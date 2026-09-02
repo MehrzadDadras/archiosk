@@ -10,7 +10,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Spin &amp; Survival Mode &mdash; Help</title>
+    <title>Spin & Survival Mode &mdash; Help</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
@@ -20,88 +20,41 @@
 
 {% import "components/fish_tank_container.html" as tank %}
 {{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
-                   {'label': 'Spin &amp; Survival Mode'}]) }}
+                   {'label': 'Spin & Survival Mode'}]) }}
 
 <header class="pm-head">
-    <h1>Spin &amp; Survival Mode</h1>
-    <p class="pm-note">
-        A comprehensive machine review of a project's evidence. Always
-        explicitly triggered, never automatic.
-    </p>
+    <h1>Spin & Survival Mode</h1>
+    <p class="lead">Runs a comprehensive review across all evidence in a project. On-demand only; never runs automatically.</p>
 </header>
 
 <article class="help-body">
 
     <section id="what">
         <h2>What a Spin is</h2>
-        <p>
-            A Spin reads the evidence already in a project and characterises it
-            as a whole. It is a <b>deliberate act</b>: nothing schedules one,
-            nothing runs one in the background, and no upload triggers one. You
-            press the button.
-        </p>
-        <p class="help-note">
-            That is a design decision rather than a limitation. A review that
-            ran itself would produce findings nobody asked for, attached to a
-            moment nobody chose, and the record would not say who wanted them.
-        </p>
+        <ul>
+          <li><strong>Comprehensive review:</strong> Analyzes all active evidence in the project.</li>
+          <li><strong>On-demand:</strong> Triggered explicitly by user action. Never runs in background or on file upload.</li>
+          <li><strong>Accountability:</strong> Every run logs user ID and timestamp to the permanent project record.</li>
+        </ul>
     </section>
 
     <section id="first">
         <h2>First Spin</h2>
-        <p>
-            Characterises the project <b>as it stands</b>. It has nothing to
-            compare against, so its findings carry no delta classification —
-            the surface says so plainly: <i>&ldquo;First Spin establishes a
-            baseline &mdash; no prior state to classify against.&rdquo;</i>
-        </p>
-        <p>
-            <b>Trigger:</b> the <b>Run First Spin</b> button in the Toolbox.
-            Available at any time.
-        </p>
+        <ul>
+          <li>AI analyzes the full document and reports the quality of its coordination.</li>
+          <li><strong>Baseline:</strong> Establishes the initial project benchmark (no prior state to classify against).</li>
+          <li><strong>Action:</strong> Click <strong>Run First Spin</strong> in the Toolbox.</li>
+        </ul>
     </section>
 
     <section id="delta">
         <h2>Delta Spin</h2>
-        <p>
-            Characterises <b>what has materially changed in project
-            understanding</b> since an earlier Spin. Not what changed in the
-            files — what changed in what the project is understood to say.
-        </p>
-        <p>
-            <b>Trigger:</b> the <b>Run Delta Spin</b> button, which appears
-            only once a First Spin exists. Until then the surface says
-            <i>&ldquo;Run First Spin before Delta Spin is available.&rdquo;</i>
-            There is no baseline to be a delta from, so the control is absent
-            rather than present-and-failing.
-        </p>
-        <p>
-            Each Delta finding carries one of <b>eight</b> classifications, and
-            only these eight — the engine drops anything outside the closed set
-            rather than inventing a label:
-        </p>
-        <dl class="help-defs">
-            <dt><code>new</code></dt>
-            <dd>Understanding that was not present before.</dd>
-            <dt><code>unchanged</code></dt>
-            <dd>Present before, and materially the same.</dd>
-            <dt><code>strengthened</code></dt>
-            <dd>Present before, now better supported.</dd>
-            <dt><code>weakened</code></dt>
-            <dd>Present before, now less well supported.</dd>
-            <dt><code>resolved</code></dt>
-            <dd>An earlier open question that now has an answer.</dd>
-            <dt><code>superseded</code></dt>
-            <dd>Replaced by a later understanding.</dd>
-            <dt><code>new_verification_gap</code></dt>
-            <dd>Something now needs checking that did not before.</dd>
-            <dt><code>indeterminate</code></dt>
-            <dd>
-                The relationship to prior understanding could not be
-                established. Kept as its own honest answer rather than being
-                forced into one of the seven above.
-            </dd>
-        </dl>
+        <ul>
+          <li>AI compares current evidence against the baseline to track coordination drift.</li>
+          <li><strong>Prerequisite:</strong> Requires an existing First Spin.</li>
+          <li><strong>Action:</strong> Click <strong>Run Delta Spin</strong> in the Toolbox.</li>
+          <li><strong>Output:</strong> Classifies changes into the 8 standard categories.</li>
+        </ul>
     </section>
 
     <section id="survival">
