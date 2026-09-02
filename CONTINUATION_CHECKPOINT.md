@@ -1,5 +1,119 @@
 # Continuation checkpoint
 
+## 2026-09-01 (deploy) — `d760e6b` live at `v=147`: one home destination, and a staging mistake caught before it shipped
+
+**`d760e6b` is live on `https://archiosk.com`**, replacing `7445ba1`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build d760e6b)`.
+
+Rollback marker **`/var/www/archiosk-backup-7445ba1`** (21M, `.env` at `600`,
+pre-edit unit at `/root/archiosk-go.service.bak-7445ba1`). Proven to be a real
+pre-deploy point before anything else was touched: it still carries
+`page_header('Projects')`, against the live tree's `page_header('All Projects')`.
+
+**`STATIC_VERSION` 146 → 147**, stepped as `CURRENT + 1` off the live file.
+Rollback trees pruned back to **2** (`7445ba1` + `408997b`); `921d851` removed by
+explicit name behind a guard refusing the keepers and the live directory.
+
+### What shipped
+
+Authenticated `/` now redirects to `/projects`, which is the single home
+destination: heading and title "All Projects", the orientation Composer and its
+voice input, Search, Environment filter, project cards, and one "+ New Project".
+The Lists/Display tray switcher no longer renders on project-less pages.
+Anonymous `/` is unchanged and still the public landing page.
+
+### Three things the change would have destroyed in silence
+
+Each was found by inspection, not by a test failing first, and each is the part
+of this stage worth remembering:
+
+1. **The Developer Composer** — `templates/index.html` is its only home. It
+   survives behind an explicit developer-mode branch in `index()`. **Still owed:
+   relocate it to `/admin/developer-tools` and delete that branch.**
+2. **The orientation Composer** — was guarded by `{% if not developer_mode %}` in
+   a template that now renders only *under* developer mode, so it was
+   unreachable markup rather than a relocated feature. Moved to `projects.html`.
+3. **The operating-environment preset** on New Project. Restored, and only when
+   exactly one environment is accessible.
+
+### The gate was red first, and that mattered
+
+The first full run on this tree: **11 failed, 6,130 passed**. It caught four
+files no targeted lane touched — including `test_composer_convergence_01`, which
+holds a registry of every Composer surface keyed by template path and failed the
+moment the Composer moved. That is the mechanism working.
+
+It also exposed a weaker problem: `test_p40e3a_layout_reconciliation` had two
+loops over the same project-less URLs, and only one failed. The other asserts
+ABSENCE of the Toolbox and Chat regions and would have kept passing against a
+`Redirecting...` stub — green for the worst possible reason. Both now follow the
+redirect.
+
+Second run, after fixes: **6,140 passed, 2 skipped, 4 deselected, 2,513
+subtests, `PYTEST_EXIT=0`, in 1:03:42.** Production code was byte-identical
+between the two runs, so re-running could have been argued away. It was not —
+this repository has already had to justify one deploy on a red suite, and a gate
+reasoned around once stops being a gate.
+
+### A staging mistake, recorded because it nearly shipped
+
+`cbc4593` committed and pushed `tests/fixtures/wd_nas_bridge/builder_corpus/`
+and `manifest.json` — six files `CONTINUATION_CHECKPOINT.md` records as
+deliberately untracked in three separate entries. Cause: staging with
+`git add -A -- tests/` instead of naming the files the change touched.
+
+Not a secrets or provenance exposure. The genuinely held-out material is
+`wd_nas_bridge/oracle/`, which `.gitignore` already protected and which was
+never committed. The recorded reason for untracking is narrower: no test reads
+this corpus, so committing it asserts a dependency that does not exist, and it
+would ship to the server because `git archive` exports the commit.
+
+Caught before the deploy, so **nothing untracked ever reached the live tree** —
+verified twice, in the tarball (0 matches) and on the server after rsync.
+`ff47e6e` untracked it; `d760e6b` added the `.gitignore` rules that `ff47e6e`'s
+message had *claimed* were added but were not, because that edit anchored on a
+path string appearing twice in the file and silently wrote nothing. Both facts
+are in the history rather than amended away.
+
+`.gitignore`'s existing `wd_nas_bridge/oracle/` block already warned, in its own
+words, that "nothing enforced it, so a `git add -A` would have committed the
+held-out answers." That argument always applied one directory up and had never
+been extended there. Now it is.
+
+### Verified live over HTTPS
+
+| Check | Result |
+|---|---|
+| `/`, `/login` | 200, assets at `?v=147` |
+| `/health` | 200 |
+| `/projects` anonymous | 302 → `/login?next=/projects` — gated |
+| `main.css?v=147` | 200, 419,863 bytes, carries the flyout rule |
+| Deployed templates | `page_header('All Projects')` and the orientation Composer both present on the server |
+| Untracked fixture on server | absent |
+
+nginx `[crit]` monitor timer still `active`; disk 8.4G used / 89G free.
+
+### Not verified, and why
+
+**No authenticated live check was performed.** It needs the ephemeral
+verification identity, and `tools/manage_verification_access.py`'s own docstring
+states it is maintainer-run and "never something an automated agent runs
+itself". Running it would have created an auth token in production against an
+explicit instruction. The authenticated path is proven in-process against a real
+test client — `/` 302s to `/projects`, which renders the heading, the Composer,
+one "+ New Project" and no tray switcher — but that is not the same as a browser
+on the live host, and this entry should not imply it is.
+
+### Carried forward
+
+- **Relocate the Developer Composer** to `/admin/developer-tools` and delete the
+  developer-mode branch in `index()`.
+- **`bridge_queue.claim_pending`'s unguarded `_write`** — real, reproduced,
+  unfixed.
+- **The distributed full-suite slowdown** — 1:03:42 and 2:42:32 on the same tree
+  hours apart. The 300s per-test timeout has never tripped across two full runs,
+  so no single test hangs; the cost is spread across the run.
+
 ## 2026-09-01 (deploy) — `7445ba1` live at `v=146`: the menu fixes, on a green suite, and the stall got a bound
 
 **`7445ba1` is live on `https://archiosk.com`**, replacing `408997b`. Confirmed
