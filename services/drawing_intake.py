@@ -401,6 +401,7 @@ class PendingUploadStore:
         # it simply has no declared perspective, which is an honest state.
         entry_choice: Optional[str] = None,
         retained_by: Optional[str] = None,
+        source_domain: Optional[str] = None,
     ) -> str:
         self._sweep_expired()
         staging_id = uuid.uuid4().hex
@@ -422,6 +423,7 @@ class PendingUploadStore:
             "entered_project_name": entered_project_name,
             "entry_choice": entry_choice,
             "retained_by": retained_by,
+            "source_domain": source_domain,
         }
         self._manifest_path(staging_id).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         return staging_id

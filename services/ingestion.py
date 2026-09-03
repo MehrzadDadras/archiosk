@@ -24,6 +24,8 @@ from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
 from services.case_workspace import (
     FOLDER_ROOT_DATA_ROOM,
     SOURCE_KIND_PROJECT_DOCUMENT,
+    KNOWN_SOURCE_DOMAINS,
+    SOURCE_DOMAIN_UNKNOWN,
     SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR,
     SOURCE_ORIGIN_TYPE_UPLOAD,
     SPREADSHEET_CLASSIFICATION_ENCRYPTED_OR_UNSUPPORTED,
@@ -148,7 +150,9 @@ def _find_duplicate_content(app: Flask, file_hash: str) -> Optional[str]:
     return None
 
 
-def document_source_payload(document: ParsedDocument) -> dict:
+def document_source_payload(
+    document: ParsedDocument, source_domain: str = SOURCE_DOMAIN_UNKNOWN,
+) -> dict:
     """
     The register_document_source payload CaseWorkspaceStore.get_or_create
     expects - shared here so ingest_upload (naming a project at creation
@@ -163,7 +167,15 @@ def document_source_payload(document: ParsedDocument) -> dict:
         "milestone_count": len(document.milestones),
         "file_path": document.original_file_path,
         "file_hash": document.original_file_hash,
+        "source_domain": source_domain,
     }
+
+
+def _validated_source_domain(value: str | None) -> str:
+    domain = value or SOURCE_DOMAIN_UNKNOWN
+    if domain not in KNOWN_SOURCE_DOMAINS:
+        raise UploadError("Select a valid source domain.")
+    return domain
 
 
 def existing_project_codes(app: Flask, exclude_project_id: str | None = None) -> set:
@@ -237,6 +249,7 @@ def ingest_upload(
     role: str | None = None,
     project_name: str | None = None,
     project_code: str | None = None,
+    source_domain: str = SOURCE_DOMAIN_UNKNOWN,
 ) -> ParsedDocument:
     """
     Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError
@@ -275,6 +288,8 @@ def ingest_upload(
     creation" treatment `operating_environment` already gets.
     """
     from services.environment_capabilities import is_valid_operating_environment
+
+    source_domain = _validated_source_domain(source_domain)
 
     if not is_valid_operating_environment(operating_environment):
         raise UploadError(
@@ -448,7 +463,8 @@ def ingest_upload(
     # exists there afterward is the normal, expected case, not a conflict.
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
     workspace = store.get_or_create(
-        document.project_id, register_document_source=document_source_payload(document),
+        document.project_id,
+        register_document_source=document_source_payload(document, source_domain=source_domain),
     )
     workspace.project_code = resolved_project_code
     store.save(workspace)
@@ -616,6 +632,7 @@ def ingest_folder_upload(
     # establishes a project exactly like a single file does, so it needs an
     # acronym for exactly the same reason and by the same rules.
     project_code: str | None = None,
+    source_domain: str = SOURCE_DOMAIN_UNKNOWN,
 ) -> tuple[ParsedDocument, list[dict]]:
     """
     CLAUDE-CA1D-RECEPTION-FIX-01 (folder establishment): establishes a
@@ -657,6 +674,7 @@ def ingest_folder_upload(
     NON-founding file: {"filename", "relative_path", "status": "added" |
     "skipped", "reason"} (reason is None when status is "added").
     """
+    source_domain = _validated_source_domain(source_domain)
     if not files:
         raise UploadError("No files were provided.")
     if not (0 <= founding_index < len(files)):
@@ -677,6 +695,7 @@ def ingest_folder_upload(
         files[founding_index], app, operating_environment, owner,
         actor=actor, role=role, project_name=project_name,
         project_code=project_code,
+        source_domain=source_domain,
     )
 
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
@@ -729,6 +748,7 @@ def ingest_folder_upload(
             kind=SOURCE_KIND_PROJECT_DOCUMENT,
             file_hash=hashlib.sha256(raw_bytes).hexdigest(),
             origin_type=SOURCE_ORIGIN_TYPE_UPLOAD, origin_reference=relative_path,
+            source_domain=source_domain,
             governance_log=governance_log, actor=actor or _DEFAULT_ACTOR,
         )
 

@@ -23,7 +23,10 @@ from services.auth import (
     user_can_upload_to_storage,
 )
 from services.rate_limit import limiter
-from services.case_workspace import CaseWorkspaceError, CaseWorkspaceStore
+from services.case_workspace import (
+    KNOWN_SOURCE_DOMAINS, SOURCE_DOMAIN_CLIENT_ISSUED, SOURCE_DOMAIN_UNKNOWN,
+    CaseWorkspaceError, CaseWorkspaceStore,
+)
 from services.environment_capabilities import (
     OPERATING_ENVIRONMENT_LABELS,
     OPERATING_ENVIRONMENT_SUBTITLES,
@@ -2974,6 +2977,15 @@ def upload():
             upload_entitled=user_can_upload_to_storage(),
         )
 
+    source_domain = request.form.get('source_domain') or SOURCE_DOMAIN_CLIENT_ISSUED
+    if source_domain not in KNOWN_SOURCE_DOMAINS:
+        return render_template(
+            'upload.html', max_upload_mb=max_upload_mb, error="Select a valid source domain.",
+            selected_environment=request.form.get('operating_environment'),
+            operating_environments=OPERATING_ENVIRONMENT_LABELS,
+            entry_choices=entry_choice_view(), upload_entitled=user_can_upload_to_storage(),
+        ), 400
+
     file_storage = request.files.get('file')
     if file_storage is None or not file_storage.filename:
         return render_template(
@@ -3013,6 +3025,7 @@ def upload():
                 actor=request.form.get('actor'),
                 role=request.form.get('role'),
                 project_name=entered_project_name,
+                source_domain=source_domain,
             )
         except (UploadError, GovernanceError) as exc:
             return render_template(
@@ -3043,6 +3056,7 @@ def upload():
         entered_project_name=entered_project_name,
         entry_choice=request.form.get('entry_choice'),
         retained_by=_posted_retained_by(),
+        source_domain=source_domain,
     )
     return redirect(url_for('portal.upload_confirm', staging_id=staging_id))
 
@@ -3088,6 +3102,8 @@ def upload_folder():
         entry_choices=entry_choice_view(),
     )
 
+    source_domain = request.form.get('folder_source_domain') or SOURCE_DOMAIN_UNKNOWN
+
     files = request.files.getlist('folder_files')
     files = [f for f in files if f and f.filename]
     if not files:
@@ -3114,6 +3130,7 @@ def upload_folder():
             # derives one from the project name. The field exists so the user
             # CAN choose, never so they must.
             project_code=request.form.get('project_code'),
+            source_domain=source_domain,
         )
     except (UploadError, GovernanceError) as exc:
         return render_template('upload.html', error=str(exc), **common_context), 400
@@ -3215,6 +3232,7 @@ def upload_confirm(staging_id):
             operating_environment=manifest["operating_environment"],
             owner=manifest["owner"], actor=manifest.get("actor"), role=manifest.get("role"),
             project_name=final_project_name,
+            source_domain=manifest.get("source_domain") or SOURCE_DOMAIN_CLIENT_ISSUED,
         )
     except (UploadError, GovernanceError) as exc:
         return render_template(

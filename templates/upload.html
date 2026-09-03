@@ -1,38 +1,7 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 
-{% block title %}Establish a Project &mdash; Archiosk
-{# CLAUDE-ENTRY-REDUNDANCY-01: narrows the upstream question to the selected
-   position. Progressive enhancement, deliberately: the groups render VISIBLE
-   by default, so a visitor without JavaScript can still answer rather than
-   being shown nothing - this script only hides the ones that do not apply. #}
-<script nonce="{{ csp_nonce }}">
-(function () {
-    var form = document.getElementById('project-creation-form');
-    if (!form) return;
-    var groups = form.querySelectorAll('.retained-by-group');
-    if (!groups.length) return;
-
-    function sync() {
-        var checked = form.querySelector('[name=entry_choice]:checked');
-        var value = checked ? checked.value : null;
-        for (var i = 0; i < groups.length; i += 1) {
-            var mine = groups[i].getAttribute('data-for-choice') === value;
-            groups[i].hidden = !mine;
-            var select = groups[i].querySelector('select');
-            // Only the visible group may submit a value, so a hidden group's
-            // answer can never be mistaken for the chosen position's.
-            if (select) select.disabled = !mine;
-        }
-    }
-
-    form.addEventListener('change', function (e) {
-        if (e.target && e.target.name === 'entry_choice') sync();
-    });
-    sync();
-})();
-</script>
-{% endblock %}
+{% block title %}Establish a Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
 <section class="hero">
@@ -120,6 +89,30 @@
     <button type="submit" class="btn btn-ghost" data-ui-ref="upload.help.submit">Ask</button>
     <span class="voice-input-status" id="upload-orientation-voice-status" data-ui-ref="upload.help.voice.status" aria-live="polite"></span>
 </form>
+<script nonce="{{ csp_nonce }}">
+// Show and enable only the engagement question for the selected position.
+(function () {
+    var form = document.getElementById('project-creation-form');
+    if (!form) return;
+    var groups = form.querySelectorAll('.retained-by-group');
+
+    function sync() {
+        var checked = form.querySelector('[name=entry_choice]:checked');
+        var value = checked ? checked.value : null;
+        groups.forEach(function (group) {
+            var active = group.getAttribute('data-for-choice') === value;
+            group.hidden = !active;
+            var select = group.querySelector('select');
+            if (select) select.disabled = !active;
+        });
+    }
+
+    form.addEventListener('change', function (event) {
+        if (event.target && event.target.name === 'entry_choice') sync();
+    });
+    sync();
+})();
+</script>
 <label class="composer-candidate-doc" id="upload-help-candidate" data-ui-ref="upload.help.candidate" hidden>
     <input type="checkbox" id="upload-help-candidate-toggle" checked>
     <span>Show GO the document I selected below: <strong id="upload-help-candidate-name"></strong></span>
@@ -269,11 +262,11 @@
            removed second question. #}
         {% for choice in entry_choices %}
         {% if choice.retained_by_options %}
-        <div class="retained-by-group" data-for-choice="{{ choice.value }}">
+        <div class="retained-by-group" data-for-choice="{{ choice.value }}" hidden>
             <label>
                 Who engaged you{% if choice.value in ('lead_design_consultant', 'subconsultant') %}?{% else %}, if that is settled{% endif %}
                 <select name="retained_by__{{ choice.value }}" class="text-input"
-                        data-ui-ref="upload.retained-by.{{ choice.value }}">
+                        data-ui-ref="upload.retained-by.{{ choice.value }}" disabled>
                     {% for option in choice.retained_by_options %}
                     <option value="{{ option.value }}">{{ option.label }}</option>
                     {% endfor %}
@@ -326,75 +319,42 @@
         <span class="mono">(required)</span>
     </label>
 
-    {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar &
-       Public-Trial Entitlement): supersedes CLAUDE-HYBRID-ENTRY-01's own
-       "Legacy" framing. The enduring choice is Link vs. Upload (Part 3):
-       LINK leaves documents in their existing approved storage and
-       connects Archiosk to them; UPLOAD makes a copy in the Project's
-       configured managed storage. Link is shown, not hidden, but honestly
-       disabled - no genuine linked-storage mechanism exists yet, and
-       Part 4 forbids disguising today's copy-upload as a link. Upload is
-       the same CLAUDE-CA1D-FOLDER-ESTABLISH-CLARITY-01 mechanism as
-       before (founding-document selection, tests unchanged), functionally
-       identical, gated by upload_entitled (services.auth.
-       user_can_upload_to_storage - real server-side enforcement lives in
-       routes/portal.py::upload_folder, this greying is a convenience on
-       top of that, never the only gate). #}
     <fieldset class="storage-connection-fieldset">
-        <legend>Connect Documents</legend>
+        <legend>Connect Project Documents</legend>
 
-        <div class="storage-option storage-option-disabled" data-ui-ref="upload.storage.link">
-            <p class="storage-option-label"><strong>Link to Storage</strong> <span class="mono">(not yet configured)</span></p>
-            <p class="pane-note">Use documents where they already live.</p>
-            {% call macros.subdisclosure('Details', html_id='storage-link-details', ui_ref='upload.storage.link.details') %}
-            <p class="pane-note">
-                Archiosk would connect to documents already in an approved storage location
-                (for example, an organization's SharePoint, another enterprise repository, or
-                Archiosk-hosted storage where offered) and leave them there as the
-                authoritative copy, rather than making a separate copy inside Archiosk. This is
-                the preferred direction but isn't built yet, so it's shown here rather than
-                hidden, and left disabled rather than misrepresented as available.
-            </p>
-            {% endcall %}
+        <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.source-domain.client-issued">
+            <p class="storage-option-label"><strong>CLIENT / OWNER INFORMATION</strong></p>
+            <p class="pane-note">Requirements and information received from the party that engaged you.</p>
+            <button type="button" class="btn btn-ghost" data-folder-picker-button data-source-domain="CLIENT_ISSUED" {% if not upload_entitled %}disabled{% endif %}>Connect Client Data Room</button>
         </div>
 
-        <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.storage.upload">
-            <p class="storage-option-label"><strong>Upload to Storage</strong></p>
-            <p class="pane-note">Copy documents into the Project's configured managed storage.</p>
-            {% if not upload_entitled %}
-            <p class="mono form-error" data-ui-ref="upload.storage.upload.disabled-reason">Not available in public trial. Available on managed/organization plans.</p>
-            {% endif %}
-
-            <button type="button" class="btn btn-ghost" id="folder-picker-button" data-ui-ref="upload.folder.picker-button" {% if not upload_entitled %}disabled{% endif %}>
-                Choose Folder to Upload&hellip;
-            </button>
-            <input type="file" id="folder-picker-input" webkitdirectory directory multiple hidden data-ui-ref="upload.folder.picker-input">
-            <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
-            <input type="hidden" name="founding_relative_path" id="founding-relative-path-field">
-
-            <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
-
-            <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
-                <p class="pane-note">Which of these is the principal RFP/document for this project? <span class="mono">(required &mdash; select one to continue)</span></p>
-                <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
-            </div>
-
-            <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
-
-            <button
-                type="submit" class="btn btn-ghost" id="folder-submit-button" disabled
-                formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">
-                Upload Folder Contents
-            </button>
-
-            {% call macros.subdisclosure('Details', html_id='storage-upload-details', ui_ref='upload.storage.upload.details') %}
-            <p class="pane-note">
-                Uploads every eligible document in the chosen folder (subfolders included) and
-                stores a permanent copy of each one in the Project's configured managed storage
-                &mdash; your local files are not watched, referenced, or left in place.
-            </p>
-            {% endcall %}
+        <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.source-domain.team-workspace">
+            <p class="storage-option-label"><strong>YOUR WORKSPACE</strong></p>
+            <p class="pane-note">Your team's developing work, proposal, design, coordination records, RFIs, and submissions.</p>
+            <button type="button" class="btn btn-ghost" data-folder-picker-button data-source-domain="TEAM_WORKSPACE" {% if not upload_entitled %}disabled{% endif %}>Connect Your Workspace</button>
         </div>
+
+        <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.source-domain.external-reference">
+            <p class="storage-option-label"><strong>EXTERNAL REFERENCES</strong></p>
+            <p class="pane-note">Codes, standards, guidance, and other non-project-authority reference material.</p>
+            <button type="button" class="btn btn-ghost" data-folder-picker-button data-source-domain="EXTERNAL_REFERENCE" {% if not upload_entitled %}disabled{% endif %}>Add External References</button>
+        </div>
+
+        {% if not upload_entitled %}
+        <p class="mono form-error" data-ui-ref="upload.storage.upload.disabled-reason">Not available in public trial. Available on managed/organization plans.</p>
+        {% endif %}
+
+        <input type="file" id="folder-picker-input" webkitdirectory directory multiple hidden data-ui-ref="upload.folder.picker-input">
+        <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
+        <input type="hidden" name="folder_source_domain" id="folder-source-domain-field">
+        <input type="hidden" name="founding_relative_path" id="founding-relative-path-field">
+        <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
+        <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
+            <p class="pane-note">Which of these is the principal document for this project? <span class="mono">(required &mdash; select one to continue)</span></p>
+            <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
+        </div>
+        <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
+        <button type="submit" class="btn btn-ghost" id="folder-submit-button" disabled formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">Connect Selected Folder</button>
     </fieldset>
 
     <fieldset class="single-file-establish-fieldset">
@@ -402,6 +362,12 @@
         <p class="pane-note">
             Uploads and permanently stores a copy of this file on Archiosk's own server.
         </p>
+        <label for="single-file-source-domain">Source domain</label>
+        <select name="source_domain" id="single-file-source-domain" class="text-input" data-ui-ref="upload.file.source-domain">
+            <option value="CLIENT_ISSUED">Client / Owner Information</option>
+            <option value="TEAM_WORKSPACE">Your Workspace</option>
+            <option value="EXTERNAL_REFERENCE">External References</option>
+        </select>
         <input
             type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md"
             id="upload-file-input" data-ui-ref="upload.file"
@@ -531,16 +497,17 @@
         var REGISTERABLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md', '.xlsx'];
         var FOUNDING_ELIGIBLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md'];
 
-        var pickerButton = document.getElementById('folder-picker-button');
+        var pickerButtons = document.querySelectorAll('[data-folder-picker-button]');
         var pickerInput = document.getElementById('folder-picker-input');
         var hiddenFilesInput = document.getElementById('folder-files-hidden');
+        var sourceDomainField = document.getElementById('folder-source-domain-field');
         var foundingField = document.getElementById('founding-relative-path-field');
         var summaryEl = document.getElementById('folder-selection-summary');
         var foundingPickerEl = document.getElementById('folder-founding-picker');
         var candidatesListEl = document.getElementById('folder-founding-candidates');
         var errorEl = document.getElementById('folder-selection-error');
         var submitButton = document.getElementById('folder-submit-button');
-        if (!pickerButton || !pickerInput || !hiddenFilesInput || !foundingField || !submitButton) return;
+        if (!pickerButtons.length || !pickerInput || !hiddenFilesInput || !sourceDomainField || !foundingField || !submitButton) return;
 
         var selectedFiles = [];   // File[], renamed so .name === relative path
         var eligibleRelativePaths = [];
@@ -592,7 +559,12 @@
             });
         }
 
-        pickerButton.addEventListener('click', function () { pickerInput.click(); });
+        pickerButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                sourceDomainField.value = button.getAttribute('data-source-domain');
+                pickerInput.click();
+            });
+        });
 
         pickerInput.addEventListener('change', function () {
             errorEl.hidden = true;

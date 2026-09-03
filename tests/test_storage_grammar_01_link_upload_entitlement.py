@@ -98,7 +98,7 @@ class _BaseTestCase(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# upload.html - Connect Documents (Link / Upload) grammar.
+# upload.html - explicit source-domain connection grammar.
 # ---------------------------------------------------------------------------
 
 class UploadPageStorageGrammarTests(_BaseTestCase):
@@ -108,34 +108,30 @@ class UploadPageStorageGrammarTests(_BaseTestCase):
         self.assertIn("Choose how this Project's documents connect to Archiosk.", body)
         self.assertNotIn("Kept available for establishing a project from a full", body)
 
-    def test_link_option_present_but_permanently_disabled_and_honest(self):
+    def test_three_source_domains_are_present(self):
         client = self._client_as("sg_admin", 1)
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn('data-ui-ref="upload.storage.link"', body)
-        self.assertIn("Link to Storage", body)
-        self.assertIn("not yet configured", body)
-        # Never disguised as a real, active linking mechanism (Part 4).
-        self.assertIn("isn't built yet", body)
+        self.assertIn("Connect Client Data Room", body)
+        self.assertIn("Connect Your Workspace", body)
+        self.assertIn("Add External References", body)
+        self.assertIn('data-source-domain="CLIENT_ISSUED"', body)
+        self.assertIn('data-source-domain="TEAM_WORKSPACE"', body)
+        self.assertIn('data-source-domain="EXTERNAL_REFERENCE"', body)
 
     def test_upload_option_present_and_functional_for_a_real_entitled_user(self):
         client = self._client_as("sg_admin", 1)
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn('data-ui-ref="upload.storage.upload"', body)
-        self.assertIn("Upload to Storage", body)
-        # Today every real (non-trial) user is entitled - picker button
-        # must NOT carry a disabled attribute, and the disabled-reason
-        # notice must not render.
-        picker_start = body.index('id="folder-picker-button"')
-        picker_tag_end = body.index(">", picker_start)
-        self.assertNotIn("disabled", body[picker_start:picker_tag_end])
+        client_button = body.index('data-source-domain="CLIENT_ISSUED"')
+        client_button_end = body.index(">", client_button)
+        self.assertNotIn("disabled", body[client_button:client_button_end])
         self.assertNotIn('data-ui-ref="upload.storage.upload.disabled-reason"', body)
 
-    def test_details_disclosures_hold_the_fuller_custody_explanation(self):
+    def test_domain_copy_preserves_authority_boundaries(self):
         client = self._client_as("sg_admin", 1)
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn('data-ui-ref="upload.storage.link.details"', body)
-        self.assertIn('data-ui-ref="upload.storage.upload.details"', body)
-        self.assertIn("local files are not watched, referenced, or left in place", body)
+        self.assertIn("Requirements and information received from the party that engaged you.", body)
+        self.assertIn("Your team's developing work", body)
+        self.assertIn("non-project-authority reference material", body)
 
 
 class UploadEntitlementGreyingTests(_BaseTestCase):
@@ -145,18 +141,19 @@ class UploadEntitlementGreyingTests(_BaseTestCase):
             body = client.get("/upload").get_data(as_text=True)
         self.assertIn('data-ui-ref="upload.storage.upload.disabled-reason"', body)
         self.assertIn("Not available in public trial", body)
-        picker_start = body.index('id="folder-picker-button"')
-        picker_tag_end = body.index(">", picker_start)
-        self.assertIn("disabled", body[picker_start:picker_tag_end])
+        for domain in ("CLIENT_ISSUED", "TEAM_WORKSPACE", "EXTERNAL_REFERENCE"):
+            button_start = body.index(f'data-source-domain="{domain}"')
+            button_end = body.index(">", button_start)
+            self.assertIn("disabled", body[button_start:button_end])
 
-    def test_link_option_stays_disabled_regardless_of_entitlement(self):
-        # Link's disabled state is architectural (no mechanism exists),
-        # never tied to the trial/entitlement question at all.
+    def test_domain_buttons_are_enabled_when_entitled(self):
         with patch("routes.portal.user_can_upload_to_storage", return_value=True):
             client = self._client_as("sg_admin", 1)
             body = client.get("/upload").get_data(as_text=True)
-        self.assertIn("Link to Storage", body)
-        self.assertIn("not yet configured", body)
+        for domain in ("CLIENT_ISSUED", "TEAM_WORKSPACE", "EXTERNAL_REFERENCE"):
+            button_start = body.index(f'data-source-domain="{domain}"')
+            button_end = body.index(">", button_start)
+            self.assertNotIn("disabled", body[button_start:button_end])
 
 
 # ---------------------------------------------------------------------------

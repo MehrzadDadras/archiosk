@@ -926,6 +926,23 @@ KNOWN_SOURCE_ORIGIN_TYPES = (
     SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT,
 )
 
+SOURCE_DOMAIN_CLIENT_ISSUED = "CLIENT_ISSUED"
+SOURCE_DOMAIN_TEAM_WORKSPACE = "TEAM_WORKSPACE"
+SOURCE_DOMAIN_EXTERNAL_REFERENCE = "EXTERNAL_REFERENCE"
+SOURCE_DOMAIN_UNKNOWN = "UNKNOWN"
+KNOWN_SOURCE_DOMAINS = (
+    SOURCE_DOMAIN_CLIENT_ISSUED,
+    SOURCE_DOMAIN_TEAM_WORKSPACE,
+    SOURCE_DOMAIN_EXTERNAL_REFERENCE,
+    SOURCE_DOMAIN_UNKNOWN,
+)
+
+
+def source_domain_of(source: dict) -> str:
+    """Return an explicit domain without mutating legacy Source records."""
+    value = source.get("source_domain")
+    return value if value in KNOWN_SOURCE_DOMAINS else SOURCE_DOMAIN_UNKNOWN
+
 # -- Requirement vocabulary (Prompt 15) --------------------------------------
 # Prompt 15 #10/#11: the SAME classification vocabulary NREOCRC itself uses
 # ([MANDATORY]/[RATED]/[INDICATIVE]/[REFERENCE]/[INFORMATIONAL]) - per-
@@ -1291,6 +1308,10 @@ class Source:
     # import archive reference, or None for an ordinary upload).
     origin_type: Optional[str] = None  # open-world, KNOWN_SOURCE_ORIGIN_TYPES
     origin_reference: Optional[str] = None
+    # User-selected corpus boundary. This is provenance context, never a
+    # document-authority classification. Legacy Sources omit it and read as
+    # SOURCE_DOMAIN_UNKNOWN through source_domain_of().
+    source_domain: str = SOURCE_DOMAIN_UNKNOWN
     # CLAUDE-MM1: additive Source-Artifact fields the multimodal foundation
     # needs (camel-multimodal-programme.md's MM1) - every existing Source
     # simply lacks these keys and loads with the honest None default, the
@@ -5927,6 +5948,7 @@ class CaseWorkspaceStore:
                 # backfilled/fabricated.
                 file_path=register_document_source.get("file_path"),
                 file_hash=register_document_source.get("file_hash"),
+                source_domain=register_document_source.get("source_domain", SOURCE_DOMAIN_UNKNOWN),
             )
             workspace.sources.append(asdict(source))
 
@@ -7060,6 +7082,7 @@ class CaseWorkspaceStore:
         file_hash: Optional[str] = None,
         origin_type: Optional[str] = None,
         origin_reference: Optional[str] = None,
+        source_domain: str = SOURCE_DOMAIN_UNKNOWN,
         folder_id: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
         actor: str = "system",
@@ -7081,6 +7104,8 @@ class CaseWorkspaceStore:
         add_source's existing callers (none of which pass folder_id
         today) are completely unaffected.
         """
+        if source_domain not in KNOWN_SOURCE_DOMAINS:
+            raise CaseWorkspaceError(f"{source_domain!r} is not a recognized source domain.")
         source = Source(
             id=_new_id(),
             project_id=workspace.project_id,
@@ -7105,6 +7130,7 @@ class CaseWorkspaceStore:
                 if origin_type is not None else None
             ),
             origin_reference=origin_reference,
+            source_domain=source_domain,
             folder_id=folder_id,
         )
         workspace.sources.append(asdict(source))
@@ -7284,6 +7310,7 @@ class CaseWorkspaceStore:
             width=width,
             height=height,
             supersedes_source_id=old_source_id,
+            source_domain=source_domain_of(old_source),
         )
         workspace.sources.append(asdict(new_source))
         old_source["superseded_by_source_id"] = new_source.id
