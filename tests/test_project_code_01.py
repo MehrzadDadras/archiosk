@@ -16,6 +16,7 @@ prove that stored-not-derived property holds.
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from services.project_code import (
     CODE_MAX_LENGTH, CODE_MIN_LENGTH, ProjectCodeError, REFERENCE_TYPE_CASE,
@@ -81,11 +82,15 @@ class AcronymsDoNotCollide(unittest.TestCase):
 
 
 class ValidatingWhatAPersonTyped(unittest.TestCase):
+    def test_three_and_four_letter_codes_are_accepted(self):
+        self.assertEqual(validate_code("PNS"), "PNS")
+        self.assertEqual(validate_code("SRPC"), "SRPC")
+
     def test_a_good_code_is_normalized_not_rejected(self):
         self.assertEqual(validate_code(" s-r p c "), "SRPC")
 
     def test_too_short_and_too_long_are_refused_with_a_usable_message(self):
-        for bad in ["AB", "ABCDE"]:
+        for bad in ["N", "NB", "NORTH"]:
             with self.subTest(bad=bad), self.assertRaises(ProjectCodeError) as caught:
                 validate_code(bad)
             self.assertIn(str(CODE_MIN_LENGTH), str(caught.exception))
@@ -94,6 +99,21 @@ class ValidatingWhatAPersonTyped(unittest.TestCase):
     def test_a_code_must_start_with_a_letter(self):
         with self.assertRaises(ProjectCodeError):
             validate_code("1ABC")
+
+    def test_numeric_and_symbol_only_codes_are_refused(self):
+        for bad in ("123", "!!!"):
+            with self.subTest(bad=bad), self.assertRaises(ProjectCodeError):
+                validate_code(bad)
+
+    def test_digits_are_not_allowed_inside_an_acronym(self):
+        with self.assertRaises(ProjectCodeError):
+            validate_code("P1S")
+
+    def test_establish_form_declares_the_same_length_and_alpha_constraints(self):
+        template = (Path(__file__).resolve().parents[1] / "templates" / "upload.html").read_text(encoding="utf-8")
+        self.assertIn('minlength="3"', template)
+        self.assertIn('maxlength="4"', template)
+        self.assertIn('pattern="[A-Za-z]{3,4}"', template)
 
     def test_an_empty_code_is_refused(self):
         with self.assertRaises(ProjectCodeError):

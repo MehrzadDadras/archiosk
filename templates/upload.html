@@ -300,7 +300,8 @@
             type="text" name="project_code" class="text-input project-code-input"
             value="{{ request.form.get('project_code', '') }}"
             id="upload-project-code" data-ui-ref="upload.project-code"
-            maxlength="4" size="4" autocomplete="off" spellcheck="false"
+            minlength="3" maxlength="4" pattern="[A-Za-z]{3,4}" size="4"
+            autocomplete="off" spellcheck="false" autocapitalize="characters"
             aria-describedby="upload-project-code-note"
             placeholder="SRPC">
         <span class="pane-note" id="upload-project-code-note" data-ui-ref="upload.project-code.note">

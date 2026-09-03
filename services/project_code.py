@@ -33,11 +33,12 @@ SRPC-C-014 can both exist, because the type discriminator distinguishes them.
 from __future__ import annotations
 
 import re
+import string
 from typing import Iterable, Optional
 
 CODE_MIN_LENGTH = 3
 CODE_MAX_LENGTH = 4
-_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{2,3}$")
+_CODE_PATTERN = re.compile(r"^[A-Z]{3,4}$")
 
 # Type discriminators. Deliberately single letters: the reference has to survive
 # being read aloud and typed from memory.
@@ -79,7 +80,7 @@ def validate_code(raw: str, taken: Iterable[str] = ()) -> str:
             "A project acronym must be %d or %d letters." % (CODE_MIN_LENGTH, CODE_MAX_LENGTH))
     if not _CODE_PATTERN.match(code):
         raise ProjectCodeError(
-            "A project acronym must start with a letter and use only letters and digits.")
+            "A project acronym must use only letters.")
     if code in {normalize_code(t) for t in taken}:
         raise ProjectCodeError("That project acronym is already in use.")
     return code
@@ -91,7 +92,7 @@ def derive_code(project_name: str, taken: Iterable[str] = ()) -> str:
     Initials of the significant words first, because that is what a person would
     have written themselves - "South Regional Police Centre" gives SRPC. Falls
     back through progressively less elegant strategies rather than failing, and
-    only ever resorts to a numeric suffix when the obvious forms are taken.
+    only ever resorts to an alphabetic suffix when the obvious forms are taken.
     """
     taken_norm = {normalize_code(t) for t in taken if t}
     words = [w for w in re.split(r"[^A-Za-z0-9]+", project_name or "") if w]
@@ -129,21 +130,24 @@ def derive_code(project_name: str, taken: Iterable[str] = ()) -> str:
         if is_valid_code(candidate) and normalize_code(candidate) not in taken_norm:
             return normalize_code(candidate)
 
-    # Everything obvious is taken or unusable. Vary the last character rather
-    # than lengthening: the reference has to stay short to be worth having.
+    # Everything obvious is taken or unusable. Fall back to PRJ, then vary
+    # alphabetic suffixes while keeping the governed 3-or-4-letter shape.
     base = next((normalize_code(c) for c in candidates
                  if normalize_code(c)[:1].isalpha()), "PRJ")
     stem = base[:CODE_MIN_LENGTH] or "PRJ"
     if not stem[:1].isalpha():
         stem = "PRJ"
-    for suffix in "23456789":
-        candidate = (stem + suffix)[:CODE_MAX_LENGTH]
+    if is_valid_code(stem) and stem not in taken_norm:
+        return stem
+    for suffix in string.ascii_uppercase:
+        candidate = (stem[:CODE_MIN_LENGTH] + suffix)[:CODE_MAX_LENGTH]
         if is_valid_code(candidate) and normalize_code(candidate) not in taken_norm:
             return normalize_code(candidate)
-    for suffix in range(10, 100):
-        candidate = (stem[:2] + str(suffix))
-        if is_valid_code(candidate) and normalize_code(candidate) not in taken_norm:
-            return candidate
+    for first in string.ascii_uppercase:
+        for second in string.ascii_uppercase:
+            candidate = stem[:2] + first + second
+            if is_valid_code(candidate) and candidate not in taken_norm:
+                return candidate
     raise ProjectCodeError("Could not derive a unique project acronym.")
 
 
