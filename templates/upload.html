@@ -3,7 +3,7 @@
 {% block title %}New Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="hero new-project-hero">
     {# CLAUDE-POSTCAMEL-META-T01 (Territory Before Ontology): reframed
        from "Ingest a project document" - that heading and the founder-
        centric "put your document into Archiosk" framing implied the
@@ -93,9 +93,6 @@
         </div>
         {% endif %}
         {% endfor %}
-        <label class="operating-environment-confirm">
-            <input type="checkbox" required aria-label="Confirm project position">
-        </label>
     </fieldset>
 
     <label>Project name
@@ -149,34 +146,28 @@
         <input type="file" name="folder_files" id="folder-files-hidden" multiple hidden>
         <input type="hidden" name="folder_source_domain" id="folder-source-domain-field">
         <input type="hidden" name="founding_relative_path" id="founding-relative-path-field">
+        <div id="folder-domain-summary" data-ui-ref="upload.folder.domain-summary" hidden></div>
         <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
         <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
             <p class="pane-note">Which of these is the principal document for this project? <span class="mono">(required &mdash; select one to continue)</span></p>
             <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
         </div>
         <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
-        <button type="submit" class="btn btn-ghost" id="folder-submit-button" disabled formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">Connect Selected Folder</button>
+        <button type="submit" class="btn btn-ghost" id="folder-submit-button" disabled formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">Connect Folder</button>
     </fieldset>
 
     <fieldset class="single-file-establish-fieldset">
-        <legend>Upload File</legend>
-        <label for="single-file-source-domain">Source domain</label>
-        <select name="source_domain" id="single-file-source-domain" class="text-input" data-ui-ref="upload.file.source-domain">
-            <option value="CLIENT_ISSUED">Client / Owner Information</option>
-            <option value="TEAM_WORKSPACE">Your Workspace</option>
-            <option value="EXTERNAL_REFERENCE">External References</option>
-        </select>
+        <legend class="new-project-section-heading">Upload File</legend>
+        <input type="hidden" name="source_domain" value="UNKNOWN">
         <input
             type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md"
             id="upload-file-input" data-ui-ref="upload.file"
             data-max-upload-bytes="{{ max_upload_mb * 1024 * 1024 }}" data-max-upload-mb="{{ max_upload_mb }}">
-        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>
-            Create project and parse document
-        </button>
+        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>Upload File</button>
     </fieldset>
 </form>
 <section class="upload-composer" id="upload-help" data-ui-ref="upload.help">
-    <h2>Composer</h2>
+    <h2 class="new-project-section-heading">Composer</h2>
     <form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form"
           data-developer-composer-form data-composer-send='[data-ui-ref="upload.help.submit"]'>
         <input type="text" class="text-input" id="upload-orientation-input" name="message"
@@ -416,6 +407,7 @@
         var pickerInput = document.getElementById('folder-picker-input');
         var hiddenFilesInput = document.getElementById('folder-files-hidden');
         var sourceDomainField = document.getElementById('folder-source-domain-field');
+        var domainSummaryEl = document.getElementById('folder-domain-summary');
         var foundingField = document.getElementById('founding-relative-path-field');
         var summaryEl = document.getElementById('folder-selection-summary');
         var foundingPickerEl = document.getElementById('folder-founding-picker');
@@ -426,6 +418,12 @@
 
         var selectedFiles = [];   // File[], renamed so .name === relative path
         var eligibleRelativePaths = [];
+        var pendingSourceDomain = '';
+        var domainLabels = {
+            CLIENT_ISSUED: 'Client Data Room',
+            TEAM_WORKSPACE: 'Your Workspace',
+            EXTERNAL_REFERENCE: 'External References'
+        };
 
         function matchesExtensionList(relativePath, extensions) {
             var lower = relativePath.toLowerCase();
@@ -476,7 +474,7 @@
 
         pickerButtons.forEach(function (button) {
             button.addEventListener('click', function () {
-                sourceDomainField.value = button.getAttribute('data-source-domain');
+                pendingSourceDomain = button.getAttribute('data-source-domain') || '';
                 pickerInput.click();
             });
         });
@@ -485,6 +483,14 @@
             errorEl.hidden = true;
             var rawFiles = Array.prototype.slice.call(pickerInput.files || []);
             if (!rawFiles.length) return;
+
+            sourceDomainField.value = pendingSourceDomain;
+            var firstRelativePath = rawFiles[0].webkitRelativePath || rawFiles[0].name;
+            var folderName = firstRelativePath.split('/')[0];
+            if (domainSummaryEl) {
+                domainSummaryEl.textContent = (domainLabels[pendingSourceDomain] || 'Folder') + ': ' + folderName;
+                domainSummaryEl.hidden = false;
+            }
 
             selectedFiles = rawFiles.map(function (file) {
                 var relativePath = file.webkitRelativePath || file.name;

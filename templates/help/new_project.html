@@ -68,7 +68,7 @@
 
     <section id="single-file-upload">
         <h2>Upload File</h2>
-        <p>A single upload accepts PDF, DOCX, TXT, CSV, or MD, stores a project copy on Archiosk's server, parses supported content, and records the selected source domain. The file picker displays the active deployment limit when a file is too large.</p>
+        <p>A single upload accepts PDF, DOCX, TXT, CSV, or MD, stores a project copy on Archiosk's server, and parses supported content. When no active connection supplies a source domain, the source remains UNKNOWN rather than being silently classified. The file picker displays the active deployment limit when a file is too large.</p>
         <p>Text-bearing PDFs and documents provide the strongest evidence. Images and scanned drawings may not contain readable text; native images are not accepted by this founding-file control. XLSX can be registered through a supported folder or project document path but cannot establish a project by itself.</p>
         <p>See <a href="{{ url_for('help_center.guide', guide='file-types-and-limits') }}">File types &amp; limits</a> and <a href="{{ url_for('help_center.guide', guide='drawing-ingestion') }}">Drawing ingestion &amp; baselines</a> for detailed limitations.</p>
     </section>

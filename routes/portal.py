@@ -2977,7 +2977,7 @@ def upload():
             upload_entitled=user_can_upload_to_storage(),
         )
 
-    source_domain = request.form.get('source_domain') or SOURCE_DOMAIN_CLIENT_ISSUED
+    source_domain = request.form.get('source_domain') or SOURCE_DOMAIN_UNKNOWN
     if source_domain not in KNOWN_SOURCE_DOMAINS:
         return render_template(
             'upload.html', max_upload_mb=max_upload_mb, error="Select a valid source domain.",

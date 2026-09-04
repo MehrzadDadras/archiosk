@@ -34,7 +34,7 @@ def test_visible_order_and_minimal_labels():
 
 def test_composer_is_last_open_surface_and_has_no_fake_suggestions():
     body = _page()
-    assert body.index("Upload File") < body.index("<h2>Composer</h2>")
+    assert body.index("Upload File") < body.index(">Composer</h2>")
     assert '<section class="upload-composer"' in body
     composer = body[body.index('<section class="upload-composer"'):body.index('</section>', body.index('<section class="upload-composer"'))]
     assert '<details' not in composer
@@ -53,3 +53,16 @@ def test_folder_buttons_keep_distinct_domains():
         start = body.index(label)
         tag = body[body.rfind("<button", 0, start):body.index(">", start) + 1]
         assert f'data-source-domain="{domain}"' in tag
+
+
+def test_cleanup_keeps_required_position_and_minimal_upload_controls():
+    body = _page()
+    assert 'type="radio" name="entry_choice"' in body
+    assert 'type="checkbox" required aria-label="Confirm project position"' not in body
+    assert 'id="single-file-source-domain"' not in body
+    assert '<input type="hidden" name="source_domain" value="UNKNOWN">' in body
+    assert "Create project and parse document" not in body
+    assert ">Upload File</button>" in body
+    assert "Connect Selected Folder" not in body
+    assert ">Connect Folder</button>" in body
+    assert 'id="folder-domain-summary"' in body

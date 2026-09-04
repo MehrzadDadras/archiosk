@@ -50,7 +50,7 @@ def domain_app(tmp_path):
     return application
 
 
-def test_establish_project_renders_three_source_domains_and_single_file_selector(domain_app):
+def test_establish_project_renders_three_source_domains_and_safe_single_file_fallback(domain_app):
     client = domain_app.test_client()
     with client.session_transaction() as session:
         session.update(user_id=1, username="domain_admin", role="admin")
@@ -61,7 +61,8 @@ def test_establish_project_renders_three_source_domains_and_single_file_selector
         assert text in body
     for removed in ("CLIENT / OWNER INFORMATION", "YOUR WORKSPACE", "EXTERNAL REFERENCES"):
         assert removed not in body
-    assert 'name="source_domain"' in body
+    assert '<input type="hidden" name="source_domain" value="UNKNOWN">' in body
+    assert 'id="single-file-source-domain"' not in body
     assert 'name="folder_source_domain"' in body
 
 
@@ -119,4 +120,6 @@ def test_prime_role_keeps_all_domains_and_only_selected_engagement_control_activ
     assert "select.disabled = !active" in template
     assert 'data-for-choice="{{ choice.value }}" hidden' in template
     assert 'data-ui-ref="upload.retained-by.{{ choice.value }}" disabled' in template
+    assert "sourceDomainField.value = pendingSourceDomain" in template
+    assert "domainLabels[pendingSourceDomain]" in template
     assert template.index("</form>") < template.index("group.hidden = !active")

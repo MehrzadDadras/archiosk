@@ -141,7 +141,8 @@ class SingleFilePathWordingTests(_BaseTestCase):
         body = self._body()
         self.assertIn('data-ui-ref="upload.file"', body)
         self.assertIn('data-ui-ref="upload.submit"', body)
-        self.assertIn("Create project and parse document", body)
+        self.assertIn(">Upload File</button>", body)
+        self.assertNotIn("Create project and parse document", body)
 
     def test_form_disables_both_submit_buttons_on_actual_submission(self):
         # CLAUDE-CLIENT-RFP-PROJECT-CREATION-01 (Game E): a real
@@ -187,10 +188,11 @@ class MechanismNotRemovedRegressionTests(_BaseTestCase):
         ):
             self.assertIn(f'data-ui-ref="{ref}"', body)
 
-    def test_folder_picker_wiring_script_still_unchanged(self):
+    def test_folder_picker_wiring_preserves_domain_until_a_new_selection_completes(self):
         body = self._body()
         self.assertIn("pickerButtons.forEach(function (button)", body)
-        self.assertIn("sourceDomainField.value = button.getAttribute('data-source-domain')", body)
+        self.assertIn("pendingSourceDomain = button.getAttribute('data-source-domain')", body)
+        self.assertIn("sourceDomainField.value = pendingSourceDomain", body)
         self.assertIn("submitButton.disabled = !relativePath;", body)
 
     def test_folder_route_still_functions_end_to_end(self):
