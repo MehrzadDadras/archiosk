@@ -428,7 +428,12 @@ class QualificationRuleTests(_BaseTestCase):
                 "field_project_name": "Riverside Community Library",
             })
         self.assertEqual(confirm.status_code, 400)
-        self.assertIn("unique", confirm.get_data(as_text=True))
+        # The rejection is unchanged; only its wording is. The upload path now
+        # states the fact ("Project name already exists.") rather than the rule
+        # ("Entry names must be unique."). Behaviour is what this test guards,
+        # and both assertions around this one still prove it: 400, and the
+        # second project was never created.
+        self.assertIn("Project name already exists.", confirm.get_data(as_text=True))
         self.assertEqual(self._registry_project_count(), 1)
 
     def test_operating_environment_is_carried_through_unchanged_never_re_asked(self):

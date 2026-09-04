@@ -329,13 +329,10 @@ class TheClientSharesTheNormalizationBoundary(unittest.TestCase):
         self.assertIn("form.addEventListener('submit'", self.source)
 
     def test_the_markup_offers_both_a_picker_and_a_hidden_transport_field(self):
-        # Was reading index.html and had been failing since 3ab9477 relocated
-        # the Developer Composer to /admin/developer-tools - index.html has
-        # carried none of this markup since. Same assertions, true file.
-        markup = (_REPO_ROOT / "templates" / "developer_tools.html").read_text(encoding="utf-8")
-        self.assertIn('id="developer-home-composer-image"', markup)
-        self.assertIn('name="image_data_url"', markup)
-        self.assertIn('accept="image/*"', markup)
+        index = (_REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="developer-home-composer-image"', index)
+        self.assertIn('name="image_data_url"', index)
+        self.assertIn('accept="image/*"', index)
 
     def test_it_does_not_import_project_evidence_flows(self):
         # Make-Q / Add-to-Q / capture review are project-evidence concerns and

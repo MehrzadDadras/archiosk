@@ -187,6 +187,23 @@ _UPLOAD_ENTRY_CHOICE_DYNAMIC_REFS = {
     f"upload.entry-choice.{value}" for value in _ENTRY_CHOICES
 }
 
+# The two orientation Composers now render from ONE shared shell
+# (_macros.html's composer_shell), which builds every ref from its ui_prefix
+# argument - `data-ui-ref="{{ ui_prefix }}.form"` - so the literal strings no
+# longer appear in any template source even though the rendered pages carry
+# them exactly as before. Same Jinja-family situation the sets above already
+# describe, declared the same way rather than by loosening the assertion.
+#
+# Deliberately NOT the attachment refs: the shell renders those only when a
+# caller passes attach=True, and neither of these two does (see
+# test_composer_convergence_01's own attachment-boundary contract). Listing
+# them here would claim a control these pages do not render.
+_COMPOSER_SHELL_DYNAMIC_REFS = {
+    f"{prefix}.{part}"
+    for prefix in ("index.orientation", "upload.help")
+    for part in ("form", "submit", "voice", "voice.status", "reply")
+}
+
 # CLAUDE-ENTRY-REDUNDANCY-01: the upstream question is rendered per position,
 # so its refs are a Jinja-loop family too. The operating-environment radios
 # above are gone from the creation form entirely - the environment is derived
@@ -260,6 +277,7 @@ def _all_template_refs() -> set[str]:
     refs |= _UPLOAD_RETAINED_BY_DYNAMIC_REFS
     refs |= _CHUNKED_UPLOAD_DYNAMIC_REFS
     refs |= _INDEX_CHOICE_DYNAMIC_REFS
+    refs |= _COMPOSER_SHELL_DYNAMIC_REFS
     return refs
 
 
