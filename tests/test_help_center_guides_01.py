@@ -136,6 +136,14 @@ class TheThreeNewGuidesTests(_Base):
                 self.assertIn(ext, body)
 
 
+class NewProjectGuideTests(_Base):
+    def test_acronym_guidance_lives_in_help(self):
+        body = self.client().get("/help/new-project").get_data(as_text=True)
+        for text in ("3 or 4 letters", "ABCD-T014", "references", "persists"):
+            with self.subTest(text=text):
+                self.assertIn(text, body)
+
+
 class TheSurfacesLinkRatherThanExplainTests(unittest.TestCase):
     """The point of the migration: a label and a link, not a wall of text."""
 

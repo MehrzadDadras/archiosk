@@ -294,21 +294,19 @@
        It sits directly under the name because it IS project identity, and
        because seeing "South Regional Police Centre / SRPC" together is what
        makes the derivation obviously correct or obviously wrong at a glance. #}
-    <label class="project-code-field" for="upload-project-code">
-        <span class="project-code-label">Acronym</span>
-        <input
-            type="text" name="project_code" class="text-input project-code-input"
-            value="{{ request.form.get('project_code', '') }}"
-            id="upload-project-code" data-ui-ref="upload.project-code"
-            minlength="3" maxlength="4" pattern="[A-Za-z]{3,4}" size="4"
-            autocomplete="off" spellcheck="false" autocapitalize="characters"
-            aria-describedby="upload-project-code-note"
-            placeholder="SRPC">
-        <span class="pane-note" id="upload-project-code-note" data-ui-ref="upload.project-code.note">
-            3&ndash;4 letters. Used in references like <span class="mono">ABCD-T014</span>.
-            Change it now if you like &mdash; after work is filed under it, it stays.
-        </span>
-    </label>
+    <fieldset class="project-code-field" data-ui-ref="upload.project-code">
+        <legend class="project-code-label">Acronym</legend>
+        <input type="hidden" name="project_code" id="upload-project-code"
+               value="{{ request.form.get('project_code', '') }}">
+        <div class="project-code-slots" role="group" aria-label="Acronym">
+            {% for slot in range(4) %}
+            <input type="text" class="project-code-slot" maxlength="1"
+                   inputmode="text" autocomplete="off" spellcheck="false"
+                   autocapitalize="characters" aria-label="Acronym character {{ slot + 1 }}"
+                   data-project-code-slot="{{ slot }}">
+            {% endfor %}
+        </div>
+    </fieldset>
     <div class="upload-form-optional">
         <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor" placeholder="Your name (optional, for the audit trail)">
         <input type="text" name="role" class="text-input" data-ui-ref="upload.role" placeholder="Your role (optional)">
@@ -388,10 +386,62 @@
 (function () {
     var name = document.getElementById('upload-project-name');
     var code = document.getElementById('upload-project-code');
-    if (!name || !code) return;
+    var slots = Array.prototype.slice.call(document.querySelectorAll('[data-project-code-slot]'));
+    if (!name || !code || slots.length !== 4) return;
     var NOISE = ['the', 'a', 'an', 'of', 'for', 'and', 'at', 'in', 'on', 'to'];
     var edited = false;
-    code.addEventListener('input', function () { edited = true; });
+
+    function letters(value) {
+        return (value || '').replace(/[^A-Za-z]/g, '').toUpperCase();
+    }
+
+    function render(value) {
+        value = letters(value);
+        slots.forEach(function (slot, index) { slot.value = value.charAt(index); });
+        code.value = value;
+    }
+
+    function sync() {
+        code.value = slots.map(function (slot) { return slot.value; }).join('');
+        var valid = code.value.length === 0 || code.value.length === 3 || code.value.length === 4;
+        slots[0].setCustomValidity(valid ? '' : 'Enter a 3 or 4 letter acronym.');
+    }
+
+    slots.forEach(function (slot, index) {
+        slot.addEventListener('input', function () {
+            edited = true;
+            var value = letters(slot.value);
+            if (value.length > 1) {
+                render(value);
+                slots[Math.min(value.length, 4) - 1].focus();
+            } else {
+                slot.value = value;
+                sync();
+                if (value && index < slots.length - 1) slots[index + 1].focus();
+            }
+        });
+        slot.addEventListener('keydown', function (event) {
+            if (event.key === 'Backspace' && !slot.value && index > 0) {
+                event.preventDefault();
+                slots[index - 1].value = '';
+                slots[index - 1].focus();
+                edited = true;
+                sync();
+            }
+        });
+        slot.addEventListener('paste', function (event) {
+            var pasted = letters((event.clipboardData || window.clipboardData).getData('text'));
+            if (!pasted) return;
+            event.preventDefault();
+            edited = true;
+            render(pasted);
+            slots[0].setCustomValidity(pasted.length <= 4 ? '' : 'Enter a 3 or 4 letter acronym.');
+            slots[Math.min(pasted.length, 4) - 1].focus();
+        });
+    });
+
+    render(code.value);
+    sync();
     name.addEventListener('input', function () {
         // Never overwrite a value the person chose themselves.
         if (edited && code.value) return;
@@ -407,7 +457,8 @@
         if (initials.length < 3 && significant.length) {
             initials = significant[0].slice(0, 4).toUpperCase();
         }
-        code.value = /^[A-Za-z]/.test(initials) ? initials : '';
+        render(/^[A-Za-z]/.test(initials) ? initials : '');
+        sync();
     });
 })();
 </script>

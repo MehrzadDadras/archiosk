@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>New Project &mdash; Help</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'New Project'}]) }}
+
+<header class="pm-head">
+    <h1>New Project</h1>
+</header>
+
+<article class="help-body">
+    <section id="project-name">
+        <h2>Project name</h2>
+        <p>Use the project name your team will recognize. Project names must be unique. If no name is entered, Archiosk derives one from the selected file or folder; a duplicate name is refused.</p>
+    </section>
+
+    <section id="acronym">
+        <h2>Acronym</h2>
+        <p>Use 3 or 4 letters. The acronym becomes the short project identity used in references such as <span class="mono">ABCD-T014</span>.</p>
+        <p>You can accept the acronym derived from the project name or type your own. After project work is filed under it, the acronym persists so existing references do not change.</p>
+    </section>
+</article>
+
+<p class="pm-note"><a href="{{ url_for('help_center.index') }}">&larr; All guides</a></p>
+</body>
+</html>

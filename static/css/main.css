@@ -2266,10 +2266,21 @@ main:has(.document-viewer-canvas-container) {
    what makes a derived acronym obviously right or obviously wrong at a glance.
    Narrow by construction: a 4-character field that looks like a 4-character
    field tells the user the limit without a validation message. */
-.project-code-field { display: flex; align-items: baseline; gap: .55rem; flex-wrap: wrap; margin: .5rem 0 0; }
+.project-code-field { border: 0; padding: 0; margin: .5rem 0 0; }
 .project-code-label { font-size: .8rem; color: var(--text-secondary); }
-.project-code-input { width: 6ch; max-width: 6ch; min-width: 6ch; text-transform: uppercase; letter-spacing: .06em; }
-#upload-project-code-note { flex: 1 1 16rem; margin: 0; }
+.project-code-slots { display: flex; gap: .35rem; margin-top: .35rem; }
+.project-code-slot {
+    width: 2.25rem;
+    height: 2.5rem;
+    border: 1px solid var(--border);
+    border-radius: .25rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    font: 600 1rem/1 var(--font-mono);
+    text-align: center;
+    text-transform: uppercase;
+}
+.project-code-slot:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .composer-candidate-doc { display: flex; align-items: center; gap: .5rem; margin: 0 0 .35rem; font-size: .85rem; color: var(--text-secondary); }
 .composer-candidate-doc strong { font-weight: 500; color: var(--text-primary); }

@@ -27,6 +27,11 @@ help_bp = Blueprint("help_center", __name__)
 # template-injection surface, and "guides" is not a directory anyone should be
 # able to walk.
 GUIDES = {
+    "new-project": {
+        "template": "help/new_project.html",
+        "title": "New Project",
+        "summary": "Project naming, acronym rules, references, and persistence.",
+    },
     "field-access-passes": {
         "template": "help/field_access_passes.html",
         "title": "Field access passes",

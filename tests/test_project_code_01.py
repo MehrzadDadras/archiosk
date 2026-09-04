@@ -109,11 +109,14 @@ class ValidatingWhatAPersonTyped(unittest.TestCase):
         with self.assertRaises(ProjectCodeError):
             validate_code("P1S")
 
-    def test_establish_form_declares_the_same_length_and_alpha_constraints(self):
+    def test_establish_form_uses_four_slots_and_submits_one_value(self):
         template = (Path(__file__).resolve().parents[1] / "templates" / "upload.html").read_text(encoding="utf-8")
-        self.assertIn('minlength="3"', template)
-        self.assertIn('maxlength="4"', template)
-        self.assertIn('pattern="[A-Za-z]{3,4}"', template)
+        self.assertEqual(template.count('data-project-code-slot="{{ slot }}"'), 1)
+        self.assertIn('{% for slot in range(4) %}', template)
+        self.assertEqual(template.count('name="project_code"'), 1)
+        self.assertIn('type="hidden" name="project_code"', template)
+        self.assertNotIn('3&ndash;4 letters.', template)
+        self.assertNotIn('Used in references like', template)
 
     def test_an_empty_code_is_refused(self):
         with self.assertRaises(ProjectCodeError):
