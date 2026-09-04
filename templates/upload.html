@@ -4,16 +4,14 @@
 {% block title %}New Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
-{# The page title is a rule head, not a hero: "New Project" at working-copy
-   size on the left of a horizontal divider that carries to the right edge.
-   The hero's 2.25rem display type was the largest thing on a page whose
-   actual subject is the form beneath it, so it competed with the section
-   frames rather than introducing them. The divider is the same 1px
-   var(--border) line .gateway-divider already draws. #}
-<div class="np-rule-head" data-ui-ref="upload.page-title">
-    <h1>New Project</h1>
-    <span class="np-rule" aria-hidden="true"></span>
-</div>
+{# A plain, standalone page title. The hero's 2.25rem display type was the
+   largest thing on a page whose actual subject is the form beneath it, so
+   the reduced size stays; the horizontal rule that briefly ran beside it
+   was removed on live visual judgement - a line travelling right from the
+   text read as an unfinished divider rather than a heading, and the five
+   bordered section frames below already supply all the structure the page
+   needs. #}
+<h1 class="np-page-title" data-ui-ref="upload.page-title">New Project</h1>
 
 <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 
@@ -49,8 +47,13 @@
        the architecture's own vocabulary reaches the user: the system carries
        the sophistication so the user does not have to. Declaring a position
        establishes no contractual authority and selects no contract form. #}
+    {# "Company identity" names the company-level answer, against "Your
+       identity" above it, which is the person. The field itself is unchanged
+       and still per-project: a company is Lead Design Consultant on one job
+       and Subconsultant on the next, and the comment above still governs -
+       declaring it establishes no contractual authority. #}
     <fieldset class="operating-environment-fieldset">
-        <legend>Your project position</legend>
+        <legend>Company identity</legend>
         {% for choice in entry_choices %}
         <label class="operating-environment-option entry-choice-option">
             <input
@@ -147,12 +150,16 @@
         <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
         <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
             {# The "(required - select one to continue)" gloss was explaining a
-               state the disabled Connect Folder button already shows. #}
+               state the disabled Upload Folder button already shows. #}
             <p class="pane-note">Which of these is the principal document for this project?</p>
             <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
         </div>
         <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
-        <button type="submit" class="btn btn-ghost" id="folder-submit-button" disabled formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">Connect Folder</button>
+        {# "Upload Folder", matching this fieldset's own legend. The three
+           buttons above deliberately keep Connect/Add: they choose a source
+           domain and open the picker, connecting nothing yet. This one is the
+           act itself, so it does not share their verb. #}
+        <button type="submit" class="btn btn-ghost" id="folder-submit-button" disabled formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">Upload Folder</button>
     </fieldset>
 
     {# Staged multi-file selection. The picker sits BELOW the staged rows, so

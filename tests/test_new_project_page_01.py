@@ -20,7 +20,7 @@ def _page():
 
 def test_visible_order_and_minimal_labels():
     body = _page()
-    labels = ["New Project", "Your name", "Your role", "Your project position",
+    labels = ["New Project", "Your name", "Your role", "Company identity",
               "Project name", "Acronym", "Upload Project Folder", "Upload File", "Composer"]
     positions = [body.index(label) for label in labels]
     assert positions == sorted(positions)
@@ -64,7 +64,11 @@ def test_cleanup_keeps_required_position_and_minimal_upload_controls():
     assert "Create project and parse document" not in body
     assert ">Upload Files</button>" in body
     assert "Connect Selected Folder" not in body
-    assert ">Connect Folder</button>" in body
+    # The submit says Upload Folder, matching its fieldset's own legend; the
+    # three source-domain buttons above keep Connect/Add because they open a
+    # picker rather than perform the upload.
+    assert ">Upload Folder</button>" in body
+    assert ">Connect Folder</button>" not in body
     assert 'id="folder-domain-summary"' in body
 
 
@@ -76,15 +80,20 @@ def test_identity_and_project_identity_are_framed_sections():
     identity = body[body.index('data-ui-ref="upload.identity"'):body.index('data-ui-ref="upload.entry-choice')]
     assert 'name="actor"' in identity and 'name="role"' in identity
     project_identity = body.index('data-ui-ref="upload.project-identity"')
-    assert body.index("Your project position") < project_identity
+    assert body.index("Company identity") < project_identity
     assert body.index('name="project_name"') > project_identity
 
 
-def test_page_title_is_a_rule_head_not_a_hero():
+def test_page_title_is_plain_and_standalone_not_a_hero():
     body = _page()
-    assert 'class="np-rule-head"' in body
-    assert '<span class="np-rule"' in body
+    assert 'class="np-page-title"' in body
     assert '<section class="hero new-project-hero">' not in body
+    # No rule, border or divider attached to the title - the five bordered
+    # section frames below carry the page's structure.
+    assert 'np-rule' not in body
+    title = body[body.index('class="np-page-title"'):]
+    assert '</h1>' in title[:200]
+    assert '<span' not in title[:title.index('</h1>')]
 
 
 def test_upload_file_stages_multiple_files_without_a_domain_selector():

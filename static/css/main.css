@@ -1678,24 +1678,20 @@ main:has(.document-viewer-canvas-container) {
     font-weight: 300;
 }
 .new-project-hero h1 { font-size: 2.25rem; }
-/* New Project page title: name on the left, rule carrying to the right
-   edge. Structural, not decorative - the same 1px var(--border) line
-   .gateway-divider draws, no new token and no color meaning added. */
-.np-rule-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    margin: 0 0 var(--space-6);
-}
-.np-rule-head h1 {
+/* New Project page title. Plain and standalone: no border, no rule, no
+   flex row. It briefly carried a horizontal rule running to the right edge
+   and that was removed on live visual judgement - it read as an unfinished
+   divider rather than a heading. Deliberately NOT .dash-head, which draws
+   its own border-bottom; the five bordered section frames below already
+   give this page its structure, and a sixth line above them was one too
+   many. Size stays reduced from the retired 2.25rem hero. */
+.np-page-title {
     font-family: var(--font-display);
     font-size: 1.35rem;
     font-weight: 300;
     line-height: 1.2;
-    margin: 0;
-    white-space: nowrap;
+    margin: 0 0 var(--space-6);
 }
-.np-rule { flex: 1 1 auto; height: 1px; background: var(--border); }
 /* One frame per section of New Project. Same border-only treatment as
    .operating-environment-fieldset and .storage-connection-fieldset, so all
    five sections read as one series rather than three framed and two loose. */
