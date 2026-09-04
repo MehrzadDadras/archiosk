@@ -2134,7 +2134,7 @@ main:has(.document-viewer-canvas-container) {
 }
 .dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; font-weight: 300; }
 .dash-head-actions { display: flex; gap: 0.6rem; align-items: center; }
-.mono { font-family: var(--font-body); color: var(--machine-blue); font-size: 1.1rem; }
+.mono { font-family: var(--font-body); font-size: 1.1rem; }
 .form-error { color: var(--failure-red); }
 .dash-meta { display: flex; gap: 2.2rem; }
 .meta-stat { text-align: right; }
