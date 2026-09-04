@@ -1,5 +1,95 @@
 # Continuation checkpoint
 
+## 2026-09-04 (deploy) — `37326a8` live at `v=152`: label cleanups, two governance decisions, and an egress guard
+
+**`37326a8` is live on `https://archiosk.com`**, replacing `7dac0ca`. Confirmed from
+systemd: `Gunicorn - ArchiOSK GO (accepted build 37326a8)`. `STATIC_VERSION` 151 → 152,
+stepped as `CURRENT + 1` off the live file and verified served (`?v=152`). Internal and
+public `/health` both 200; `/`, `/login`, `/explore` all 200. Rollback marker
+`/var/www/archiosk-backup-7dac0ca-pre-37326a8`, `.env` at `/root/archiosk.env.bak-7dac0ca`,
+outside the live tree.
+
+Verified by live content, not only by the marker: the served `main.css` carries
+`np-page-title`, `upload-file-rows` and `upload-file-row-remove` and no longer carries
+`np-rule-head`/`.np-rule`; the deployed `upload.html` carries `>Upload Folder</button>`,
+`<legend>Company identity</legend>` and `np-page-title`, and carries none of
+`>Connect Folder</button>`, `Your project position` or `np-rule-head`. The stashed TTS
+files are absent from the live tree, as intended.
+
+### What shipped
+
+Three label/header cleanups are the only user-visible change: the folder submit reads
+**Upload Folder** (matching its own legend, while the three source-domain buttons keep
+Connect/Add because they open a picker rather than perform the upload), the position
+fieldset reads **Company identity**, and the page title is a plain standalone `<h1>` with
+the horizontal rule removed on live visual judgement. Everything else is governance,
+tests and documentation.
+
+### Two decisions recorded where they govern
+
+**Conversation Thread Lifecycle superseded by the Disposable Project Workspace model.**
+Actions 16/17/18 dropped. The root cause was developer-mode scratchpad mess, not a
+governed-record problem, and it is solved at the container: sandbox projects are deleted
+or reset wholesale. `CaseRecord` stays unbloated, production keeps one linear
+`project_conversation`, and `CLAUDE-ONE-COMPOSER-01` / `CLAUDE-MOBILE-PRIMARY-RESET-01`
+remain intact and unreversed. The design record is preserved in full with Sections 0-6
+unedited and non-governing.
+
+**Voice output shelved indefinitely.** Studio Voice (OpenAI speech egress) and Device
+Voice are both NOT AUTHORIZED. Recorded in order of seriousness, with the test failure
+last: the route sent governed project text to OpenAI referencing
+`ACTION_EXTERNAL_AI_REQUEST` zero times; `services/tts.py` reached a third provider
+outside `llm_gateway.py`; `openai==1.109.1` arrived without `tools/dependency_fit.py`;
+and `capability_registry.py`'s user-facing claim that ARCHIOSK "cannot speak its own
+replies aloud" would have become false. Explicitly recorded as NOT a substantive
+violation of `CLAUDE-MOBILE-Q-TRIAL-01`, which prohibits *automatic brand speech* — the
+code was click-triggered and never spoke the brand, so repealing that prohibition to
+admit read-aloud would have repealed the wrong rule. The work survives in `stash@{0}`
+(base `a8cfc0b`, 10 files, recoverability verified byte-for-byte).
+
+### The guard blind spot, closed
+
+The speech guards scan `static/js` for `speechSynthesis`. They caught Device Voice —
+fully local, no network — and were silent on Studio Voice, which contains neither string
+and shipped project text to OpenAI. **The guard caught the harmless half and missed the
+dangerous one**; deleting `browserSpeak` alone would have turned the suite green with the
+egress intact.
+
+`tests/test_external_provider_boundary_01.py` closes it, and was verified to CATCH rather
+than merely pass: run against the shelved work, `services/tts.py` fails it four times
+over. Two implementation notes worth keeping. Imports are read from the parsed AST, not
+by regex, so a provider named in a comment is never mistaken for a call. Comments and
+docstrings are stripped before the egress scan because `capability_registry.py`
+legitimately discusses "text-to-speech" while explaining ARCHIOSK has no such capability
+— verified to match without stripping and not with it, so a guard lacking this would have
+been unusable on day one. `_PROVIDER_DOORS` is an allowlist, not a description:
+`anthropic` is reached by four modules, `llm_gateway` plus the three pre-existing copies
+its own docstring records it was extracted from without finishing the migration. They are
+grandfathered as not endorsed, and converging them is a real bounded candidate.
+
+### The gate, and a corrected count
+
+**12 failed, 6,177 passed, 2 skipped, 4 deselected, 2,573 subtests, 2:43:33,
+`PYTEST_EXIT=1`.** The background-task notification again reported "exit code 0" for the
+wrapper while pytest exited 1 — the trap `CLAUDE.md` documents; the redirected log is what
+was read.
+
+**The baseline was reported during this session as 11. It was 12, and the correction
+belongs here.** Stashing the TTS work removed two failures and the duplicate-name fix
+removed one, but reverting `test_developer_composer_image_01`'s path repair — done on
+explicit Product Owner instruction — put one back. That arithmetic was missed at the time.
+All 12 are accounted for: eleven stale assertions pre-existing at `53e1ca0`, plus that one
+deliberate revert, whose file is byte-identical to its pre-tranche state. Zero new
+failures, zero regressions from this tranche.
+
+Both speech guards now pass, and the new provider-boundary guard passes.
+
+### Still owed
+
+The eleven inherited failures remain red by Product Owner instruction. Three of them trace
+to eleven commits landing with empty message bodies across six undocumented production
+deployments — the recording gap that made them invisible until this tranche looked.
+
 ## 2026-09-04 (deploy) — `7dac0ca` live at `v=151`: New Project sections, staged multi-file upload, one shared Composer
 
 **`7dac0ca` is live on `https://archiosk.com`**, replacing `53e1ca0`. Confirmed
