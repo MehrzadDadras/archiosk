@@ -2135,6 +2135,22 @@ main:has(.document-viewer-canvas-container) {
 .dash-head h1 { font-family: var(--font-display); font-size: 1.8rem; margin: 0.3rem 0 0; font-weight: 300; }
 .dash-head-actions { display: flex; gap: 0.6rem; align-items: center; }
 .mono { font-family: var(--font-body); font-size: 1.1rem; }
+/* A machine-originated value shown verbatim: a build version, a recorded
+   surface, a reference format specimen. tokens.css assigns --machine-blue
+   to "machine/system/reference", and this is the deliberate way to claim
+   it - one declaration, colour only.
+
+   Deliberately NOT folded back into .mono. That class carried this colour
+   implicitly and painted everything it touched as machine output,
+   including labels whose own class had already declared --text-metadata;
+   separating the two is the entire point, and merging them again would
+   rebuild the coupling. Typography is chosen by .mono, meaning by this.
+
+   Deliberately NOT applied to ids. --text-metadata's own definition reads
+   "timestamps, ids, labels", so a project id is metadata by the grammar's
+   own words even though it is machine-generated, and .project-card-id
+   already says so. */
+.reference-value { color: var(--machine-blue); }
 .form-error { color: var(--failure-red); }
 .dash-meta { display: flex; gap: 2.2rem; }
 .meta-stat { text-align: right; }

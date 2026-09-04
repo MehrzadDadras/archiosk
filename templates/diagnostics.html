@@ -37,11 +37,11 @@
                 <span>{{ r.reported_at.strftime('%Y-%m-%d %H:%M') if r.reported_at else 'unknown' }}</span>
                 {% if r.static_version %}
                 <span class="project-card-dot" aria-hidden="true">&middot;</span>
-                <span class="mono">v{{ r.static_version }}</span>
+                <span class="mono reference-value">v{{ r.static_version }}</span>
                 {% endif %}
                 {% if r.surface %}
                 <span class="project-card-dot" aria-hidden="true">&middot;</span>
-                <span class="mono">{{ r.surface }}</span>
+                <span class="mono reference-value">{{ r.surface }}</span>
                 {% endif %}
             </div>
             {% if r.findings %}
