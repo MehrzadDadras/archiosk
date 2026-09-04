@@ -37,9 +37,16 @@
         <p>GO uses project position to decide which questions and evidence to bring forward. It does not determine your contract, authority, entitlement, or document authority. Confirmation is required because project position becomes immutable after project creation.</p>
     </section>
 
+    <section id="page-sections">
+        <h2>How the page is arranged</h2>
+        <p>New Project asks in a fixed order: <strong>Your identity</strong> (your name and your role), <strong>Your project position</strong>, <strong>Project identity</strong> (project name and acronym), <strong>Upload Project Folder</strong>, <strong>Upload File</strong>, and <strong>Composer</strong> last.</p>
+        <p>Your identity and Project identity are framed together because each pair is one answer: who you are, and what this project is called. The grouping is presentational — every field behaves exactly as it does elsewhere.</p>
+    </section>
+
     <section id="project-name">
         <h2>Project name</h2>
-        <p>Use the project name your team will recognize. Project names must be unique. If no name is entered, Archiosk derives one from the selected file or folder; a duplicate name is refused.</p>
+        <p>Use the project name your team will recognize. Project names must be unique. If no name is entered, Archiosk derives one from the selected file or folder; a duplicate name is refused with <span class="mono">Project name already exists.</span></p>
+        <p>Uniqueness is checked against every existing project's current effective name, not just its original filename, so renaming an earlier project does not free up its old name by accident.</p>
     </section>
 
     <section id="acronym">
@@ -68,7 +75,9 @@
 
     <section id="single-file-upload">
         <h2>Upload File</h2>
-        <p>A single upload accepts PDF, DOCX, TXT, CSV, or MD, stores a project copy on Archiosk's server, and parses supported content. When no active connection supplies a source domain, the source remains UNKNOWN rather than being silently classified. The file picker displays the active deployment limit when a file is too large.</p>
+        <p>Upload File accepts PDF, DOCX, TXT, CSV, or MD, stores a project copy on Archiosk's server, and parses supported content. When no active connection supplies a source domain, the source remains UNKNOWN rather than being silently classified. The file picker displays the active deployment limit when a file is too large.</p>
+        <p><strong>Choosing more than one file.</strong> Choose File accepts a multiple selection, and each chosen file becomes its own row. Choosing again <em>adds</em> to the list rather than replacing it, so you can pick from several folders in turn. A file already staged is not added twice. Each row's &times; removes only that file, and Upload Files stays unavailable while no file is staged.</p>
+        <p>With one file staged, the page behaves exactly as a single upload always has. With more than one, the <strong>first file in the list establishes the project</strong> and the rest are connected as additional documents; the page states which file that is before you submit. Nothing is uploaded until you press Upload Files.</p>
         <p>Text-bearing PDFs and documents provide the strongest evidence. Images and scanned drawings may not contain readable text; native images are not accepted by this founding-file control. XLSX can be registered through a supported folder or project document path but cannot establish a project by itself.</p>
         <p>See <a href="{{ url_for('help_center.guide', guide='file-types-and-limits') }}">File types &amp; limits</a> and <a href="{{ url_for('help_center.guide', guide='drawing-ingestion') }}">Drawing ingestion &amp; baselines</a> for detailed limitations.</p>
     </section>
@@ -76,7 +85,9 @@
     <section id="composer">
         <h2>Composer</h2>
         <p>Use Composer at the bottom of New Project to ask GO about the page and its fields. It uses New Project page context and does not create a project or ingest a selected file. The file picker is not a manual document-context toggle.</p>
+        <p>Composer looks and behaves the same everywhere in Archiosk — same field, microphone, Send button, spacing and keyboard rules — because every one of them is rendered from a single shared Composer. Pressing Enter sends; Shift+Enter starts a new line where the field accepts one.</p>
         <p>No demonstration suggestions are shown. If real suggestions are available, Down Arrow selects the next suggestion, Up Arrow selects the previous one, Enter accepts it, and Escape dismisses the list. Arrow keys are not captured while suggestions are closed.</p>
+        <p><strong>Why there is no attachment control here.</strong> Composer offers a <span class="mono">+</span> attachment only where an attached file has a governed home to go to — inside a project. New Project has no project yet, and this Composer answers from page context rather than reading documents, so it would have nowhere to put an attachment and nothing to do with it. The control is left out rather than shown and quietly ignored.</p>
     </section>
 
     <section id="elapsed-status">

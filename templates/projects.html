@@ -58,15 +58,22 @@
    identifies a KIND of control, not the page it sits on, and renaming them
    would churn the registry and several test files to describe the same
    control doing the same job. UI_REFERENCE_MAP.md records the new location. #}
-<form class="gateway-orientation-form" id="index-orientation-form" data-ui-ref="index.orientation.form"
-      data-developer-composer-form data-composer-send='[data-ui-ref="index.orientation.submit"]'>
-    <input type="text" class="text-input" id="index-orientation-input" name="message" data-developer-composer-input autocomplete="off" placeholder="Open a project, or ask what you can do here" aria-label="Ask Archiosk">
-    <button type="button" id="index-orientation-voice" class="voice-input-button" data-ui-ref="index.orientation.voice"
-            aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
-    <button type="submit" class="btn btn-ghost" data-ui-ref="index.orientation.submit">Ask</button>
-    <span class="voice-input-status" id="index-orientation-voice-status" data-ui-ref="index.orientation.voice.status" aria-live="polite"></span>
-</form>
-<p class="gateway-orientation-reply" id="index-orientation-reply" data-ui-ref="index.orientation.reply" aria-live="polite" hidden></p>
+{# Now the shared shell (_macros.html composer_shell). Same ids, same
+   index.orientation.* refs, same POST - what changed is that this stopped
+   being a second hand-maintained copy of the same control. Its button said
+   "Ask" where New Project's said "Send" for no reason either page could
+   name; one shell means one word for one act. #}
+{# attach=False for the same reason New Project's is - _classify_gateway_
+   orientation takes (message, projects, can_create_project) and no image.
+   See upload.html's own note for what unlocks it. #}
+{{ macros.composer_shell(
+    prefix="index-orientation",
+    ui_prefix="index.orientation",
+    action=url_for('portal.gateway_orientation'),
+    send_label="Send",
+    placeholder="Open a project, or ask what you can do here",
+    aria_label="Ask Archiosk",
+    attach=False) }}
 
 {# CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives here now.
 

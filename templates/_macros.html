@@ -701,3 +701,76 @@
    folder caption cut into the composer's upper blue rule rather than a
    floating label - chat.context-indicator is unchanged as a UI
    reference, only its DOM position and visual treatment moved. #}
+
+{# -- composer_shell -------------------------------------------------------
+   ONE Composer shell for every surface that offers an orientation/ask
+   Composer outside the Case Workspace dock: New Project and the All
+   Projects home today, the Developer Tools workbench next.
+
+   Before this macro those two were the same control copy-pasted twice and
+   then drifted: one said "Send" and the other "Ask", one carried a context
+   field and the other did not, and only the Developer workbench had an
+   attachment door at all. Nothing about either page justified the
+   difference - it was two edits at two times, which is exactly the
+   proliferation this repository's own operating notes name.
+
+   The parameters are the only things that legitimately vary: which id
+   prefix the page's own scripts already bind to, which data-ui-ref family
+   the reference registry already records, where the form posts, and what
+   the field asks for. Everything structural - order of controls, classes,
+   spacing, focus/hover treatment, keyboard binding, voice wiring - comes
+   from here so it cannot drift again.
+
+   `attach` is opt-in and deliberately NOT the workspace Composer's
+   attachment apparatus. main.css's own note on the establish help desk
+   says the + chip means "this is going into the record"; on New Project
+   there is no record yet, so this rides one turn to the model and is filed
+   by nothing, exactly as the Developer workbench's own screenshot door
+   already behaves. Make-Q, Add-to-Q and the capture/crop flow are project-
+   evidence machinery and stay out. #}
+{% macro composer_shell(prefix, ui_prefix, action, send_label="Send",
+                        placeholder="", context_value=None,
+                        aria_label="Composer", attach=True) %}
+<form class="gateway-orientation-form composer-shell" id="{{ prefix }}-form"
+      data-ui-ref="{{ ui_prefix }}.form"
+      data-developer-composer-form
+      data-composer-send='[data-ui-ref="{{ ui_prefix }}.submit"]'
+      {% if attach %}data-composer-image-scope{% endif %}
+      action="{{ action }}" method="post">
+    {# The page's own script fetches this endpoint and preventDefaults, so the
+       token is for the case where it does not: a real POST must not 400 on a
+       missing token when the only thing that failed was JavaScript. #}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="text" class="text-input" id="{{ prefix }}-input" name="message"
+           data-developer-composer-input autocomplete="off"
+           {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+           aria-label="{{ aria_label }}">
+    {% if context_value %}<input type="hidden" name="context" value="{{ context_value }}">{% endif %}
+    {% if attach %}
+    <label class="composer-attach" for="{{ prefix }}-image"
+           data-ui-ref="{{ ui_prefix }}.attach" title="Attach a screenshot">
+        <span aria-hidden="true">+</span>
+        <span class="visually-hidden">Attach a screenshot</span>
+    </label>
+    <input type="file" id="{{ prefix }}-image" accept="image/*" data-composer-image-input hidden>
+    <input type="hidden" name="image_data_url" id="{{ prefix }}-image-data" data-composer-image-field>
+    <span class="composer-attach-chip" id="{{ prefix }}-image-chip"
+          data-composer-image-chip data-ui-ref="{{ ui_prefix }}.attach.preview" hidden>
+        <img class="composer-attach-thumb" id="{{ prefix }}-image-thumb"
+             data-composer-image-thumb alt="" aria-hidden="true">
+        <span class="composer-attach-name" id="{{ prefix }}-image-name" data-composer-image-name></span>
+        <button type="button" class="composer-attach-clear" id="{{ prefix }}-image-clear"
+                data-composer-image-clear data-ui-ref="{{ ui_prefix }}.attach.clear"
+                aria-label="Remove the attached screenshot">&times;</button>
+    </span>
+    {% endif %}
+    <button type="button" id="{{ prefix }}-voice" class="voice-input-button"
+            data-ui-ref="{{ ui_prefix }}.voice"
+            aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
+    <button type="submit" class="btn btn-ghost" data-ui-ref="{{ ui_prefix }}.submit">{{ send_label }}</button>
+    <span class="voice-input-status" id="{{ prefix }}-voice-status"
+          data-ui-ref="{{ ui_prefix }}.voice.status" aria-live="polite"></span>
+</form>
+<p class="gateway-orientation-reply" id="{{ prefix }}-reply"
+   data-ui-ref="{{ ui_prefix }}.reply" aria-live="polite" hidden></p>
+{% endmacro %}

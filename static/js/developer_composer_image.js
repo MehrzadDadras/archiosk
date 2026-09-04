@@ -1,35 +1,42 @@
-/* CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: screenshots into the Developer Composer.
+/* CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: screenshots into a Composer.
 
-   Two doors, because the Product Owner reached for the one that did not exist:
-   a real Ctrl/Cmd+V paste (what a screenshot workflow actually is), and the +
-   picker (what a phone offers). Both end at the same hidden field, so the
-   server sees one wire format either way.
+   Two doors, because the Product Owner reached for the one that did not
+   exist: a real Ctrl/Cmd+V paste (what a screenshot workflow actually is),
+   and the + picker (what a phone offers). Both end at the same hidden field,
+   so the server sees one wire format either way.
+
+   Now binds PER FORM rather than to one set of developer-home ids. The
+   behavior is identical and the Developer workbench's own ids are unchanged;
+   what changed is that _macros.html's composer_shell can hand this module any
+   Composer, which is what "one shared Composer everywhere" requires. A form
+   opts in with data-composer-image-scope and names its parts with
+   data-composer-image-* attributes; a page with no such form does nothing.
 
    DELIBERATELY NOT composer_attach.js. That module is 533 lines bound to the
    workspace Composer's own ids and carries Make-Q, Add-to-Q and the capture
-   crop/review flow - project-evidence machinery that has no meaning here, since
-   Developer Mode has no project and files nothing. Generalizing it would have
-   meant reworking a load-bearing path for a surface that needs a fraction of
-   it.
+   crop/review flow - project-evidence machinery that has no meaning here,
+   since these surfaces file nothing. Generalizing it would have meant
+   reworking a load-bearing path for a surface that needs a fraction of it.
 
-   What IS shared is the part that must be: window.ArchioskPrepareImage, the one
-   place the byte/edge boundary is applied. Its own comment says both doors into
-   the same vision capability must normalize identically "otherwise a camera
-   photo succeeds or fails solely because of which Composer surface happened to
-   receive it" - and that now includes this one. It is defined on every page
-   (before composer_attach.js's own early return), so nothing new is loaded to
-   get it. */
+   What IS shared is the part that must be: window.ArchioskPrepareImage, the
+   one place the byte/edge boundary is applied. Its own comment says both
+   doors into the same vision capability must normalize identically
+   "otherwise a camera photo succeeds or fails solely because of which
+   Composer surface happened to receive it" - and that now includes every
+   surface this binds. It is defined on every page (before
+   composer_attach.js's own early return), so nothing new is loaded. */
 (function () {
-    var input = document.getElementById('developer-home-composer-image');
-    var field = document.getElementById('developer-home-composer-image-data');
-    var chip = document.getElementById('developer-home-composer-image-chip');
-    var thumb = document.getElementById('developer-home-composer-image-thumb');
-    var nameEl = document.getElementById('developer-home-composer-image-name');
-    var clearBtn = document.getElementById('developer-home-composer-image-clear');
-    var messageBox = document.querySelector('.developer-home-composer-form [data-developer-composer-input]');
-    if (!input || !field) return;
-
-    var form = field.closest('form');
+    function bind(form) {
+        if (!form || form.dataset.composerImageBound === 'true') return;
+        var input = form.querySelector('[data-composer-image-input]');
+        var field = form.querySelector('[data-composer-image-field]');
+        if (!input || !field) return;
+        form.dataset.composerImageBound = 'true';
+        var chip = form.querySelector('[data-composer-image-chip]');
+        var thumb = form.querySelector('[data-composer-image-thumb]');
+        var nameEl = form.querySelector('[data-composer-image-name]');
+        var clearBtn = form.querySelector('[data-composer-image-clear]');
+        var messageBox = form.querySelector('[data-developer-composer-input]');
 
     function show(name, dataUrl) {
         field.value = dataUrl;
@@ -114,4 +121,11 @@
             window.setTimeout(clear, 0);
         });
     }
+    }
+
+    function bindAll() {
+        document.querySelectorAll('[data-composer-image-scope]').forEach(bind);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAll);
+    else bindAll();
 })();

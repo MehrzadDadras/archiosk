@@ -97,3 +97,39 @@ def test_upload_file_stages_multiple_files_without_a_domain_selector():
     # Action 9: no visible Source Domain dropdown, UNKNOWN fallback preserved.
     assert '<input type="hidden" name="source_domain" value="UNKNOWN">' in fieldset
     assert "<select" not in fieldset
+
+
+def _help_page():
+    import app as app_module
+    from models import User, db
+
+    application = app_module.create_app("testing")
+    with application.app_context():
+        db.session.add(User(username="np_help", password_hash=generate_password_hash("x"), role="admin"))
+        db.session.commit()
+    client = application.test_client()
+    with client.session_transaction() as session:
+        session.update(user_id=1, username="np_help", role="admin")
+    return client.get("/help/new-project").get_data(as_text=True)
+
+
+def test_help_carries_the_explanations_the_working_screen_dropped():
+    help_body = _help_page()
+    # Each of these was removed from, or never stated on, the working screen.
+    for topic in ("Choosing more than one file", "first file in the list establishes the project",
+                  "Project name already exists.", "How the page is arranged",
+                  "Your identity", "Project identity",
+                  "Why there is no attachment control here"):
+        assert topic in help_body, topic
+    # And the roles / source-domain / folder guidance it already held is intact.
+    for kept in ("Client Data Room", "TEAM_WORKSPACE", "EXTERNAL_REFERENCE",
+                 "Upload Project Folder", "3 or 4 letters"):
+        assert kept in help_body, kept
+
+
+def test_help_does_not_contradict_the_working_screen():
+    help_body = _help_page()
+    # The page no longer presents a one-file-only control, so Help must not
+    # describe one. "A single upload accepts" was the superseded wording.
+    assert "A single upload accepts" not in help_body
+    assert "Upload File accepts" in help_body

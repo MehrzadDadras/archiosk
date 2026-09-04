@@ -68,9 +68,30 @@ SURFACES = {
     # CLAUDE-HOME-UNIFY-01: moved to projects.html with the home destination
     # itself. This registry existing is exactly why the move could not go
     # unnoticed - test_the_registry_does_not_rot failed on the stale path.
-    "home-orientation": ("projects.html", 'id="index-orientation-form"', False, False),
-    "establish-project": ("upload.html", 'id="upload-orientation-form"', False, False),
+    #
+    # Both orientation surfaces now render from ONE shared shell
+    # (_macros.html's composer_shell) instead of two hand-maintained copies,
+    # so they resolve to the same form markup here. That is the convergence
+    # working, not the registry losing resolution: the per-page checks below
+    # still assert each page really calls the shell, and the attachment
+    # boundary is asserted against the RENDERED page, because the macro source
+    # necessarily contains both sides of its own {% if attach %}.
+    "home-orientation": ("_macros.html", "gateway-orientation-form composer-shell", False, False),
+    "establish-project": ("_macros.html", "gateway-orientation-form composer-shell", False, False),
 }
+
+# Pages that must actually call the shared shell, and the id prefix each one
+# passes. Replaces the old per-page form-id anchors: a page that silently
+# stopped calling the macro would otherwise leave its contract assertions
+# passing against a shell it no longer renders.
+_SHARED_SHELL_CALLERS = {
+    "upload.html": "upload-orientation",
+    "projects.html": "index-orientation",
+}
+
+# The macro source holds both branches of its own attachment conditional, so
+# "is there a + on this surface" can only be answered honestly by rendering.
+_SHARED_SHELL_TEMPLATE = "_macros.html"
 
 # Markers that make a <form> Composer-like. A form carrying any of these is
 # making a conversational promise to the user and owes the contract above.
@@ -153,7 +174,12 @@ class EveryComposerSurfaceHonoursTheContract(unittest.TestCase):
                 self.assertEqual("<textarea" in html, multiline)
 
     def test_attachment_is_present_exactly_where_evidence_has_a_home(self):
-        for key, html, _, attach in self._each():
+        for key, (template, _, _, attach) in SURFACES.items():
+            if template == _SHARED_SHELL_TEMPLATE and key in ("home-orientation", "establish-project"):
+                # Asserted against the rendered page instead - see
+                # TheAttachmentBoundaryHoldsOnTheRenderedPage below.
+                continue
+            html = _form_html(_read(template), SURFACES[key][1])
             with self.subTest(surface=key):
                 self.assertEqual("composer-attach" in html, attach)
 
@@ -185,6 +211,18 @@ class NoNewSurfaceCanDriftInSilently(unittest.TestCase):
             with self.subTest(surface=key):
                 self.assertIn(anchor, _read(template))
 
+    def test_each_shared_shell_page_still_calls_the_shell(self):
+        # The shared shell means two surfaces resolve to one piece of markup,
+        # so "the anchor still exists" no longer proves either PAGE renders a
+        # Composer. A page that quietly stopped calling composer_shell would
+        # otherwise keep passing every contract assertion above.
+        for page, prefix in _SHARED_SHELL_CALLERS.items():
+            with self.subTest(page=page):
+                text = _read(page)
+                self.assertIn("composer_shell(", text,
+                              "%s no longer renders the shared Composer" % page)
+                self.assertIn('prefix="%s"' % prefix, text)
+
 
 class VoiceWiringIsScopedToItsOwnComposer(unittest.TestCase):
     """A regression guard for a trap this convergence created."""
@@ -209,6 +247,59 @@ class VoiceWiringIsScopedToItsOwnComposer(unittest.TestCase):
             html = _form_html(_read(template), anchor)
             with self.subTest(surface=key):
                 self.assertEqual(html.count("voice-input-button"), 1)
+
+
+class TheAttachmentBoundaryHoldsOnTheRenderedPage(unittest.TestCase):
+    """
+    The + boundary, asserted where it is actually decided.
+
+    This file's own contract says attachment belongs only where attached
+    evidence has a governed home, and that its absence on the project-less
+    surfaces is "a boundary, not drift". The shared shell CAN render a +
+    (the Developer workbench uses it), so the boundary is now a decision
+    each caller makes rather than a fact about which file the markup lives
+    in - and the macro source contains both branches either way.
+
+    Two independent reasons it stays off these two surfaces, and either
+    alone is sufficient: there is no project yet for evidence to belong to,
+    and portal.gateway_orientation's branches take (message, ...) with no
+    image parameter at all, so a + would accept a screenshot the server
+    discards in silence.
+    """
+
+    def _page(self, url):
+        import app as app_module
+        from models import User, db
+        from werkzeug.security import generate_password_hash
+
+        application = app_module.create_app("testing")
+        with application.app_context():
+            db.session.add(User(username="conv_boundary",
+                                password_hash=generate_password_hash("x"), role="admin"))
+            db.session.commit()
+        client = application.test_client()
+        with client.session_transaction() as session:
+            session.update(user_id=1, username="conv_boundary", role="admin")
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return response.get_data(as_text=True)
+
+    def test_no_attachment_control_on_the_project_less_surfaces(self):
+        for url in ("/upload", "/projects"):
+            with self.subTest(url=url):
+                body = self._page(url)
+                self.assertIn("composer-shell", body,
+                              "%s should render the shared Composer" % url)
+                self.assertNotIn("composer-attach", body)
+                self.assertNotIn("image_data_url", body)
+
+    def test_the_shared_shell_still_offers_the_rest_of_the_contract(self):
+        for url in ("/upload", "/projects"):
+            with self.subTest(url=url):
+                body = self._page(url)
+                self.assertIn("voice-input-button", body)
+                self.assertIn(">Send</button>", body)
+                self.assertIn("data-developer-composer-form", body)
 
 
 class RecordedExceptions(unittest.TestCase):

@@ -137,7 +137,7 @@
             {% endfor %}
         </div>
         {% endif %}
-        <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form" data-developer-composer-form>
+        <form class="developer-home-composer-form" method="post" action="{{ url_for('portal.developer_home_composer') }}" data-ui-ref="developer.home.composer.form" data-developer-composer-form data-composer-image-scope>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <textarea class="text-input" name="message" data-developer-composer-input placeholder="Ask about ARCHIOSK, paste a screenshot, or use /CCN" aria-label="Developer Composer message" autocomplete="off" rows="1"></textarea>
             {# CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: the same two doors the
@@ -152,14 +152,17 @@
                 <span aria-hidden="true">+</span>
                 <span class="visually-hidden">Attach a screenshot</span>
             </label>
-            <input type="file" id="developer-home-composer-image" accept="image/*" hidden>
-            <input type="hidden" name="image_data_url" id="developer-home-composer-image-data">
+            {# ids unchanged; the data-composer-image-* attributes are how the
+               now-per-form module finds these parts, so one Composer shell can
+               serve every surface instead of this one alone. #}
+            <input type="file" id="developer-home-composer-image" accept="image/*" data-composer-image-input hidden>
+            <input type="hidden" name="image_data_url" id="developer-home-composer-image-data" data-composer-image-field>
             <span class="composer-attach-chip" id="developer-home-composer-image-chip"
-                  data-ui-ref="developer.home.composer.attach.preview" hidden>
-                <img class="composer-attach-thumb" id="developer-home-composer-image-thumb" alt="" aria-hidden="true">
-                <span class="composer-attach-name" id="developer-home-composer-image-name"></span>
+                  data-composer-image-chip data-ui-ref="developer.home.composer.attach.preview" hidden>
+                <img class="composer-attach-thumb" id="developer-home-composer-image-thumb" data-composer-image-thumb alt="" aria-hidden="true">
+                <span class="composer-attach-name" id="developer-home-composer-image-name" data-composer-image-name></span>
                 <button type="button" class="composer-attach-clear" id="developer-home-composer-image-clear"
-                        data-ui-ref="developer.home.composer.attach.clear" aria-label="Remove the attached screenshot">&times;</button>
+                        data-composer-image-clear data-ui-ref="developer.home.composer.attach.clear" aria-label="Remove the attached screenshot">&times;</button>
             </span>
             <button type="button" id="developer-home-composer-voice" class="voice-input-button" data-ui-ref="developer.home.composer.voice"
                     aria-label="Press and speak - audio is processed by your browser only and is never saved">&#127908;&#65039;</button>

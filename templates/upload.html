@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 
 {% block title %}New Project &mdash; Archiosk{% endblock %}
 
@@ -180,19 +181,30 @@
         <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>Upload Files</button>
     </fieldset>
 </form>
+{# One shared shell (_macros.html composer_shell), not a third hand-rolled
+   copy. Same ids and the same upload.help.* reference family this page
+   already used, so nothing bound to them had to move. #}
 <section class="upload-composer" id="upload-help" data-ui-ref="upload.help">
     <h2 class="new-project-section-heading">Composer</h2>
-    <form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form"
-          data-developer-composer-form data-composer-send='[data-ui-ref="upload.help.submit"]'>
-        <input type="text" class="text-input" id="upload-orientation-input" name="message"
-               data-developer-composer-input autocomplete="off" aria-label="Composer">
-        <input type="hidden" name="context" value="establish-project">
-        <button type="button" id="upload-orientation-voice" class="voice-input-button"
-                data-ui-ref="upload.help.voice" aria-label="Press and speak" hidden>&#127908;&#65039;</button>
-        <button type="submit" class="btn btn-ghost" data-ui-ref="upload.help.submit">Send</button>
-        <span class="voice-input-status" id="upload-orientation-voice-status" aria-live="polite"></span>
-    </form>
-    <p class="gateway-orientation-reply" id="upload-orientation-reply" data-ui-ref="upload.help.reply" aria-live="polite" hidden></p>
+    {# attach=False, deliberately, and not a shrunken ambition: the shell
+       renders a real attachment door (the Developer workbench uses it), but
+       portal.gateway_orientation's establish-project branch reaches
+       _establish_project_reply(message) - a rule-based classifier taking text
+       and nothing else. A + here would accept a screenshot the server
+       discards without saying so, which is worse than no + at all, and is the
+       exact drift main.css's own note warns about: same-looking controls
+       meaning different things. It becomes one argument change the moment
+       that endpoint can receive an image - which needs a vision-capable model
+       call on a project-less surface, and so the ACTION_EXTERNAL_AI_REQUEST
+       gate, i.e. real scope beyond this tranche. #}
+    {{ macros.composer_shell(
+        prefix="upload-orientation",
+        ui_prefix="upload.help",
+        action=url_for('portal.gateway_orientation'),
+        send_label="Send",
+        context_value="establish-project",
+        aria_label="Composer",
+        attach=False) }}
 </section>
 
 <script nonce="{{ csp_nonce }}">
