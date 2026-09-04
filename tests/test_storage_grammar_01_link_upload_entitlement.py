@@ -102,10 +102,10 @@ class _BaseTestCase(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class UploadPageStorageGrammarTests(_BaseTestCase):
-    def test_hero_copy_is_the_short_addendum_sentence_not_the_old_disclaimer(self):
+    def test_hero_is_now_title_only(self):
         client = self._client_as("sg_admin", 1)
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn("Choose how this Project's documents connect to Archiosk.", body)
+        self.assertNotIn("Choose how this Project's documents connect to Archiosk.", body)
         self.assertNotIn("Kept available for establishing a project from a full", body)
 
     def test_three_source_domains_are_present(self):
@@ -126,12 +126,12 @@ class UploadPageStorageGrammarTests(_BaseTestCase):
         self.assertNotIn("disabled", body[client_button:client_button_end])
         self.assertNotIn('data-ui-ref="upload.storage.upload.disabled-reason"', body)
 
-    def test_domain_copy_preserves_authority_boundaries(self):
+    def test_domain_copy_preserves_authority_boundaries_in_help(self):
         client = self._client_as("sg_admin", 1)
-        body = client.get("/upload").get_data(as_text=True)
-        self.assertIn("Requirements and information received from the party that engaged you.", body)
-        self.assertIn("Your team's developing work", body)
-        self.assertIn("non-project-authority reference material", body)
+        body = client.get("/help/new-project").get_data(as_text=True)
+        self.assertIn("requirements and information received", body)
+        self.assertIn("team-created proposals", body)
+        self.assertIn("does not become project-issued authority", body)
 
 
 class UploadEntitlementGreyingTests(_BaseTestCase):

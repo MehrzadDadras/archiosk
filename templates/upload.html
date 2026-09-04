@@ -1,7 +1,6 @@
 {% extends "base.html" %}
-{% import "_macros.html" as macros %}
 
-{% block title %}Establish a Project &mdash; Archiosk{% endblock %}
+{% block title %}New Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
 <section class="hero">
@@ -25,195 +24,15 @@
        consistent with "+ New Project," and still carrying the Territory
        framing (a project is established IN Archiosk, not moved into
        it). #}
-    <h1>Establish a Project</h1>
+    <h1>New Project</h1>
     {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar):
        replaces CLAUDE-HYBRID-ENTRY-01's own longer disclaimer copy - the
        enduring customer-facing choice is Link vs. Upload (below), stated
        plainly rather than as a disclaimer; the fuller custody explanation
        moved behind each option's own "Details" disclosure. #}
-    <p class="hero-copy" data-ui-ref="upload.limits">
-        Choose how this Project's documents connect to Archiosk.
-    </p>
-    <p class="hero-copy" data-ui-ref="upload.limits.formats">
-        Accepted formats: PDF, DOCX, TXT, CSV, MD &mdash; up to {{ max_upload_mb }}MB
-        each. Best suited to text-based material such as RFPs, RFQs, specs,
-        contracts, reports, and meeting minutes with exhibits. Scanned drawings,
-        native spreadsheets, and images aren&rsquo;t supported yet.
-    </p>
 </section>
 
-{# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: a lightweight,
-   collapsible Composer/help surface for this form specifically - "do not
-   make the user leave the setup flow" to ask what a field means. Reuses
-   the SAME project-less orientation composer pattern index.html's own
-   .gateway-orientation-form already established (same classes/JS shape,
-   same backend route) rather than building a project-creation-specific
-   chat implementation - only the backend's classifier differs (see
-   routes/portal.py's _classify_establish_project_help), reached via the
-   hidden `context=establish-project` field below. Wrapped in the app's
-   own native-disclosure grammar (macros.subdisclosure), collapsed by
-   default, so it never obscures the form fields beneath it. #}
-{% call macros.subdisclosure("Ask Archiosk about this form", html_id="upload-help", ui_ref="upload.help") %}
-{# CLAUDE-ESTABLISH-COMPOSER-ENTER-01: Enter submits this question.
-
-   Live Product Owner report, twice, on archiosk.com: typing a question here
-   and pressing Enter did nothing. This form is structurally eligible for the
-   browser's own implicit submission - one text field, one submit button, no
-   competing earlier submit button, correct form association in the parsed DOM
-   (all four verified) - so the markup alone gives no reason for Enter to fail,
-   and no root cause could be confirmed from the repository.
-
-   Two things are certain, and together they are the whole basis for this
-   repair. First, this form was relying on implicit submission, which is
-   positional and silent, while the Composer this field is meant to behave like
-   stopped relying on it after implicit submission produced a live defect here
-   once before (CLAUDE-CA1D-COMPOSER-ENTER-FIX-01). Second, the two composers
-   that work - the Workspace chat dock and the Developer Composer - both carry
-   autocomplete="off"; both orientation composers, the two reported broken, did
-   not. This field is name="message" in a GET form with no action, so a native
-   submission writes ?message=... into the URL and the browser begins offering
-   saved values for it; while that dropdown is open the first Enter dismisses
-   or accepts the suggestion instead of submitting. That is per-browser and
-   per-history, which is why it does not reproduce in a clean automated browser
-   and why it can persist across deployments for one person and not another.
-
-   Unproven, but it is the only account that fits every observation. Both
-   halves of the Composer convention are adopted here rather than picking one.
-   Clicking Ask is unchanged. #}
-<form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form"
-      data-developer-composer-form data-composer-send='[data-ui-ref="upload.help.submit"]'>
-    <input type="text" class="text-input" id="upload-orientation-input" name="message" data-developer-composer-input autocomplete="off" placeholder="e.g. what does Client / Owner mean?" aria-label="Ask Archiosk about this form">
-    <input type="hidden" name="context" value="establish-project">
-    <button type="button" id="upload-orientation-voice" class="voice-input-button" data-ui-ref="upload.help.voice"
-            aria-label="Press and speak - audio is processed by your browser only and is never saved" hidden>&#127908;&#65039;</button>
-    <button type="submit" class="btn btn-ghost" data-ui-ref="upload.help.submit">Ask</button>
-    <span class="voice-input-status" id="upload-orientation-voice-status" data-ui-ref="upload.help.voice.status" aria-live="polite"></span>
-</form>
-<script nonce="{{ csp_nonce }}">
-// Show and enable only the engagement question for the selected position.
-(function () {
-    var form = document.getElementById('project-creation-form');
-    if (!form) return;
-    var groups = form.querySelectorAll('.retained-by-group');
-
-    function sync() {
-        var checked = form.querySelector('[name=entry_choice]:checked');
-        var value = checked ? checked.value : null;
-        groups.forEach(function (group) {
-            var active = group.getAttribute('data-for-choice') === value;
-            group.hidden = !active;
-            var select = group.querySelector('select');
-            if (select) select.disabled = !active;
-        });
-    }
-
-    form.addEventListener('change', function (event) {
-        if (event.target && event.target.name === 'entry_choice') sync();
-    });
-    sync();
-})();
-</script>
-<label class="composer-candidate-doc" id="upload-help-candidate" data-ui-ref="upload.help.candidate" hidden>
-    <input type="checkbox" id="upload-help-candidate-toggle" checked>
-    <span>Show GO the document I selected below: <strong id="upload-help-candidate-name"></strong></span>
-</label>
-<p class="pane-note" id="upload-help-candidate-note" data-ui-ref="upload.help.candidate.note" hidden>
-    Shown for this question only. It is not filed, not registered, and becomes
-    part of the project record only when you create the project below.
-</p>
-<p class="gateway-orientation-reply" id="upload-orientation-reply" data-ui-ref="upload.help.reply" aria-live="polite" hidden></p>
-{% endcall %}
 <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
-<script nonce="{{ csp_nonce }}">
-// CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H: same ported
-// composer-wiring script as index.html's own copy - see that template's
-// own comment for the reasoning. Never auto-chooses a consequential
-// setting (operating environment, storage connection) - this widget only
-// ever explains, it never submits the real form on the user's behalf.
-(function () {
-    var form = document.getElementById('upload-orientation-form');
-    var input = document.getElementById('upload-orientation-input');
-    var replyEl = document.getElementById('upload-orientation-reply');
-    if (!form || !input) return;
-
-    function csrfToken() {
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        return meta ? meta.content : '';
-    }
-
-    function showReply(text) {
-        if (!replyEl) return;
-        replyEl.textContent = text || '';
-        replyEl.hidden = !text;
-    }
-
-    // CLAUDE-ESTABLISH-HELPDESK-01 (GOV-D-001): the candidate founding document.
-    // Read from the Establish form's OWN file input - there is deliberately no
-    // second picker here. Nothing is uploaded by asking: the file rides along
-    // with this one question, is read in memory server-side, and is discarded.
-    // It becomes a real Source only if the user creates the project below.
-    var candidateWrap = document.getElementById('upload-help-candidate');
-    var candidateToggle = document.getElementById('upload-help-candidate-toggle');
-    var candidateName = document.getElementById('upload-help-candidate-name');
-    var candidateNote = document.getElementById('upload-help-candidate-note');
-    var foundingInput = document.getElementById('upload-file-input');
-
-    function selectedCandidate() {
-        if (!foundingInput || !foundingInput.files || !foundingInput.files.length) return null;
-        return foundingInput.files[0];
-    }
-
-    function syncCandidate() {
-        var file = selectedCandidate();
-        var show = !!file;
-        if (candidateWrap) candidateWrap.hidden = !show;
-        if (candidateNote) candidateNote.hidden = !show;
-        if (show && candidateName) candidateName.textContent = file.name;
-    }
-
-    if (foundingInput) {
-        foundingInput.addEventListener('change', syncCandidate);
-        syncCandidate();
-    }
-
-    function ask(message) {
-        var formData = new FormData(form);
-        formData.set('message', message);
-        var file = selectedCandidate();
-        if (file && candidateToggle && candidateToggle.checked) {
-            formData.set('candidate_document', file, file.name);
-        }
-        fetch('{{ url_for("portal.gateway_orientation") }}', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRFToken': csrfToken() },
-            credentials: 'same-origin',
-        }).then(function (resp) {
-            return resp.json();
-        }).then(function (data) {
-            showReply(data.text || '');
-        }).catch(function () {
-            showReply('Something went wrong - try again.');
-        });
-    }
-
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var message = input.value.trim();
-        if (!message) return;
-        ask(message);
-    });
-
-    if (window.ArchioskVoiceInput) {
-        window.ArchioskVoiceInput({
-            buttonId: 'upload-orientation-voice',
-            statusId: 'upload-orientation-voice-status',
-            onTranscript: function (transcript) { input.value = transcript; },
-            onEnd: function () { input.focus(); },
-        });
-    }
-})();
-</script>
 
 {% if error %}
 <p class="mono form-error" data-ui-ref="upload.error">{{ error }}</p>
@@ -221,6 +40,12 @@
 <p class="mono form-error" id="upload-size-error" data-ui-ref="upload.client-size-error" hidden></p>
 
 <form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form" action="{{ url_for('portal.upload') }}">
+    <label>Your name
+        <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor">
+    </label>
+    <label>Your role
+        <input type="text" name="role" class="text-input" data-ui-ref="upload.role">
+    </label>
     {# CLAUDE-ENTRY-REDUNDANCY-01: ONE question, not two. This form used to ask
        for the Project Operating Environment and then immediately for the
        project position - the same words ("Client / Owner") in two adjacent
@@ -235,21 +60,14 @@
        the sophistication so the user does not have to. Declaring a position
        establishes no contractual authority and selects no contract form. #}
     <fieldset class="operating-environment-fieldset">
-        <legend>Your position on this project <span class="mono">(required)</span></legend>
-        <p class="pane-note">
-            How this project sits in the procurement chain. It shapes which questions and
-            evidence Archiosk brings forward &mdash; it does not decide anything about your
-            contract, your authority, or what you are owed. Those come from the project
-            documents themselves.
-        </p>
+        <legend>Your project position</legend>
         {% for choice in entry_choices %}
         <label class="operating-environment-option entry-choice-option">
             <input
                 type="radio" name="entry_choice" value="{{ choice.value }}" required
                 data-ui-ref="upload.entry-choice.{{ choice.value }}">
             <span class="entry-choice-text">
-                <span class="entry-choice-label">{{ choice.label }}</span>
-                <small class="pane-note">{{ choice.subtitle }}</small>
+                <span class="entry-choice-label">{% if choice.value == 'client_owner' %}Client{% elif choice.value == 'lead_design_consultant' %}Lead Design Consultant{% elif choice.value == 'subconsultant' %}Subconsultant{% elif choice.value == 'prime_contractor' %}Design-Builder / GC{% else %}Subcontractor{% endif %}</span>
             </span>
         </label>
         {% endfor %}
@@ -275,15 +93,16 @@
         </div>
         {% endif %}
         {% endfor %}
+        <label class="operating-environment-confirm">
+            <input type="checkbox" required aria-label="Confirm project position">
+        </label>
     </fieldset>
 
-
-    <input
-        type="text" name="project_name" class="text-input text-input-wide"
-        value="{{ request.form.get('project_name', '') }}"
-        data-ui-ref="upload.project-name"
-        id="upload-project-name"
-        placeholder="Project name (optional &mdash; defaults to the file/folder name; must be unique)">
+    <label>Project name
+        <input type="text" name="project_name" class="text-input text-input-wide"
+               value="{{ request.form.get('project_name', '') }}"
+               data-ui-ref="upload.project-name" id="upload-project-name">
+    </label>
 
     {# CLAUDE-PROJECT-CODE-01: the governed acronym. Filled in for the user as
        they type the name, and editable - "the user must not be required to
@@ -307,35 +126,18 @@
             {% endfor %}
         </div>
     </fieldset>
-    <div class="upload-form-optional">
-        <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor" placeholder="Your name (optional, for the audit trail)">
-        <input type="text" name="role" class="text-input" data-ui-ref="upload.role" placeholder="Your role (optional)">
-    </div>
-
-    <label class="operating-environment-confirm">
-        <input type="checkbox" required>
-        Confirm project position &mdash; this cannot be changed after the project is created.
-        <span class="mono">(required)</span>
-    </label>
-
     <fieldset class="storage-connection-fieldset">
-        <legend>Connect Project Documents</legend>
+        <legend>Upload Project Folder</legend>
 
         <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.source-domain.client-issued">
-            <p class="storage-option-label"><strong>CLIENT / OWNER INFORMATION</strong></p>
-            <p class="pane-note">Requirements and information received from the party that engaged you.</p>
             <button type="button" class="btn btn-ghost" data-folder-picker-button data-source-domain="CLIENT_ISSUED" {% if not upload_entitled %}disabled{% endif %}>Connect Client Data Room</button>
         </div>
 
         <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.source-domain.team-workspace">
-            <p class="storage-option-label"><strong>YOUR WORKSPACE</strong></p>
-            <p class="pane-note">Your team's developing work, proposal, design, coordination records, RFIs, and submissions.</p>
             <button type="button" class="btn btn-ghost" data-folder-picker-button data-source-domain="TEAM_WORKSPACE" {% if not upload_entitled %}disabled{% endif %}>Connect Your Workspace</button>
         </div>
 
         <div class="storage-option{% if not upload_entitled %} storage-option-disabled{% endif %}" data-ui-ref="upload.source-domain.external-reference">
-            <p class="storage-option-label"><strong>EXTERNAL REFERENCES</strong></p>
-            <p class="pane-note">Codes, standards, guidance, and other non-project-authority reference material.</p>
             <button type="button" class="btn btn-ghost" data-folder-picker-button data-source-domain="EXTERNAL_REFERENCE" {% if not upload_entitled %}disabled{% endif %}>Add External References</button>
         </div>
 
@@ -357,10 +159,7 @@
     </fieldset>
 
     <fieldset class="single-file-establish-fieldset">
-        <legend>Or upload a single file</legend>
-        <p class="pane-note">
-            Uploads and permanently stores a copy of this file on Archiosk's own server.
-        </p>
+        <legend>Upload File</legend>
         <label for="single-file-source-domain">Source domain</label>
         <select name="source_domain" id="single-file-source-domain" class="text-input" data-ui-ref="upload.file.source-domain">
             <option value="CLIENT_ISSUED">Client / Owner Information</option>
@@ -376,6 +175,70 @@
         </button>
     </fieldset>
 </form>
+<section class="upload-composer" id="upload-help" data-ui-ref="upload.help">
+    <h2>Composer</h2>
+    <form class="gateway-orientation-form" id="upload-orientation-form" data-ui-ref="upload.help.form"
+          data-developer-composer-form data-composer-send='[data-ui-ref="upload.help.submit"]'>
+        <input type="text" class="text-input" id="upload-orientation-input" name="message"
+               data-developer-composer-input autocomplete="off" aria-label="Composer">
+        <input type="hidden" name="context" value="establish-project">
+        <button type="button" id="upload-orientation-voice" class="voice-input-button"
+                data-ui-ref="upload.help.voice" aria-label="Press and speak" hidden>&#127908;&#65039;</button>
+        <button type="submit" class="btn btn-ghost" data-ui-ref="upload.help.submit">Send</button>
+        <span class="voice-input-status" id="upload-orientation-voice-status" aria-live="polite"></span>
+    </form>
+    <p class="gateway-orientation-reply" id="upload-orientation-reply" data-ui-ref="upload.help.reply" aria-live="polite" hidden></p>
+</section>
+
+<script nonce="{{ csp_nonce }}">
+(function () {
+    var projectForm = document.getElementById('project-creation-form');
+    if (projectForm) {
+        var groups = projectForm.querySelectorAll('.retained-by-group');
+        function syncEngagement() {
+            var checked = projectForm.querySelector('[name=entry_choice]:checked');
+            groups.forEach(function (group) {
+                var active = !!checked && group.getAttribute('data-for-choice') === checked.value;
+                group.hidden = !active;
+                var select = group.querySelector('select');
+                if (select) select.disabled = !active;
+            });
+        }
+        projectForm.addEventListener('change', function (event) {
+            if (event.target && event.target.name === 'entry_choice') syncEngagement();
+        });
+        syncEngagement();
+    }
+
+    var composer = document.getElementById('upload-orientation-form');
+    var input = document.getElementById('upload-orientation-input');
+    var reply = document.getElementById('upload-orientation-reply');
+    if (!composer || !input) return;
+    composer.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var message = input.value.trim();
+        if (!message) return;
+        var csrf = document.querySelector('meta[name="csrf-token"]');
+        fetch('{{ url_for("portal.gateway_orientation") }}', {
+            method: 'POST', body: new FormData(composer),
+            headers: {'X-CSRFToken': csrf ? csrf.content : ''}, credentials: 'same-origin'
+        }).then(function (response) {
+            if (!response.ok) throw new Error('request failed');
+            return response.json();
+        }).then(function (payload) {
+            reply.textContent = payload.text || '';
+            reply.hidden = !reply.textContent;
+        }).catch(function () {
+            reply.textContent = 'Something went wrong - try again.';
+            reply.hidden = false;
+        });
+    });
+    if (window.ArchioskVoiceInput) {
+        window.ArchioskVoiceInput({buttonId: 'upload-orientation-voice', statusId: 'upload-orientation-voice-status',
+            onTranscript: function (transcript) { input.value = transcript; }, onEnd: function () { input.focus(); }});
+    }
+})();
+</script>
 <script nonce="{{ csp_nonce }}">
 // CLAUDE-PROJECT-CODE-01: show the acronym being derived while the name is
 // typed. This mirrors ONLY the initials strategy from services/project_code.py -

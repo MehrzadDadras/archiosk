@@ -143,6 +143,21 @@ class NewProjectGuideTests(_Base):
             with self.subTest(text=text):
                 self.assertIn(text, body)
 
+    def test_guide_is_the_complete_page_reference(self):
+        body = self.client().get("/help/new-project").get_data(as_text=True)
+        required = (
+            "Client / Owner", "Lead Design Consultant", "Subconsultant / Specialist Consultant",
+            "Prime / Design-Builder / GC", "Subcontractor / Trade Bidder", "Who engaged you?",
+            "procurement chain", "immutable", "unique", "duplicate", "CLIENT_ISSUED",
+            "TEAM_WORKSPACE", "EXTERNAL_REFERENCE", "UNKNOWN", "does not determine authority",
+            "principal document", "PDF", "DOCX", "TXT", "CSV", "MD", "XLSX",
+            "scanned drawings", "images", "Composer", "Down Arrow", "Up Arrow", "Enter",
+            "Escape", "00h:00m:00s", "fake percentage", "estimate remaining time",
+        )
+        for text in required:
+            with self.subTest(text=text):
+                self.assertIn(text, body)
+
 
 class TheSurfacesLinkRatherThanExplainTests(unittest.TestCase):
     """The point of the migration: a label and a link, not a wall of text."""

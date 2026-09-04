@@ -182,10 +182,10 @@ class MarkupContractTests(unittest.TestCase):
         tag = self.body[self.body.rindex("<input", 0, i):self.body.index(">", i) + 1]
         self.assertIn('autocomplete="off"', tag)
 
-    def test_the_ask_button_is_still_there(self):
+    def test_the_send_button_is_still_there(self):
         # The repair adds a keyboard path; it removes no pointer path.
         self.assertIn('data-ui-ref="upload.help.submit"', self.body)
-        self.assertIn(">Ask</button>", self.body)
+        self.assertIn(">Send</button>", self.body)
 
     def test_the_shared_primitive_still_defaults_for_forms_that_declare_nothing(self):
         # The Workspace chat dock and Developer Composer never declare a send
@@ -277,6 +277,17 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
             asked = page.evaluate("window.__asked")
             browser.close()
         self.assertEqual(asked, [])
+
+    def test_arrow_keys_are_not_captured_without_suggestions(self):
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = self._page(browser)
+            allowed = page.eval_on_selector(
+                "#upload-orientation-input",
+                "el => el.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true, cancelable: true}))",
+            )
+            browser.close()
+        self.assertTrue(allowed)
 
     def test_clicking_ask_still_works(self):
         with sync_playwright() as p:

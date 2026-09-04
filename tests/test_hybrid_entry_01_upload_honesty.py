@@ -65,7 +65,7 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         self.assertNotIn("Choose Project Folder", body)
         self.assertNotIn("Establish Project from Folder", body)
 
-    def test_folder_path_is_explicitly_labeled_legacy_full_upload(self):
+    def test_folder_path_explanation_moved_to_help(self):
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
         # Grammar): supersedes the "Legacy" framing this test asserted -
         # the Product Owner's own Part 1/3 replaced "Upload Folder
@@ -76,11 +76,10 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         # capability, not silently removed) is now covered by
         # test_upload_option_present_and_functional below instead.
         body = self._body()
-        self.assertIn("Upload Folder Contents", body)
-        self.assertIn("Upload to Storage", body)
-        self.assertIn("configured managed storage", body)
+        self.assertIn("Upload Project Folder", body)
+        self.assertNotIn("configured managed storage", body)
 
-    def test_folder_path_explicitly_states_it_is_not_a_folder_link(self):
+    def test_folder_behavior_is_explained_in_help_not_the_form(self):
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
         # Grammar, Part 4): the literal sentence this test asserted was
         # HYBRID-ENTRY-01's own inline disclaimer, now moved behind the
@@ -91,9 +90,9 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         # honestly labeled "(not yet configured)" rather than by this
         # exact sentence appearing inline.
         body = self._body()
-        self.assertIn("not yet configured", body)
-        self.assertIn("Link to Storage", body)
-        self.assertIn("local files are not watched, referenced, or left in place", body)
+        self.assertNotIn("local files are not watched, referenced, or left in place", body)
+        help_body = self.client.get("/help/new-project").get_data(as_text=True)
+        self.assertIn("relative paths", help_body)
 
     def test_folder_submit_button_no_longer_styled_as_the_primary_recommended_action(self):
         body = self._body()
@@ -116,7 +115,7 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         body = self._body()
         self.assertNotIn("your files stay wherever they already are", body)
 
-    def test_hero_copy_states_current_honest_behavior_and_future_direction(self):
+    def test_hero_contains_no_explanatory_copy(self):
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage
         # Grammar, Part 1): the long inline disclaimer this test asserted
         # is deliberately gone - the Product Owner's own instruction was
@@ -126,16 +125,17 @@ class FolderPathNoLongerReadsAsLinkingTests(_BaseTestCase):
         # Details disclosure (test_link_option_present_but_disabled_and_
         # honest below), not inline hero copy.
         body = self._body()
-        self.assertIn("Choose how this Project's documents connect to Archiosk.", body)
+        self.assertNotIn("Choose how this Project's documents connect to Archiosk.", body)
 
 
 class SingleFilePathWordingTests(_BaseTestCase):
-    def test_single_file_path_explicitly_states_permanent_server_storage(self):
+    def test_single_file_storage_behavior_moved_to_help(self):
         body = self._body()
         fieldset_start = body.index('class="single-file-establish-fieldset"')
         fieldset_end = body.index("</fieldset>", fieldset_start)
         fieldset = body[fieldset_start:fieldset_end]
-        self.assertIn("permanently stores a copy of this file on Archiosk's own server", fieldset)
+        self.assertNotIn("permanently stores a copy", fieldset)
+        self.assertIn("stores a project copy", self.client.get("/help/new-project").get_data(as_text=True))
 
     def test_single_file_capability_itself_is_not_removed(self):
         body = self._body()
@@ -181,7 +181,7 @@ class MechanismNotRemovedRegressionTests(_BaseTestCase):
     def test_every_pre_existing_folder_ui_reference_still_present(self):
         body = self._body()
         for ref in (
-            "upload.folder.picker-button", "upload.folder.picker-input",
+            "upload.folder.picker-input",
             "upload.folder.summary", "upload.folder.founding-picker",
             "upload.folder.error", "upload.folder.submit",
         ):
@@ -189,7 +189,8 @@ class MechanismNotRemovedRegressionTests(_BaseTestCase):
 
     def test_folder_picker_wiring_script_still_unchanged(self):
         body = self._body()
-        self.assertIn("pickerButton.addEventListener('click', function () { pickerInput.click(); });", body)
+        self.assertIn("pickerButtons.forEach(function (button)", body)
+        self.assertIn("sourceDomainField.value = button.getAttribute('data-source-domain')", body)
         self.assertIn("submitButton.disabled = !relativePath;", body)
 
     def test_folder_route_still_functions_end_to_end(self):

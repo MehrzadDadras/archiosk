@@ -19,6 +19,24 @@
 </header>
 
 <article class="help-body">
+    <section id="purpose">
+        <h2>What New Project does</h2>
+        <p>New Project creates a governed project record and connects its first documents to Archiosk. Use a folder connection for a project set or Upload File for one founding document.</p>
+    </section>
+
+    <section id="roles">
+        <h2>Your role and project position</h2>
+        <ul>
+            <li><strong>Client / Owner:</strong> procures design or construction services.</li>
+            <li><strong>Lead Design Consultant:</strong> leads design coordination for the party that retained the consultant.</li>
+            <li><strong>Subconsultant / Specialist Consultant:</strong> provides a specialist discipline through the consultant chain.</li>
+            <li><strong>Prime / Design-Builder / GC:</strong> leads the delivery or construction team.</li>
+            <li><strong>Subcontractor / Trade Bidder:</strong> provides trade work through the delivery chain.</li>
+        </ul>
+        <p>Project position records where you sit in the procurement chain. <strong>Who engaged you?</strong> records the relevant upstream relationship for the selected position. Only that position's applicable control is enabled.</p>
+        <p>GO uses project position to decide which questions and evidence to bring forward. It does not determine your contract, authority, entitlement, or document authority. Confirmation is required because project position becomes immutable after project creation.</p>
+    </section>
+
     <section id="project-name">
         <h2>Project name</h2>
         <p>Use the project name your team will recognize. Project names must be unique. If no name is entered, Archiosk derives one from the selected file or folder; a duplicate name is refused.</p>
@@ -28,6 +46,42 @@
         <h2>Acronym</h2>
         <p>Use 3 or 4 letters. The acronym becomes the short project identity used in references such as <span class="mono">ABCD-T014</span>.</p>
         <p>You can accept the acronym derived from the project name or type your own. After project work is filed under it, the acronym persists so existing references do not change.</p>
+    </section>
+
+    <section id="source-domains">
+        <h2>Document connections and source domains</h2>
+        <p>Every explicitly connected source retains one source domain. Source domain describes where material came from; it does not determine authority.</p>
+        <ul>
+            <li><strong>Client Data Room — CLIENT_ISSUED:</strong> requirements and information received from the engaging party. An RFP, Addendum, or Project Agreement may govern differently from background reports, minutes, or site-visit records; receipt alone does not make every item equally authoritative.</li>
+            <li><strong>Your Workspace — TEAM_WORKSPACE:</strong> team-created proposals, designs, coordination records, RFIs, and submissions. Team work does not become evidence of what the Client required.</li>
+            <li><strong>External References — EXTERNAL_REFERENCE:</strong> codes, standards, guidance, and other reference material. External material does not become project-issued authority by being connected.</li>
+        </ul>
+        <p>Existing sources without a recorded domain remain <strong>UNKNOWN</strong> legacy sources; they are not silently reclassified.</p>
+    </section>
+
+    <section id="folder-upload">
+        <h2>Upload Project Folder</h2>
+        <p>The browser supplies files only from the folder you select and preserves their relative paths. Choose the matching source-domain button first. Archiosk shows the selection and connects it only when you submit.</p>
+        <p>Folder registration accepts PDF, DOCX, TXT, CSV, MD, and XLSX. A principal document is required to establish the project and must be PDF, DOCX, TXT, CSV, or MD; spreadsheets can be registered but cannot be the founding document. If one eligible top-level document exists it is proposed visibly; otherwise you select the principal document.</p>
+        <p>The deployment's upload-size limit is enforced for the request. Unsupported files are reported and skipped rather than registered as unreadable sources.</p>
+    </section>
+
+    <section id="single-file-upload">
+        <h2>Upload File</h2>
+        <p>A single upload accepts PDF, DOCX, TXT, CSV, or MD, stores a project copy on Archiosk's server, parses supported content, and records the selected source domain. The file picker displays the active deployment limit when a file is too large.</p>
+        <p>Text-bearing PDFs and documents provide the strongest evidence. Images and scanned drawings may not contain readable text; native images are not accepted by this founding-file control. XLSX can be registered through a supported folder or project document path but cannot establish a project by itself.</p>
+        <p>See <a href="{{ url_for('help_center.guide', guide='file-types-and-limits') }}">File types &amp; limits</a> and <a href="{{ url_for('help_center.guide', guide='drawing-ingestion') }}">Drawing ingestion &amp; baselines</a> for detailed limitations.</p>
+    </section>
+
+    <section id="composer">
+        <h2>Composer</h2>
+        <p>Use Composer at the bottom of New Project to ask GO about the page and its fields. It uses New Project page context and does not create a project or ingest a selected file. The file picker is not a manual document-context toggle.</p>
+        <p>No demonstration suggestions are shown. If real suggestions are available, Down Arrow selects the next suggestion, Up Arrow selects the previous one, Enter accepts it, and Escape dismisses the list. Arrow keys are not captured while suggestions are closed.</p>
+    </section>
+
+    <section id="elapsed-status">
+        <h2>Long-running action status</h2>
+        <p>Long-running actions show started, running, completed, failed, or cancelled with elapsed time in <span class="mono">00h:00m:00s</span> format. The clock updates once per second, stops in a final visible state, and resets for the next action. It does not show fake percentage progress or estimate remaining time.</p>
     </section>
 </article>
 

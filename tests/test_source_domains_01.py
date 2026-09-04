@@ -56,11 +56,11 @@ def test_establish_project_renders_three_source_domains_and_single_file_selector
         session.update(user_id=1, username="domain_admin", role="admin")
     body = client.get("/upload").get_data(as_text=True)
     for text in (
-        "CLIENT / OWNER INFORMATION", "Connect Client Data Room",
-        "YOUR WORKSPACE", "Connect Your Workspace",
-        "EXTERNAL REFERENCES", "Add External References",
+        "Connect Client Data Room", "Connect Your Workspace", "Add External References",
     ):
         assert text in body
+    for removed in ("CLIENT / OWNER INFORMATION", "YOUR WORKSPACE", "EXTERNAL REFERENCES"):
+        assert removed not in body
     assert 'name="source_domain"' in body
     assert 'name="folder_source_domain"' in body
 
