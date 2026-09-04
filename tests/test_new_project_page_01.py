@@ -62,7 +62,38 @@ def test_cleanup_keeps_required_position_and_minimal_upload_controls():
     assert 'id="single-file-source-domain"' not in body
     assert '<input type="hidden" name="source_domain" value="UNKNOWN">' in body
     assert "Create project and parse document" not in body
-    assert ">Upload File</button>" in body
+    assert ">Upload Files</button>" in body
     assert "Connect Selected Folder" not in body
     assert ">Connect Folder</button>" in body
     assert 'id="folder-domain-summary"' in body
+
+
+def test_identity_and_project_identity_are_framed_sections():
+    body = _page()
+    assert "<legend>Your identity</legend>" in body
+    assert "<legend>Project identity</legend>" in body
+    # Grouping only: the fields themselves are unchanged and still posted.
+    identity = body[body.index('data-ui-ref="upload.identity"'):body.index('data-ui-ref="upload.entry-choice')]
+    assert 'name="actor"' in identity and 'name="role"' in identity
+    project_identity = body.index('data-ui-ref="upload.project-identity"')
+    assert body.index("Your project position") < project_identity
+    assert body.index('name="project_name"') > project_identity
+
+
+def test_page_title_is_a_rule_head_not_a_hero():
+    body = _page()
+    assert 'class="np-rule-head"' in body
+    assert '<span class="np-rule"' in body
+    assert '<section class="hero new-project-hero">' not in body
+
+
+def test_upload_file_stages_multiple_files_without_a_domain_selector():
+    body = _page()
+    fieldset = body[body.index('class="single-file-establish-fieldset"'):]
+    fieldset = fieldset[:fieldset.index("</fieldset>")]
+    assert "multiple" in fieldset
+    assert ">Choose File</button>" in fieldset
+    assert 'id="upload-file-rows"' in fieldset
+    # Action 9: no visible Source Domain dropdown, UNKNOWN fallback preserved.
+    assert '<input type="hidden" name="source_domain" value="UNKNOWN">' in fieldset
+    assert "<select" not in fieldset

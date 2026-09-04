@@ -95,7 +95,11 @@ def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
         if (document := registry.get(pid)) is not None
     }
     if entry_name in existing_names:
-        raise UploadError("Entry names must be unique.")
+        # Says what happened in the reader's own words. "Entry names must be
+        # unique" states the rule; the person at New Project needs the fact.
+        # The rename path below keeps its own wording - it is a different
+        # surface, reached with a different question in mind.
+        raise UploadError("Project name already exists.")
 
 
 def reject_if_display_name_taken(app: Flask, entry_name: str, exclude_project_id: str) -> None:

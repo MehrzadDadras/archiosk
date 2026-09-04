@@ -2986,14 +2986,67 @@ def upload():
             entry_choices=entry_choice_view(), upload_entitled=user_can_upload_to_storage(),
         ), 400
 
-    file_storage = request.files.get('file')
-    if file_storage is None or not file_storage.filename:
+    # Upload File stages any number of files and posts them all under the
+    # same "file" part name. One file is the long-standing path and is
+    # completely unchanged below, drawing-candidate interstitial included.
+    posted_files = [f for f in request.files.getlist('file') if f and f.filename]
+    if not posted_files:
         return render_template(
             'upload.html', max_upload_mb=max_upload_mb, error="No file was provided.",
             selected_environment=request.form.get('operating_environment'),
             operating_environments=OPERATING_ENVIRONMENT_LABELS,
             entry_choices=entry_choice_view(),
         ), 400
+
+    if len(posted_files) > 1:
+        # Many files is the same act folder establishment already performs -
+        # one founding document plus additional connected sources - so it
+        # reuses ingest_folder_upload rather than growing a second
+        # multi-document ingestion path. The first staged file founds the
+        # project, which the page states before submit rather than inferring.
+        #
+        # Gated on the same entitlement upload_folder checks: this writes the
+        # same number of files to the same storage, and leaving it ungated
+        # would make it the bypass around that gate. A single upload keeps
+        # its existing ungated behavior.
+        if not user_can_upload_to_storage():
+            abort(403)
+        relative_paths = [f.filename for f in posted_files]
+        try:
+            document, results = ingest_folder_upload(
+                posted_files, relative_paths, 0, current_app,
+                operating_environment=_resolved_operating_environment(),
+                owner=session.get('username', ''),
+                actor=request.form.get('actor'), role=request.form.get('role'),
+                project_name=request.form.get('project_name'),
+                project_code=request.form.get('project_code'),
+                source_domain=source_domain,
+            )
+        except (UploadError, GovernanceError) as exc:
+            return render_template(
+                'upload.html', max_upload_mb=max_upload_mb, error=str(exc),
+                selected_environment=request.form.get('operating_environment'),
+                operating_environments=OPERATING_ENVIRONMENT_LABELS,
+                entry_choices=entry_choice_view(),
+            ), 400
+
+        _establish_perspective(
+            document.project_id,
+            request.form.get('entry_choice'), _posted_retained_by(),
+        )
+        added = [r for r in results if r["status"] == "added"]
+        skipped = [r for r in results if r["status"] == "skipped"]
+        if added:
+            flash(f"Established with {len(added)} additional document(s).", "success")
+        if skipped:
+            flash(
+                "Not added (" + str(len(skipped)) + "): " +
+                "; ".join(f"{r['relative_path']} - {r['reason']}" for r in skipped),
+                "error",
+            )
+        return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
+
+    file_storage = posted_files[0]
 
     # CLAUDE-P40-VW8-QA-R2A: staging-time analysis ONLY (native-text/
     # candidate extraction - see services/drawing_intake.py's own

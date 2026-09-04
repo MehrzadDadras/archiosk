@@ -1678,6 +1678,39 @@ main:has(.document-viewer-canvas-container) {
     font-weight: 300;
 }
 .new-project-hero h1 { font-size: 2.25rem; }
+/* New Project page title: name on the left, rule carrying to the right
+   edge. Structural, not decorative - the same 1px var(--border) line
+   .gateway-divider draws, no new token and no color meaning added. */
+.np-rule-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin: 0 0 var(--space-6);
+}
+.np-rule-head h1 {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 300;
+    line-height: 1.2;
+    margin: 0;
+    white-space: nowrap;
+}
+.np-rule { flex: 1 1 auto; height: 1px; background: var(--border); }
+/* One frame per section of New Project. Same border-only treatment as
+   .operating-environment-fieldset and .storage-connection-fieldset, so all
+   five sections read as one series rather than three framed and two loose. */
+.np-group {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: var(--space-5) var(--space-6);
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+.np-group > label { display: block; }
+.np-group .project-code-field { margin: 0; }
 .hero-copy { color: var(--text-secondary); font-size: 1.05rem; max-width: 60ch; }
 .hero-actions { margin-top: 2.2rem; display: flex; gap: 1rem; }
 .hero-actions-center { justify-content: center; }
@@ -1747,6 +1780,35 @@ main:has(.document-viewer-canvas-container) {
 .storage-option-disabled > .pane-note { color: var(--text-disabled); }
 #folder-selection-summary { margin: 0.8rem 0 0.4rem; color: var(--text-secondary); font-size: var(--text-sm); }
 #folder-domain-summary { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; }
+/* Staged Upload File rows. Plain list + border, no accent color - a staged
+   file is a pending fact, not a status signal (see this file's header on
+   when color is and is not appropriate). */
+.upload-file-rows { list-style: none; margin: 0; padding: 0; width: 100%; }
+.upload-file-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
+}
+.upload-file-row-name { overflow-wrap: anywhere; }
+.upload-file-row-remove {
+    flex: 0 0 auto;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    line-height: 1;
+    padding: 0.2rem 0.45rem;
+}
+.upload-file-row-remove:hover,
+.upload-file-row-remove:focus-visible { color: var(--text-primary); }
+.upload-file-founding-note { margin: var(--space-3) 0 0; }
+#single-file-submit-button:disabled { opacity: 0.5; cursor: not-allowed; }
 .new-project-section-heading {
     font-family: var(--font-body);
     font-size: 1rem;

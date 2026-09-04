@@ -3,34 +3,16 @@
 {% block title %}New Project &mdash; Archiosk{% endblock %}
 
 {% block content %}
-<section class="hero new-project-hero">
-    {# CLAUDE-POSTCAMEL-META-T01 (Territory Before Ontology): reframed
-       from "Ingest a project document" - that heading and the founder-
-       centric "put your document into Archiosk" framing implied the
-       project moves into Archiosk, the opposite of the governing
-       principle ("Archiosk enters the project," not the reverse).
-
-       CLAUDE-POSTCAMEL-META-T01-RC1: "Open a Project" (this stage's own
-       first attempt) was found, on reassessment, to collide with the
-       actual mechanism - the only real discovery path to this page is
-       the "+ New Project" link (base.html's Account/Admin menu as of
-       CLAUDE-LEFT-RAIL-01, ref menu dot account dot admin dot
-       new-project - was the sidebar's own ref lists dot new-project at
-       the time this comment was first written), and this route always
-       creates a brand-new Project record with a fresh id, never reopens
-       or resumes an existing one. "Open" risks implying the latter.
-       Corrected to "Establish a Project" - the Product Owner's own
-       alternate candidate wording (META-T01's own Section 4),
-       consistent with "+ New Project," and still carrying the Territory
-       framing (a project is established IN Archiosk, not moved into
-       it). #}
+{# The page title is a rule head, not a hero: "New Project" at working-copy
+   size on the left of a horizontal divider that carries to the right edge.
+   The hero's 2.25rem display type was the largest thing on a page whose
+   actual subject is the form beneath it, so it competed with the section
+   frames rather than introducing them. The divider is the same 1px
+   var(--border) line .gateway-divider already draws. #}
+<div class="np-rule-head" data-ui-ref="upload.page-title">
     <h1>New Project</h1>
-    {# CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01 addendum (Storage Grammar):
-       replaces CLAUDE-HYBRID-ENTRY-01's own longer disclaimer copy - the
-       enduring customer-facing choice is Link vs. Upload (below), stated
-       plainly rather than as a disclaimer; the fuller custody explanation
-       moved behind each option's own "Details" disclosure. #}
-</section>
+    <span class="np-rule" aria-hidden="true"></span>
+</div>
 
 <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 
@@ -40,12 +22,19 @@
 <p class="mono form-error" id="upload-size-error" data-ui-ref="upload.client-size-error" hidden></p>
 
 <form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form" action="{{ url_for('portal.upload') }}">
-    <label>Your name
-        <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor">
-    </label>
-    <label>Your role
-        <input type="text" name="role" class="text-input" data-ui-ref="upload.role">
-    </label>
+    {# Visual grouping only - no behavior, no new field, no new validation.
+       Name and role were two loose labels above a bordered position
+       fieldset, so the eye read the framed thing as the first section and
+       these as page furniture. They are the first section. #}
+    <fieldset class="np-group" data-ui-ref="upload.identity">
+        <legend>Your identity</legend>
+        <label>Your name
+            <input type="text" name="actor" class="text-input" data-ui-ref="upload.actor">
+        </label>
+        <label>Your role
+            <input type="text" name="role" class="text-input" data-ui-ref="upload.role">
+        </label>
+    </fieldset>
     {# CLAUDE-ENTRY-REDUNDANCY-01: ONE question, not two. This form used to ask
        for the Project Operating Environment and then immediately for the
        project position - the same words ("Client / Owner") in two adjacent
@@ -95,6 +84,12 @@
         {% endfor %}
     </fieldset>
 
+    {# Visual grouping only. Name and acronym ARE one thing - the acronym is
+       derived from the name and shown beside it precisely so the pair reads
+       as correct or wrong at a glance - so the frame states what the layout
+       was already relying on the reader to infer. #}
+    <fieldset class="np-group" data-ui-ref="upload.project-identity">
+        <legend>Project identity</legend>
     <label>Project name
         <input type="text" name="project_name" class="text-input text-input-wide"
                value="{{ request.form.get('project_name', '') }}"
@@ -123,6 +118,7 @@
             {% endfor %}
         </div>
     </fieldset>
+    </fieldset>
     <fieldset class="storage-connection-fieldset">
         <legend>Upload Project Folder</legend>
 
@@ -149,21 +145,39 @@
         <div id="folder-domain-summary" data-ui-ref="upload.folder.domain-summary" hidden></div>
         <div id="folder-selection-summary" data-ui-ref="upload.folder.summary" hidden></div>
         <div id="folder-founding-picker" data-ui-ref="upload.folder.founding-picker" hidden>
-            <p class="pane-note">Which of these is the principal document for this project? <span class="mono">(required &mdash; select one to continue)</span></p>
+            {# The "(required - select one to continue)" gloss was explaining a
+               state the disabled Connect Folder button already shows. #}
+            <p class="pane-note">Which of these is the principal document for this project?</p>
             <ul class="folder-founding-candidates" id="folder-founding-candidates"></ul>
         </div>
         <p class="mono form-error" id="folder-selection-error" data-ui-ref="upload.folder.error" hidden></p>
         <button type="submit" class="btn btn-ghost" id="folder-submit-button" disabled formaction="{{ url_for('portal.upload_folder') }}" data-ui-ref="upload.folder.submit">Connect Folder</button>
     </fieldset>
 
+    {# Staged multi-file selection. The picker sits BELOW the staged rows, so
+       an empty stage reads "Choose File" and a loaded one reads
+       file / file / Choose File / Upload Files - the same control in the same
+       place either way, rather than a picker that moves once files exist.
+
+       The native input is the transport, not the interface: a second
+       selection would REPLACE its FileList, which is exactly the behavior
+       being fixed, so staged files are held in script and written back
+       through a DataTransfer before submit. The input keeps name="file" and
+       the hidden source_domain stays UNKNOWN - no visible domain selector
+       here, and no change to how a domain-less upload is classified. #}
     <fieldset class="single-file-establish-fieldset">
         <legend class="new-project-section-heading">Upload File</legend>
         <input type="hidden" name="source_domain" value="UNKNOWN">
         <input
-            type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md"
-            id="upload-file-input" data-ui-ref="upload.file"
+            type="file" name="file" accept=".pdf,.docx,.txt,.csv,.md" multiple
+            id="upload-file-input" data-ui-ref="upload.file" class="visually-hidden"
             data-max-upload-bytes="{{ max_upload_mb * 1024 * 1024 }}" data-max-upload-mb="{{ max_upload_mb }}">
-        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>Upload File</button>
+        <ul class="upload-file-rows" id="upload-file-rows" data-ui-ref="upload.file.rows" hidden></ul>
+        <button type="button" class="btn btn-ghost" id="upload-file-choose"
+                data-ui-ref="upload.file.choose">Choose File</button>
+        <p class="pane-note upload-file-founding-note" id="upload-file-founding-note"
+           data-ui-ref="upload.file.founding-note" hidden></p>
+        <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>Upload Files</button>
     </fieldset>
 </form>
 <section class="upload-composer" id="upload-help" data-ui-ref="upload.help">
@@ -318,56 +332,128 @@
 </script>
 
 <script nonce="{{ csp_nonce }}">
-    // CLAUDE-P40-VW8-QA (Project-Creation Upload-Capacity Correction):
-    // an early, client-side-only convenience - the server-side
-    // MAX_CONTENT_LENGTH check (app.py's own 413 handler) is what
-    // actually enforces the limit; this only saves a reviewer the
-    // round-trip for the common case where the browser already knows
-    // the file's size before anything is uploaded.
+    // Staged multi-file selection for Upload File.
     //
-    // CLAUDE-CLIENT-RFP-PROJECT-CREATION-01: single-file-submit-button
-    // now starts disabled (template) and is only ever enabled once a
-    // real, size-valid file is actually chosen - the same "disabled
-    // until valid" discipline folder-submit-button already used below.
-    // A real Product Owner pressed this button with nothing chosen and
-    // only learned "No file was provided" after a full server round
-    // trip; a disabled button makes that misleading ready state
-    // impossible rather than relying on a server error as guidance.
+    // Replaces this stage's own single-file size-check IIFE. That version
+    // read input.files[0] directly, so a second visit to the picker
+    // discarded the first choice with no indication - the native FileList
+    // is replaced wholesale on every selection, never appended to. Files
+    // are therefore held here and written back through a DataTransfer just
+    // before submit, which is the only way to hand a browser-constructed
+    // list to a real multipart POST.
+    //
+    // The size ceiling it enforced is preserved and now applies per staged
+    // file. It remains a client-side convenience only: app.py's
+    // MAX_CONTENT_LENGTH 413 handler is what actually enforces the limit.
+    // The "disabled until genuinely valid" discipline is preserved too -
+    // an empty stage cannot submit, which is what stopped a real Product
+    // Owner from learning "No file was provided" after a full round trip.
     (function () {
         var input = document.getElementById('upload-file-input');
         var errorEl = document.getElementById('upload-size-error');
         var form = document.getElementById('project-creation-form');
         var submitButton = document.getElementById('single-file-submit-button');
-        if (!input || !errorEl || !form || !submitButton) return;
+        var chooseButton = document.getElementById('upload-file-choose');
+        var rowsEl = document.getElementById('upload-file-rows');
+        var foundingNote = document.getElementById('upload-file-founding-note');
+        if (!input || !errorEl || !form || !submitButton || !chooseButton || !rowsEl) return;
         var maxBytes = parseInt(input.getAttribute('data-max-upload-bytes'), 10);
         var maxMb = input.getAttribute('data-max-upload-mb');
+        var staged = [];
 
-        function checkSize() {
-            var file = input.files && input.files[0];
-            if (!file) {
-                errorEl.hidden = true;
-                submitButton.disabled = true;
-                return true;
-            }
-            if (file.size > maxBytes) {
-                var actualMb = (file.size / (1024 * 1024)).toFixed(1);
-                errorEl.textContent = 'This file is ' + actualMb + ' MB. The current maximum is ' +
-                    maxMb + ' MB. Choose a smaller file or reduce its size before uploading.';
-                errorEl.hidden = false;
-                submitButton.disabled = true;
-                return false;
-            }
-            errorEl.hidden = true;
-            submitButton.disabled = false;
-            return true;
+        // Identity for "exact pending duplicate". Name alone would refuse two
+        // genuinely different files that happen to share a name from
+        // different folders; name+size+mtime is what the browser can tell us
+        // about sameness without reading the bytes.
+        function keyOf(file) {
+            return file.name + ' ' + file.size + ' ' + file.lastModified;
         }
 
-        input.addEventListener('change', checkSize);
-        form.addEventListener('submit', function (e) {
-            if (document.activeElement === document.getElementById('single-file-submit-button') && !checkSize()) {
-                e.preventDefault();
+        function oversized() {
+            return staged.filter(function (file) { return file.size > maxBytes; });
+        }
+
+        function paintError() {
+            var bad = oversized();
+            if (!bad.length) {
+                errorEl.hidden = true;
+                return true;
             }
+            var names = bad.map(function (file) {
+                return file.name + ' (' + (file.size / (1024 * 1024)).toFixed(1) + ' MB)';
+            }).join(', ');
+            errorEl.textContent = 'Too large for the current ' + maxMb + ' MB maximum: ' + names +
+                '. Remove ' + (bad.length === 1 ? 'it' : 'them') + ' or reduce the file size before uploading.';
+            errorEl.hidden = false;
+            return false;
+        }
+
+        function render() {
+            rowsEl.innerHTML = '';
+            staged.forEach(function (file, index) {
+                var li = document.createElement('li');
+                li.className = 'upload-file-row';
+                li.setAttribute('data-ui-ref', 'upload.file.row');
+                var name = document.createElement('span');
+                name.className = 'upload-file-row-name';
+                name.textContent = file.name;
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'upload-file-row-remove';
+                remove.setAttribute('data-ui-ref', 'upload.file.row.remove');
+                remove.setAttribute('aria-label', 'Remove ' + file.name);
+                remove.textContent = '×';
+                remove.addEventListener('click', function () {
+                    staged.splice(index, 1);
+                    render();
+                });
+                li.appendChild(name);
+                li.appendChild(remove);
+                rowsEl.appendChild(li);
+            });
+            rowsEl.hidden = staged.length === 0;
+            var sizesOk = paintError();
+            submitButton.disabled = staged.length === 0 || !sizesOk;
+            submitButton.textContent = staged.length === 1 ? 'Upload File' : 'Upload Files';
+            if (foundingNote) {
+                // Never leave which document founds the project to inference.
+                foundingNote.textContent = staged.length > 1
+                    ? 'The project will be established from ' + staged[0].name +
+                      '. The rest are connected as additional documents.'
+                    : '';
+                foundingNote.hidden = staged.length < 2;
+            }
+        }
+
+        chooseButton.addEventListener('click', function () { input.click(); });
+
+        input.addEventListener('change', function () {
+            var seen = {};
+            staged.forEach(function (file) { seen[keyOf(file)] = true; });
+            Array.prototype.slice.call(input.files || []).forEach(function (file) {
+                var key = keyOf(file);
+                if (seen[key]) return;   // exact pending duplicate - already staged
+                seen[key] = true;
+                staged.push(file);       // append; never replace what is already staged
+            });
+            // Clearing the native input is what makes re-picking the SAME file
+            // fire another change event, so a removed file can be re-added.
+            input.value = '';
+            render();
         });
+
+        form.addEventListener('submit', function (event) {
+            if (event.submitter !== submitButton && document.activeElement !== submitButton) return;
+            if (!staged.length || !paintError()) {
+                event.preventDefault();
+                return;
+            }
+            var transfer = new DataTransfer();
+            staged.forEach(function (file) { transfer.items.add(file); });
+            input.files = transfer.files;
+        });
+
+        render();
     })();
 
     // CLAUDE-CA1D-RECEPTION-FIX-01: folder establishment.

@@ -311,7 +311,9 @@ class UploadFormPresentationTests(_BaseTestCase):
         client = self._client_as("vw8qa_admin", 1)
         body = client.get("/upload").get_data(as_text=True)
         self.assertIn("upload-size-error", body)
-        self.assertIn("checkSize", body)
+        # The guard survived the staged-multi-file rewrite and now runs per
+        # staged file; `checkSize` was its single-file-only name.
+        self.assertIn("paintError", body)
 
     def test_upload_form_controls_carry_ui_references(self):
         client = self._client_as("vw8qa_admin", 1)

@@ -141,7 +141,10 @@ class SingleFilePathWordingTests(_BaseTestCase):
         body = self._body()
         self.assertIn('data-ui-ref="upload.file"', body)
         self.assertIn('data-ui-ref="upload.submit"', body)
-        self.assertIn(">Upload File</button>", body)
+        # Staged multi-file: the submit renders "Upload Files" and the script
+        # relabels it to "Upload File" when exactly one file is staged, so the
+        # one-file capability this test guards is intact under a plural label.
+        self.assertIn(">Upload Files</button>", body)
         self.assertNotIn("Create project and parse document", body)
 
     def test_form_disables_both_submit_buttons_on_actual_submission(self):
