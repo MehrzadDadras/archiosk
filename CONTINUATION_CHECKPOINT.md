@@ -1,5 +1,128 @@
 # Continuation checkpoint
 
+## 2026-09-04 (deploy) — `7dac0ca` live at `v=151`: New Project sections, staged multi-file upload, one shared Composer
+
+**`7dac0ca` is live on `https://archiosk.com`**, replacing `53e1ca0`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build 7dac0ca)`. `STATIC_VERSION`
+150 → 151, stepped as `CURRENT + 1` read off the live file, and verified actually
+served (`?v=151` in the rendered page). Both `/health` endpoints 200/ok, internal
+and public. Rollback marker `/var/www/archiosk-backup-53e1ca0-pre-7dac0ca`, with
+`.env` copied to `/root/archiosk.env.bak-53e1ca0` — outside the live tree, per
+CLAUDE-DEPLOY-ENV-BACKUP-01.
+
+Verified live content rather than trusting the marker: the served
+`main.css` carries `np-rule-head`/`upload-file-rows`/`upload-file-row-remove`,
+and the served `developer_composer_image.js` carries `data-composer-image-scope`
+and `composerImageBound`. None of those exist at `53e1ca0`, so the deployed tree
+is genuinely this commit and not a cached artifact.
+
+### What shipped
+
+Three commits, staged and individually tested.
+
+`8a31932` — New Project framing and staged multi-file upload. The page title
+became a rule head instead of a 2.25rem hero; "Your identity" and "Project
+identity" became framed sections (grouping only, no field or validation moved);
+the duplicate-name message became "Project name already exists." on the upload
+path only, with the rename path and its two tests untouched.
+
+The real defect fixed there: **Upload File read `input.files[0]`, so a second
+visit to the picker replaced the first choice outright** — that is what
+assigning to a native `FileList` does. "Add another file" was not slow, it was
+impossible, and the discarded choice left no trace. Files are now staged in
+script and written back through a `DataTransfer` before submit, with append,
+per-row remove, refusal of exact pending duplicates (name+size+mtime), and
+disable-on-empty. Server side, `/upload` reads `request.files.getlist('file')`:
+exactly one file takes the original path completely untouched, interstitial
+included; more than one reuses `ingest_folder_upload`, because one founding
+document plus additional sources is the act folder establishment already
+performs. Multi-file is gated on `user_can_upload_to_storage()`, which
+`upload_folder` already enforces — it writes the same files to the same storage
+through a different door, and an ungated door is the way around the gate.
+
+`718011c` — one shared Composer shell (`_macros.html`'s `composer_shell`). New
+Project and All Projects stopped being two hand-maintained copies that had
+already drifted: one said "Send", the other "Ask"; one carried a context field,
+the other did not. `developer_composer_image.js` now binds per form rather than
+to one hardcoded set of developer-home ids. Ids and both `data-ui-ref` families
+are unchanged, so nothing bound to them moved.
+
+`7dac0ca` — NUL-byte repair and this tranche's own test fallout.
+
+### The NUL bytes, and a wrong diagnosis corrected
+
+`templates/upload.html` was committed in `8a31932` carrying two NUL bytes: the
+staged-upload dedup key was written with `'\0'` where spaces were intended.
+Functionally inert — a NUL joins a string as well as a space — which is exactly
+why a green test run did not catch it.
+
+Not inert for git. A file containing NUL is treated as binary, so no
+line-ending normalization is applied and every diff comes back whole-file:
+`upload.html` reported 674/588 for what is really a 156/70 change.
+
+**`8a31932`'s own message attributes that whole-file diff to CRLF and describes
+an LF normalization pass as the fix. That diagnosis was wrong.** The line-ending
+observation was real but was not the cause. The normalization was harmless and
+was left in place. Both the wrong diagnosis and the correction are in the
+history rather than amended away — the same discipline `ff47e6e`/`d760e6b`
+already set, because a commit message that overstates what it understood is
+what becomes unknowable later. A repository-wide sweep found no other NUL.
+
+### Test state, and 13 failures deliberately left red
+
+Full suite before the final corrections: **14 failed, 6,179 passed, 2 skipped,
+4 deselected, 2,573 subtests, 36:27, `PYTEST_EXIT=1`.** After: **13 failed** on
+the nine affected files. The one that disappeared was this tranche's only
+contribution to the count.
+
+Every one of the 13 was checked against `53e1ca0` rather than assumed:
+
+- **11 pre-existing at the production tip** — stale assertions against copy and
+  controls earlier commits already changed (`Establish a Project`, `Confirm
+  project position`, `principal RFP/document`, `upload.limits`, the
+  `developer.*` registry rows orphaned when `3ab9477` moved the Developer
+  Composer into `developer_tools.html`, which is not in that scanner's file
+  list, and a z-index badge assertion).
+- **2 caused by untracked local TTS files**, absent from `HEAD` and structurally
+  absent from the deploy tarball, so they cannot reach production.
+
+Product Owner instruction, this session: leave all of them red in this tranche
+and keep the diff clean. Recorded here because a red suite is otherwise
+indistinguishable from an unnoticed regression the next time someone runs it.
+
+**Worth its own attention:** `test_no_static_script_can_produce_speech` fails on
+`static/js/tts.js`. That guard is a repo-wide Product Owner prohibition on
+speech synthesis, and the uncommitted TTS work currently violates it.
+
+Three of those stale tests share one cause worth naming: the eleven commits from
+`f3762c2` to `53e1ca0` all landed with **empty message bodies** — no objective,
+no evidence, no recorded suite run. Six production deployments in that window
+have no durable record of whether the gate was run.
+
+### Deliberately not built
+
+**Actions 16, 17 and the remainder of 18 — a project-scoped chat-history rail,
+pin/hide/safe-delete, and folding the Workspace dock into the shared shell — are
+on hold by Product Owner decision**, to be taken as a dedicated design increment.
+
+Two reasons, both recorded so the next session does not re-derive them. There is
+no per-project chat *thread* object: `ProjectWorkspace.project_conversation` is a
+single list, and `CaseRecord` is a governed investigative object with
+objective/status/visibility/findings that must not be inflated into a container
+for casual chat. And a history rail beside the composer is the exact pattern
+`CLAUDE-ONE-COMPOSER-01` and `CLAUDE-MOBILE-PRIMARY-RESET-01` each deliberately
+removed — reversible, but as a deliberate decision rather than a side effect.
+
+**The Composer `+` attachment stays off New Project and All Projects**, ratified
+this session. `portal.gateway_orientation`'s two branches take `(message, ...)`
+with no image parameter, so a `+` would accept a screenshot the server discards
+in silence. `test_composer_convergence_01`'s own contract already states the
+boundary: attachment belongs "exactly where evidence has a home", and its absence
+on the project-less surfaces is "a boundary, not drift". The shell renders a real
+`+` when a caller asks for one, so this is one argument change the day that
+endpoint can receive an image — which needs a vision-capable call on a
+project-less surface, and therefore the `ACTION_EXTERNAL_AI_REQUEST` gate.
+
 ## 2026-09-01 (application) — `3ab9477`: Developer Composer moved to Developer Tools
 
 **`3ab9477` is the latest application commit and is pushed to `origin/main`.** This
