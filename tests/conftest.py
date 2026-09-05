@@ -125,3 +125,70 @@ def pytest_sessionstart(session):
     if removed:
         names = ", ".join(p.name for p in removed)
         print("\n[conftest] reset test stores: %s" % names)
+
+
+# ---------------------------------------------------------------------------
+# CLAUDE-XDIST-STORE-SWEEP-01 - stale per-worker stores.
+# ---------------------------------------------------------------------------
+
+WORKER_ENV_VAR = "PYTEST_XDIST_WORKER"
+
+# The suffixed stores TestingConfig hands each xdist worker
+# (instance/test_registry_gw0, ...). Anchored to the same two stems this file
+# already resets, so a future third store follows automatically rather than
+# being silently missed.
+_WORKER_STORE_GLOBS = ("test_registry_*", "test_project_assets_*")
+
+
+def _stale_worker_stores() -> list[Path]:
+    """Per-worker stores left behind by a previous run.
+
+    Every candidate is re-checked through _is_disposable_store rather than
+    trusted because it matched a glob - the glob is a search, the allowlist is
+    the authority, and that ordering is what keeps instance/registry
+    unreachable from here.
+    """
+    return [
+        path for pattern in _WORKER_STORE_GLOBS
+        for path in sorted(_INSTANCE_DIR.glob(pattern))
+        if path.is_dir() and _is_disposable_store(path)
+    ]
+
+
+def pytest_configure(config):
+    """Remove worker stores orphaned by a run with a different -n.
+
+    THE PROBLEM. Each worker clears only its OWN store, so `-n 8` followed by
+    `-n 2` leaves test_registry_gw2..gw7 untouched forever. That is the same
+    slow-accumulation shape this file's own header describes: a store nobody
+    empties, failing much later in whichever feature draws the short straw.
+
+    WHY pytest_configure AND NOT pytest_sessionstart. xdist spawns its workers
+    during the controller's session start, so a sweep there races store
+    creation and could delete a LIVE worker's directory mid-run. configure runs
+    before any worker exists.
+
+    WHY THE WORKER GUARD. configure also runs inside each worker. Without this,
+    worker gw3 would delete gw5's store - the precise failure this exists to
+    prevent, caused by the fix for it. Absent in a serial run too, which is
+    correct: with no workers, every gw* directory is stale by definition.
+
+    KNOWN LIMITATION, recorded rather than solved: two pytest runs started
+    concurrently on one machine would have the second sweep the first's worker
+    stores. That is already true of the shared instance/test_registry today, so
+    it is pre-existing rather than introduced, and locking for a scenario
+    nobody has would be machinery this repository does not need.
+    """
+    if os.environ.get(KEEP_ENV_VAR) or os.environ.get(WORKER_ENV_VAR):
+        return
+    removed = []
+    for path in _stale_worker_stores():
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            removed.append(path)
+        else:
+            print("\n[conftest] WARNING: %s survived the sweep - remove it by "
+                  "hand, or it will keep accumulating." % path)
+    if removed:
+        print("\n[conftest] swept %d stale worker store(s): %s"
+              % (len(removed), ", ".join(p.name for p in removed)))
