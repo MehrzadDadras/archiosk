@@ -67,7 +67,6 @@ def assess_and_record_question_fit(
     question: str,
     policy_decision: str,
     script_text: Optional[str] = None,
-    evidence_context: Optional[list[str]] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
@@ -103,8 +102,7 @@ def assess_and_record_question_fit(
         )
     else:
         result = assess_question_fit(
-            question=question, script_text=script_text,
-            evidence_context=evidence_context, api_key=api_key,
+            question=question, script_text=script_text, api_key=api_key,
             model=model, timeout=timeout,
         )
 

@@ -288,7 +288,7 @@ class NarrativeTextTests(_WiringFixture):
     def test_the_text_assessed_is_the_text_stored(self):
         captured = {}
 
-        def _capture(question, script_text, evidence_context=None, **kwargs):
+        def _capture(question, script_text, **kwargs):
             captured["script_text"] = script_text
             from services.cross_modal_investigation import QuestionFitResult
 
