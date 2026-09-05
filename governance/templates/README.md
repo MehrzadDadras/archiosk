@@ -145,6 +145,10 @@ CIC-REPO-SAFETY v1.0
 CIC-COMPOSER v1.0
 ```
 
+The IDs in that block are illustrative shape, not citations — `GOV-X-002` does not
+exist. `GOV-P-004` has since become a real record (2026-09-05); it is unrelated to
+its appearance here, and the Register below is the authority on what exists.
+
 Cited records are reported against on completion using the Canonical
 Implementation Order's existing compliance vocabulary — `PASS` · `PARTIAL` ·
 `NOT APPLICABLE` · `CONFLICT` — with concise evidence. A knowingly `PARTIAL` or
@@ -192,6 +196,22 @@ exactly the bureaucracy this family is meant to avoid.
 |---|---|---|---|---|---|
 | [GOV-P-001](../records/GOV-P-001.md) | Selection is context, not authorization | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-001.md) |
 | [GOV-P-002](../records/GOV-P-002.md) | Work surfaces carry the work; control surfaces carry the machinery | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-002.md) |
+| [GOV-P-003](../records/GOV-P-003.md) | Help without humiliation | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-003.md) |
+| [GOV-P-004](../records/GOV-P-004.md) | Decoupled Two-Sided Procurement Foundation | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-004.md) |
+| [GOV-D-001](../records/GOV-D-001.md) | Authorize model-based advisory conversation on the Establish a Project surface, without granting project-less Composer authority generally | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-001.md) |
+| [GOV-D-002](../records/GOV-D-002.md) | Reconcile the earlier Task scope boundary for mobile continuation | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-002.md) |
+| [GOV-CN-001](../records/GOV-CN-001.md) | Amend CIC-SPIN-INTELLIGENCE to v1.2 — admit an observer-shear layer, and fix the boundary that keeps it out of Helix | Governance Change Notice | v1.0 | ABSORBED | [Record](../records/GOV-CN-001.md) |
+| [GOV-CR-001](../records/GOV-CR-001.md) | Multi-Observer Shear Mapping cannot be implemented as "Helix" without amending a CURRENT standing contract | Governance Conflict Report | v1.0 | RESOLVED | [Record](../records/GOV-CR-001.md) |
+| [GOV-S-001](../records/GOV-S-001.md) | Partial supersession of CIC-SPIN-INTELLIGENCE v1.1 — SCOPE and APPLIES WHEN replaced, MANDATORY INVARIANTS extended | Governance Supersession Record | v1.0 | CURRENT | [Record](../records/GOV-S-001.md) |
 
 Add one row per record created from a template. The register is an index, never a
 replacement for the record.
+
+**Register repair, 2026-09-05.** Six real records existed in `../records/` without a
+row here — `GOV-P-003`, `GOV-D-001`, `GOV-D-002`, `GOV-CN-001`, `GOV-CR-001` and
+`GOV-S-001` — so the index had silently stopped being one. They are added above,
+transcribed from each record's own header rather than restated. **One drift is
+recorded, not fixed:** `GOV-CR-001` carries `STATUS: RESOLVED`, which is not in the
+Status vocabulary above. Its own status is reproduced as written rather than
+reinterpreted here; correcting or admitting the term is a change to that record or to
+the vocabulary, and belongs to whoever holds that decision — not to an index repair.

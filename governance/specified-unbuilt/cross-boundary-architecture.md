@@ -2,6 +2,20 @@
 
 **Status:** Specified, not implemented.
 
+> **Governing addition, 2026-09-05 — [`GOV-P-004`](../records/GOV-P-004.md) v1.0,
+> "Decoupled Two-Sided Procurement Foundation" (`CURRENT`).** Nothing in this
+> document is superseded, narrowed, or corrected; every statement below remains in
+> force. `GOV-P-004` states the layer this document left unstated — that Owner and
+> Proponent are not merely separate *Projects* but separate *deployments* sharing no
+> application, network, runtime, or database, with the issued data room package
+> (documents, a zip, or a structured export, moved out-of-band) as the only boundary
+> object, and with neither mode depending on the counterparty running ARCHIOSK. Read
+> the two together: this document resolves the project-layer design, `GOV-P-004`
+> fixes the deployment layer and the standalone-viability rule. The addendum-lineage
+> paragraph below is where `GOV-P-004`'s Supersession-via-Delta-Ingestion clause
+> lands, bounded by `add-addendum-facility.md` §2 item 6 — an arriving addendum marks
+> affected downstream work for review; it never applies itself.
+
 ## Owner / Proponent publication
 
 Owner Private Project → authorized publication → immutable **Published Procurement Instrument** → independent, physically separate Proponent Project imports it as its own fresh `Source`. Never one project under differentiated access — tested directly and confirmed: a single shared workspace with visibility flags means every future feature is one bug away from leaking confidential pre-publication owner deliberation to a bidder in an active competition; genuine physical separation fails safe instead, because there is no code path that could leak what was never in the same file. This is the same strict-isolation invariant (constitutional #8) already governing ordinary project-to-project boundaries, now understood to carry a second, independent, higher-stakes justification (procurement integrity) alongside its original one (stale-truth prevention).
