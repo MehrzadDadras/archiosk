@@ -794,9 +794,18 @@ class DeepOceanGlassMaterialTests(unittest.TestCase):
         self.assertIn("0 24px 70px rgba(1, 8, 14, .5)", body)
 
     def test_menu_dropdown_panels_get_the_glass_treatment_in_deep_ocean_only(self):
+        # CLAUDE-MENU-BACKDROP-ROOT-01 superseded the blur half of this
+        # assertion. It was not a regression: these panels are descendants
+        # of .workspace-topbar, which has its own backdrop-filter, and an
+        # element with backdrop-filter establishes a backdrop root - so the
+        # panel's own filter could only ever sample content inside the
+        # topbar, never the page behind it. Measured live on 2026-09-05:
+        # disabling it rendered identically to the shipped build. The
+        # property was removed rather than left looking load-bearing, so
+        # this now asserts its ABSENCE. The glow needs no backdrop and stays.
         idx = self.css.index(".workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,")
         block = self.css[idx:self.css.index("}", idx)]
-        self.assertIn("backdrop-filter: blur(var(--ocean-glass-blur));", block)
+        self.assertNotIn("backdrop-filter", block)
         self.assertIn("box-shadow: var(--ocean-glow);", block)
         # Every listed selector must itself carry the .appearance-deep-ocean
         # scope directly - never a bare, unscoped selector that would leak
@@ -848,17 +857,33 @@ class DeepOceanMenuForegroundLayeringTests(unittest.TestCase):
         self.tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
 
-    def test_new_foreground_token_is_a_literal_copy_of_the_gateway_reference(self):
-        self.assertIn("--ocean-glass-foreground: rgba(8, 28, 36, .72);", self.tokens_css)
+    def test_foreground_token_is_opaque_and_the_gateway_reference_is_untouched(self):
+        # Was: a literal copy of .gateway-card-wide's rgba(8, 28, 36, .72).
+        # CLAUDE-MENU-BACKDROP-ROOT-01 made it OPAQUE at the same hue and
+        # tone. The .72 reuse assumed the menu's blur would handle whatever
+        # came through the remaining 28%; it cannot, because of the topbar
+        # backdrop root (see the sibling test above). .gateway-card-wide has
+        # no such ancestor, which is why the same number still works THERE -
+        # so the reference is deliberately left exactly as it was, and this
+        # asserts both halves of that split.
+        self.assertIn("--ocean-glass-foreground: rgb(8, 28, 36);", self.tokens_css)
+        self.assertNotIn("--ocean-glass-foreground: rgba(8, 28, 36, .72);", self.tokens_css)
         idx = self.css.index(".gateway-shell .gateway-card-wide {")
         body = self.css[idx:idx + 300]
         self.assertIn("background-color: rgba(8, 28, 36, .72);", body)
 
     def test_foreground_token_is_denser_than_the_passive_surface_it_replaces(self):
-        # .72 alpha (denser / more opaque) vs. .55 alpha inherited from
-        # --surface-primary - the whole point of the fix.
+        # Still the whole point of the fix, now at its conclusion: the
+        # passive tray stays translucent at .55 and the floating menu is
+        # fully opaque, which is as dense as "denser" can get. The .72
+        # intermediate is gone (CLAUDE-MENU-BACKDROP-ROOT-01) because it
+        # left 28% of --ocean-text-primary showing through with nothing
+        # able to blur it.
         self.assertIn("rgba(10, 35, 42, .55)", self.tokens_css)  # --ocean-surface-primary, unchanged
-        self.assertIn("rgba(8, 28, 36, .72)", self.tokens_css)   # --ocean-glass-foreground, new
+        self.assertIn("--ocean-glass-foreground: rgb(8, 28, 36);", self.tokens_css)
+        # The tray must NOT have been opaqued along with the menu - the
+        # glass theme's passive surfaces are still meant to be glass.
+        self.assertNotIn("--ocean-surface-primary: rgb(", self.tokens_css)
 
     def test_menu_dropdown_panels_get_their_own_denser_background_in_deep_ocean(self):
         idx = self.css.index(".workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,")

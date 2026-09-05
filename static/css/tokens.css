@@ -626,11 +626,34 @@
        foreground. .gateway-card-wide is itself already a floating
        card over a live background and was never reported as bleeding
        through, so its own background-color (.72 alpha - meaningfully
-       denser than .55) is reused here verbatim, same as the two
-       tokens above: not a new number, not re-derived. */
+       denser than .55) was reused here verbatim.
+
+       CLAUDE-MENU-BACKDROP-ROOT-01: that value is now OPAQUE, and the
+       history above is kept because it explains why it was not. The
+       .72 reuse was sound reasoning with one false premise - it
+       assumed the menu's own backdrop-filter would blur whatever
+       showed through the remaining 28%, exactly as it does for
+       .gateway-card-wide. It cannot. The floating menu panel is a
+       DESCENDANT of .workspace-topbar, which carries its own
+       backdrop-filter, and per spec an element with backdrop-filter
+       establishes a backdrop root: a descendant's filter can only
+       sample content inside that ancestor, never the page painted
+       behind it. .gateway-card-wide has no such ancestor, which is
+       why the same number worked there and not here.
+
+       Confirmed on live production (2026-09-05, authenticated
+       walkthrough of archiosk.com at v=155, Product Owner observing
+       the real screen): with the blur disabled the panel rendered
+       IDENTICALLY to the shipped build - the blur contributes nothing
+       - while an opaque background eliminated the bleed completely.
+       The project rail read straight through an open menu because
+       28% of --ocean-text-primary (rgb(230, 244, 255)) on a dark
+       ground is comfortably legible. Same hue and tone as before, now
+       at full alpha, so the menu keeps its identity and finally does
+       what LAYERING-01 already said it should: own the foreground. */
     --ocean-glass-blur: 14px;
     --ocean-glow: 0 24px 70px rgba(1, 8, 14, .5);
-    --ocean-glass-foreground: rgba(8, 28, 36, .72);
+    --ocean-glass-foreground: rgb(8, 28, 36);
 
     /* CLAUDE-P40-DTAB1: same rationale as the light-mode block above -
        identical values across every dark theme, the same convention

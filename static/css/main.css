@@ -6217,15 +6217,29 @@ main:hover,
    real floating-card-over-live-background precedent that never drew a
    bleed-through report - so a genuinely foreground overlay now reads
    as denser glass than the passive panel underneath it, without
-   inventing a new color or touching any other appearance mode. */
+   inventing a new color or touching any other appearance mode.
+
+   CLAUDE-MENU-BACKDROP-ROOT-01: the density above was necessary and
+   not sufficient, and the backdrop-filter that used to sit in this
+   rule has been REMOVED as provably dead rather than left in place
+   looking load-bearing. Every selector below is a descendant of
+   .workspace-topbar, which carries its own backdrop-filter (the
+   five-surface rule above); per spec that ancestor establishes a
+   backdrop root, so these panels could only ever blur content inside
+   the topbar, never the page behind it. Measured on live production
+   during the 2026-09-05 authenticated walkthrough: disabling the blur
+   produced a rendering IDENTICAL to the shipped build, and the rail
+   text showing through was the 28% that .72 alpha transmits, not an
+   unblurred backdrop. --ocean-glass-foreground is opaque as of that
+   record (see tokens.css), which also makes any backdrop-filter here
+   meaningless by construction. The glow stays: box-shadow needs no
+   backdrop. */
 .workspace-topbar.appearance-deep-ocean .workspace-menubar-panel,
 .workspace-topbar.appearance-deep-ocean .workspace-menubar-subpanel,
 .workspace-topbar.appearance-deep-ocean .workspace-layout-options,
 .workspace-topbar.appearance-deep-ocean .workspace-appearance-options,
 .workspace-topbar.appearance-deep-ocean .workspace-user-options {
     background-color: var(--ocean-glass-foreground);
-    -webkit-backdrop-filter: blur(var(--ocean-glass-blur));
-    backdrop-filter: blur(var(--ocean-glass-blur));
     box-shadow: var(--ocean-glow);
 }
 /* The Composer dock is a real, bounded panel (not a floating overlay),
