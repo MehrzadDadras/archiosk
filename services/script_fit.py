@@ -47,8 +47,10 @@ from typing import Optional
 from services.case_workspace import (
     CaseWorkspaceStore,
     ProjectWorkspace,
+    SCRIPT_CHECK_FAIL,
     SCRIPT_CHECK_PASS,
     SCRIPT_CHECK_REVIEW_NEEDED,
+    SCRIPT_READINESS_REUSABLE,
 )
 from services.cross_modal_investigation import (
     EvidenceConsistencyResult,
@@ -343,4 +345,71 @@ def run_script_trust_chain(
         "checks": readiness["checks"],
         "content_checksum": readiness.get("content_checksum"),
         "reasons": readiness["reasons"],
+    }
+
+
+# --- What a person is told -------------------------------------------------
+# Four statuses, deliberately fewer than the seven checks behind them. A Help
+# reader is not troubleshooting a gate; they need to know whether they can rely
+# on what they are reading. The detailed check results stay available to a
+# reviewer, who is the only person for whom "which of seven" is actionable.
+HELP_STATUS_READY = "ready"
+HELP_STATUS_READY_FOR_REVIEW = "ready_for_review"
+HELP_STATUS_NEEDS_REVIEW = "needs_review"
+HELP_STATUS_BLOCKED_EVIDENCE = "blocked_by_evidence_mismatch"
+HELP_STATUS_CHECK_UNAVAILABLE = "check_could_not_run"
+
+_HELP_STATUS_LABELS = {
+    HELP_STATUS_READY: "Ready",
+    HELP_STATUS_READY_FOR_REVIEW: "Ready for review",
+    HELP_STATUS_NEEDS_REVIEW: "Needs review",
+    HELP_STATUS_BLOCKED_EVIDENCE: "Blocked by evidence mismatch",
+    HELP_STATUS_CHECK_UNAVAILABLE: "Check could not run",
+}
+
+
+def help_status_for(readiness: dict, could_not_run: Optional[list[str]] = None) -> dict:
+    """Translate seven derived checks into the one thing a reader needs.
+
+    Precedence is deliberate and is not the order of the checks:
+
+      1. A check that COULD NOT RUN outranks everything. "We could not look" is
+         a different statement from "we looked and it is not ready", and
+         collapsing the two is how an outage starts reading as a verdict.
+      2. An evidence mismatch is called out by name. It is the one failure a
+         reader must not treat as ordinary incompleteness - the text disagrees
+         with what it cites, which is worse than the text being unfinished.
+      3. REUSABLE reads as Ready. Everything else that has cleared the machine
+         checks and is only waiting on a person reads as Ready for review.
+      4. Everything else is Needs review, without enumerating why. A reader
+         cannot act on "semantic_fit is review_needed"; a reviewer can, and gets
+         the full `checks` dict.
+
+    Returns the machine value, a human label, and whether the Script's own text
+    may be shown as an answer at all - which is only true once REUSABLE, since
+    that is the state that means a human signed it off for reuse beyond the
+    question it was written for.
+    """
+    checks = readiness.get("checks", {})
+    readiness_value = readiness.get("readiness")
+
+    if could_not_run:
+        status = HELP_STATUS_CHECK_UNAVAILABLE
+    elif checks.get("evidence_consistency") == SCRIPT_CHECK_FAIL:
+        status = HELP_STATUS_BLOCKED_EVIDENCE
+    elif readiness_value == SCRIPT_READINESS_REUSABLE:
+        status = HELP_STATUS_READY
+    elif all(
+        checks.get(name) == SCRIPT_CHECK_PASS
+        for name in ("question_fit", "evidence_fidelity", "unsupported_claims",
+                     "current_applicability", "semantic_fit", "evidence_consistency")
+    ):
+        status = HELP_STATUS_READY_FOR_REVIEW
+    else:
+        status = HELP_STATUS_NEEDS_REVIEW
+
+    return {
+        "status": status,
+        "label": _HELP_STATUS_LABELS[status],
+        "answerable": status == HELP_STATUS_READY,
     }
