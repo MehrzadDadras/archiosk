@@ -690,6 +690,10 @@ SCRIPT_READINESS_REUSABLE = "reusable"
 # "82% grounded" to be read as good enough by whoever is in a hurry, and
 # Section 5's own "do not use vague confidence percentages without a
 # defined and testable meaning" already settled that argument for Claim.
+SCRIPT_VALIDATION_VALIDATED = "validated"
+SCRIPT_VALIDATION_REJECTED = "rejected"
+KNOWN_SCRIPT_VALIDATION_DECISIONS = (SCRIPT_VALIDATION_VALIDATED, SCRIPT_VALIDATION_REJECTED)
+
 SCRIPT_CHECK_PASS = "pass"
 SCRIPT_CHECK_FAIL = "fail"
 SCRIPT_CHECK_REVIEW_NEEDED = "review_needed"
@@ -2590,6 +2594,15 @@ class WorkProduct:
     issued_at: Optional[str] = None
     issued_by: Optional[str] = None
     issued_checksum: Optional[str] = None
+    # Append-only, and read with .get() everywhere so work products persisted
+    # before these existed keep loading unchanged. Both follow `reviews`'
+    # own shape - a stored decision with an actor and a time - and neither
+    # touches `state`, deliberately: the Script readiness chain and the
+    # WorkProduct issue lifecycle are separate axes, and record_work_product_
+    # review's own `work_product["state"] = decision` is exactly the coupling
+    # avoided here.
+    script_validations: list = field(default_factory=list)
+    script_fit_verdicts: list = field(default_factory=list)
 
 
 @dataclass
@@ -9642,6 +9655,112 @@ class CaseWorkspaceStore:
             result["superseded_by_claim_id"] = successor_supersession["successor_id"]
         return result
 
+    def record_script_validation(
+        self, workspace: ProjectWorkspace, work_product_id: str, decision: str, actor: str,
+        comments: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """The human act that is the authority transition, and the only one.
+
+        Shaped after WorkProductReview - a stored decision with an actor, a
+        time and an optional comment - but deliberately NOT that method:
+        record_work_product_review sets `work_product["state"] = decision`,
+        and the Script readiness chain must not drag the WorkProduct issue
+        lifecycle along with it. Two axes, two records.
+
+        The content checksum at the moment of decision is stored WITH the
+        decision. That is what makes a validation stop applying when the
+        Script is edited afterwards: nothing expires it, nothing has to
+        remember to invalidate it - the checksum simply no longer matches, and
+        resolve_script_readiness stops counting it. Reuses
+        _work_product_content_checksum rather than hashing again, so "the
+        content changed" means exactly what it already means for issue.
+        """
+        decision = normalize_open_world_value(decision, KNOWN_SCRIPT_VALIDATION_DECISIONS)
+        if decision not in KNOWN_SCRIPT_VALIDATION_DECISIONS:
+            raise CaseWorkspaceError(
+                "'%s' is not a recognized script validation decision. Use one of: %s."
+                % (decision, ", ".join(KNOWN_SCRIPT_VALIDATION_DECISIONS))
+            )
+        if not (actor or "").strip():
+            raise CaseWorkspaceError("A script validation must record who made it.")
+
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None:
+            raise CaseWorkspaceError("No work product %s in this project." % work_product_id)
+
+        record = {
+            "decision": decision,
+            "actor": actor,
+            "validated_at": _now(),
+            "content_checksum": self._work_product_content_checksum(work_product),
+            "comments": comments,
+        }
+        work_product.setdefault("script_validations", []).append(record)
+        work_product["modified_at"] = record["validated_at"]
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="script_validation_recorded",
+                actor=actor, role="reviewer",
+                payload={"work_product_id": work_product_id, "decision": decision},
+            )
+        return record
+
+    def record_script_fit_verdict(
+        self, workspace: ProjectWorkspace, work_product_id: str, outcome: str, reason: str,
+        assessed_by: str = "model", question: Optional[str] = None, ran: bool = True,
+        provider: Optional[str] = None, model: Optional[str] = None,
+    ) -> dict:
+        """Store the latest semantic question-fit verdict against a Script.
+
+        **Recording a verdict grants nothing.** A PASS stored here permits a
+        human to proceed and contributes no authority of its own; FAIL and
+        REVIEW_NEEDED block. That asymmetry is the entire reason a model output
+        is allowed to be persisted next to a governed record at all - it can
+        stop a promotion, and there is no path by which it causes one.
+
+        Carries the same content checksum as a validation, and for the same
+        reason: a verdict describes the Script it actually read. Edit the
+        Script and the verdict stops applying rather than silently vouching for
+        text nothing assessed. `question` is stored alongside so a reader can
+        see WHICH question was assessed, not merely that something was.
+        """
+        outcome = normalize_open_world_value(
+            outcome, (SCRIPT_CHECK_PASS, SCRIPT_CHECK_REVIEW_NEEDED, SCRIPT_CHECK_FAIL)
+        )
+        if outcome not in (SCRIPT_CHECK_PASS, SCRIPT_CHECK_REVIEW_NEEDED, SCRIPT_CHECK_FAIL):
+            raise CaseWorkspaceError(
+                "'%s' is not a recognized question-fit outcome." % outcome
+            )
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None:
+            raise CaseWorkspaceError("No work product %s in this project." % work_product_id)
+
+        record = {
+            "outcome": outcome,
+            "reason": reason,
+            "assessed_by": assessed_by,
+            "assessed_at": _now(),
+            "content_checksum": self._work_product_content_checksum(work_product),
+            "question": question,
+            "ran": bool(ran),
+            "provider": provider,
+            "model": model,
+        }
+        work_product.setdefault("script_fit_verdicts", []).append(record)
+        self.save(workspace)
+        return record
+
+    def _applicable_script_record(self, work_product: dict, key: str) -> Optional[dict]:
+        """The most recent entry in `key` that still describes the Script as it
+        stands now. Anything recorded against different content is not expired,
+        deleted or rewritten - the history stays intact - it simply stops being
+        applicable, which is the honest way to say "that decision was about a
+        different text"."""
+        current = self._work_product_content_checksum(work_product)
+        applicable = [r for r in work_product.get(key, []) if r.get("content_checksum") == current]
+        return applicable[-1] if applicable else None
+
     def resolve_script_readiness(self, workspace: ProjectWorkspace, work_product_id: str) -> dict:
         """Measure a candidate Script against the gate standing between it and
         reuse, and derive its readiness from the result.
@@ -9668,6 +9787,16 @@ class CaseWorkspaceStore:
                                 resolve_claim_status rather than re-deriving
                                 staleness, so this can never drift from what the
                                 rest of the kernel means by stale.
+          semantic_fit          the latest recorded question-fit verdict that
+                                still applies to the Script as it stands. FAIL
+                                and REVIEW_NEEDED block; a PASS permits a human
+                                to proceed and confers nothing. No verdict also
+                                blocks - "nobody looked" is not "it is fine".
+                                A model can stop a promotion here and can never
+                                cause one.
+          human_validation      a recorded human decision that still applies.
+                                This is the authority transition, and the only
+                                one.
           reuse_eligibility     every substantive claim has actually been
                                 adopted by a human. This is the one check
                                 separating VALIDATED from REUSABLE: a Script can
@@ -9768,14 +9897,53 @@ class CaseWorkspaceStore:
                         "reuse beyond it." % (label, status.get("status"))
                     )
 
+        # -- semantic fit: blocking only -------------------------------------
+        # A stored PASS lets a human proceed and grants nothing. FAIL and
+        # REVIEW_NEEDED block. No verdict at all also blocks - "nobody has
+        # looked" is not the same as "it is fine", and defaulting the absent
+        # case to pass is precisely how a gate becomes decorative.
+        verdict = self._applicable_script_record(script, "script_fit_verdicts")
+        if verdict is None:
+            semantic_fit = SCRIPT_CHECK_REVIEW_NEEDED
+            stale_verdicts = [v for v in script.get("script_fit_verdicts", [])]
+            reasons.append(
+                "Question fit has not been assessed against the Script as it now stands."
+                if stale_verdicts else "Question fit has not been assessed."
+            )
+        elif verdict["outcome"] == SCRIPT_CHECK_PASS:
+            semantic_fit = SCRIPT_CHECK_PASS
+        else:
+            semantic_fit = verdict["outcome"]
+            reasons.append("Question fit is %s: %s" % (verdict["outcome"], verdict.get("reason")))
+
+        # -- human validation: the authority transition ----------------------
+        validation = self._applicable_script_record(script, "script_validations")
+        if validation is None:
+            human_validation = SCRIPT_CHECK_REVIEW_NEEDED
+            reasons.append(
+                "No human validation applies to the Script as it now stands."
+                if script.get("script_validations") else "The Script has not been validated by a human."
+            )
+        elif validation["decision"] == SCRIPT_VALIDATION_VALIDATED:
+            human_validation = SCRIPT_CHECK_PASS
+        else:
+            human_validation = SCRIPT_CHECK_FAIL
+            reasons.append("A human rejected this Script: %s" % (validation.get("comments") or "no reason given"))
+
         checks = {
             "question_fit": question_fit,
             "evidence_fidelity": evidence_fidelity,
             "unsupported_claims": unsupported,
             "current_applicability": applicability,
+            "semantic_fit": semantic_fit,
+            "human_validation": human_validation,
             "reuse_eligibility": reuse,
         }
-        gate = (question_fit, evidence_fidelity, unsupported, applicability)
+        # VALIDATED needs every structural check, a PASS verdict AND a human.
+        # Neither the model nor the structure can reach it alone, which is the
+        # governing rule expressed as an `all()`.
+        gate = (question_fit, evidence_fidelity, unsupported, applicability,
+                semantic_fit, human_validation)
         if all(c == SCRIPT_CHECK_PASS for c in gate):
             readiness = (SCRIPT_READINESS_REUSABLE if reuse == SCRIPT_CHECK_PASS
                          else SCRIPT_READINESS_VALIDATED)
@@ -9784,6 +9952,7 @@ class CaseWorkspaceStore:
 
         return {"readiness": readiness, "work_product_id": work_product_id, "resolved": True,
                 "question": step["question"] if step else None,
+                "content_checksum": self._work_product_content_checksum(script),
                 "checks": checks, "reasons": reasons}
 
     def accept_claim_as_observation(

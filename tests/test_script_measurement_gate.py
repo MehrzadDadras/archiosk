@@ -60,6 +60,8 @@ from services.case_workspace import (
     SCRIPT_READINESS_DRAFT,
     SCRIPT_READINESS_REUSABLE,
     SCRIPT_READINESS_VALIDATED,
+    SCRIPT_VALIDATION_REJECTED,
+    SCRIPT_VALIDATION_VALIDATED,
 )
 
 QUESTION = "What is Survival Mode, and is it another kind of Spin?"
@@ -128,6 +130,24 @@ class _GateFixture(unittest.TestCase):
             self.workspace, claim_id=claim["id"], actor="tester", reason="verified against Help",
         )
 
+    def _fit(self, script, outcome=SCRIPT_CHECK_PASS, reason="assessed"):
+        return self.store.record_script_fit_verdict(
+            self.workspace, work_product_id=script["id"], outcome=outcome,
+            reason=reason, question=QUESTION,
+        )
+
+    def _validate(self, script, decision=SCRIPT_VALIDATION_VALIDATED, comments=None):
+        return self.store.record_script_validation(
+            self.workspace, work_product_id=script["id"], decision=decision,
+            actor="reviewer", comments=comments,
+        )
+
+    def _cleared(self, script):
+        """A Script taken through the full gate: assessed and validated."""
+        self._fit(script)
+        self._validate(script)
+        return script
+
     def _readiness(self, script):
         return self.store.resolve_script_readiness(self.workspace, script["id"])
 
@@ -135,10 +155,16 @@ class _GateFixture(unittest.TestCase):
 class CorrectScriptPassesTests(_GateFixture):
     """The pilot, answered correctly and grounded in current Help."""
 
-    def test_a_sound_but_unadopted_script_is_validated_not_reusable(self):
+    def test_a_sound_unadopted_but_assessed_and_validated_script_is_validated(self):
+        # SUPERSEDED EXPECTATION, recorded rather than quietly rewritten: this
+        # test used to reach VALIDATED on the four structural checks alone.
+        # The lifecycle now requires a semantic fit verdict AND a human
+        # validation before VALIDATED, so structural soundness is necessary and
+        # no longer sufficient. The old assertion was not wrong; the gate moved.
         claim = self._claim("Survival Mode is a lens on either Spin run, not a third kind of Spin.")
         script = self._script()
         self._scene(script, "Survival Mode is a lens on either run, not a third kind of Spin.", claim)
+        self._cleared(script)
 
         result = self._readiness(script)
         self.assertEqual(result["question"], QUESTION)
@@ -154,6 +180,7 @@ class CorrectScriptPassesTests(_GateFixture):
         claim = self._claim("Survival Mode is a lens on either Spin run, not a third kind of Spin.")
         script = self._script()
         self._scene(script, "Survival Mode is a lens on either run, not a third kind of Spin.", claim)
+        self._cleared(script)
         self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_VALIDATED)
 
         self._adopt(claim)
@@ -176,6 +203,7 @@ class CorrectScriptPassesTests(_GateFixture):
                     content_class=CONTENT_CLASS_AI_PROPOSED)
         self._adopt(sourced)
         self._adopt(inferred)
+        self._cleared(script)
 
         result = self._readiness(script)
         self.assertEqual(result["checks"]["evidence_fidelity"], SCRIPT_CHECK_PASS)
@@ -211,6 +239,7 @@ class GateBlocksTests(_GateFixture):
         script = self._script()
         self._scene(script, "Survival Mode is a lens, not a third kind of Spin.", claim)
         self._adopt(claim)
+        self._cleared(script)
         self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_REUSABLE)
 
         # The Help page is revised. register_source_revision is the real
@@ -265,6 +294,165 @@ class GateBlocksTests(_GateFixture):
         self.assertEqual(result["checks"]["question_fit"], SCRIPT_CHECK_FAIL)
 
 
+class ModelCannotPromoteTests(_GateFixture):
+    """The governing rule: a stored fit verdict may block or require review,
+    and may never validate, adopt or make anything reusable."""
+
+    def _sound_script(self):
+        claim = self._claim("Survival Mode is a lens on either Spin run, not a third kind of Spin.")
+        script = self._script()
+        self._scene(script, "Survival Mode is a lens on either run, not a third kind of Spin.", claim)
+        return script, claim
+
+    def test_a_pass_alone_does_not_produce_validated(self):
+        script, _ = self._sound_script()
+        self._fit(script, SCRIPT_CHECK_PASS)
+        result = self._readiness(script)
+        self.assertEqual(result["checks"]["semantic_fit"], SCRIPT_CHECK_PASS)
+        self.assertEqual(result["checks"]["human_validation"], SCRIPT_CHECK_REVIEW_NEEDED)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_DRAFT)
+
+    def test_human_validation_without_a_verdict_does_not_produce_validated(self):
+        script, _ = self._sound_script()
+        self._validate(script)
+        result = self._readiness(script)
+        self.assertEqual(result["checks"]["human_validation"], SCRIPT_CHECK_PASS)
+        self.assertEqual(result["checks"]["semantic_fit"], SCRIPT_CHECK_REVIEW_NEEDED)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_DRAFT)
+
+    def test_a_fail_verdict_blocks_even_with_human_validation(self):
+        script, _ = self._sound_script()
+        self._fit(script, SCRIPT_CHECK_FAIL, reason="answers a different question")
+        self._validate(script)
+        result = self._readiness(script)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_DRAFT)
+        self.assertTrue(any("different question" in r for r in result["reasons"]))
+
+    def test_a_review_needed_verdict_blocks_even_with_human_validation(self):
+        script, _ = self._sound_script()
+        self._fit(script, SCRIPT_CHECK_REVIEW_NEEDED, reason="incomplete")
+        self._validate(script)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_DRAFT)
+
+    def test_pass_plus_human_validation_produces_validated(self):
+        script, _ = self._sound_script()
+        self._fit(script, SCRIPT_CHECK_PASS)
+        self._validate(script)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_VALIDATED)
+
+    def test_no_verdict_at_all_still_requires_review(self):
+        # "Nobody has looked" is not "it is fine".
+        script, _ = self._sound_script()
+        self._validate(script)
+        self.assertEqual(self._readiness(script)["checks"]["semantic_fit"], SCRIPT_CHECK_REVIEW_NEEDED)
+
+    def test_a_human_rejection_blocks_outright(self):
+        script, claim = self._sound_script()
+        self._fit(script, SCRIPT_CHECK_PASS)
+        self._adopt(claim)
+        self._validate(script, SCRIPT_VALIDATION_REJECTED, comments="tone is wrong for Help")
+        result = self._readiness(script)
+        self.assertEqual(result["checks"]["human_validation"], SCRIPT_CHECK_FAIL)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_DRAFT)
+
+    def test_validated_does_not_imply_reusable(self):
+        script, _ = self._sound_script()
+        self._cleared(script)
+        result = self._readiness(script)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_VALIDATED)
+        self.assertEqual(result["checks"]["reuse_eligibility"], SCRIPT_CHECK_REVIEW_NEEDED)
+
+    def test_reusable_additionally_requires_adopted_claims(self):
+        script, claim = self._sound_script()
+        self._cleared(script)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_VALIDATED)
+        self._adopt(claim)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_REUSABLE)
+
+
+class VersionSafetyTests(_GateFixture):
+    """A decision describes the text it was made about. Edit the text and the
+    decision stops applying - it is not deleted, expired or rewritten."""
+
+    def _validated_script(self):
+        claim = self._claim("Survival Mode is a lens on either Spin run, not a third kind of Spin.")
+        script = self._script()
+        self._scene(script, "Survival Mode is a lens on either run, not a third kind of Spin.", claim)
+        self._adopt(claim)
+        self._cleared(script)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_REUSABLE)
+        return script, claim
+
+    def test_editing_the_script_invalidates_the_prior_fit_verdict(self):
+        script, claim = self._validated_script()
+        self._scene(script, "It also changes how findings are ranked.", claim)
+
+        result = self._readiness(script)
+        self.assertEqual(result["checks"]["semantic_fit"], SCRIPT_CHECK_REVIEW_NEEDED)
+        self.assertNotEqual(result["readiness"], SCRIPT_READINESS_REUSABLE)
+        self.assertTrue(any("as it now stands" in r for r in result["reasons"]))
+
+    def test_editing_the_script_invalidates_the_prior_human_validation(self):
+        script, claim = self._validated_script()
+        self._scene(script, "It also changes how findings are ranked.", claim)
+
+        result = self._readiness(script)
+        self.assertEqual(result["checks"]["human_validation"], SCRIPT_CHECK_REVIEW_NEEDED)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_DRAFT)
+
+    def test_the_superseded_decisions_are_kept_not_deleted(self):
+        script, claim = self._validated_script()
+        self._scene(script, "It also changes how findings are ranked.", claim)
+        stored = self.store.get_work_product(self.workspace, script["id"])
+        self.assertEqual(len(stored["script_validations"]), 1)
+        self.assertEqual(len(stored["script_fit_verdicts"]), 1)
+
+    def test_re_assessing_and_re_validating_the_edited_script_restores_it(self):
+        script, claim = self._validated_script()
+        self._scene(script, "It also changes how findings are ranked.", claim)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_DRAFT)
+
+        self._cleared(script)  # assessed and validated again, against the new text
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_REUSABLE)
+
+    def test_the_checksum_reported_is_the_governed_content_checksum(self):
+        script, _ = self._validated_script()
+        reported = self._readiness(script)["content_checksum"]
+        stored = self.store.get_work_product(self.workspace, script["id"])
+        self.assertEqual(reported, stored["script_validations"][-1]["content_checksum"])
+
+
+class RecordValidationTests(_GateFixture):
+    def test_an_unrecognised_decision_is_refused(self):
+        script = self._script()
+        with self.assertRaises(Exception):
+            self._validate(script, "looks-fine")
+
+    def test_a_validation_must_name_who_made_it(self):
+        script = self._script()
+        with self.assertRaises(Exception):
+            self.store.record_script_validation(
+                self.workspace, work_product_id=script["id"],
+                decision=SCRIPT_VALIDATION_VALIDATED, actor="   ",
+            )
+
+    def test_an_unrecognised_fit_outcome_is_refused(self):
+        script = self._script()
+        with self.assertRaises(Exception):
+            self.store.record_script_fit_verdict(
+                self.workspace, work_product_id=script["id"],
+                outcome="excellent", reason="r",
+            )
+
+    def test_recording_a_verdict_never_changes_work_product_state(self):
+        script = self._script()
+        before = self.store.get_work_product(self.workspace, script["id"])["state"]
+        self._fit(script, SCRIPT_CHECK_PASS)
+        self._validate(script)
+        after = self.store.get_work_product(self.workspace, script["id"])["state"]
+        self.assertEqual(before, after)
+
+
 class LifecycleIntegrityTests(_GateFixture):
     """DRAFT cannot skip the gate, and measuring never repairs."""
 
@@ -274,6 +462,7 @@ class LifecycleIntegrityTests(_GateFixture):
         self._scene(script, "Survival Mode is a lens, not a third kind of Spin.", claim)
         self._scene(script, "And it silently rewrites the baseline.")  # unsupported
         self._adopt(claim)
+        self._cleared(script)
 
         result = self._readiness(script)
         # Reuse eligibility alone is satisfied - and it still is not enough.
@@ -285,6 +474,7 @@ class LifecycleIntegrityTests(_GateFixture):
         claim = self._claim("Survival Mode is a lens, not a third kind of Spin.")
         script = self._script()
         self._scene(script, "Survival Mode is a lens, not a third kind of Spin.", claim)
+        self._cleared(script)
         stored = self.store.get_work_product(self.workspace, script["id"])
         for forbidden in ("readiness", "script_readiness", "reusable", "validated"):
             self.assertNotIn(forbidden, stored)
