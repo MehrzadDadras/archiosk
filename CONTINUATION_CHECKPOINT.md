@@ -1,5 +1,47 @@
 # Continuation checkpoint
 
+## 2026-09-05 (production housekeeping) — rollback directories pruned 13 → 3, and the rule written down
+
+Appended above the entries below, none of which is altered. The `a68a85c` deploy
+entry immediately below flags 13 accumulated rollback directories as "noted,
+deliberately not actioned"; that was accurate when written and is answered here
+rather than edited there.
+
+**13 → 3.** Removed the ten oldest `/var/www/archiosk-backup-*` directories
+(2026-09-01 through 2026-09-04 13:42), keeping `37326a8-pre-2c43a5d`, `2c43a5d`
+and `d6f6605` — the last of which is the live build's own rollback point. 262 MB
+→ 61 MB.
+
+**Disk was explicitly NOT the justification** and the record should not be read as
+if it were: 262 MB against 89 GB free on a disk at 9% used. The reason was ten
+standing copies of production `.env` — real API keys and the Flask secret. All ten
+were correctly `600 archiosk:archiosk`, so this reduced exposure surface rather
+than fixing a defect. Every commit those directories named still exists in git
+history, so their code was redundant; only rollback speed and the `.env` snapshot
+were ever unique to them.
+
+**Dry-run first, explicit list, not a computed offset.** The dry-run printed the
+ten targets, confirmed the count, confirmed all three keepers existed, and
+confirmed no keeper appeared in the target list, before anything was removed — the
+same discipline the deploy's own step 5 applies. An explicit list was used rather
+than `tail -n +4` precisely because a sort or off-by-one in a computed loop deletes
+the wrong recovery point silently.
+
+Live application verified untouched afterwards: `STATIC_VERSION` still 156, the
+opaque `--ocean-glass-foreground` still on disk and still served, service active,
+internal and public `/health` 200, and `/`, `/login`, `/explore` all 200.
+
+**One keeper is an incomplete rollback point.** `37326a8-pre-2c43a5d` holds no
+`.env` (three of the original thirteen did not, predating
+CLAUDE-DEPLOY-ENV-BACKUP-01's step-4 discipline). It restores the deployed tree but
+not that era's secrets. Kept anyway as the third generation, and recorded so nobody
+discovers it mid-incident.
+
+**The durable output is the policy, not the deletion**, so it went into
+`deploy/DEPLOYMENT.md` step 13 where it will be found at the point of use rather
+than only here: keep the 3 most recent, prune only as a separate deliberate
+decision, never automate it, dry-run first, and do not cite disk as the reason.
+
 ## 2026-09-05 (deploy) — `a68a85c` live at `v=156`: the Deep Ocean menu fix reaches production
 
 **`a68a85c` is live on `https://archiosk.com`**, replacing `d6f6605`. Confirmed

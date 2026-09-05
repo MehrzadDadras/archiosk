@@ -526,11 +526,52 @@ ssh ubuntu@<server> "rm -rf /tmp/archiosk-<short-hash>.tar /tmp/archiosk-deploy-
 ```
 
 The step-4 backup (`/var/www/archiosk-backup-<hash>`) is the real rollback point,
-not this scratch — it's safe to remove immediately, not "eventually." Keep at most
-the current deploy's own backup and the previous one if you want one extra rollback
-generation; remove older `archiosk-backup-<hash>` directories once you're confident
-the current deploy is stable (a separate, deliberate decision each time, not part of
-routine per-deploy cleanup — don't automate away your only rollback point).
+not this scratch — it's safe to remove immediately, not "eventually."
+
+### Rollback-directory retention: keep the 3 most recent
+
+Decided 2026-09-05 after the count reached **13** (262 MB), and recorded here so
+the next deploy inherits a rule rather than a judgement call. Pruning older
+directories remains **a separate, deliberate decision each time — never part of
+routine per-deploy cleanup.** Do not automate it away; do not fold it into step 13.
+
+**Disk is not the reason, and should not be cited as one.** The 13 directories
+were 262 MB against 89 GB free on a disk at 9% used. Anyone justifying a prune by
+space is arguing from the wrong premise.
+
+**The reason is standing copies of production secrets.** Ten of those thirteen
+held a `.env` — real API keys and the Flask secret. All were correctly `600
+archiosk:archiosk`, so this is exposure surface rather than an existing defect:
+every additional copy is another place a future mistaken `rsync`, backup job or
+permission change can leak live credentials.
+
+**Three is the number because code is recoverable from git and `.env` is not.**
+Every commit these directories name still exists in history, so their *code* is
+redundant — their unique value is rollback speed and the `.env` snapshot. You
+realistically roll back one deploy, occasionally two; rolling back eight would be
+worse than re-deploying from git. Three gives two generations beyond the realistic
+case.
+
+**Dry-run before deleting, and use an explicit list, not a computed `tail -n +4`.**
+A sort or off-by-one in a computed loop deletes the wrong recovery point silently.
+Print what would go, confirm the count, confirm no keeper appears in the target
+list, then execute:
+
+```bash
+ssh ubuntu@<server> "
+  for d in <explicit oldest hashes>; do
+    sudo rm -rf \"/var/www/archiosk-backup-\$d\"
+  done
+"
+```
+
+Afterwards, verify the live app is untouched — `STATIC_VERSION`, the service, and
+`/health` — since this operates inside `/var/www/` next to the live tree.
+
+Note that some older directories may hold **no `.env`** at all (three did, predating
+CLAUDE-DEPLOY-ENV-BACKUP-01's step-4 discipline). Those are incomplete rollback
+points: they restore the deployed tree but not that era's secrets. Worth knowing
+before relying on one.
 
 ## Rollback
 
