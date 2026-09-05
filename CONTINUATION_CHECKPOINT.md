@@ -1,5 +1,120 @@
 # Continuation checkpoint
 
+## 2026-09-05 (application) — `aeb203f`: the suite runs in 8 minutes, and why it did not before
+
+**`aeb203f` is the latest application commit and is pushed to `origin/main`.**
+This entry records application completion. **It does not claim a production
+deployment newer than the `2c43a5d` / `v=154` deployment recorded below**, and
+that is deliberate: all three commits are test infrastructure and documentation,
+nothing user-facing, so no deploy is warranted on their own. They ride with the
+next tranche that has a reason to ship.
+
+### The headline
+
+**Full suite 2:43:33 → 7:50.** A 20.9x speedup with byte-identical results: 12
+failed, 6,177 passed, 2 skipped, 2,573 subtests, 6,191 executed in both modes,
+the same twelve failures by name. Against this session's own contended 7:00:57
+run it is 53x.
+
+Three commits: `a560e46` (per-worker stores), `f856c02` (stale-store sweep),
+`aeb203f` (the Watchdog Protocol in `CLAUDE.md`).
+
+### Per-worker stores — the design decision that mattered
+
+The obvious implementation, `os.getenv("REGISTRY_STORE_PATH")` in
+`TestingConfig`, is forbidden four lines above it by that class's own comment:
+"a test must never touch real state because of whatever a developer's .env
+happens to say." Accepting a caller-supplied path would have reopened exactly
+the hole that sentence closes.
+
+So the only thing allowed to vary is a **suffix** derived from
+`PYTEST_XDIST_WORKER`, validated as lowercase alphanumeric and otherwise
+ignored. Checked rather than assumed: `../../evil`, `/etc/passwd`, `GW0`,
+`gw0;rm -rf` and `""` all fall back to the default, and with the variable unset
+the paths are byte-identical to what they always were. `tests/conftest.py`
+needed **no change** — it reads `TEST_STORE_PATHS` from `TestingConfig`
+precisely so "if those paths ever move, this follows them."
+
+`f856c02` then closed the gap `a560e46` named in its own message: each worker
+clears only its own store, so `-n 8` followed by `-n 2` stranded
+`test_registry_gw2..gw7` forever — the same slow-accumulation shape that
+produced the original `ProjectCodeError` cascade. Two decisions carried the
+risk, and both were verified in practice rather than reasoned about:
+`pytest_configure` rather than `pytest_sessionstart`, because xdist spawns
+workers during the controller's session start and a sweep there could delete a
+live worker's directory; and a `PYTEST_XDIST_WORKER` guard, because configure
+also runs inside each worker and without it `gw3` would delete `gw5`'s store —
+the exact failure the sweep exists to prevent, caused by the fix for it.
+`_is_disposable_store` was **not** loosened: the glob is a search, that function
+remains the authority, and every candidate is re-checked through it.
+
+`pytest-xdist` passed `tools/dependency_fit.py` on all six constraints before
+installation, and is deliberately **not** in `requirements.txt` — that file
+ships to production and `pytest` itself is not in it either. A fresh clone gets
+the serial path and is correct, only slower.
+
+### Why the suite was slow, which is the more useful finding
+
+A gate ran for 7:00:57 against the same suite's 2:43:33 hours earlier. It was
+not hung: it was **I/O-starved at 5.6% CPU** across 6.8 hours with 890 MB read.
+
+The cause was **four orphaned `python app.py` processes in a single five-deep
+Werkzeug reloader chain** (`42236 → 32964 → 34144 → 36296 → 34412`), the oldest
+**47 hours** old, each restart having nested a new child under the previous one.
+Killing it from the top produced an immediate measured recovery: **CPU 5.6% →
+~79%**, and progress from roughly 10 percentage points per hour to 7 points in 4
+minutes.
+
+`CLAUDE.md` previously attributed wide suite-duration variance to "the
+environment". That paragraph is left standing — it is still true of what it
+actually claims — but now carries a pointer to the new protocol, because a large
+part of that spread turned out to be diagnosable rather than weather.
+
+### A benchmark that could not be called, recorded as such
+
+A Defender-exclusion benchmark on `instance/test_*` returned a **16.9% mean
+improvement** and it still was not called a win: the after-set's standard
+deviation was **11.88 against the before-set's 2.23**, and the slowest after-run
+(90.2s) was slower than the fastest before-run (88.8s). Distributions overlapped.
+
+The lesson is now a rule in `CLAUDE.md`: at least five runs per side on this
+machine, report spread rather than only means, and test distribution
+**separation**. A percentage threshold set in advance is only valid when the
+variance is comparable on both sides — mine was not, so the threshold was the
+wrong test.
+
+The exclusions remain in place (they are free and directionally right) but they
+are **not** the answer to the baseline. Parallelism was.
+
+### Where the ~2,000 new tests came from
+
+Asked and answered by measurement, since the figure had been drifting:
+**1,933 net `def test_` functions added in 14 days**, across 134 commits and
++29,014 lines in `tests/`.
+
+**Brand-new hand-written test functions, not parameterisation and not subtest
+expansion.** `def test_` in tree is 6,192 against 6,191 executed — a 1:1
+relationship — with only **2** `@parametrize` sites in 330 files. The 239
+`subTest()` sites are reported separately as the 2,573-subtest line and never
+fed the 6,177 figure.
+
+By programme: Storage Bridge +156, Mobile +139, RBAC/quota gate +105, Calm
+Lake/Page-Field +86, Gemini vision +62, chunked upload +32, QR field passes +27,
+Spin decision architecture and sheet recogniser +26 each, nginx alerting +22,
+then a long tail. **There is nothing redundant to prune** — which is why
+parallelism was the right lever rather than trimming.
+
+### Still owed
+
+The twelve inherited failures remain red by Product Owner instruction — eleven
+stale at `53e1ca0`, one reverted on instruction, none a regression. Two items
+from the `.mono` colour audit stay open and are recorded so they are not lost:
+**Deep Ocean has zero contrast coverage** (`parse_tokens` matches 6-digit hex
+only, so 17 of Ocean's 35 tokens are invisible, and its `rgba()` surfaces need
+compositing before contrast can even be computed), and **the heading scale has
+seven sizes with no named tiers**, with `.mono`'s 1.1rem still larger than the
+0.95rem section headings it sits beneath.
+
 ## 2026-09-04 (deploy) — `2c43a5d` live at `v=154`: the `.mono` colour separation, and a 10x test-suite slowdown diagnosed
 
 **`2c43a5d` is live on `https://archiosk.com`**, replacing `37326a8`. Confirmed from
