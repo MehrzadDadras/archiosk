@@ -1,5 +1,89 @@
 # Continuation checkpoint
 
+## 2026-09-04 (deploy) — `2c43a5d` live at `v=154`: the `.mono` colour separation, and a 10x test-suite slowdown diagnosed
+
+**`2c43a5d` is live on `https://archiosk.com`**, replacing `37326a8`. Confirmed from
+systemd: `Gunicorn - ArchiOSK GO (accepted build 2c43a5d)`. `STATIC_VERSION` 152 → 154,
+computed off the live file (`CURRENT + 2`, one step per CSS commit) behind an assertion
+that the live value really was 152 — never an absolute literal, per `DEPLOYMENT.md`'s own
+warning that the recorded near-miss was a bump *below* what production served. Verified
+served (`?v=154`). Internal and public `/health` 200; `/`, `/login`, `/explore` 200.
+Rollback marker `/var/www/archiosk-backup-37326a8-pre-2c43a5d`, `.env` at
+`/root/archiosk.env.bak-37326a8`.
+
+Verified by live content: the served `main.css` reads
+`.mono { font-family: var(--font-body); font-size: 1.1rem; }` — no `--machine-blue` — and
+carries `.reference-value`. Deployed templates carry two `reference-value` uses each in
+`diagnostics.html` and `help/new_project.html`, and none on the project-id spans.
+
+### What shipped: one semantic fix in two halves
+
+`.mono` was a typography class that also carried `color: var(--machine-blue)`, so
+everything it touched was painted as machine output. The cascade was the whole defect:
+`.mono` (2137) sat after `.eyebrow` (1665) and `.project-card-id` (2018), **both of which
+already declare `color: var(--text-metadata)`**. The authors had stated the correct
+semantic and a utility class silently overrode it, 119 and 472 lines later. `4054ee3`
+removed the declaration; `2c43a5d` added `.reference-value { color: var(--machine-blue); }`
+and applied it to four genuinely machine-originated values — a build version, a recorded
+surface, and the `ABCD-T014` / `00h:00m:00s` format specimens.
+
+Measured, not assumed: `--machine-blue` as text fails AA body contrast on
+`surface-selected` in Dark and Tinted (4.41:1), passing today only because accents are
+held to the 3:1 badge threshold — the wrong bar for the 1.1rem body-ish text `.mono`
+produced. `--text-metadata` clears 4.5:1 against every surface layer in every parsed mode
+(min 4.70:1).
+
+**Project ids were deliberately NOT given the accent**, reversing this session's own
+earlier audit. `--text-metadata` is defined in `tokens.css` as "timestamps, ids, labels",
+so an id is metadata by the grammar's own words even though a machine generated it, and
+`.project-card-id` already said so. Doing otherwise would have re-created at those exact
+sites the override `4054ee3` had just removed.
+
+`font-size: 1.1rem` was left on `.mono` deliberately — it is still LARGER than every
+section heading it sits beneath (`.workspace-pane h3` and the Toolbox `h2` are both
+0.95rem). That hierarchy inversion is real and remains open; it belongs with heading-scale
+work, not with a colour fix.
+
+### The gate, and a 10x slowdown with a cause
+
+**12 failed, 6,177 passed, 2 skipped, 4 deselected, 2,573 subtests, `PYTEST_EXIT=1`** —
+the failure set **identical** to the previous gate's, zero new. Both background-task
+notifications again reported "exit code 0" for the wrapper while pytest exited 1.
+
+Wall clock was **7:00:57** against the same suite's 2:43:33 hours earlier. It was not
+hung: it was **I/O-starved at 5.6% CPU** over 6.8 hours with 890 MB read.
+
+The cause was **four orphaned `python app.py` processes in a single five-deep reloader
+chain** — `42236 → 32964 → 34144 → 36296 → 34412` — the oldest running **47 hours**, each
+restart having spawned a new child under the previous one. This is exactly the hazard
+`CLAUDE.md` documents, and the Werkzeug reloaders' filesystem watching contended with the
+suite's own churn in `instance/test_registry`.
+
+Killing the chain from the top with `taskkill /T` produced an immediate, measured
+recovery: **CPU 5.6% → ~79%** (200.4 CPU-seconds in a 252-second window) and progress from
+roughly 10 percentage points per hour to **7 points in 4 minutes**. A ~10x speedup, with
+the pytest tree untouched because it is a separate parent.
+
+**The operational lesson is worth more than the deploy.** `CLAUDE.md` currently attributes
+wide suite-duration variance (25:28 to 2:52:35 on materially the same tree) to "the
+environment". At least some of that spread is probably this: orphaned reloader chains
+quietly starving the run. **Before accepting a slow suite as normal, check for stray
+`app.py` processes** — it is a one-command check and it recovered ~3 hours here. These
+processes should not have been running at all under the standing live-only, no-localhost
+policy.
+
+### Still owed
+
+The twelve inherited failures remain red by Product Owner instruction. Two items from the
+`.mono` audit remain open and are recorded rather than lost: **Deep Ocean has zero
+contrast coverage** — `parse_tokens` matches 6-digit hex only, so 17 of Ocean's 35 tokens
+are invisible to the suite, and its `rgba()` surfaces need compositing before contrast can
+even be computed — and **the heading scale has seven sizes with no named tiers**.
+
+This deploy also wants live visual judgement in Deep Ocean: the audit proved the cascade
+and the contrast maths, but only looking at the Toolbox and Project Intelligence panels
+can confirm the hierarchy now reads correctly.
+
 ## 2026-09-04 (deploy) — `37326a8` live at `v=152`: label cleanups, two governance decisions, and an egress guard
 
 **`37326a8` is live on `https://archiosk.com`**, replacing `7dac0ca`. Confirmed from
