@@ -199,6 +199,7 @@ exactly the bureaucracy this family is meant to avoid.
 | [GOV-P-003](../records/GOV-P-003.md) | Help without humiliation | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-003.md) |
 | [GOV-P-004](../records/GOV-P-004.md) | Decoupled Two-Sided Procurement Foundation | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-004.md) |
 | [GOV-P-005](../records/GOV-P-005.md) | Airlock is movement; Vestibule is admission | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-005.md) |
+| [GOV-P-006](../records/GOV-P-006.md) | A model may constrain a governed transition; it may never authorize one | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-006.md) |
 | [GOV-D-001](../records/GOV-D-001.md) | Authorize model-based advisory conversation on the Establish a Project surface, without granting project-less Composer authority generally | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-001.md) |
 | [GOV-D-002](../records/GOV-D-002.md) | Reconcile the earlier Task scope boundary for mobile continuation | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-002.md) |
 | [GOV-D-003](../records/GOV-D-003.md) | The deferred programme set was reviewed against current substrate and remains correctly deferred | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-003.md) |
