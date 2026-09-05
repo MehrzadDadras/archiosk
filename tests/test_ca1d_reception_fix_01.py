@@ -270,14 +270,29 @@ class RemovedProjectNavAndWordingTests(_BaseReceptionFixTestCase):
 
 class UploadReceptionCopyTests(_BaseReceptionFixTestCase):
     def test_upload_copy_preserves_required_facts(self):
+        """The New Project page still says what it is and how to establish
+        a Project - which is all this guard was ever for.
+
+        It used to pin the hero copy that stood on this page during this
+        tranche's own walkthrough: an "Establish a Project" heading, the
+        accepted-formats/max-size paragraph, and the scanned-drawings
+        limitation sentence. bc37b97 rebuilt the page and removed all three,
+        and tests/test_new_project_page_01.py - the approved contract for the
+        rebuilt surface - now asserts two of them ("Establish a Project",
+        "Accepted formats:") as REMOVED, by name. Two green tests cannot both
+        be right about the same page, and the approved contract governs.
+
+        What this guard is actually for is unchanged: a reception correction
+        made elsewhere must not damage the entry page. So it asserts the
+        page's own identity and both establishment mechanisms, rather than
+        copy the product has deliberately retired.
+        """
         client = self._client_as("rf_owner", 1)
         body = client.get("/upload").get_data(as_text=True)
-        self.assertIn("Establish a Project", body)
-        self.assertIn("PDF, DOCX, TXT, CSV, MD", body)
-        self.assertIn("MB", body)
-        self.assertIn("Scanned drawings", body)
-        self.assertIn("native", body)
-        self.assertIn("images", body)
+        self.assertIn("New Project", body)
+        self.assertIn("Upload Project Folder", body)
+        self.assertIn("Upload File", body)
+        self.assertIn('name="entry_choice"', body)
 
 
 class ProjectGatewayBackActionTests(_BaseReceptionFixTestCase):

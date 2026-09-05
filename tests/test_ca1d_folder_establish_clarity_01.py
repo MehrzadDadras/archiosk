@@ -40,22 +40,39 @@ class FolderEstablishClarityTests(unittest.TestCase):
             sess["role"] = "admin"
 
     def test_upload_page_names_the_required_selection_explicitly(self):
+        # "principal RFP/document" became "principal document" when c81536e
+        # separated connected documents by source domain: a connected folder
+        # can now be a client data room, a team workspace or an external-
+        # reference set, and "RFP" names only one of those three cases.
+        #
+        # The "(required - select one to continue)" gloss went with the
+        # rebuild. templates/upload.html's own comment at that line records
+        # why - it was "explaining a state the disabled Upload Folder button
+        # already shows" - and that button's disabled default is asserted by
+        # test_folder_submit_button_still_starts_disabled below, so the
+        # required-ness is still guarded, just not as a second sentence.
         body = self.client.get("/upload").get_data(as_text=True)
-        self.assertIn("Which of these is the principal RFP/document for this project?", body)
-        self.assertIn("(required", body)
-        self.assertIn("select one to continue", body)
+        self.assertIn("Which of these is the principal document for this project?", body)
 
-    def test_confirm_checkbox_is_also_explicitly_marked_required(self):
-        """Matches this form's own existing convention (Project
-        Operating Environment already says '(required)') - every
-        required field on this page uses the same plain-text marker,
-        no new color introduced (tokens.css's own semantic-color
-        grammar reserves --highlight-orange narrowly for "current
-        step in a sequence", not general "required")."""
+    def test_the_confirm_checkbox_and_its_required_marker_are_both_gone(self):
+        """Was: the confirm checkbox is also explicitly marked required.
+
+        This tranche gave a confirmation checkbox a plain-text "(required)"
+        marker so every required field on the page was marked the same way.
+        53e1ca0 removed the checkbox itself, and
+        tests/test_new_project_page_01.py asserts its absence by exact markup.
+
+        The invariant survives in a different register rather than
+        disappearing: required-ness on this page is now carried by control
+        state - a required radio group, and a submit button that starts
+        disabled - instead of by a text marker. Both already have their own
+        guards (test_folder_submit_button_still_starts_disabled below, and
+        tests/test_entry_redundancy_01.py for the radios), so this asserts the
+        removal stayed clean rather than restating them.
+        """
         body = self.client.get("/upload").get_data(as_text=True)
-        confirm_start = body.index("operating-environment-confirm")
-        confirm_end = body.index("</label>", confirm_start)
-        self.assertIn("(required)", body[confirm_start:confirm_end])
+        self.assertNotIn("operating-environment-confirm", body)
+        self.assertNotIn('aria-label="Confirm project position"', body)
 
     def test_folder_submit_button_still_starts_disabled(self):
         """Unchanged behavior - this tranche only makes the existing
@@ -86,13 +103,26 @@ class FolderEstablishClarityTests(unittest.TestCase):
         # .project-card-selectable precedent for "pick one from a list".
         self.assertIn(".folder-founding-candidates label:has(input:checked)", css)
 
-    def test_folder_picker_wiring_script_itself_is_unchanged(self):
-        """This tranche is CSS/wording only - the actual selection/
-        submit-enabling logic (already fixed by
-        CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01) must not be touched
-        again here."""
+    def test_folder_picker_wiring_still_opens_the_picker_and_gates_submit(self):
+        """Was: the folder picker wiring script itself is unchanged.
+
+        It is not unchanged, and deliberately so. c81536e replaced the single
+        picker button with three source-domain buttons (Client Data Room /
+        Your Workspace / External References), so the one
+        `pickerButton.addEventListener(...)` line this test pinned by exact
+        text became a `pickerButtons.forEach(...)` loop that also records
+        which domain was chosen before opening the picker.
+
+        The behaviour the assertion existed to protect is intact and is what
+        this asserts instead: clicking a picker button opens the file picker,
+        and the submit button stays gated on a real selection. That second
+        line - the CLAUDE-CA1D-CSP-INLINE-SCRIPT-FIX-01 repair this test was
+        written to defend - is still asserted verbatim.
+        """
         body = self.client.get("/upload").get_data(as_text=True)
-        self.assertIn("pickerButton.addEventListener('click', function () { pickerInput.click(); });", body)
+        self.assertIn("pickerButtons.forEach(", body)
+        loop_start = body.index("pickerButtons.forEach(")
+        self.assertIn("pickerInput.click();", body[loop_start:loop_start + 400])
         self.assertIn("submitButton.disabled = !relativePath;", body)
 
 

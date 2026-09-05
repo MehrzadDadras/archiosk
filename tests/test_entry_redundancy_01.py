@@ -124,7 +124,13 @@ class TheFormAsksOnceTests(unittest.TestCase):
         self.assertNotIn('name="operating_environment"', self.body)
 
     def test_the_position_question_is_the_primary_one(self):
-        self.assertIn("Your position on this project", self.body)
+        # The label became "Company identity" when the page was rebuilt, set
+        # against "Your identity" immediately above it - templates/upload.html
+        # carries the reasoning: the first fieldset is the person, this one is
+        # the company, and a company is Lead Design Consultant on one job and
+        # Subconsultant on the next. The question, its field name and its
+        # primacy are unchanged; only the words naming it moved.
+        self.assertIn("Company identity", self.body)
         self.assertIn('name="entry_choice"', self.body)
 
     def test_the_upstream_question_is_scoped_per_position(self):
@@ -142,9 +148,30 @@ class TheFormAsksOnceTests(unittest.TestCase):
         self.assertIn('class="retained-by-group"', self.body)
         self.assertIn("data-for-choice=", self.body)
 
-    def test_the_confirmation_copy_is_no_longer_implementation_heavy(self):
-        self.assertIn("Confirm project position", self.body)
+    def test_the_confirmation_is_no_longer_asked_at_all(self):
+        """Was: the confirmation copy is no longer implementation-heavy.
+
+        CLAUDE-ENTRY-REDUNDANCY-01 replaced a confirmation checkbox whose
+        label named the machinery ("configures the project environment") with
+        one that named the act ("Confirm project position"). 53e1ca0 then
+        removed the checkbox outright, and tests/test_new_project_page_01.py
+        asserts its absence by exact markup.
+
+        That is this class's own thesis carried further than it went itself. A
+        required radio group already makes the user declare a position, so a
+        second control asking them to confirm what they had just picked was
+        the redundancy - its label was only the symptom.
+
+        Inverted rather than deleted, so the ask-once invariant keeps a guard
+        instead of losing one: the retired control must stay gone, and the
+        question that replaced it must stay required.
+        """
+        self.assertNotIn("operating-environment-confirm", self.body)
+        self.assertNotIn('aria-label="Confirm project position"', self.body)
         self.assertNotIn("configures the project environment", self.body)
+        start = self.body.index('name="entry_choice"')
+        tag = self.body[self.body.rfind("<input", 0, start):self.body.index(">", start) + 1]
+        self.assertIn("required", tag)
 
 
 class BackwardCompatibilityTests(unittest.TestCase):

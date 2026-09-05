@@ -185,7 +185,13 @@ class UploadEntryPointCopyTests(unittest.TestCase):
         # "Establish a Project" - it collided with the actual mechanism
         # ("+ New Project" always creates a fresh record, never reopens
         # an existing one).
-        self.assertIn("Establish a Project", body)
+        # bc37b97 rebuilt this page and the heading became a plain "New
+        # Project" rule head. tests/test_new_project_page_01.py, the approved
+        # contract for the rebuilt surface, asserts "Establish a Project" as
+        # REMOVED by name, so the correction RC1 made here has itself been
+        # superseded - the collision it fixed ("Open a Project" implying reuse
+        # of an existing record) cannot recur under a heading that says New.
+        self.assertIn("New Project", body)
         # CLAUDE-HYBRID-ENTRY-01: META-T01's own original claim here -
         # "your files stay wherever they already are" - was found to be
         # false of BOTH establishment mechanisms on this page (both
@@ -205,7 +211,18 @@ class UploadEntryPointCopyTests(unittest.TestCase):
         # carried by the Link option's own honest "not yet configured"
         # label (see tests/test_storage_grammar_01_link_upload_
         # entitlement.py) rather than by this exact sentence.
-        self.assertIn("Choose how this Project's documents connect to Archiosk.", body)
+        #
+        # That framing sentence is gone too (bc37b97; also asserted REMOVED by
+        # the approved contract). The choice it introduced is now made by
+        # picking one of three source-domain doors rather than by reading a
+        # sentence about doors, so the doors themselves are what this asserts.
+        self.assertIn("Upload Project Folder", body)
+        self.assertIn('data-source-domain="CLIENT_ISSUED"', body)
+        self.assertIn('data-source-domain="TEAM_WORKSPACE"', body)
+        self.assertIn('data-source-domain="EXTERNAL_REFERENCE"', body)
+        # The invariant this test actually protects, unchanged and still the
+        # reason it exists: never claim files stay where they are, because
+        # both establishment mechanisms upload a copy to Archiosk's server.
         self.assertNotIn("your files stay wherever they already are", body)
 
     def test_upload_page_still_carries_every_required_ui_reference(self):
@@ -213,8 +230,12 @@ class UploadEntryPointCopyTests(unittest.TestCase):
         data-ui-ref the pre-existing test suite already depends on."""
         client = self._client()
         body = client.get("/upload").get_data(as_text=True)
+        # upload.limits and upload.limits.formats are deliberately NOT in this
+        # list any more: bc37b97 removed both paragraphs, and their registry
+        # rows are retired in UI_REFERENCE_MAP.md accordingly. Every other ref
+        # this guard was written to protect is still asserted.
         for ref in (
-            "upload.limits", "upload.limits.formats", "upload.file", "upload.project-name",
+            "upload.file", "upload.project-name",
             # CLAUDE-ENTRY-REDUNDANCY-01: the operating-environment radios are
             # gone from this form - the environment is derived from the
             # declared project position now, so the user answers once.
