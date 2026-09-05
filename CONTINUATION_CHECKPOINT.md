@@ -1,5 +1,134 @@
 # Continuation checkpoint
 
+## 2026-09-05 (governance) — `b49b787`: the two-sided procurement boundary gets a rule, one layer below where it was already settled
+
+Appended above the entries below, none of which is altered. Documentation only —
+no code, tests, routes, services, `models.py`, `config.py`, `app.py` or
+migrations touched, so the full-suite gate does not apply and none was run. This
+is a governance filing, not a deploy: nothing changed on `https://archiosk.com`,
+and `STATIC_VERSION` is untouched at 155.
+
+**Pushed to `origin/main`. 4 files, 306 insertions, 0 deletions** — the change is
+strictly additive, which is the property that made it safe to land without a
+gate.
+
+### What landed
+
+`governance/records/GOV-P-004.md` — **Decoupled Two-Sided Procurement
+Foundation**, `CURRENT`, approved by the Product Owner on 2026-09-05. ARCHIOSK
+serves issuance (Owner mode) and response (Proponent mode) as independent, fully
+isolated workflows over one shared evidence/supersession *kernel* — code and
+semantics, never shared data. The boundary between the parties is the issued data
+room package moved out-of-band; never a shared runtime, network, application
+instance, or database. Neither mode may assume or depend on the counterparty
+running ARCHIOSK, and a structured export is an optional enrichment of the
+boundary object, never a precondition for it.
+
+Three companion edits, each a citation rather than a restatement:
+`governance/STATUS.md` (one paragraph under *What BEEHIVE is*, turning its
+existing "not inherently an Owner application or a Proponent application"
+sentence into a cited rule), `governance/specified-unbuilt/cross-boundary-architecture.md`
+(a dated header note), and `governance/templates/README.md` (register row, plus
+the drift repair below).
+
+### Where it went, and the alternative that was rejected
+
+`governance/templates/README.md`'s own routing tree decided this, and the
+interesting half is what it declined. **It is not an eighteenth constitutional
+invariant.** #8 (project boundaries strict) and #9 (cross-boundary movement
+explicit and authorized) already carry the isolation rule; what is genuinely new
+here is deployment architecture and product shape, which neither reaches — and
+`constitutional-invariants.md` says of itself that it "is deliberately not
+padded — every entry earned its place across nine rounds of adversarial review."
+Adding to that list for a rule two existing entries already imply would have been
+padding it. It is also not a `CIC-*` (not a single work domain), not `CLAUDE.md`
+(not an operating practice), and not `current/` (not an inventory). That leaves
+the routing tree's last branch exactly: a durable cross-cutting rule with no
+existing home.
+
+### The layer that was missing, which is the finding worth keeping
+
+`specified-unbuilt/cross-boundary-architecture.md` had already settled this
+question adversarially — at the **project** layer. A single shared workspace
+under visibility flags was tested and rejected, because "every future feature is
+one bug away from leaking confidential pre-publication owner deliberation to a
+bidder in an active competition."
+
+What it never said is the layer beneath the project record. *Two separate
+Projects* is not the same claim as *two separate deployments*, and
+`CLAUDE-RFP-BOUNDARY-01`'s no-leak proof shows precisely where the gap sits:
+`tests/test_owner_proponent_isolation_01.py` demonstrates isolation by scanning
+"every file anywhere under the **shared registry storage root**." The proof is
+sound and the isolation it proves is real — but that sentence is also a statement
+of fact about the world. Both sides live today in one deployment, over one
+storage root, in one process. Nothing depends on that co-location. Without a
+stated rule something eventually would, and it would have been found as a leak
+rather than as a design error.
+
+The standalone-viability half is commercial, not technical, and worth stating
+plainly: a two-sided product whose value requires both sides to adopt it has no
+viable first customer. The built path already respects this —
+`services/procurement_publication.py`'s `build_published_package_zip` is a plain
+stdlib `zipfile` of exactly the selected files, deliberately carrying no
+manifest, and the Proponent side registers it through the completely unmodified
+`ingest_upload`/`ingest_folder_upload`. A human moves a zip between two systems
+that have never spoken to each other. The record makes that permanent rather than
+incidental.
+
+### Bounded, deliberately
+
+The principle's Supersession-via-Delta-Ingestion clause says addenda
+"automatically mark affected downstream proponent work for review," and that word
+needed fencing. It is fenced in three places against
+`specified-unbuilt/add-addendum-facility.md` §2 item 6 — opening or adding an
+addendum "must not silently apply amendments, alter requirements, or overwrite
+the governing procurement document." What is automatic is the **flag**; never the
+conclusion. Analyze → Review → Apply is unchanged, constitutional #1 and #2
+govern the marking act, and the marking mechanism itself
+(`specified-unbuilt/per-item-attention-review-state.md`) remains not implemented
+and is not commissioned by this record.
+
+`GOV-P-004` **authorizes nothing**. The Neutral/Adjudication Workspace, the
+Experience Corpus, the Add Addendum facility and delta ingestion all remain
+exactly as `STATUS.md`'s authorization table records them. It governs how those
+must behave *if and when* separately authorized.
+
+### Register drift, found while filing
+
+`governance/templates/README.md`'s Register listed only `GOV-P-001` and
+`GOV-P-002`. Six real records in `governance/records/` had no row —
+`GOV-P-003`, `GOV-D-001`, `GOV-D-002`, `GOV-CN-001`, `GOV-CR-001`, `GOV-S-001` —
+so the index had quietly stopped being one. Rows added, transcribed from each
+record's own header rather than re-described.
+
+**One sub-drift is recorded and deliberately not fixed:** `GOV-CR-001` carries
+`STATUS: RESOLVED`, which is not in that same file's Status vocabulary
+(`DRAFT`/`PROPOSED`/`CURRENT`/`SUPERSEDED`/`ABSORBED`/`WITHDRAWN`/`EXPIRED`).
+Reproducing it as written is an index repair's job; correcting the record, or
+admitting the term into the vocabulary, is a governance decision and belongs to
+whoever holds it. Separately, the README's worked example for citing governance
+already used a hypothetical "GOV-P-004 v1.0" — now that the ID is real, the
+example is marked illustrative so the two are not confused.
+
+### Still owed
+
+- **A `GOV-I-` oracle for Standalone Viability.** The record's own Verification
+  section states this rather than claiming coverage: no check asserts that no
+  code path depends on the counterparty running ARCHIOSK, and none asserts the
+  two sides do not depend on shared infrastructure. Today they demonstrably share
+  a storage root in every environment that exists — permitted by the principle
+  (co-location for development and testing is explicitly allowed), but nothing
+  may come to depend on it, and at present only reading enforces that.
+- The Supersession-via-Delta-Ingestion invariants are unverifiable for as long as
+  the mechanism is unbuilt. Not a gap to close now; a gap to remember when it is
+  built.
+
+### Carried forward, unchanged
+
+The `d6f6605` deploy entry below still owes **a manual authenticated browser pass
+on `https://archiosk.com`, started from the sign-in page**. Nothing in this
+commit touches that, and it remains open.
+
 ## 2026-09-05 (deploy) — `d6f6605` live at `v=155`: the green tranche ships
 
 **`d6f6605` is live on `https://archiosk.com`**, replacing `2c43a5d`. Confirmed
