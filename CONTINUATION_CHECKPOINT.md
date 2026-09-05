@@ -1,5 +1,37 @@
 # Continuation checkpoint
 
+## 2026-09-05 (acceptance) — Deep Ocean menu fix confirmed live by the Product Owner
+
+Appended above the entries below, none of which is altered. Closes the last item
+the `a68a85c` deploy entry listed as still owed.
+
+**Product Owner, 2026-09-05, looking at deployed `a68a85c` / `v=156`: "the deep
+ocean menu is good."** The floating menu now reads as a solid foreground panel;
+the project rail no longer bleeds through it.
+
+This matters as more than a bug closure. `CLAUDE.md` records Deep Ocean as a
+Product-Owner-accepted visual baseline, and `CLAUDE-MENU-BACKDROP-ROOT-01`
+changed that baseline — `--ocean-glass-foreground` went from `rgba(8, 28, 36,
+.72)` to opaque `rgb(8, 28, 36)`, and the inert `backdrop-filter` was removed
+from the floating-menu rule. **That change is now accepted**, on the deployed
+build rather than on a screenshot or a local preview.
+
+The hue correction the same section protects is untouched and remains in force:
+this changed alpha only, never hue.
+
+Chain of evidence for the record, since each step was a different kind of proof:
+the defect was found by the manual authenticated walkthrough, confirmed on the
+real screen by the Product Owner, diagnosed by measuring three rendered states
+(blur disabled rendered identically to the shipped build, proving the blur was
+inert), fixed against the backdrop-root cause rather than the symptom, verified
+by served content after deploy, and now visually accepted live. No test in the
+suite could have caught it at any point — the tokens, the CSS and the contrast
+math were each individually correct.
+
+Nothing remains owed from the `54615b2` or `a68a85c` entries except the
+publication affordance in its *offered* state, which needs a pre-publication
+Owner project and remains deliberately unbuilt on production.
+
 ## 2026-09-05 (production housekeeping) — rollback directories pruned 13 → 3, and the rule written down
 
 Appended above the entries below, none of which is altered. The `a68a85c` deploy
