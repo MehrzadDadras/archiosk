@@ -11,6 +11,20 @@ so the next color change (or a future named mode/theme file - see
 tokens.css's own header) gets checked the same rigorous way without
 re-deriving the contrast math.
 
+Both color notations tokens.css actually uses are handled: `#RRGGBB`
+and `rgb()`/`rgba()`. The second matters because Deep Ocean's structural
+tokens are translucent glass, and alpha is not something a contrast
+ratio can be computed from directly - composite_stack() resolves it
+against the layer underneath, and relative_luminance() refuses a
+translucent color outright rather than quietly measuring it as if its
+alpha were 1.
+
+REQUIRED_PAIRINGS below remains a Light-mode subset by design. The
+per-theme matrices live with the tests that own them:
+tests/test_p40vw8qa_theme_foreground_contrast.py for the three opaque
+dark modes, tests/test_deep_ocean_contrast_coverage.py for the
+composited Deep Ocean one.
+
 Usage:
     python tools/check_contrast.py [path/to/tokens.css]
 
@@ -104,30 +118,116 @@ REQUIRED_PAIRINGS = [
 ]
 
 
+# A token whose ENTIRE value is one color literal - a hex triple, or an
+# rgb()/rgba() functional value. Anchoring on the whole value (rather
+# than searching for a color anywhere in it) is what keeps composite
+# declarations out: --ocean-glow's value is `0 24px 70px rgba(1, 8, 14,
+# .5)`, a box-shadow, and picking its rgba() out of the middle would
+# register a shadow offset as if it were a surface color.
+_TOKEN_RE = re.compile(
+    r"(--[a-zA-Z0-9-]+)\s*:\s*(#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})|rgba?\([^)]*\))\s*;"
+)
+_HEX_RE = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\Z")
+_FUNCTIONAL_RE = re.compile(
+    r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(\d*\.?\d+)\s*)?\)\Z"
+)
+
+
 def parse_tokens(path: Path) -> dict[str, str]:
+    """Every custom property whose value is a single color literal.
+
+    Both notations are returned as written, NOT normalized to hex - an
+    rgba() value carries an alpha that a hex string cannot, and losing
+    it silently is precisely how a translucent theme gets audited as if
+    it were opaque. Composite it first (see composite_stack()).
+    """
     text = path.read_text(encoding="utf-8")
-    tokens = {}
-    for name, value in re.findall(r"(--[a-zA-Z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})\s*;", text):
-        tokens[name] = value
-    return tokens
+    return {name: value for name, value in _TOKEN_RE.findall(text)}
+
+
+def parse_color(value: str) -> tuple[float, float, float, float]:
+    """(r, g, b, alpha) - channels 0-255, alpha 0-1.
+
+    Accepts `#RGB`, `#RRGGBB`, `rgb(r, g, b)` and `rgba(r, g, b, a)`.
+    """
+    value = value.strip()
+    if _HEX_RE.fullmatch(value):
+        h = value.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+        return float(r), float(g), float(b), 1.0
+    match = _FUNCTIONAL_RE.fullmatch(value)
+    if match:
+        r, g, b, a = match.groups()
+        return float(r), float(g), float(b), 1.0 if a is None else float(a)
+    raise ValueError(f"unrecognized color literal: {value!r}")
+
+
+def _rgb_to_hex(r: float, g: float, b: float) -> str:
+    return "#" + "".join(f"{min(255, max(0, round(c))):02X}" for c in (r, g, b))
+
+
+def composite_stack(base: str, *layers: str) -> str:
+    """Paint each layer over `base`, bottom-first, and return the opaque
+    result as `#RRGGBB`.
+
+    Standard source-over alpha compositing, per channel:
+
+        C_composite = alpha * C_foreground + (1 - alpha) * C_background
+
+    `base` must be opaque - it is the thing everything else floats
+    above, and there is no defined color behind it to blend into.
+    Channels stay in float across the whole stack and are rounded once
+    at the end, so a three-layer stack does not accumulate three
+    roundings.
+    """
+    r, g, b, a = parse_color(base)
+    if a < 1.0:
+        raise ValueError(
+            f"composite_stack() needs an OPAQUE base, got {base!r} (alpha {a}) - "
+            "name the layer underneath it and pass that as the base instead"
+        )
+    for layer in layers:
+        lr, lg, lb, la = parse_color(layer)
+        r = la * lr + (1 - la) * r
+        g = la * lg + (1 - la) * g
+        b = la * lb + (1 - la) * b
+    return _rgb_to_hex(r, g, b)
+
+
+def composite(foreground: str, background: str) -> str:
+    """One layer over one opaque background - composite_stack() for the
+    common two-layer case."""
+    return composite_stack(background, foreground)
 
 
 def hex_to_rgb(h: str) -> tuple[int, int, int]:
-    h = h.lstrip("#")
-    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b, _ = parse_color(h)
+    return int(r), int(g), int(b)
 
 
-def relative_luminance(hexcode: str) -> float:
+def relative_luminance(color: str) -> float:
     def lin(c: float) -> float:
         c = c / 255
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
 
-    r, g, b = hex_to_rgb(hexcode)
+    r, g, b, a = parse_color(color)
+    if a < 1.0:
+        # Deliberately loud rather than approximating alpha away: WCAG
+        # relative luminance is defined for an opaque RGB triple, and a
+        # translucent token's real luminance depends entirely on what it
+        # is sitting on. tokens.css's own --ocean-* family says the same
+        # thing in prose; this makes it unrepresentable in code.
+        raise ValueError(
+            f"{color!r} is translucent (alpha {a}) - relative luminance is undefined "
+            "until it is composited over its background (see composite_stack())"
+        )
     return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 
 
-def contrast_ratio(hex_a: str, hex_b: str) -> float:
-    lum_a, lum_b = relative_luminance(hex_a), relative_luminance(hex_b)
+def contrast_ratio(color_a: str, color_b: str) -> float:
+    lum_a, lum_b = relative_luminance(color_a), relative_luminance(color_b)
     lighter, darker = max(lum_a, lum_b), min(lum_a, lum_b)
     return (lighter + 0.05) / (darker + 0.05)
 
