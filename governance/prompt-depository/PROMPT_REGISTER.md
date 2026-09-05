@@ -24,6 +24,8 @@ Prompt history is not a set of equally current authorities. Resolve conflicts, c
 
 No broad historical prompt migration has been performed.
 
+**Deferred-set review, 2026-09-05.** The `DEFERRED` programme records in this table were reviewed against current implemented substrate and confirmed correctly deferred by [`GOV-D-003`](../records/GOV-D-003.md) — no status changed, nothing was absorbed, and no implementation was authorized. `DEFERRED` here is a disposition carrying Product Owner acceptance, not an open assignment awaiting closure; `back-catalog/MIGRATION-QUEUE.md` scores this set `P3` and states that it "cost[s] nothing where [it] sit[s]." One record was changed by that review's companion finding: `GO-EXTERNAL-VESTIBULE-01` keeps its status, and the load-bearing distinction it carried was promoted to [`GOV-P-005`](../records/GOV-P-005.md).
+
 | Prompt ID | Title | Agent | Status | Product Owner acceptance | Record |
 |---|---|---|---|---|---|
 | CLAUDE-AIRLOCK-AUTH-01 | Record Product Owner Authorization for Mission 01 | Claude | RUN | Explicit Product Owner authorization, 2026-08-19; bounded External Intelligence Airlock Mission 01 only, recorded and pushed as `7318564` | [Record](CLAUDE-AIRLOCK-AUTH-01.md) |

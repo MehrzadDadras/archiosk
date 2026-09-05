@@ -95,6 +95,17 @@ This preservation record does not authorize external connectors, intake UI, admi
 
 Do not invent these. Later recovered source material may enrich this record without replacing its stable identity, current evidence-provenance machinery, Airlock distinction, or human-authority boundary.
 
+> **Status clarification, 2026-09-05 — not a supersession, and not a status change.**
+> The **Airlock = movement / Vestibule = admission** distinction this record carries
+> has been promoted to [`GOV-P-005`](../records/GOV-P-005.md) v1.0 (`CURRENT`),
+> resolving `MIGRATION-QUEUE.md` `MQ-P0-04` / `REGISTER.md` `GBC-0026`: the
+> distinction was load-bearing for four `RUN` Airlock mission authorizations while
+> the only record stating it was `DEFERRED`. **This record's `DEFERRED` status
+> remains correct and unchanged** — it governs the unbuilt External Source Vestibule
+> *admission workflow*, which is still neither implemented nor authorized. Reviewed
+> and confirmed correctly deferred by [`GOV-D-003`](../records/GOV-D-003.md). The
+> prompt text below is unchanged.
+
 ## Exact prompt text
 
 ```text

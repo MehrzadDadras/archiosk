@@ -198,8 +198,10 @@ exactly the bureaucracy this family is meant to avoid.
 | [GOV-P-002](../records/GOV-P-002.md) | Work surfaces carry the work; control surfaces carry the machinery | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-002.md) |
 | [GOV-P-003](../records/GOV-P-003.md) | Help without humiliation | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-003.md) |
 | [GOV-P-004](../records/GOV-P-004.md) | Decoupled Two-Sided Procurement Foundation | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-004.md) |
+| [GOV-P-005](../records/GOV-P-005.md) | Airlock is movement; Vestibule is admission | Governance Principle | v1.0 | CURRENT | [Record](../records/GOV-P-005.md) |
 | [GOV-D-001](../records/GOV-D-001.md) | Authorize model-based advisory conversation on the Establish a Project surface, without granting project-less Composer authority generally | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-001.md) |
 | [GOV-D-002](../records/GOV-D-002.md) | Reconcile the earlier Task scope boundary for mobile continuation | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-002.md) |
+| [GOV-D-003](../records/GOV-D-003.md) | The deferred programme set was reviewed against current substrate and remains correctly deferred | Governance Decision Record | v1.0 | CURRENT | [Record](../records/GOV-D-003.md) |
 | [GOV-CN-001](../records/GOV-CN-001.md) | Amend CIC-SPIN-INTELLIGENCE to v1.2 — admit an observer-shear layer, and fix the boundary that keeps it out of Helix | Governance Change Notice | v1.0 | ABSORBED | [Record](../records/GOV-CN-001.md) |
 | [GOV-CR-001](../records/GOV-CR-001.md) | Multi-Observer Shear Mapping cannot be implemented as "Helix" without amending a CURRENT standing contract | Governance Conflict Report | v1.0 | RESOLVED | [Record](../records/GOV-CR-001.md) |
 | [GOV-S-001](../records/GOV-S-001.md) | Partial supersession of CIC-SPIN-INTELLIGENCE v1.1 — SCOPE and APPLIES WHEN replaced, MANDATORY INVARIANTS extended | Governance Supersession Record | v1.0 | CURRENT | [Record](../records/GOV-S-001.md) |
