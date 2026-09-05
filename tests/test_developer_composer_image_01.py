@@ -329,10 +329,14 @@ class TheClientSharesTheNormalizationBoundary(unittest.TestCase):
         self.assertIn("form.addEventListener('submit'", self.source)
 
     def test_the_markup_offers_both_a_picker_and_a_hidden_transport_field(self):
-        index = (_REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('id="developer-home-composer-image"', index)
-        self.assertIn('name="image_data_url"', index)
-        self.assertIn('accept="image/*"', index)
+        # 3ab9477 moved the Developer Composer off authenticated `/` and onto
+        # the protected /admin/developer-tools surface. The control itself is
+        # unchanged - same ids, same hidden transport field - so this is a
+        # path correction, not a narrowed assertion.
+        markup = (_REPO_ROOT / "templates" / "developer_tools.html").read_text(encoding="utf-8")
+        self.assertIn('id="developer-home-composer-image"', markup)
+        self.assertIn('name="image_data_url"', markup)
+        self.assertIn('accept="image/*"', markup)
 
     def test_it_does_not_import_project_evidence_flows(self):
         # Make-Q / Add-to-Q / capture review are project-evidence concerns and
