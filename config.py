@@ -206,8 +206,26 @@ class TestingConfig(BaseConfig):
     # never touch real state because of whatever a developer's .env happens to
     # say. A fixed path rather than a per-process temp dir so the artifacts stay
     # inspectable after a failure.
-    REGISTRY_STORE_PATH = str(BASE_DIR / "instance" / "test_registry")
-    PROJECT_ASSET_PATH = str(BASE_DIR / "instance" / "test_project_assets")
+    #
+    # The ONE thing allowed to vary is a per-xdist-worker suffix, so parallel
+    # workers do not write into one another's stores. Deliberately a SUFFIX
+    # derived from the worker id, never a caller-supplied path: the rule above
+    # is what forbids `os.getenv("REGISTRY_STORE_PATH")` here, and an arbitrary
+    # path from the environment is exactly the hole it closes. PYTEST_XDIST_WORKER
+    # is set by xdist itself ("gw0", "gw1", ...), is not something a .env carries,
+    # and is validated below - anything that is not lowercase alphanumeric is
+    # ignored rather than trusted, so no traversal or absolute path can reach
+    # these values. Empty when running single-process, so the paths are then
+    # byte-identical to what they have always been.
+    #
+    # tests/conftest.py needs no change to follow this: it reads TEST_STORE_PATHS
+    # from this class precisely "if those paths ever move, this follows them",
+    # and its disposable-store allowlist still holds - instance/test_registry_gw0
+    # is under instance/ and still starts with "test_".
+    _XDIST_WORKER = os.getenv("PYTEST_XDIST_WORKER", "")
+    _WORKER_SUFFIX = "_" + _XDIST_WORKER if _XDIST_WORKER.isalnum() and _XDIST_WORKER.islower() else ""
+    REGISTRY_STORE_PATH = str(BASE_DIR / "instance" / ("test_registry" + _WORKER_SUFFIX))
+    PROJECT_ASSET_PATH = str(BASE_DIR / "instance" / ("test_project_assets" + _WORKER_SUFFIX))
     SESSION_COOKIE_SECURE = False
     # Hermetic tests must never attempt a real SMTP connection based on
     # whatever the developer's local .env happens to have configured -
