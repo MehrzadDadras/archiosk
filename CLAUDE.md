@@ -174,6 +174,11 @@ the environment and is not a fixed service-level expectation. Treat pass/fail as
 the assurance signal, not wall-clock time. An unusually long run is not
 automatically evidence of a code regression.
 
+**But it is not weather either — see the Watchdog Protocol below.** Those
+figures predate both parallel execution and the discovery that much of that
+spread had a diagnosable cause. A slow run is now a thing to investigate with
+two commands, not to wait out.
+
 **Never read the result through a pipe.** Redirect to a log file and capture
 the exit code as its own line (`... > run.log 2>&1; echo "PYTEST_EXIT=$?" >>
 run.log`). `pytest -q 2>&1 | tail -40` reports *tail's* exit status, not
@@ -252,6 +257,95 @@ present in `.env`.
 When testing the live app through a browser, **always start from the
 sign-in page**, never mid-session — a stale session cookie can carry
 state across a restart in a way that's easy to misread as a real bug.
+
+## Test Suite & Execution Watchdog Protocol
+
+Established 2026-09-05 by measurement, after a gate took 7 hours that should
+have taken minutes. Every number below was observed on this machine, not
+estimated.
+
+### Baseline and execution modes
+
+| Mode | Command | Baseline |
+|---|---|---|
+| **Parallel** | `pytest -q -n 8 --dist loadfile` | **~8 minutes** |
+| Serial | `pytest -q` | **~2h 45m** |
+
+Same result either way: 12 failed, 6,177 passed, 2 skipped, 2,573 subtests,
+6,191 executed in both. A 20x difference in time and none in outcome.
+
+**A gate run MUST state which mode it executed.** "The full suite passed" now
+means two different things, and a reader cannot tell 8 minutes from 2h 45m from
+the sentence alone.
+
+`--dist loadfile` rather than bare `-n 8`: it keeps a file's tests on one
+worker, which preserves the within-file state locality many `setUp` methods
+assume. Parallel mode needs `pytest-xdist`, which is installed in the venv and
+deliberately NOT in `requirements.txt` - that file ships to production and
+pytest itself is not in it either. A fresh clone gets the serial path and is
+correct, only slower.
+
+### Pre-flight sweep - do this BEFORE a full-suite gate
+
+```bash
+tasklist //FI "IMAGENAME eq python.exe"
+```
+
+Orphaned `python app.py` / Werkzeug reloader chains starve the suite of I/O.
+This is not hypothetical: a five-deep chain (`42236 -> 32964 -> 34144 -> 36296
+-> 34412`), the oldest 47 hours old, was found mid-gate. Each restart had
+nested a new child under the previous one - the accumulation this file's
+Environment-quirks section already warns about, now with a measured cost.
+
+Kill the whole chain from the TOP, which takes the descendants with it and
+stops the reloader respawning a child:
+
+```bash
+taskkill //PID <oldest-pid> //T //F
+```
+
+Killing it mid-run recovered the suite immediately: **CPU 5.6% -> ~79%**, and
+progress from roughly 10 percentage points per hour to 7 points in 4 minutes.
+Roughly a 10x recovery, with the pytest process untouched because it sits under
+a different parent. Under the standing live-only, no-localhost policy these
+processes should not be running at all.
+
+### Anomaly and degradation thresholds
+
+- **Parallel (`-n 8`) anomaly threshold: 15 minutes.** Against an ~8 minute
+  baseline, that is roughly 2x - past it, something is wrong.
+- **Instantaneous CPU below 20% means I/O starvation or process contention,
+  NOT slow code.** Cumulative average is misleading on a long run; compute the
+  instantaneous rate as `delta-CPU-seconds / delta-wall-seconds`. The
+  diagnostic run showed 5.6% cumulative while genuinely starved, and ~79%
+  instantaneous the moment contention was cleared.
+
+**Claude MUST NOT silently poll past these thresholds.** On crossing one,
+immediately and without being asked:
+
+1. dump the last 15 lines of the redirected log;
+2. sample process telemetry - PID, elapsed, CPU seconds, computed CPU %, read
+   and write bytes;
+3. state plainly whether the run is advancing, starved, or hung, and alert.
+
+Waiting quietly while a gate burns hours is the failure mode this exists to
+prevent. A log that is still growing means slow, not hung - and those are
+different problems with different answers.
+
+### Benchmarking rule
+
+**Any performance benchmark on this machine requires at least 5 runs per
+side.** Windows filesystem variance is large enough that fewer is
+indistinguishable from noise, and this was learned the expensive way: a
+Defender-exclusion benchmark returned a 16.9% mean improvement that could not
+be called, because the after-set's standard deviation was 11.88 against the
+before-set's 2.23 and the distributions overlapped - the slowest after-run was
+slower than the fastest before-run.
+
+Report mean, median, min, max and standard deviation, and check distribution
+SEPARATION rather than only comparing means. A percentage threshold set in
+advance is only valid if the variance is comparable on both sides; when it is
+not, separation is the test.
 
 ## Credentials given in chat
 
