@@ -1,5 +1,158 @@
 # Continuation checkpoint
 
+## 2026-09-05 (verification + fix) — `54615b2`: the authenticated production pass, and the defect it found that no test could
+
+Appended above the entries below, none of which is altered. **This closes the
+manual authenticated browser pass carried forward from the `d6f6605` deploy
+entry.** It was owed across two prior tranches; it is done, and it earned its
+keep on the first run.
+
+### The pass, as executed
+
+Live production, `https://archiosk.com`, started from a genuinely signed-out
+state. The Product Owner performed the sign-in — credential entry is not
+something the agent does — and the walkthrough was driven from there.
+
+**Deployed commit verified by content before anything else**, which is the
+precondition an earlier session learned the hard way when a live visual verdict
+was given against stale deployed code:
+
+- `/health`, `/`, `/login`, `/explore`, `/start-trial`, `/forgot-password` — all **200**
+- `?v=155` on all 3 stylesheets and all 4 scripts
+- served `main.css` md5 **`0983d86fa4ac0b14ec121094602bc1d4`**, 424,827 bytes —
+  byte-identical to the committed file *and* to the digest recorded at the
+  `d6f6605` deploy. Production was provably running `d6f6605`, not a cached
+  artefact.
+
+| Step | Result |
+|---|---|
+| Sign-in from signed-out state | clean; no stale cookie carried in |
+| Project list (`/projects`) | 27 projects |
+| Case Workspace | all five owned surfaces present, zero errors |
+| Deep Ocean appearance | live computed values byte-match the committed tokens |
+| Menu foreground token | `.72`, correctly denser than the passive tray's `.55` |
+| Publication gating (withheld) | zero publish forms/buttons on a `Published` project |
+| Sign-out | `/logout` → `/login`; `/projects` → `/login?next=/projects`; **zero project names leaked** |
+
+Deep Ocean's live values are worth recording exactly, because they are the same
+values this session's contrast harness audited mathematically — surfaces
+`rgba(10, 35, 42, 0.55)`, text `rgb(230, 244, 255)`, `blur(14px)`, and the
+literal `.app-shell` gradient. Blue-leaning, so the
+`CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01` baseline is intact live. **The audit was
+against what actually renders.**
+
+### The finding: a fix that was necessary, not sufficient, and looked complete
+
+With Deep Ocean active, the project rail reads straight through an open menu.
+The Product Owner confirmed it on the real screen — which also established that
+screenshot capture is trustworthy on this app, contrary to a standing caution.
+
+`CLAUDE-MENU-FOREGROUND-LAYERING-01` had already diagnosed this once and fixed
+half of it: it correctly saw that an open menu read as the same material as the
+passive tray, and correctly made it denser (`.72` vs `.55`). It then assumed the
+panel's own `backdrop-filter` would blur whatever came through the remaining
+28%, as it does for `.gateway-card-wide`, whose value it reused verbatim.
+
+**It cannot, for a structural reason.** Every selector in that rule is a
+descendant of `.workspace-topbar`, which carries its own `backdrop-filter` as
+one of Deep Ocean's five blurred surfaces. Per spec, an element with
+`backdrop-filter` establishes a backdrop **root** — a descendant's filter can
+only sample content inside that ancestor, never the page painted behind it.
+`.gateway-card-wide` has no such ancestor, which is exactly why the same number
+works there and not here.
+
+**Measured in three states rather than reasoned about**, using ephemeral inline
+styles that were reverted:
+
+| State | Result |
+|---|---|
+| Live (`.72` + blur) | rail text legible through the menu |
+| `.72`, blur disabled | **identical to live** → the blur contributes nothing |
+| Opaque `rgb(8, 28, 36)` | bleed eliminated completely |
+
+The text coming through was simply the 28% that `.72` transmits, and 28% of
+`--ocean-text-primary` on a dark ground is comfortably legible.
+
+**The fix** (`54615b2`): `--ocean-glass-foreground` becomes opaque at the same
+hue and tone, so the menu keeps its identity and finally does what LAYERING-01
+already said it should — own the foreground. The provably dead
+`backdrop-filter` was removed from that rule rather than left looking
+load-bearing; the glow stays, since `box-shadow` needs no backdrop.
+
+Deliberately not touched: `.gateway-card-wide` keeps `.72` (no backdrop-root
+ancestor, never reported as bleeding); the passive trays stay translucent at
+`.55`, because this is the glass theme and its passive surfaces are still meant
+to be glass; no other appearance mode is reached; and hue is untouched, so the
+protected `HUE-CORRECTION-01` baseline is unaffected.
+
+**Three tests were updated and the distinction stated rather than resolved
+silently.** They asserted the `.72` value and the presence of
+`backdrop-filter` — the mechanism now disproved. Every test defending the
+actual *intent* is untouched and still green: deep-ocean-only scoping on every
+selector, the Composer dock's glow-only treatment, no leakage into
+dark/tinted/deep-forest, and the structural guard that blur/glow only ever
+appear inside a deep-ocean-scoped rule. Each updated test carries the
+supersession reasoning inline.
+
+**Why this matters beyond one panel.** No test in the suite could have caught
+it. The tokens were correct, the CSS was correct, the contrast math was
+correct — and the rendered result was still wrong, because the defect lived in
+a spec interaction between two rules that are individually right. This is
+precisely the class of thing the manual pass exists for, and it was found on
+the first run after being deferred twice.
+
+### The deployment assessment has changed
+
+The prior reading — recorded in the `288b2ce` entry — was that the tranche had
+**nothing to deploy**: ten commits, none touching `templates/`, `static/`,
+`routes/`, `app.py`, `models.py` or `config.py`, and the one runtime file
+(`services/procurement_governance.py`) imported by nothing. That was accurate
+when written and is answered here rather than edited there.
+
+`54615b2` changes that. It is a real, user-visible correction to a legibility
+defect on a shipped appearance, so **the tranche now has a reason to ship**,
+which is the same standard the `d6f6605` tranche applied to itself.
+
+`STATIC_VERSION` bumped **155 → 156** in the local `.env` as its own explicit
+step, since `.env` is git-ignored and never appears in a reviewed diff. The
+deploy runbook still reads the live value and computes `CURRENT + 1` rather
+than trusting this number.
+
+### What could not be verified, and why
+
+**The publication affordance in its *offered* state.** Both Owner-side projects
+— PSD and RFP Boundary Live Verify - Owner — are already at
+`Client / Owner · Published`, left that way by the earlier
+`CLAUDE-RFP-BOUNDARY-01` verification. So the affordance being correctly
+*withheld* after publication is confirmed; the affordance being *offered*
+before it is not observable without a pre-publication Owner project.
+
+Creating one was the disposable-project route (the pattern COMM-A1 §M records),
+and it was deliberately **not taken** — it writes and deletes real data on
+production and was not authorized. `publish_procurement_package_route` is also
+`POST`-only, `@admin_required` and irreversible (`lifecycle_stage =
+LIFECYCLE_PUBLISHED`, "cannot be published again"), so it is not something to
+exercise casually against real data. This remains open and is a deliberate gap,
+not an oversight.
+
+### Verification
+
+Gate for `54615b2` is the `static/css/` fast path: **Tier 0 853 passed / 663
+subtests**, plus the targeted appearance lanes — `p40vw6`,
+`appearance-simplify`, `deep-ocean-contrast`, `p40vw8qa` foreground and
+approved-theme-set, `p40vw3` — **157 passed**. Serial. The full suite remains
+the deploy gate and has not been re-run since `288b2ce`.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`54615b2`**, working tree clean.
+- Production: **`d6f6605`** at **`v=155`** — now one user-facing commit behind.
+
+### Carried forward
+
+- The publication *offered* state, above.
+- A deploy, which this tranche now warrants for the first time.
+
 ## 2026-09-05 (application) — `288b2ce`: GOV-P-004/GOV-P-005 become code, and two boundaries are held rather than crossed
 
 Appended above the entries below, none of which is altered. **Pushed to
