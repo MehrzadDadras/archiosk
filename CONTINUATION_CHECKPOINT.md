@@ -1,5 +1,144 @@
 # Continuation checkpoint
 
+## 2026-09-05 (application) — `805f4c8` + `9e55693`: the appearance the contrast harness could not see, and a baseline that had quietly moved
+
+Appended above the entries below, none of which is altered. **Both pushed to
+`origin/main`; neither is deployed, deliberately.** Tests, tooling and
+documentation only — no `routes/`, `services/`, `models.py`, `config.py`,
+`app.py`, migrations, `templates/`, `static/css/` or `static/js/` touched — so
+the full-suite gate does not apply, `STATIC_VERSION` needs no bump and is
+untouched at 155, and there is nothing user-facing to ship. They ride with the
+next functional tranche, which runs the full suite as its own gate.
+
+`805f4c8`: 3 files, 434 insertions, 10 deletions. `9e55693`: 5 files, 75
+insertions, 14 deletions.
+
+### `805f4c8` — one of five Appearances had no contrast coverage, and nothing said so
+
+`tools/check_contrast.py`'s `parse_tokens()` matched only `#RRGGBB`. Titanium,
+Black, Midnight Blue and Deep Forest are opaque flat-hex ramps, so that was
+sufficient for four of the five. Deep Ocean is not: its structural tokens are
+literal copies of `.gateway-shell`'s translucent glass (`rgba(10, 35, 42, .55)`
+and family, per `tokens.css`'s own CLAUDE-APPEARANCE-SIMPLIFY-01 comment).
+
+**The failure mode is the finding worth keeping.** A value that did not match
+the hex pattern was not skipped loudly — it never entered the token dict at all.
+No failure, no `SKIP` line, no assertion. An entire theme with zero automated
+contrast coverage presented, from outside, exactly as a theme that passed. This
+is the shape of gap that a green suite actively conceals rather than reveals.
+
+Harness, in `tools/check_contrast.py`:
+
+- `parse_tokens()` now matches `rgb()`/`rgba()` as well as hex, anchored on the
+  **whole** declaration value. That anchoring is load-bearing rather than
+  tidiness: `--ocean-glow` is `0 24px 70px rgba(1, 8, 14, .5)`, a box-shadow, and
+  a looser pattern would have registered a shadow offset as a surface colour.
+  Values are returned as written, never normalised to hex, because hex cannot
+  carry the alpha the audit depends on.
+- `parse_color()` — `#RGB`/`#RRGGBB`/`rgb()`/`rgba()` to `(r, g, b, a)`.
+- `composite_stack()` — source-over compositing over an opaque base,
+  `C = a*C_fg + (1-a)*C_bg` per channel, held in float across the whole stack and
+  rounded once at the end rather than once per layer.
+- `relative_luminance()` now **raises** on a translucent colour instead of
+  discarding its alpha. `tokens.css` and `tools/derive_theme_palettes.py` both
+  already said in prose that the math assumes an opaque triple; this makes the
+  mistake unrepresentable rather than merely documented.
+
+`tests/test_deep_ocean_contrast_coverage.py` (21 tests) is the audit. Two
+properties give it its value:
+
+**The composite base is read, not restated.** It comes from `main.css`'s own
+`.app-shell.appearance-deep-ocean` gradient, so a change to that background moves
+the assertions rather than leaving them measuring a backdrop the app no longer
+paints.
+
+**The base is the worst case, by construction.** Lightest linear stop with both
+radial overlays composited at full strength — an upper bound on lightness, since
+the radials are centred at 50% 10% and 50% 45% and never both peak on one pixel.
+Deep Ocean's foregrounds are all light, so lightest backdrop means lowest ratio.
+Measured there: text-primary 14.23:1, secondary 9.87:1, metadata 7.03:1 on canvas
+and surface-primary; the tightest cell in the matrix is metadata on
+surface-selected at **4.82:1** against the 4.5 floor. Seven accents 5.38–8.31:1
+against a 3.0 floor, six tab colours likewise, brand mark 9.98:1 against the
+stricter 4.5. `glass-foreground` — the denser floating-menu fill from
+CLAUDE-MENU-FOREGROUND-LAYERING-01, which carries menu text and had never been
+measured — is audited alongside the five surfaces the existing matrix covers.
+
+**The harness is checked against a number it did not produce.** `tokens.css`'s
+CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01 comment records 15.36 / 10.51 / 7.41. The
+test reproduces all three to within 0.1 on that comment's own backdrop (lightest
+linear stop, overlays excluded). The roughly 1.1-point gap to the figures above
+is the overlays, not a disagreement — which is why both readings are recorded
+rather than one superseding the other.
+
+`REQUIRED_PAIRINGS` is untouched and stays a Light-mode subset by design,
+following the precedent CLAUDE-P40-VW8-QA set: a per-theme matrix lives in the
+test that owns it. `python tools/check_contrast.py` still reports ALL PAIRINGS
+PASS across all 54 pairings.
+
+### `9e55693` — the gap that made visible, and a baseline nobody was watching
+
+**Deep Forest joined the text × surface matrix.** With `805f4c8` landed, coverage
+was Deep Ocean (its own file) plus three of the four opaque Appearances in
+`tests/test_p40vw8qa_theme_foreground_contrast.py`. Deep Forest was absent from
+that file — and not because it postdates it: it shipped in that same VW8-QA
+stage, and `tests/test_p40vw8qa_approved_theme_set.py` has always derived and
+pinned its ramp. It was simply never added. Coverage is now 5/5 across the two
+files: four opaque modes in the matrix file, Deep Ocean in the composited one.
+
+Nothing had to change to support it — `--forest-*` is a flat-hex ramp and
+`_mode_tokens()` was already prefix-driven — so it is one dict entry, one
+foreground test mirroring the three that exist, and one tuple in the
+semantic-accent loop. That last is not a restatement of the Black rows: the
+accent hexes are asserted equal to Black's elsewhere, but the canvas is `#001A12`,
+not `#000000`. It passes everywhere; tightest cell in the now-four-mode matrix is
+`--forest-text-metadata` on `--forest-surface-selected` at **4.71:1** against the
+4.5 floor, text-primary 14.32:1 (AAA), accents 6.13–9.44:1.
+
+**Tier 0's recorded counts were reconciled in all four places that carried
+them** — `CLAUDE.md`, `TEST_LANES.md`, `MANIFEST.md` and `tools/tier0.py`'s own
+docstring, which between them held three different figures (50/803/660,
+49/793/207, and a stray "list of 50 paths").
+
+Measured 2026-09-05: **52 files, 853 tests, 663 subtests.** Duration over 5 runs —
+mean 26.71s, median 25.66s, min 23.57s, max 30.24s, stdev 2.86s. Five runs and a
+distribution rather than one number because this repository's own benchmarking
+rule says a single Windows filesystem timing is indistinguishable from noise; a
+2.86s stdev on a ~27s mean is exactly the spread that made a lone "28.33s" read
+as more precise than it was.
+
+**The drift was not all this session's doing, and each location now says so.**
+The 50/803 recorded on 2026-09-01 had already become 51 files / 831 tests before
+today; this session's two additions took it to 52/853. The reason is structural
+and worth stating once here: Tier 0's membership is **derived by rule on every
+run**, which is what keeps the lane growing with the suite — and is exactly why a
+count written into prose goes stale in silence, with no assertion failing when it
+does. All four locations now frame their number as a dated observation rather
+than a contract, and name `tools/tier0.py --list` as the thing to trust. A
+`MANIFEST.md` row for `tools/check_contrast.py` was also added in `805f4c8`; it
+had none, despite being imported by four test files.
+
+### Verification
+
+Serial, on this tree. **Tier 0: 853 passed, 663 subtests, exit 0** (final run
+30.96s, inside the measured spread). `tests/test_tier0_lane_01.py` plus the
+extended matrix, the approved-theme-set file and the Deep Ocean file together:
+**69 passed, 471 subtests, exit 0**. The full theme/contrast lane, all eight
+files, run against `805f4c8`: **243 passed**. `tools/check_contrast.py` run
+directly: exit 0, ALL PAIRINGS PASS across 54 pairings. No full-suite gate on
+either commit, and none was required.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`9e55693`**, working tree clean.
+- Production: **`d6f6605`** at **`v=155`**, unchanged by either commit.
+
+### Carried forward, unchanged
+
+The `d6f6605` deploy entry below still owes **a manual authenticated browser pass
+on `https://archiosk.com`, started from the sign-in page**. Neither commit here
+touches that, and it remains open.
+
 ## 2026-09-05 (governance) — `b49b787`: the two-sided procurement boundary gets a rule, one layer below where it was already settled
 
 Appended above the entries below, none of which is altered. Documentation only —
