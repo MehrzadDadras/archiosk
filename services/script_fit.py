@@ -47,6 +47,7 @@ from typing import Optional
 from services.case_workspace import (
     CaseWorkspaceStore,
     ProjectWorkspace,
+    SCRIPT_CHECK_PASS,
     SCRIPT_CHECK_REVIEW_NEEDED,
 )
 from services.cross_modal_investigation import (
@@ -250,3 +251,96 @@ def script_claim_pairs(
         if text:
             pairs.append({"unit_id": section["id"], "text": text, "claims": statements})
     return pairs
+
+
+def run_script_trust_chain(
+    store: CaseWorkspaceStore,
+    workspace: ProjectWorkspace,
+    work_product_id: str,
+    policy_decision: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout: Optional[float] = None,
+    record: bool = True,
+) -> dict:
+    """Run the Script trust chain once, in order, and report where it stands.
+
+    Question -> fit -> consistency -> readiness. One entry point, because two of
+    the defects found while building these stages were interaction defects
+    rather than faults inside any stage: a fingerprint that retired a verdict on
+    the very human adoption the gate was asking for, and a check that only
+    became reachable once another had recorded. Stages that are only ever
+    exercised separately do not surface that class of problem.
+
+    **This orchestrates and reports; it decides nothing.** It does not validate,
+    adopt, promote, or touch WorkProduct lifecycle or Script content. Every
+    stage is delegated to the function that already owns it - no assessment
+    logic, no policy reading and no readiness derivation is reimplemented here,
+    so there is no second copy to drift. Human validation remains the authority
+    transition and is deliberately NOT a stage: an orchestrator that could
+    validate would be an orchestrator that could promote.
+
+    Both model stages run even when the first does not pass. A reviewer looking
+    at a rejected Script wants to know everything wrong with it, not just the
+    first thing - and stopping early would make the consolidated result depend
+    on evaluation order rather than on the Script.
+
+    `record=False` runs the chain without storing either verdict, for a caller
+    that wants a look before committing one. Readiness is still resolved, and
+    still reflects only what was already recorded - an unstored verdict cannot
+    move it, which is the same rule everywhere else in this chain.
+    """
+    script = store.get_work_product(workspace, work_product_id)
+    if script is None:
+        raise ValueError("No work product %s in this project." % work_product_id)
+
+    step_id = script.get("source_investigation_step_id")
+    step = store.get_investigation_step(workspace, step_id) if step_id else None
+    question = step["question"] if step else None
+
+    if question is None:
+        # Nothing to assess fit against. Say so rather than sending an empty
+        # question to a model and treating whatever comes back as a verdict.
+        fit = {
+            "outcome": SCRIPT_CHECK_REVIEW_NEEDED,
+            "reason": "The Script does not resolve to an originating question, so fit "
+                      "cannot be assessed.",
+            "ran": False, "stored": False,
+        }
+    else:
+        fit = assess_and_record_question_fit(
+            store, workspace, work_product_id=work_product_id, question=question,
+            policy_decision=policy_decision, api_key=api_key, model=model,
+            timeout=timeout, record=record,
+        )
+
+    consistency = assess_and_record_evidence_consistency(
+        store, workspace, work_product_id=work_product_id,
+        policy_decision=policy_decision, api_key=api_key, model=model,
+        timeout=timeout, record=record,
+    )
+
+    readiness = store.resolve_script_readiness(workspace, work_product_id)
+
+    stages = {"question_fit": fit, "evidence_consistency": consistency}
+    # Which stage is holding this Script up, named rather than inferred from a
+    # readiness value that cannot say why.
+    blocked_by = [
+        name for name, result in stages.items()
+        if result["outcome"] != SCRIPT_CHECK_PASS
+    ]
+    could_not_run = [
+        name for name, result in stages.items() if not result.get("ran")
+    ]
+
+    return {
+        "work_product_id": work_product_id,
+        "question": question,
+        "stages": stages,
+        "blocked_by": blocked_by,
+        "could_not_run": could_not_run,
+        "readiness": readiness["readiness"],
+        "checks": readiness["checks"],
+        "content_checksum": readiness.get("content_checksum"),
+        "reasons": readiness["reasons"],
+    }
