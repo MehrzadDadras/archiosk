@@ -675,6 +675,25 @@ KNOWN_ANALYTICAL_METHODS = (
 # RELATIONSHIP_STATUS_SUPERSEDED, it is derived at read time in
 # resolve_claim_status from a real Supersession record, never a value
 # this field is ever directly set to.
+# -- Script readiness (Question -> Script -> Evidence -> Measurement) -------
+# A Script's readiness is DERIVED on every call, never stored - the same
+# read-time discipline resolve_claim_status/resolve_relationship_status
+# already apply. That is not a stylistic choice here: it is what makes
+# "a DRAFT must never become REUSABLE without passing the gate"
+# structurally true rather than a rule someone has to honour. There is no
+# field to set, so there is no way to set it.
+SCRIPT_READINESS_DRAFT = "draft"
+SCRIPT_READINESS_VALIDATED = "validated"
+SCRIPT_READINESS_REUSABLE = "reusable"
+
+# Explicit outcomes, deliberately not a score. A percentage would invite
+# "82% grounded" to be read as good enough by whoever is in a hurry, and
+# Section 5's own "do not use vague confidence percentages without a
+# defined and testable meaning" already settled that argument for Claim.
+SCRIPT_CHECK_PASS = "pass"
+SCRIPT_CHECK_FAIL = "fail"
+SCRIPT_CHECK_REVIEW_NEEDED = "review_needed"
+
 CLAIM_ADOPTION_PROPOSED = "proposed"
 CLAIM_ADOPTION_UNDER_REVIEW = "under_review"
 CLAIM_ADOPTION_ACCEPTED_AS_OBSERVATION = "accepted_as_observation"
@@ -9622,6 +9641,150 @@ class CaseWorkspaceStore:
         if successor_supersession is not None:
             result["superseded_by_claim_id"] = successor_supersession["successor_id"]
         return result
+
+    def resolve_script_readiness(self, workspace: ProjectWorkspace, work_product_id: str) -> dict:
+        """Measure a candidate Script against the gate standing between it and
+        reuse, and derive its readiness from the result.
+
+        Five checks, each pass/fail/review_needed, never a score:
+
+          question_fit          the Script resolves to a real originating
+                                InvestigationStep, and at least one scene cites
+                                a Claim produced BY THAT STEP. That is what
+                                catches a Script assembled from claims about a
+                                different question - structurally answerable,
+                                unlike "is the prose a good answer", which is a
+                                semantic judgement this deliberately does not
+                                pretend to make.
+          evidence_fidelity     every scene either cites a claim that still
+                                resolves, or is an explicitly marked inference.
+                                A broken citation fails, and an unmarked
+                                inference does not get the benefit of the doubt.
+          unsupported_claims    no scene asserts with no basis - no citation at
+                                all, a cited claim carrying no evidence of its
+                                own, or one whose confidence is
+                                insufficient_evidence.
+          current_applicability nothing cited is stale or broken. Reuses
+                                resolve_claim_status rather than re-deriving
+                                staleness, so this can never drift from what the
+                                rest of the kernel means by stale.
+          reuse_eligibility     every substantive claim has actually been
+                                adopted by a human. This is the one check
+                                separating VALIDATED from REUSABLE: a Script can
+                                be perfectly sound for the question it was made
+                                for while resting on proposals nobody signed
+                                off, and handing that to someone asking a
+                                DIFFERENT question is the moment a proposal
+                                quietly becomes a fact.
+
+        Readiness follows from the checks and nothing else: REUSABLE needs all
+        five, VALIDATED the first four, anything else is DRAFT. Nothing is
+        repaired, rewritten or promoted here - this measures and reports.
+        """
+        script = self._find(workspace.work_products, work_product_id)
+        if script is None:
+            return {"readiness": SCRIPT_READINESS_DRAFT, "work_product_id": work_product_id,
+                    "resolved": False, "checks": {}, "reasons": ["No such work product."]}
+
+        reasons: list[str] = []
+        scenes = [s for s in script.get("sections", [])
+                  if s.get("section_type") == "scene" and not s.get("removed")]
+
+        step_id = script.get("source_investigation_step_id")
+        step = self._find(workspace.investigation_steps, step_id) if step_id else None
+        step_claim_ids = {c["id"] for c in workspace.claims
+                          if step is not None and c.get("investigation_step_id") == step["id"]}
+        cited_ids = {link["object_id"] for scene in scenes
+                     for link in scene.get("evidence_links", [])
+                     if link.get("object_type") == OBJECT_KIND_CLAIM}
+        if step is None:
+            question_fit = SCRIPT_CHECK_FAIL
+            reasons.append("Script does not resolve to an originating investigation step.")
+        elif not scenes:
+            question_fit = SCRIPT_CHECK_FAIL
+            reasons.append("Script carries no narrative units.")
+        elif not (cited_ids & step_claim_ids):
+            question_fit = SCRIPT_CHECK_FAIL
+            reasons.append("No narrative unit cites a claim produced by the originating question.")
+        else:
+            question_fit = SCRIPT_CHECK_PASS
+
+        evidence_fidelity = SCRIPT_CHECK_PASS
+        unsupported = SCRIPT_CHECK_PASS
+        applicability = SCRIPT_CHECK_PASS
+        reuse = SCRIPT_CHECK_PASS
+        if not scenes:
+            evidence_fidelity = unsupported = applicability = reuse = SCRIPT_CHECK_FAIL
+
+        for scene in scenes:
+            claim_links = [l for l in scene.get("evidence_links", [])
+                           if l.get("object_type") == OBJECT_KIND_CLAIM]
+            if not claim_links:
+                unsupported = SCRIPT_CHECK_FAIL
+                reasons.append("Narrative unit %s asserts with no cited basis." % scene["id"])
+                continue
+
+            for link in claim_links:
+                status = self.resolve_claim_status(workspace, link["object_id"])
+                claim = self._find(workspace.claims, link["object_id"])
+                label = "claim %s" % link["object_id"]
+
+                if claim is None or status.get("status") in ("unresolved", "broken"):
+                    evidence_fidelity = SCRIPT_CHECK_FAIL
+                    applicability = SCRIPT_CHECK_FAIL
+                    reasons.append("Narrative unit %s cites %s, which no longer resolves."
+                                   % (scene["id"], label))
+                    continue
+
+                if not claim.get("evidence_links"):
+                    unsupported = SCRIPT_CHECK_FAIL
+                    reasons.append("%s carries no evidence of its own." % label)
+                if claim["confidence_state"] == CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE:
+                    unsupported = SCRIPT_CHECK_FAIL
+                    reasons.append("%s rests on insufficient evidence." % label)
+
+                if status.get("stale") or claim["confidence_state"] == CONFIDENCE_STATE_STALE_EVIDENCE:
+                    applicability = SCRIPT_CHECK_FAIL
+                    reasons.append("%s cites evidence that is stale; the source has moved on." % label)
+
+                # An inference is legitimate, but only while it is MARKED as
+                # one. The section's own content_class is what marks it; a
+                # scene presenting an interpretation as human-authored fact is
+                # the laundering this check exists to catch.
+                if claim["claim_class"] != CLAIM_CLASS_DIRECTLY_VERIFIED:
+                    if scene.get("content_class") == CONTENT_CLASS_HUMAN_AUTHORED:
+                        evidence_fidelity = SCRIPT_CHECK_FAIL
+                        reasons.append(
+                            "Narrative unit %s presents %s (%s) as authored fact rather than inference."
+                            % (scene["id"], label, claim["claim_class"])
+                        )
+
+                if status.get("status") not in (
+                    CLAIM_ADOPTION_ACCEPTED_AS_OBSERVATION, CLAIM_ADOPTION_ACCEPTED_AS_FINDING,
+                ):
+                    reuse = SCRIPT_CHECK_REVIEW_NEEDED
+                    reasons.append(
+                        "%s is %s, not human-adopted - sound for this question, not yet safe to "
+                        "reuse beyond it." % (label, status.get("status"))
+                    )
+
+        checks = {
+            "question_fit": question_fit,
+            "evidence_fidelity": evidence_fidelity,
+            "unsupported_claims": unsupported,
+            "current_applicability": applicability,
+            "reuse_eligibility": reuse,
+        }
+        gate = (question_fit, evidence_fidelity, unsupported, applicability)
+        if all(c == SCRIPT_CHECK_PASS for c in gate):
+            readiness = (SCRIPT_READINESS_REUSABLE if reuse == SCRIPT_CHECK_PASS
+                         else SCRIPT_READINESS_VALIDATED)
+        else:
+            readiness = SCRIPT_READINESS_DRAFT
+
+        return {"readiness": readiness, "work_product_id": work_product_id, "resolved": True,
+                "question": step["question"] if step else None,
+                "checks": checks, "reasons": reasons}
 
     def accept_claim_as_observation(
         self, workspace: ProjectWorkspace, claim_id: str, actor: str, reason: Optional[str] = None,
