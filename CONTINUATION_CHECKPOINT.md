@@ -1,5 +1,83 @@
 # Continuation checkpoint
 
+## 2026-09-05 (application) — `e56e5ff`: the Script trust chain is complete and has no operator
+
+Appended above the entries below, none of which is altered. Six commits,
+`4c9d208`..`e56e5ff`, all pushed and none deployed — production remains
+`a68a85c` at `v=156`, and nothing here is user-reachable.
+
+### What now exists
+
+A Script is a **composition, not a new object family**:
+`WorkProduct(artifact_type="script")` whose ordered `scene`/`direction` sections
+cite `Claim`s. `artifact_type` and `section_type` were already open-world, so
+this needed no schema change and no new closed vocabulary.
+
+`CaseWorkspaceStore.resolve_script_readiness` derives **DRAFT / VALIDATED /
+REUSABLE** on every call from seven checks, and is **stored nowhere** — that is
+what makes the gate unskippable rather than merely rule-governed. There is no
+field to set.
+
+| Check | Source |
+|---|---|
+| `question_fit` | structural: the Script cites a claim from its own question |
+| `evidence_fidelity` | cited claims resolve; inferences are marked |
+| `unsupported_claims` | no scene asserts with no basis |
+| `current_applicability` | delegates to `resolve_claim_status` for staleness |
+| `semantic_fit` | recorded model verdict — does the Script *explicitly* answer |
+| `evidence_consistency` | recorded model verdict — does it contradict what it cites |
+| `reuse_eligibility` | every substantive claim human-adopted |
+
+VALIDATED requires the first six; REUSABLE adds the seventh. `GOV-P-006`
+governs both model stages: **a model assessment may block a governed transition
+and may never authorize one.** Absence of a verdict blocks; an assessment that
+could not run degrades to review-needed, never to pass or fail.
+
+`services/script_fit.py` holds the policy-gated seams and
+`run_script_trust_chain`, one entry point that runs fit → consistency →
+readiness and reports `blocked_by` separately from `could_not_run`. The caller
+resolves `ACTION_EXTERNAL_AI_REQUEST`; the service enforces it.
+
+**Version binding:** verdicts carry the Script content checksum, and consistency
+also a cited-claims fingerprint (statement plus retired-state). Editing the
+Script or superseding a cited Claim retires the verdicts; superseded decisions
+are kept, not deleted.
+
+### Verification standard applied
+
+Every stage is mutation-tested, not merely covered: **35 mutants across five
+commits, 0 survivors.** Two of those runs found real defects — a claims
+fingerprint that retired a verdict on the very human adoption the gate asks for
+(a convergence loop), and a test of mine that passed for the wrong reason. Live
+adversarial probes were run against the real model at each model stage, and one
+of them found the question-fit prompt inferring an unstated answer and reporting
+it as stated; the contract was tightened and re-probed.
+
+Full suite green throughout, parallel mode, ending at **6,369 passed / 0 failed
+/ 2,608 subtests / 7:41**.
+
+### The state that matters for whoever picks this up
+
+**Complete and unreachable.** Every entry point is callable only from a test or
+a scratchpad script: no route, no surface, no operator path. The chain has never
+run on anything a person created.
+
+Two consequences worth knowing before building that path:
+
+- **Editing a Script retires both model verdicts by design**, so any automatic
+  re-run policy has a cost and latency question attached — two model calls per
+  material edit.
+- **A Script whose scene contradicts its cited claim is caught only by
+  `evidence_consistency`.** Before that check existed it reached REUSABLE with
+  every other check green; that hole was previously masked by the question-fit
+  model judging truth, which it is now explicitly forbidden to do.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`e56e5ff`**, working tree clean.
+- Production: **`a68a85c`** at **`v=156`**, unchanged and unaffected.
+
+
 ## 2026-09-05 (acceptance) — Deep Ocean menu fix confirmed live by the Product Owner
 
 Appended above the entries below, none of which is altered. Closes the last item
