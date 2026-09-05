@@ -13,10 +13,12 @@ Run via:
 """
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from services.case_workspace import (
     CaseWorkspaceError,
@@ -571,13 +573,46 @@ class PromptInjectionAndAIBoundaryTests(unittest.TestCase):
         """Section 8's own 'must not silently fill project-evidence gaps
         using general model knowledge' - proven here as 'never fabricates
         a result when it cannot actually run', the same discipline
-        services/project_qa.py already established."""
-        result = propose_ai_assisted_claim(
-            question="q", evidence_summaries=[{"object_type": "evidence_item", "content": "x"}], api_key="",
-        )
+        services/project_qa.py already established.
+
+        HERMETICITY. `api_key=""` alone does NOT make this test independent
+        of the machine it runs on: propose_ai_assisted_claim's own
+        `api_key or os.getenv("ANTHROPIC_API_KEY", "")` treats an empty
+        string as "caller supplied nothing" and falls back to the
+        environment - which is correct production behaviour (a deployment
+        supplies its key by env) and is deliberately NOT changed here.
+
+        The consequence for this test was real, not theoretical: with a key
+        present in a developer's `.env` it reached the network and came back
+        with a 401 and "An error occurred calling the model" instead of the
+        no-key skip it asserts. It passed in the full suite only by accident
+        of ordering - `app.py`'s testing mode sets `ANTHROPIC_API_KEY` to ""
+        process-wide, so any earlier test on the same xdist worker that built
+        a testing app cleared it first. This file builds no app, so run alone
+        it inherited the real key. That is exactly the un-mocked live API
+        call CLAUDE.md records as having cost an 8.5-hour run.
+
+        So the environment is pinned rather than assumed, and the client
+        constructor is patched as a spy: with no key the function must return
+        before ever constructing it, and `assert_not_called` makes "no
+        external call happens" an asserted property rather than a hope. The
+        patch also means that even a regression cannot reach the network from
+        this test.
+        """
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}),                 patch("anthropic.Anthropic") as anthropic_client:
+            result = propose_ai_assisted_claim(
+                question="q",
+                evidence_summaries=[{"object_type": "evidence_item", "content": "x"}],
+                api_key="",
+            )
+
+        anthropic_client.assert_not_called()
         self.assertFalse(result.ran)
         self.assertIsNotNone(result.skipped_reason)
         self.assertIsNone(result.statement)
+        # The specific skip, not merely "some skip" - reaching the network and
+        # failing also produces ran=False, which is how this went unnoticed.
+        self.assertIn("No ANTHROPIC_API_KEY configured", result.skipped_reason)
 
 
 if __name__ == "__main__":
