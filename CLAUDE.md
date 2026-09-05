@@ -285,7 +285,26 @@ deliberately NOT in `requirements.txt` - that file ships to production and
 pytest itself is not in it either. A fresh clone gets the serial path and is
 correct, only slower.
 
-### Pre-flight sweep - do this BEFORE a full-suite gate
+### Pre-flight sweep - AUTOMATIC since `98b7e1a`
+
+`tests/conftest.py`'s `pytest_configure` now detects and tree-kills orphaned
+`app.py` chains before every run, on the controller only. **You no longer need
+to remember the manual check** - it is the run's own first act, and it names
+what it killed in the output. `ARCHIOSK_ALLOW_ORPHAN_APP=1` suppresses it.
+
+It costs ~11ms on a clean machine. Two stages, because command lines are
+expensive here: a ctypes `CreateToolhelp32Snapshot` (20.7ms, and the only
+option that yields PARENT pids) finds any `python.exe` outside pytest's own
+tree, and PowerShell CIM (943.5ms - `psutil` is absent and `wmic` no longer
+exists on Windows 11 26200) confirms the command line ONLY when stage 1 found
+something. Nothing is killed on stage 1 alone: "not ours" is equally true of a
+Jupyter kernel. The allowlist is positive and total - `python.exe`, `app.py` in
+the command line, rooted under `BASE_DIR`, no `pytest`, outside our tree - and
+it targets the CHAIN ROOT, since killing a leaf leaves the reloader free to
+spawn a replacement.
+
+The manual check remains useful for diagnosing a run already in flight, which
+the guard cannot help with because it only fires at startup:
 
 ```bash
 tasklist //FI "IMAGENAME eq python.exe"
