@@ -49,7 +49,12 @@ from services.case_workspace import (
     ProjectWorkspace,
     SCRIPT_CHECK_REVIEW_NEEDED,
 )
-from services.cross_modal_investigation import QuestionFitResult, assess_question_fit
+from services.cross_modal_investigation import (
+    EvidenceConsistencyResult,
+    QuestionFitResult,
+    assess_evidence_consistency,
+    assess_question_fit,
+)
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
 
 # Mirrors routes/workspace.py's own `_external_ai_status` reading of the same
@@ -152,3 +157,96 @@ def _as_unstored(result: QuestionFitResult, question: str) -> dict:
         "model": result.model,
         "stored": False,
     }
+
+
+def assess_and_record_evidence_consistency(
+    store: CaseWorkspaceStore,
+    workspace: ProjectWorkspace,
+    work_product_id: str,
+    policy_decision: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    timeout: Optional[float] = None,
+    record: bool = True,
+) -> dict:
+    """Check a Script against the Claims it cites, under policy, and record it.
+
+    The same seam as question fit, for the same reasons: the caller resolves
+    `ACTION_EXTERNAL_AI_REQUEST` and this enforces it; the pairs are built from
+    stored content rather than taken from a caller, so what is assessed is what
+    the checksum covers; and the only store method reached is the recorder, so
+    this can cause nothing else.
+
+    A policy refusal never calls the model and yields REVIEW_NEEDED - a refusal
+    says nothing about whether the Script contradicts its evidence, so it is not
+    allowed to look like it does.
+    """
+    script = store.get_work_product(workspace, work_product_id)
+    if script is None:
+        raise ValueError("No work product %s in this project." % work_product_id)
+
+    pairs = script_claim_pairs(store, workspace, script)
+
+    if policy_decision not in _ALLOWED_DECISIONS:
+        result = EvidenceConsistencyResult(
+            outcome=SCRIPT_CHECK_REVIEW_NEEDED,
+            reason=(
+                "Evidence consistency could not be assessed: external AI requests are "
+                "not permitted for this project (policy decision %r)." % policy_decision
+            ),
+            ran=False,
+            skipped_reason="Policy decision %r does not permit an external AI request." % policy_decision,
+        )
+    else:
+        result = assess_evidence_consistency(
+            pairs, api_key=api_key, model=model, timeout=timeout
+        )
+
+    if not record:
+        return {
+            "outcome": result.outcome, "reason": result.reason,
+            "problem_unit_ids": result.problem_unit_ids,
+            "assessed_by": result.provider or "policy",
+            "assessed_at": result.requested_at,
+            "content_checksum": None, "claims_fingerprint": None,
+            "ran": result.ran, "provider": result.provider, "model": result.model,
+            "stored": False,
+        }
+
+    return store.record_script_consistency_verdict(
+        workspace, work_product_id=work_product_id,
+        outcome=result.outcome, reason=result.reason,
+        problem_unit_ids=result.problem_unit_ids,
+        assessed_by=result.provider or "policy", ran=result.ran,
+        provider=result.provider, model=result.model,
+    )
+
+
+def script_claim_pairs(
+    store: CaseWorkspaceStore, workspace: ProjectWorkspace, script: dict
+) -> list[dict]:
+    """Each active scene beside the statements of the Claims it actually cites.
+
+    Only scenes: a direction asserts nothing, so asking whether it contradicts
+    its evidence is meaningless. A scene citing a claim that no longer resolves
+    contributes an empty claim list, which the assessor treats as unusable
+    rather than as agreement - the structural gate has its own, deterministic
+    complaint about that.
+    """
+    pairs = []
+    for section in sorted(
+        (s for s in script.get("sections", [])
+         if s.get("section_type") == "scene" and not s.get("removed")),
+        key=lambda s: s.get("order_index", 0),
+    ):
+        statements = []
+        for link in section.get("evidence_links", []):
+            if link.get("object_type") != "claim":
+                continue
+            claim = store.get_claim(workspace, link["object_id"])
+            if claim is not None and str(claim.get("statement", "")).strip():
+                statements.append(claim["statement"])
+        text = str(section.get("content", {}).get("text", "")).strip()
+        if text:
+            pairs.append({"unit_id": section["id"], "text": text, "claims": statements})
+    return pairs

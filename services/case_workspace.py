@@ -2603,6 +2603,7 @@ class WorkProduct:
     # avoided here.
     script_validations: list = field(default_factory=list)
     script_fit_verdicts: list = field(default_factory=list)
+    script_consistency_verdicts: list = field(default_factory=list)
 
 
 @dataclass
@@ -9751,6 +9752,91 @@ class CaseWorkspaceStore:
         self.save(workspace)
         return record
 
+    def script_cited_claims_fingerprint(self, workspace: ProjectWorkspace, work_product: dict) -> str:
+        """A digest of the Claims a Script's active scenes cite, as they stand.
+
+        The Script's own content checksum cannot detect this: it covers section
+        content, and a cited Claim living in `workspace.claims` can be
+        superseded, disputed or rejected without a single character of the
+        Script changing. A consistency verdict is a statement about a Script AND
+        the claims it leaned on, so it has to be invalidated by movement in
+        either.
+
+        Includes each claim's statement plus whether it is RETIRED - superseded,
+        rejected, disputed, broken or unresolved, all of which
+        resolve_claim_status already derives. That is enough to retire a PASS
+        when the evidence moves out from under it.
+
+        Deliberately NOT the full adoption ladder. An earlier version digested
+        the raw status and a test caught the consequence immediately: adopting a
+        claim - the human progress the gate is asking for - changed the
+        fingerprint and retired the consistency verdict, so assess, adopt and
+        validate could never converge without re-assessing after every
+        adoption. Adoption does not change what a claim SAYS, and consistency is
+        a statement about what it says.
+        """
+        cited = []
+        for section in work_product.get("sections", []):
+            if section.get("section_type") != "scene" or section.get("removed"):
+                continue
+            for link in section.get("evidence_links", []):
+                if link.get("object_type") == OBJECT_KIND_CLAIM:
+                    cited.append(link["object_id"])
+
+        retired_states = (
+            CLAIM_ADOPTION_SUPERSEDED, CLAIM_ADOPTION_REJECTED, CLAIM_ADOPTION_DISPUTED,
+            "broken", "unresolved",
+        )
+        parts = []
+        for claim_id in sorted(set(cited)):
+            claim = self._find(workspace.claims, claim_id)
+            status = self.resolve_claim_status(workspace, claim_id).get("status", "unresolved")
+            parts.append({
+                "claim_id": claim_id,
+                "statement": (claim or {}).get("statement", ""),
+                "retired": status in retired_states,
+            })
+        return hashlib.sha256(json.dumps(parts, sort_keys=True).encode("utf-8")).hexdigest()
+
+    def record_script_consistency_verdict(
+        self, workspace: ProjectWorkspace, work_product_id: str, outcome: str, reason: str,
+        problem_unit_ids: Optional[list[str]] = None, assessed_by: str = "model",
+        ran: bool = True, provider: Optional[str] = None, model: Optional[str] = None,
+    ) -> dict:
+        """Store the latest evidence-consistency verdict against a Script.
+
+        Recording grants nothing. FAIL and REVIEW_NEEDED block; a PASS permits a
+        human to proceed and carries no authority of its own (GOV-P-006).
+
+        Binds to BOTH the Script's content checksum and the cited-claims
+        fingerprint, so the verdict retires when either the Script or the
+        evidence beneath it moves.
+        """
+        outcome = normalize_open_world_value(
+            outcome, (SCRIPT_CHECK_PASS, SCRIPT_CHECK_REVIEW_NEEDED, SCRIPT_CHECK_FAIL)
+        )
+        if outcome not in (SCRIPT_CHECK_PASS, SCRIPT_CHECK_REVIEW_NEEDED, SCRIPT_CHECK_FAIL):
+            raise CaseWorkspaceError("'%s' is not a recognized consistency outcome." % outcome)
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None:
+            raise CaseWorkspaceError("No work product %s in this project." % work_product_id)
+
+        record = {
+            "outcome": outcome,
+            "reason": reason,
+            "problem_unit_ids": list(problem_unit_ids or []),
+            "assessed_by": assessed_by,
+            "assessed_at": _now(),
+            "content_checksum": self._work_product_content_checksum(work_product),
+            "claims_fingerprint": self.script_cited_claims_fingerprint(workspace, work_product),
+            "ran": bool(ran),
+            "provider": provider,
+            "model": model,
+        }
+        work_product.setdefault("script_consistency_verdicts", []).append(record)
+        self.save(workspace)
+        return record
+
     def _applicable_script_record(self, work_product: dict, key: str) -> Optional[dict]:
         """The most recent entry in `key` that still describes the Script as it
         stands now. Anything recorded against different content is not expired,
@@ -9794,6 +9880,13 @@ class CaseWorkspaceStore:
                                 blocks - "nobody looked" is not "it is fine".
                                 A model can stop a promotion here and can never
                                 cause one.
+          evidence_consistency  the latest recorded consistency verdict that still
+                                applies to BOTH this Script and the claims it
+                                cites. Catches what question fit deliberately
+                                will not: a unit that explicitly answers the
+                                question while contradicting its own evidence.
+                                Blocks on FAIL, REVIEW_NEEDED, absence, or a
+                                changed claim beneath it.
           human_validation      a recorded human decision that still applies.
                                 This is the authority transition, and the only
                                 one.
@@ -9916,6 +10009,32 @@ class CaseWorkspaceStore:
             semantic_fit = verdict["outcome"]
             reasons.append("Question fit is %s: %s" % (verdict["outcome"], verdict.get("reason")))
 
+        # -- evidence consistency: blocking only -----------------------------
+        # Applicable only while BOTH the Script and the claims beneath it are
+        # unchanged. A verdict recorded against different evidence is not a
+        # verdict about this Script.
+        consistency = self._applicable_script_record(script, "script_consistency_verdicts")
+        if consistency is not None:
+            expected = self.script_cited_claims_fingerprint(workspace, script)
+            if consistency.get("claims_fingerprint") != expected:
+                consistency = None
+                reasons.append(
+                    "A cited claim has changed since the consistency check ran; "
+                    "the previous verdict no longer applies."
+                )
+        if consistency is None:
+            evidence_consistency = SCRIPT_CHECK_REVIEW_NEEDED
+            if not any(r.startswith("A cited claim has changed") for r in reasons):
+                reasons.append(
+                    "The Script has not been checked for consistency with the claims it cites."
+                )
+        elif consistency["outcome"] == SCRIPT_CHECK_PASS:
+            evidence_consistency = SCRIPT_CHECK_PASS
+        else:
+            evidence_consistency = consistency["outcome"]
+            reasons.append("Evidence consistency is %s: %s"
+                           % (consistency["outcome"], consistency.get("reason")))
+
         # -- human validation: the authority transition ----------------------
         validation = self._applicable_script_record(script, "script_validations")
         if validation is None:
@@ -9936,6 +10055,7 @@ class CaseWorkspaceStore:
             "unsupported_claims": unsupported,
             "current_applicability": applicability,
             "semantic_fit": semantic_fit,
+            "evidence_consistency": evidence_consistency,
             "human_validation": human_validation,
             "reuse_eligibility": reuse,
         }
@@ -9943,7 +10063,7 @@ class CaseWorkspaceStore:
         # Neither the model nor the structure can reach it alone, which is the
         # governing rule expressed as an `all()`.
         gate = (question_fit, evidence_fidelity, unsupported, applicability,
-                semantic_fit, human_validation)
+                semantic_fit, evidence_consistency, human_validation)
         if all(c == SCRIPT_CHECK_PASS for c in gate):
             readiness = (SCRIPT_READINESS_REUSABLE if reuse == SCRIPT_CHECK_PASS
                          else SCRIPT_READINESS_VALIDATED)

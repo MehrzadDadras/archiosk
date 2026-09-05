@@ -248,6 +248,12 @@ class CausesNothingElseTests(_WiringFixture):
         )
         self.assertEqual(self._readiness()["readiness"], SCRIPT_READINESS_DRAFT)
 
+        # Evidence consistency is a required gate check too - a fit PASS plus a
+        # human is no longer sufficient on its own.
+        self.store.record_script_consistency_verdict(
+            self.workspace, work_product_id=self.script["id"],
+            outcome=SCRIPT_CHECK_PASS, reason="consistent with cited claim",
+        )
         self.store.record_script_validation(
             self.workspace, work_product_id=self.script["id"],
             decision=SCRIPT_VALIDATION_VALIDATED, actor="reviewer",

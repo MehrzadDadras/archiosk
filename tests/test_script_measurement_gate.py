@@ -142,9 +142,18 @@ class _GateFixture(unittest.TestCase):
             actor="reviewer", comments=comments,
         )
 
+    def _consistency(self, script, outcome=SCRIPT_CHECK_PASS, reason="consistent"):
+        return self.store.record_script_consistency_verdict(
+            self.workspace, work_product_id=script["id"], outcome=outcome, reason=reason,
+        )
+
     def _cleared(self, script):
-        """A Script taken through the full gate: assessed and validated."""
+        """A Script taken through the full gate: question fit assessed, evidence
+        consistency assessed, and a human validation recorded. Extended when
+        evidence consistency became a required gate check - every path to
+        VALIDATED needs all three, which is the point."""
         self._fit(script)
+        self._consistency(script)
         self._validate(script)
         return script
 
@@ -334,11 +343,26 @@ class ModelCannotPromoteTests(_GateFixture):
         self._validate(script)
         self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_DRAFT)
 
-    def test_pass_plus_human_validation_produces_validated(self):
+    def test_fit_plus_consistency_plus_human_validation_produces_validated(self):
+        # Was "pass plus human validation". Evidence consistency became a third
+        # required gate check, so a fit PASS and a human are no longer enough on
+        # their own - which is the point of adding it, and is asserted rather
+        # than assumed by the next test.
+        script, _ = self._sound_script()
+        self._fit(script, SCRIPT_CHECK_PASS)
+        self._consistency(script, SCRIPT_CHECK_PASS)
+        self._validate(script)
+        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_VALIDATED)
+
+    def test_fit_pass_and_human_validation_without_consistency_is_not_enough(self):
         script, _ = self._sound_script()
         self._fit(script, SCRIPT_CHECK_PASS)
         self._validate(script)
-        self.assertEqual(self._readiness(script)["readiness"], SCRIPT_READINESS_VALIDATED)
+        result = self._readiness(script)
+        self.assertEqual(result["checks"]["semantic_fit"], SCRIPT_CHECK_PASS)
+        self.assertEqual(result["checks"]["human_validation"], SCRIPT_CHECK_PASS)
+        self.assertEqual(result["checks"]["evidence_consistency"], SCRIPT_CHECK_REVIEW_NEEDED)
+        self.assertEqual(result["readiness"], SCRIPT_READINESS_DRAFT)
 
     def test_no_verdict_at_all_still_requires_review(self):
         # "Nobody has looked" is not "it is fine".
