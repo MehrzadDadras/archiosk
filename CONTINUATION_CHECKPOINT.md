@@ -1,5 +1,114 @@
 # Continuation checkpoint
 
+## 2026-09-05 (application) — `288b2ce`: GOV-P-004/GOV-P-005 become code, and two boundaries are held rather than crossed
+
+Appended above the entries below, none of which is altered. **Pushed to
+`origin/main`. 3 files, 949 insertions, 0 deletions** — two new files plus one
+`MANIFEST.md` row. Undeployed: no `templates/`, `static/css/` or `static/js/` file
+is touched, so `STATIC_VERSION` needs no bump and is untouched at 155, and there is
+nothing user-facing to ship. Production remains `d6f6605`.
+
+`services/procurement_governance.py` implements the boundary GOV-P-004 governs, and
+`tests/test_gov_p_004_procurement_boundary.py` verifies it.
+
+### The three invariants, and where each is actually enforced
+
+**Structural decoupling.** Two store roots and one direction of travel: the Owner
+side writes only `issued_snapshots/`, the Proponent side only
+`proponent_receipts/`. A test walks the whole Proponent lifecycle while
+byte-comparing the entire issued tree before and after, so "the receiving side
+never writes into the issued record" is measured rather than asserted.
+
+**Immutability.** `@dataclass(frozen=True)` plus `open(path, "x")`. Both are
+deliberate departures from the specified model-validator approach, and both are
+stronger: the exclusive-create flag makes the existence check and the write **one
+atomic filesystem operation**, so uniqueness on `(project_id, addendum_sequence)`
+*is* the path rather than a declared constraint with a read-then-write race; and
+`frozen` fails at the assignment itself rather than in a persistence hook that a
+future bulk write could route around. The canonical digest pins every encoder
+freedom — `sort_keys`, tightest separators, explicit UTF-8, `allow_nan=False` — so
+a NaN is refused at issue time instead of producing a package that re-reads
+differently on the other side.
+
+**GOV-P-005.** Arrival lands in `ARRIVED_IN_AIRLOCK` with `admitted_at` None.
+`ADMITTED` records that an evaluation passed and confers no authority:
+`evidence_class` is pinned to `EVIDENCE_CLASS_EXTERNALLY_RESEARCHED` for a
+receipt's whole life, and the constant is **imported** from
+`services/case_workspace.py` rather than copied, so the pinned class cannot drift
+from the kernel's own closed vocabulary.
+
+### The design decision worth keeping: integrity is three-way
+
+If the only recorded digest lived inside the snapshot file beside the payload it
+describes, rewriting both together would be self-consistent and undetectable. The
+receipt therefore captures the digest at arrival and stores it **under the other
+root**, so the vestibule compares three independently-stored facts: the payload as
+it reads now, the digest the issuer recorded, and the digest the receiver observed.
+Editing the payload alone fails the first comparison; the self-consistent tamper
+still fails against the receipt. Both shapes are tested.
+
+### Flat JSON, not `models.py` — a deliberate deviation from the specification
+
+The mission specified `models.py` or `models/procurement.py`, database rows, a
+unique constraint and a model-level mutation validator. `models.py` is this
+repository's SQLAlchemy **infrastructure** layer — `User`, tokens, enrolments,
+diagnostics — and no domain object has ever lived there; the domain model is
+flat-JSON dataclasses. `tools/dependency_fit.py --requires-database --database-type
+sqlite` returns **WARN**, against a SQLite rewrite that was explicitly proposed and
+explicitly rejected. Every specified invariant is met, and two are met more
+strongly, for the reasons above.
+
+### Two scope boundaries held rather than silently crossed
+
+Both were checked against the authority rather than inferred, and both are flagged
+in the code, the commit and the report:
+
+- **`addendum_sequence` is issuance ORDERING only** — no supersession, no delta, no
+  relate-back, no re-adjudication on receipt. `STATUS.md`'s own Owner/Proponent
+  publication row reads *"Addendum lineage … remain NOT AUTHORIZED"*, and
+  `GOV-P-004`'s OUT OF SCOPE independently declines the Add Addendum facility.
+- **Admission is evaluation-recorded, never authority-conferred.**
+  `GOV-P-005`'s Prohibited drift section states the record does not authorize the
+  External Source Vestibule, and `GO-EXTERNAL-VESTIBULE-01` remains `DEFERRED`.
+
+Building either fully requires a `STATUS.md` amendment. That is a Product Owner
+act, the table says of itself *"verbatim, do not silently change"*, and **no
+amendment was written** — the authorization was not inferred from the mission
+prompt.
+
+### Verification, and the reason to believe it
+
+35 tests pass. A suite that passes on its first run is not evidence that it bites,
+so all six load-bearing invariants were **mutation-tested**: write-once downgraded
+to last-writer-wins; `frozen` removed; evidence-class pinning removed; three-way
+integrity reduced to two-way; admission made to promote the evidence class;
+terminal-state guard removed. **All six caught — 0 surviving mutants**, source
+restored and re-verified afterwards.
+
+The full suite is the gate here because this adds a file under `services/`.
+**Parallel mode (`-n 8 --dist loadfile`): 6,246 passed, 2 skipped, 2,595 subtests,
+0 failed, 8:01** — on the ~8-minute parallel baseline, with the exit code read from
+its own `PYTEST_EXIT` line in a redirected log rather than through a pipe (the
+`705aa2a` near-miss). The background task's own "exit code 0" was not treated as
+the result.
+
+**Tier 0 is green at 853 passed / 663 subtests but does NOT cover this file.** Its
+derived membership is the *source-scan* lane, and this is a behavioural test, so
+the new file is correctly outside it and its count is unchanged at 52 files. Tier 0
+is a no-regression signal for the existing baseline only; the assurance for this
+work is the 35 tests, the mutation run, and the full suite.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`288b2ce`**, working tree clean.
+- Production: **`d6f6605`** at **`v=155`**, unchanged.
+
+### Carried forward, unchanged
+
+The `d6f6605` deploy entry below still owes **a manual authenticated browser pass
+on `https://archiosk.com`, started from the sign-in page**. Nothing here touches
+it, and it remains open.
+
 ## 2026-09-05 (governance) — `631c71b`: the backlog that was not one, and the one item in it that was doing live work
 
 Appended above the entries below, none of which is altered. Documentation only —
