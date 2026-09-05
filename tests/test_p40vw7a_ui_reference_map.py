@@ -89,6 +89,14 @@ _OPERATIONS_HTML_PATH = _REPO_ROOT / "templates" / "operations.html"
 _RESET_PROJECT_DATA_HTML_PATH = _REPO_ROOT / "templates" / "reset_project_data.html"
 # CLAUDE-DIAGNOSTIC-BRIDGE-01: the admin diagnostics view.
 _DIAGNOSTICS_HTML_PATH = _REPO_ROOT / "templates" / "diagnostics.html"
+# 3ab9477 moved the Developer Composer off authenticated `/` and onto the
+# protected /admin/developer-tools surface. This list never followed it, so
+# thirteen `developer.*` rows read as "active but rendered nowhere" for no
+# reason other than the scanner not looking here - UI_REFERENCE_MAP.md had
+# named templates/developer_tools.html as their location the whole time.
+# Adding the path also surfaced six `developer-tools.*` controls that had
+# never been registered at all, which is the coverage this staleness hid.
+_DEVELOPER_TOOLS_HTML_PATH = _REPO_ROOT / "templates" / "developer_tools.html"
 # CLAUDE-SPIN-00A: _spin_prototype.html is included (not extended) by
 # case_workspace.html's own {% block toolbox %} - its own refs are real
 # rendered markup (when ?spin=1), same as any other template here, just
@@ -265,7 +273,7 @@ def _all_template_refs() -> set[str]:
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
-        _DIAGNOSTICS_HTML_PATH,
+        _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -352,11 +360,19 @@ class RegistryConsistencyTests(unittest.TestCase):
         # (templates/components/fish_tank_container.html). It is a NAMESPACE
         # rather than a page prefix, because the same container wraps several
         # different surfaces; that is the point of it.
+        # "developer-tools" is the protected /admin/developer-tools surface
+        # 3ab9477 created. It is a sibling of "developer" rather than a
+        # family under it: the refs were written that way in
+        # templates/developer_tools.html and are already deployed, and the
+        # two prefixes name genuinely different things - "developer.*" is
+        # the Developer Composer wherever it renders, "developer-tools.*"
+        # is this one page's synthetic/test reset controls.
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|operations|projects-directory|removed-projects|developer|"
+                r"developer-tools|"
                 r"landing|explore|start-trial|spin|pdm|index|tank|help)\.[a-z0-9._\-]+$",
                 ref,
             )
