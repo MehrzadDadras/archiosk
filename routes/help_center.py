@@ -21,18 +21,22 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 
 from services.auth import is_admin, login_required
 from services.case_workspace import CaseWorkspaceStore
+from services.help_mode import (
+    HELP_LIBRARY_PROJECT_ID,
+    HelpContext,
+    HelpModeError,
+    propose_project_transition,
+    read_help_conversation,
+    record_help_message,
+)
 from services.script_fit import help_status_for, run_script_trust_chain
 
 help_bp = Blueprint("help_center", __name__)
 
-# CLAUDE-HELP-CONCIERGE-01: Help Scripts are ordinary governed WorkProducts, so
-# they need a project to live in - but they are about the PRODUCT, not about any
-# customer project, and putting them in a real one would make product
-# documentation part of that project's evidence corpus. A single reserved
-# workspace keeps them governed by exactly the same kernel while belonging to no
-# customer project. It is a project id, not a new subsystem: every Script in it
-# is a normal WorkProduct read by the normal store.
-HELP_LIBRARY_PROJECT_ID = "archiosk-help-library"
+# CLAUDE-HELP-CONCIERGE-01 / CLAUDE-HELP-MODE-01: the reserved workspace ids now
+# live in services/help_mode.py, which owns the Help/Project boundary. Re-exported
+# here because this module's existing routes and tests already import it from
+# here, and two definitions of a reserved id is exactly how they drift apart.
 
 
 def _help_store() -> CaseWorkspaceStore:
@@ -234,3 +238,111 @@ def script_recheck(script_id):
         "blocked_by": result["chain"]["blocked_by"],
         "could_not_run": result["chain"]["could_not_run"],
     })
+
+
+# --- Help / Learning Mode ---------------------------------------------------
+# CLAUDE-HELP-MODE-01. Entering Help does not enter the project. These routes
+# never receive a project workspace and never write to one; the isolation is the
+# same one the kernel already enforces between two customer projects, because to
+# the kernel that is exactly what this is.
+
+
+def _help_context_from_request(payload: dict) -> HelpContext:
+    """Build the Help context from what the client sent.
+
+    Only four fields are read. Anything project-shaped in the payload is
+    refused rather than ignored - see assert_context_is_help_shaped - because a
+    caller that sent it has misunderstood the boundary and should hear so.
+    """
+    from services.help_mode import assert_context_is_help_shaped
+
+    assert_context_is_help_shaped(payload.get("context") or {})
+    context = payload.get("context") or {}
+    return HelpContext(
+        page=context.get("page"),
+        control=context.get("control"),
+        app_version=current_app.config.get("STATIC_VERSION"),
+        role="admin" if is_admin() else "user",
+    )
+
+
+@help_bp.route("/help/mode/ask", methods=["POST"])
+@login_required
+def help_mode_ask():
+    """Ask a question in Help / Learning Mode.
+
+    The answer comes from the governed Help Library and nowhere else. The
+    project the user happens to have open is not consulted, not recorded, and
+    not reachable from here: this handler is given no project id and builds no
+    project workspace.
+    """
+    from flask import session
+
+    payload = request.get_json(silent=True) or {}
+    question = str(payload.get("question", "")).strip()
+    if not question:
+        return jsonify({"error": "A question is required."}), 400
+
+    username = session.get("username")
+    store = _help_store()
+    try:
+        context = _help_context_from_request(payload)
+        record_help_message(store, username, author=username, body=question, context=context)
+    except HelpModeError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    # The answer: a REUSABLE Help Script for this question, or an honest
+    # nothing. Help never invents an answer when the library has none - the
+    # same discipline the Help Center's own guides already state.
+    library = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    answer = None
+    for script in library.work_products:
+        if script.get("artifact_type") != "script":
+            continue
+        readiness = store.resolve_script_readiness(library, script["id"])
+        status = help_status_for(readiness)
+        if status["answerable"] and (readiness.get("question") or "").strip() == question:
+            from services.script_fit import script_narrative_text
+
+            answer = {"script_id": script["id"], "text": script_narrative_text(script)}
+            break
+
+    if answer is not None:
+        record_help_message(store, username, author="help", body=answer["text"])
+
+    return jsonify({
+        "mode": "help",
+        "question": question,
+        "answer": answer,
+        "context": context.to_dict(),
+        "project_context_used": False,
+    })
+
+
+@help_bp.route("/help/mode/history")
+@login_required
+def help_mode_history():
+    """This user's Help history. Separate storage, separate from project chat."""
+    from flask import session
+
+    return jsonify({
+        "mode": "help",
+        "messages": read_help_conversation(_help_store(), session.get("username")),
+    })
+
+
+@help_bp.route("/help/mode/transition", methods=["POST"])
+@login_required
+def help_mode_transition():
+    """Offer to continue a project-specific question in Project Mode.
+
+    This returns an OFFER. It transfers nothing, and says so explicitly in the
+    response rather than leaving a reader to infer it. Accepting is a separate
+    act by the user, in the project's own conversation, where project evidence
+    legitimately applies.
+    """
+    payload = request.get_json(silent=True) or {}
+    question = str(payload.get("question", "")).strip()
+    if not question:
+        return jsonify({"error": "A question is required."}), 400
+    return jsonify(propose_project_transition(question, payload.get("project_id")))
