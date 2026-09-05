@@ -9363,6 +9363,16 @@ class CaseWorkspaceStore:
 
     # -- investigation worklist (CLAUDE-P08) ----------------------------------------
 
+    def get_investigation_step(self, workspace: ProjectWorkspace, step_id: str) -> Optional[dict]:
+        """The read half of record_investigation_step, and the only public way
+        to recover the verbatim `question` an artifact was produced in answer
+        to. Every other MM object already had its getter
+        (get_evidence_item/get_derived_observation/get_structural_unit/
+        get_addressable_region/get_work_product); this one and get_claim were
+        the two omissions, which only surfaced once something downstream
+        needed to read an answer back rather than record one."""
+        return self._find(workspace.investigation_steps, step_id)
+
     def record_investigation_step(
         self,
         workspace: ProjectWorkspace,
@@ -9539,6 +9549,15 @@ class CaseWorkspaceStore:
 
     def claims_for_investigation_step(self, workspace: ProjectWorkspace, investigation_step_id: str) -> list[dict]:
         return [c for c in workspace.claims if c["investigation_step_id"] == investigation_step_id]
+
+    def get_claim(self, workspace: ProjectWorkspace, claim_id: str) -> Optional[dict]:
+        """The plain record, for a caller that holds a claim id from an
+        `evidence_links` entry and needs the claim's own `claim_class` and
+        `confidence_state`. resolve_claim_status answers a different, heavier
+        question (are this claim's endpoints still intact); a consumer that
+        only needs to read what was asserted should not have to pay for that,
+        nor reach into `workspace.claims` directly."""
+        return self._find(workspace.claims, claim_id)
 
     def resolve_claim_status(self, workspace: ProjectWorkspace, claim_id: str) -> dict:
         """
