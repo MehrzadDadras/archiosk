@@ -1,5 +1,88 @@
 # Continuation checkpoint
 
+## 2026-09-05 (application) — `89207d8`: the orphan check stops being something to remember
+
+**`89207d8` is the latest application commit and is pushed to `origin/main`.**
+It does not claim a production deployment newer than `2c43a5d` / `v=154` — this
+and the entry below are test infrastructure and documentation, nothing
+user-facing.
+
+Continues the tranche recorded immediately below rather than replacing it; that
+entry stands as written and was accurate when written.
+
+### What changed
+
+`tests/conftest.py`'s `pytest_configure` now detects and tree-kills orphaned
+`app.py` chains before every run, controller-only, and `CLAUDE.md`'s Watchdog
+Protocol was corrected to stop describing a manual step the harness now
+performs. A protocol that tells a reader to run a command the run already ran is
+how someone wastes time, or worse, trusts a check they never made.
+
+### The audit that reframed it
+
+Asked as part of the same request: do any test fixtures spawn background
+subprocesses without teardown? **No.** `tests/` has **zero** `subprocess.Popen`
+— the single grep hit is a string literal in `test_diagnostic_bridge_01.py`
+asserting the bridge cannot contain one. All six real spawns are synchronous
+`subprocess.run()` (`git show`, `check_contrast.py` ×3, `node -e`), which block
+until exit and cannot orphan, so no `try/finally` or fixture teardown is owed.
+
+**So the suite never created these orphans.** They come from a human or an agent
+running `python app.py` outside the harness, which the standing live-only,
+no-localhost policy says should not happen at all. The guard defends against
+action *outside* the tests, not a leak inside them — worth knowing, because it
+means no test fixture needed changing and none was.
+
+Recorded, not fixed: none of the six sets `timeout=`, and `pytest-timeout`'s
+thread method would not kill a child. All six invoke short-lived local tools, so
+the exposure is theoretical.
+
+### Why it is two stages, which is the part worth keeping
+
+Cost decided the design. `psutil` is not installed and **`wmic` no longer exists
+on Windows 11 26200**, so the only stdlib route to a command line is PowerShell
+CIM at **943.5 ms** — a 13% tax on a 7-second single-file run if paid every time.
+
+| Method | Cost | Yields |
+|---|---|---|
+| ctypes `CreateToolhelp32Snapshot` | **20.7 ms** | pid + **parent** pid + exe |
+| `tasklist` | 295.7 ms | names only |
+| PowerShell CIM | 943.5 ms | full command lines |
+
+Stage 1 always runs and uses the snapshot's parent-pid data to find any
+`python.exe` outside pytest's own tree — **measured at 11.2 ms in practice**.
+Stage 2 fires only when stage 1 found something. A clean machine pays 11 ms.
+
+**Stage 2 is mandatory before any kill.** Stage 1 cannot see command lines, so
+all it knows is "a `python.exe` that is not ours" — equally true of a Jupyter
+kernel or a language server. The allowlist is positive and total (`python.exe`,
+`app.py` in the command line, rooted under `BASE_DIR`, no `pytest`, outside our
+tree), the same shape as `_is_disposable_store`, and any failure kills nothing.
+The kill targets the **chain root**, because killing a leaf leaves the reloader
+free to spawn a replacement.
+
+### Verified, six cases
+
+The fixture deliberately does **not** start Flask — a sleeper chain matching the
+allowlist shape instead — so verification exercised the real detection path
+without violating the live-only policy.
+
+Clean machine 11.2 ms and nothing killed; a real 4-deep chain fully detected and
+confirmed, root identified as the topmost process rather than a leaf, one
+tree-kill removing all four with zero survivors; `ARCHIOSK_ALLOW_ORPHAN_APP=1`
+preserving all four while the store sweep still ran, the two flags being
+independent by design; a clean no-op on `linux`/`darwin`; and the full suite at
+`-n 8 --dist loadfile` returning **12 failed, 6,177 passed, 2 skipped, 2,573
+subtests in 7:59** — the known twelve — with the guard printing **nothing**,
+which is the real assertion: not one of the eight workers was mistaken for an
+orphan.
+
+A bug was found in the draft before it reached the file: the ancestor walk in
+`_our_process_tree` had a malformed loop condition, and that function is
+precisely what stops the guard killing its own xdist workers. Caught by reading
+the draft in the scratchpad rather than by testing it, which is the argument for
+drafting there first.
+
 ## 2026-09-05 (application) — `aeb203f`: the suite runs in 8 minutes, and why it did not before
 
 **`aeb203f` is the latest application commit and is pushed to `origin/main`.**
