@@ -1,5 +1,120 @@
 # Continuation checkpoint
 
+## 2026-09-05 (deploy) — `a68a85c` live at `v=156`: the Deep Ocean menu fix reaches production
+
+**`a68a85c` is live on `https://archiosk.com`**, replacing `d6f6605`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build a68a85c)`. Rollback marker
+`/var/www/archiosk-backup-d6f6605`, with `.env` copied into that tree at
+`600 archiosk:archiosk` — outside the sync target, per CLAUDE-DEPLOY-ENV-BACKUP-01.
+
+Appended above the entries below, none of which is altered. The `54615b2` entry
+predicted this deploy would be warranted; this is it.
+
+### What shipped
+
+Everything undeployed since `d6f6605` — eleven commits. Only **one** is
+user-facing: `54615b2`, the Deep Ocean floating-menu opacity fix. The rest is
+governance (`GOV-P-004`, `GOV-P-005`, `GOV-D-003`), the contrast harness and its
+Deep Ocean/Deep Forest coverage, the procurement boundary service (which no route
+imports, so it changes no runtime behaviour), Tier 0 metric reconciliation, and
+four checkpoint entries.
+
+That single user-facing commit is what made the tranche shippable. The `288b2ce`
+entry's assessment — nothing to deploy — was correct when written and stopped
+being correct when the live walkthrough found the menu defect.
+
+### Gate
+
+**Full suite, parallel mode (`pytest -q -n 8 --dist loadfile`): 6,248 passed, 0
+failed, 2,595 subtests, 7:00.** Exit code read from its own `PYTEST_EXIT=0` line
+in a redirected log, never through a pipe and never from the background task's
+wrapper status.
+
+One difference from the `288b2ce` run, recorded rather than glossed: that run was
+6,246 passed **+ 2 skipped**; this one is 6,248 passed **+ 0 skipped**. Identical
+6,248 executed either way — two environment-conditional skips simply did not
+trigger. `-q` suppresses skip reasons, so they are not named here rather than
+guessed at.
+
+### The runbook, step by step
+
+Steps 1–6, 9–13 executed as written. **Steps 7 and 8 were confirmed N/A rather
+than skipped by assumption**: `requirements.txt` is unchanged across
+`d6f6605..a68a85c`, and no migration, Alembic file or `models.py` is touched (the
+only "migration"-matching path is `governance/back-catalog/MIGRATION-QUEUE.md`, a
+governance document).
+
+Preconditions clean: `HEAD == origin/main == a68a85c`, working tree clean. The
+currently-live build and `STATIC_VERSION` were read **from the server** rather
+than trusted from this file — `d6f6605` and `155`, both matching.
+
+`git archive` produced **929 entries / 20.1 MB**, with `.env` and `instance/`
+structurally absent (verified by listing the tarball, not assumed), and the fix
+itself confirmed present inside the tarball before it ever left this machine.
+
+**The step-5 dry-run showed zero `deleting` lines.** The single `.env`-shaped
+match was the tracked `.env.example` — exactly the case the two precise exclude
+patterns exist to permit, and a bare `.env` path was explicitly confirmed absent
+from the dry-run output. Both changed stylesheets were confirmed present in the
+sync list.
+
+### `STATIC_VERSION` 155 → 156, computed and guarded
+
+The live value was read first and returned **155**; `CURRENT + 1` produced
+**156**. As before, the target was known in advance and still was not written as
+a literal — the recorded near-miss was a bump to a value *below* what production
+served, which leaves every browser on its cached stylesheet and looks exactly
+like a successful deploy. A guard was added to the command this time: it refuses
+outright if the computed value is not greater than the current one.
+
+### Verified by content, and one discrepancy chased rather than waved off
+
+The rendered `/login` carries `?v=156` on both stylesheets, and production now
+serves the fix itself:
+
+- `--ocean-glass-foreground: rgb(8, 28, 36)` — opaque, was `rgba(8, 28, 36, .72)`
+- the menu rule serves `background-color` + `box-shadow` only, with the
+  provably-dead `backdrop-filter` gone
+
+**The served `main.css` md5 did NOT match the local file**, and that was
+investigated rather than accepted. `diff` with CR stripped produces no output and
+the CR-stripped md5s are identical (`0c7abdea59cab11a158f1d70fb7cfa1a` on both);
+the entire 9,877-byte gap is 9,877 CR characters. The Python patch that applied
+the fix wrote LF endings, while the repository normalises this file to CRLF —
+which is what Git's persistent "LF will be replaced by CRLF" warning meant all
+session — so `git archive` exported CRLF against an LF working tree. It matched
+at `v=155` only because the file had not yet been touched. Content identity is
+proven two independent ways; CSS is indifferent to line endings.
+
+Service healthy throughout: error grep empty after each restart, internal and
+public `/health` both 200, and `/`, `/login`, `/explore`, `/start-trial` all 200.
+
+### Housekeeping noted, deliberately not actioned
+
+`/var/www/` now holds **13** `archiosk-backup-*` rollback directories. The
+runbook is explicit that pruning them is "a separate, deliberate decision each
+time, not part of routine per-deploy cleanup — don't automate away your only
+rollback point," so none was removed. Flagged here as a real accumulation worth
+a decision, not as this deploy's business. This deploy's own scratch (tarball and
+staging directory) *was* removed, per step 13.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`a68a85c`**, working tree clean.
+- Production: **`a68a85c`** at **`v=156`**.
+
+### Still owed
+
+- **The publication affordance in its *offered* state**, carried forward from the
+  `54615b2` entry: both Owner-side projects are already `Published`, so only the
+  withheld state is confirmed. Observing the offered state needs a pre-publication
+  Owner project, which means creating and deleting real data on production and was
+  not authorized.
+- **A live look at the deployed menu fix.** Production now serves the corrected
+  CSS and `?v=156` busts the cache, but nobody has yet opened Deep Ocean on the
+  new build and looked. The content verification above is strong evidence, not a
+  visual confirmation.
+
 ## 2026-09-05 (verification + fix) — `54615b2`: the authenticated production pass, and the defect it found that no test could
 
 Appended above the entries below, none of which is altered. **This closes the
