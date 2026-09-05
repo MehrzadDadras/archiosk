@@ -2369,7 +2369,18 @@ main:has(.document-viewer-canvas-container) {
     position: fixed;
     right: 1rem;
     bottom: 1rem;
-    z-index: 1200;
+    /* 90, not 1200. This is a role="status" toast appended to <body>, so it
+       has to clear the dialog layer (.conv-dialog, 80) - a long action can
+       still be running while a dialog is open. It does NOT get to outrank the
+       UI Reference Mode badge (100), which is deliberately the file's highest
+       z-index so a QA reviewer can inspect a control inside an open dialog;
+       see tests/test_p40vw6_theme_correction.py's own assertion on that.
+       1200 arrived with bc37b97 in a file whose every other value is <= 100,
+       and outranked the badge by a factor of twelve for no stated reason.
+       Nothing else in this file sits between 80 and 1200, so 90 preserves
+       every pairwise relationship this rule had except the one that was
+       wrong. */
+    z-index: 90;
     margin: 0;
     padding: .55rem .75rem;
     border: 1px solid var(--border);
