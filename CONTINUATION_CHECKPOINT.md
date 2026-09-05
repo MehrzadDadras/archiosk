@@ -1,5 +1,150 @@
 # Continuation checkpoint
 
+## 2026-09-05 (governance) — `631c71b`: the backlog that was not one, and the one item in it that was doing live work
+
+Appended above the entries below, none of which is altered. Documentation only —
+no code, tests, `routes/`, `services/`, `models.py`, `config.py`, `app.py` or
+migrations touched, so the full-suite gate does not apply and none was run. Not a
+deploy: nothing changed on `https://archiosk.com` and `STATIC_VERSION` is
+untouched at 155.
+
+**Pushed to `origin/main`. 7 files, 417 insertions, 2 deletions** — the two
+deletions are single-line replacements that lose nothing. Strictly additive in
+effect: no prompt record's status or verbatim text changed.
+
+### The instruction, and why it was not executed as framed
+
+Product Owner, 2026-09-05: *"Get the old assignments done with so we can move on,
+and the sequence does not matter unless Claude finds it matters."* Six programmes
+were named for retirement so that attention could move to `GOV-P-004`.
+
+The review found the premise did not hold, and both decisions taken were taken by
+the Product Owner on that finding rather than on the original framing.
+
+**These were never an open queue.** All six are already dispositioned in
+`prompt-depository/PROMPT_REGISTER.md` — six `DEFERRED`, two `APPROVED` — in a
+register that describes itself as a *"governed prospective register"* recording
+*"future prompts and their lineage."* `DEFERRED` there is the disposition, carrying
+Product Owner acceptance language, not an item awaiting closure. The "formal
+deferred status confirmation" sought for Risk/Monte Carlo and Universal Venue
+already existed, and equally for the other four.
+
+**The proposed substrate reconciliation had already been performed, and reached the
+opposite conclusion.** `current/comm-a1-self-project-commissioning-readiness.md`
+sections J, K, L and M are that exact exercise: each names the implemented
+primitive covering the near-term need and concludes *not required* while preserving
+the future question. All four were re-verified in code rather than taken on the
+record's word — `GovernanceLog` plus per-object append-only sub-history (J);
+`original_requirement_identifier` at `services/case_workspace.py:1440` (K);
+`artifact_type="risk_register"` live in the form at `templates/case_workspace.html:3626`
+(L); the throwaway-admin + disposable-project pattern (M). Reaching "retire" would
+need **new** evidence, not a fresh reading of the same evidence.
+
+The two closest "already satisfied" candidates fail specifically.
+`services/project_code.py` gives a *project* a governed acronym and its own header
+records *"Repository inspection found NO existing acronym or project-code concept"* —
+a project code is not project-**object** identity.
+`services/external_intelligence_airlock.py` does implement the non-promotion rule
+but calls itself *"deliberately a small process seam… not a durable Airlock
+subsystem,"* which is exactly what the Vestibule record already says about itself.
+
+**The corpus's own audit had already answered the retirement question.**
+`back-catalog/MIGRATION-QUEUE.md`, verbatim: *"Age is not priority. The 18
+`DEFERRED` prompt records and the 13 commissioning stage records are the oldest
+material in the corpus and are all `P3`. They are settled, correctly filed, and
+cost nothing where they sit."*
+
+### `GOV-P-005` — Airlock is movement; Vestibule is admission
+
+The finding worth keeping: **the item proposed for retirement first was the one
+item the audit had flagged as active risk, and its remedy was promotion, not
+retirement.** `MQ-P0-04`/`GBC-0026`, scored P0: `GO-EXTERNAL-VESTIBULE-01` was
+`DEFERRED` while the Airlock/Vestibule distinction it carried was load-bearing for
+live mission authorizations — *"a `DEFERRED` record is doing current authoritative
+work. Status and use disagree."*
+
+Verification found it **sharper than recorded**: four `RUN` mission authorizations
+invoke the distinction, not the three the queue names, and the rule is already
+implemented — `services/external_intelligence_airlock.py` stores successful
+material only as `EVIDENCE_CLASS_EXTERNALLY_RESEARCHED` and *"nothing here promotes
+it into project authority,"* against a deliberately **CLOSED**
+`KNOWN_EVIDENCE_CLASSES` vocabulary whose own comment names it as what the Camel
+programme's *"no silent AI-to-authoritative promotion"* discipline leans on. Until
+this filing the distinction lived only in a `DEFERRED` prompt record and a
+`specified-unbuilt/` spec — two places that by their own status describe something
+unbuilt.
+
+It also underwrites the forward work directly. `GOV-P-004`'s invariant that
+*"Proponent-side ingestion establishes its own immutable snapshot baseline as a
+fresh `Source` with truthful provenance of the received artifact"* **is** this rule
+at the procurement boundary. Filing it now prevented the same distinction being
+restated a third time while the original stayed marked deferred.
+
+Unusually for a `GOV-P` in this corpus it carries real oracle coverage on one half
+(`tests/test_external_intelligence_airlock_m01a.py::test_self_promotion_cannot_change_validation_state`),
+and the record states plainly that the general case across the other arrival
+channels has none.
+
+### `GOV-D-003` — the deferred set reviewed, and confirmed correctly deferred
+
+No status changed, nothing absorbed, no implementation authorized. **What closes is
+the question, not the programmes.** The review is dated so it need not repeat
+without new evidence.
+
+Two dispositions were considered and rejected on governance grounds rather than
+preference. **`ABSORBED`** is a factual claim requiring a named successor, and every
+record's own Lineage field says *"Related, not absorbed"* about its neighbours,
+deliberately — asserting otherwise would falsify lineage, the same class of harm
+`constitutional-invariants.md` #3 forbids for evidence provenance. **Retirement** is
+not expressible: the register's status vocabulary is closed and has no "closed"
+state, and a `DEFERRED` record with a recorded reason carries strictly more
+information than a closed one would.
+
+**Sequencing answer.** No schema, domain-model or route dependency among the six.
+Two exceptions were found, both tied to `GOV-P-004`: the Vestibule had to be settled
+*with* it rather than after it, and `GO-PREAWARD-ADJUDICATION-01` is the anchor for
+what `GOV-P-004` explicitly excludes (*"does not reach evaluation, award, scoring,
+or any adjudication workflow"*) — retiring it would have removed the counterpart of
+a deliberate exclusion.
+
+### What this deliberately does not claim
+
+`GOV-D-003` records what remains genuinely open, so "the backlog is cleared" is not
+read more widely than the decision supports. Verified against the queue:
+
+- **`MQ-P0-02`** — `GOV-I-001`, Teacher/Oracle pass-fail and leakage enforcement.
+  P0, open; **no `GOV-I-` record of any number exists yet.**
+- **`MQ-P1-03`** — `GOV-X-001`, blocked on Product Owner input (a review/expiry
+  condition an agent may not invent).
+- **`MQ-P1-06`** — 12 of 14 `specified-unbuilt/` authorization markers still
+  missing; three of the fourteen need per-record wording, not a bulk stamp.
+- `MQ-P1-01`, `MQ-P1-04`, the seven `P2` items.
+- The `GOV-I-` oracle for `GOV-P-004`'s Standalone Viability, already owed below.
+  `GOV-P-005` has the same gap for its own general case.
+
+Already resolved: `MQ-P0-01`, `MQ-P0-03`, `MQ-P1-02`, `MQ-P1-05`, and now
+`MQ-P0-04`.
+
+### Verification
+
+No test gate applies. Instead: every link and every backticked repository path in
+both new records was resolved against the working tree (**0 broken**), and each
+code claim quoted above was read in the file rather than carried over from a
+governance record. `GO-EXTERNAL-VESTIBULE-01` gains only a dated clarification note
+— the same not-a-supersession precedent `MQ-P0-03` used for the Camel record — with
+its status and verbatim prompt text unchanged.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`631c71b`**, working tree clean.
+- Production: **`d6f6605`** at **`v=155`**, unchanged.
+
+### Carried forward, unchanged
+
+The `d6f6605` deploy entry below still owes **a manual authenticated browser pass
+on `https://archiosk.com`, started from the sign-in page**. Nothing here touches
+it, and it remains open.
+
 ## 2026-09-05 (application) — `805f4c8` + `9e55693`: the appearance the contrast harness could not see, and a baseline that had quietly moved
 
 Appended above the entries below, none of which is altered. **Both pushed to
