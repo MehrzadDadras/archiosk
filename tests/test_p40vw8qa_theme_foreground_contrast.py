@@ -20,6 +20,21 @@ CSS-scoping mechanism (main.css's .appearance-dark/.appearance-tinted
 rules) redefines the complete set of tokens the three text tiers and
 seven semantic accents depend on - not just the two or three checked in
 the original VW6 test file.
+
+Deep Forest added afterwards (2026-09-05). It was NOT absent because it
+postdates this file - it shipped in this same VW8-QA stage, and
+test_p40vw8qa_approved_theme_set.py has always derived and pinned its
+ramp. It was simply never added to the matrix here, so the one file
+that measures every text tier against every surface layer measured
+three of the four opaque Appearances. Nothing needed to change to
+support it: --forest-* is a flat-hex ramp like the other three, and
+_mode_tokens() was already prefix-driven. It passes everywhere, with
+the tightest cell in the whole four-mode matrix at 4.71:1
+(--forest-text-metadata on --forest-surface-selected, against the 4.5
+floor). The fifth Appearance, Deep Ocean, is deliberately NOT here: its
+tokens are translucent rgba() glass and its ratios only exist once
+composited over a base layer, which needs a different harness -
+tests/test_deep_ocean_contrast_coverage.py owns that one.
 """
 from __future__ import annotations
 
@@ -57,7 +72,7 @@ def _mode_tokens(tokens: dict, prefix: str) -> dict:
 
 class FullModeMatrixContrastTests(unittest.TestCase):
     """Every text tier against every surface layer it can actually
-    render on, for all three Appearance modes - not just canvas/
+    render on, for all four OPAQUE Appearance modes - not just canvas/
     surface-primary (tools/check_contrast.py's own, Light-only, subset)."""
 
     @classmethod
@@ -67,6 +82,7 @@ class FullModeMatrixContrastTests(unittest.TestCase):
             "Light": _mode_tokens(raw, ""),
             "Dark": _mode_tokens(raw, "dark-"),
             "Tinted": _mode_tokens(raw, "tint-"),
+            "Deep Forest": _mode_tokens(raw, "forest-"),
         }
 
     def test_every_text_tier_meets_aa_against_every_surface_layer_in_every_mode(self):
@@ -109,6 +125,16 @@ class FullModeMatrixContrastTests(unittest.TestCase):
         from check_contrast import relative_luminance
         self.assertGreater(relative_luminance(tokens["text-primary"]), 0.5)
 
+    def test_deep_forest_mode_foreground_is_light_and_readable(self):
+        # Same two assertions Black/Midnight Blue are held to above -
+        # Deep Forest is the third of the three opaque DARK appearances
+        # and shares their warm off-white foreground family.
+        tokens = self.modes["Deep Forest"]
+        ratio = contrast_ratio(tokens["text-primary"], tokens["surface-primary"])
+        self.assertGreaterEqual(ratio, 7.0)
+        from check_contrast import relative_luminance
+        self.assertGreater(relative_luminance(tokens["text-primary"]), 0.5)
+
     def test_metadata_tier_still_visibly_dimmer_than_secondary_tier(self):
         # The two corrected values must not have been darkened/lightened
         # so far they stop reading as the quietest tier (Section
@@ -128,7 +154,12 @@ class FullModeMatrixContrastTests(unittest.TestCase):
 class SemanticAccentContrastTests(unittest.TestCase):
     """The seven semantic accents (seal-red, machine-blue, ...), each
     against their own mode's canvas/surface-primary - the badge/link/
-    accent-text pairing threshold (3:1), for all three modes."""
+    accent-text pairing threshold (3:1), for all four opaque modes.
+
+    Deep Forest's accent hexes are asserted equal to Black's elsewhere
+    (test_p40vw8qa_approved_theme_set.py), but its canvas is not black
+    (#001A12), so these are genuinely different measurements, not a
+    restatement of the Black rows."""
 
     _ACCENTS = (
         "seal-red", "machine-blue", "highlight-orange",
@@ -141,7 +172,9 @@ class SemanticAccentContrastTests(unittest.TestCase):
 
     def test_every_accent_meets_3_to_1_against_canvas_and_surface_in_every_mode(self):
         failures = []
-        for mode_name, prefix in (("Light", ""), ("Dark", "dark-"), ("Tinted", "tint-")):
+        for mode_name, prefix in (
+            ("Light", ""), ("Dark", "dark-"), ("Tinted", "tint-"), ("Deep Forest", "forest-"),
+        ):
             canvas = self.tokens[f"--{prefix}canvas"] if prefix else self.tokens["--canvas"]
             surface = self.tokens[f"--{prefix}surface-primary"] if prefix else self.tokens["--surface-primary"]
             for accent in self._ACCENTS:

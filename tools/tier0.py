@@ -8,8 +8,9 @@ about a file* rather than a judgement about a feature: does this test need the
 Flask application at all?
 
 A test that never calls `create_app`/`test_client` cannot pay app-construction,
-ingestion or store setup costs. Measured on this repository: 49 such files,
-793 tests, 207 subtests, in 25.26s - against a full suite of 25-35 minutes on a
+ingestion or store setup costs. Measured on this repository (2026-09-05, 5
+runs): 52 such files, 853 tests, 663 subtests, mean 26.71s / median 25.66s /
+min 23.57s / max 30.24s / stdev 2.86s - against a full suite of 25-35 minutes on a
 good day and 4h35m on a bad one. That is the whole point of the lane: after a
 templates/CSS/registry edit you learn in seconds whether the structural
 assertions still hold, instead of choosing between "no feedback" and "the gate".
@@ -24,7 +25,12 @@ unreachable on a phone was caught by the FULL suite, not by a source scan. Read
 
 WHY THE SET IS DERIVED, NOT LISTED
 
-A hand-maintained list of 49 paths goes stale silently: a new source-scan test
+The counts above are a dated observation, not a property of this tool - the
+selection is derived on every run, so it grows on its own as source-scan tests
+are added (49/793 when this was written, 50/803 on 2026-09-01, 52/853 now).
+Run `--list` rather than trusting any of those numbers.
+
+A hand-maintained list of paths goes stale silently: a new source-scan test
 simply never joins the lane, and nothing says so. The two rules below are
 checked against the files themselves on every run, so the lane grows with the
 suite. `tests/test_tier0_lane_01.py` asserts the rules still select a sane set,

@@ -193,11 +193,20 @@ high-risk security/evidence/authorization change.
 
 **Fast-path UI/markup changes no longer require it** (Product Owner,
 2026-09-01). A change confined to `templates/`, `static/css/`, or `static/js/`
-runs **Tier 0** (`./venv/Scripts/python.exe tools/tier0.py` — 50 files, 803
-tests, ~28s) plus the targeted Lane A/B files for the surface being changed.
-See `TEST_LANES.md`. The reason is arithmetic: a markup edit was costing between
+runs **Tier 0** (`./venv/Scripts/python.exe tools/tier0.py` — **52 files, 853
+tests, 663 subtests, 23.6–30.2s over 5 runs**, measured 2026-09-05) plus the
+targeted Lane A/B files for the surface being changed. See `TEST_LANES.md`.
+The reason is arithmetic: a markup edit was costing between
 27 minutes and 4 hours 35 minutes of gate for a result already understood, which
 is a tax on iteration rather than a safety measure.
+
+**Those counts are a dated observation, not a contract.** Tier 0's membership
+is derived by rule on every run, so the lane grows on its own whenever a
+source-scan test file is added — and a number written into prose then goes
+stale in silence rather than failing. It already had: the 50 files / 803 tests
+recorded on 2026-09-01 had drifted to 51 / 831 before this session added two
+more. `tools/tier0.py --list` prints the current selection in a second;
+re-measure rather than quoting this line if the number matters.
 
 Two things this deliberately does not do. It does not touch the deploy gate —
 nothing reaches the live host without a full run. And it does not pretend the

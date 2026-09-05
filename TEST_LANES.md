@@ -64,16 +64,29 @@ answer below: yes, by roughly 25-50x for the two worked examples tried.
 ## The lanes
 
 **Tier 0 — Fast feedback.** `./venv/Scripts/python.exe tools/tier0.py`.
-**Measured 2026-09-01: 50 files, 803 passed, 660 subtests, 28.33s** (30.0s
-wall), against a full suite of 26–35 minutes on a good day and 4h35m on a bad
-one.
+**Measured 2026-09-05: 52 files, 853 passed, 663 subtests.** Duration across
+5 runs: mean 26.71s, median 25.66s, min 23.57s, max 30.24s, stdev 2.86s -
+reported as a distribution rather than one number because
+`CLAUDE.md`'s own benchmarking rule is that a single Windows filesystem
+timing here is indistinguishable from noise. Against a full suite of ~8
+minutes parallel / ~2h45m serial (see `CLAUDE.md`'s Watchdog Protocol).
+
+This supersedes **2026-09-01: 50 files, 803 passed, 660 subtests, 28.33s**
+(30.0s wall). The counts moved because membership is derived (see the next
+paragraph) and the lane therefore grows whenever a qualifying test file is
+added - not because its rules changed. By 2026-09-05 the 2026-09-01 figure had
+already drifted to 51 files / 831 tests with nobody noticing, and this session's
+own two additions (`tests/test_deep_ocean_contrast_coverage.py`, plus one Deep
+Forest case in `tests/test_p40vw8qa_theme_foreground_contrast.py`) took it to
+52 / 853. **Treat any count recorded in prose as a dated observation and
+re-measure**; `tools/tier0.py --list` prints the current selection in a second.
 
 Unlike every lane below, Tier 0's membership is **derived, not listed** — and
 deliberately so, because it is the one lane whose membership is a mechanical
 fact about a file rather than a judgement about a feature. `tools/tier0.py`
 selects every `tests/test_*.py` that (a) never references `create_app`/
 `test_client`/`app_fixture`, (b) spawns no OS process and no real browser, and
-(c) genuinely reads source text and asserts on it. A hand-maintained list of 50
+(c) genuinely reads source text and asserts on it. A hand-maintained list of
 paths goes stale in silence — a new source-scan test would simply never join
 the lane — so `tests/test_tier0_lane_01.py` re-applies those rules to their own
 output and fails if the selection breaks.
