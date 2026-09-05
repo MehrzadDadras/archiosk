@@ -1,5 +1,148 @@
 # Continuation checkpoint
 
+## 2026-09-05 (application) — `12e79d9`: the suite is green, for the first time in this record
+
+**`12e79d9` is the latest application commit and is pushed to `origin/main`.**
+It does not claim a production deployment newer than `2c43a5d` / `v=154`. It
+does change `static/css/main.css`, so **`STATIC_VERSION` moved 154 → 155 in
+`.env`** and the next deployment carries `v=155` — the first entry in this file
+where that bump is owed by a commit that has not yet shipped.
+
+Appended beside the entries below, none of which is altered. The tranche
+recorded immediately below stands as written.
+
+### The headline
+
+**6,189 passed, 0 failed, 2 skipped, 2,573 subtests, 8:15, `PYTEST_EXIT=0`**,
+at `-n 8 --dist loadfile`. **Parallel mode — stated, per the Watchdog
+Protocol's own rule that a gate run must say which mode it executed.**
+
+The twelve inherited failures are gone. The arithmetic closes without
+rounding: 6,177 passed before this tranche, plus the twelve, is 6,189. Nothing
+was skipped, deselected, marked xfail, or renamed out of the count to reach it,
+and `grep -c "^FAILED"` on the redirected log returns 0. The background-task
+notification reported "exit code 0" for the wrapper as it always does; this
+time pytest agreed, which is only knowable because the exit code was captured
+as its own line rather than read through a pipe.
+
+Product Owner instruction had held all twelve red across several tranches so a
+red suite stayed distinguishable from an unnoticed regression. That instruction
+was lifted for this work, and the count is now a real signal again.
+
+### Four commits
+
+`327296e` — `test_developer_composer_image_01` read `templates/index.html` for
+the Developer Composer's screenshot picker. `3ab9477` moved that control to
+`templates/developer_tools.html`, ids unchanged, and the assertion had been
+looking in the wrong file ever since. One path. This repair was made once
+before and reverted on Product Owner instruction; re-applied here on explicit
+approval.
+
+`3fd2f3d` — eight assertions across four files, all pinning New Project page
+copy and controls the rebuild removed. **The decision was not a judgement
+call:** `tests/test_new_project_page_01.py`, which names itself the approved
+contract for that surface and is green, asserts the ABSENCE of the same
+strings and markup by name — `"Establish a Project"`, `"Accepted formats:"`,
+`type="checkbox" required aria-label="Confirm project position"`,
+`id="single-file-source-domain"`. Two green tests cannot both be right about
+one page. Two of the eight were **inverted rather than deleted**, so the
+ask-once and required-selection invariants keep a guard instead of losing one,
+and two method names were corrected where they had come to assert the opposite
+of what they said (`..._script_itself_is_unchanged`, for a script `c81536e`
+deliberately changed).
+
+`56faf88` — the UI reference registry. See below.
+
+`12e79d9` — the one failure of the twelve where the test was right and the
+product was wrong. Detailed below.
+
+### The z-index defect, and why 90
+
+`test_ui_reference_mode_badge_is_the_new_top_overlay` asserted
+`badge_z == max(all_z)` and got **`100 != 1200`**. The UI Reference Mode badge
+is deliberately the file's highest z-index: it is a QA aid whose whole purpose
+is remaining visible while a reviewer inspects a control inside an open dialog.
+`bc37b97` added `.elapsed-action-status { z-index: 1200 }` to a stylesheet
+whose every other value is ≤ 100, outranking the badge by a factor of twelve.
+
+Fixed at **90**, in the CSS, with the reasoning written into the rule rather
+than only into the commit message. That value is minimal in a checkable sense:
+the toast is a `role="status"` region appended to `<body>` and does have to
+clear the dialog layer (`.conv-dialog`, 80), and **nothing else in the file
+sits between 80 and 1200** — so `1200 → 90` preserves every pairwise
+relationship the rule had except badge-vs-toast, which is exactly the one the
+invariant says must flip. Verified by sorting every z-index in the file
+afterwards: 100, 90, 80, 80, then 70 and below.
+
+### What the stale scanner was hiding — the finding worth keeping
+
+`test_every_active_registry_row_actually_exists_in_a_template` reported 17 rows
+as "active but rendered nowhere". **Thirteen were a checker looking in the
+wrong place**: `UI_REFERENCE_MAP.md` had named
+`templates/developer_tools.html` as their location since `3ab9477`, and the
+test's hand-maintained list of scanned template paths never followed the move.
+The registry was right and the test was stale — the reverse of the other ten
+failures.
+
+Adding that one path surfaced the part that matters: **six `developer-tools.*`
+controls with no registry row at all.** `developer-tools.project-selection`,
+`.project-select`, `.reset-analysis`, `.reset-analysis.submit`,
+`.reset-test-project`, `.reset-test-project.submit`. **Two of those are submit
+buttons performing irreversible resets** — Reset Analysis State and Reset Test
+Project. They are registered now with what actually gates them: a typed
+`RESET ANALYSIS STATE`, and a `RESET TEST PROJECT: <project name>` whose
+confirmation names the specific project so it cannot be typed from muscle
+memory against the wrong one. The chooser above them is registered with the
+selection-is-not-authorization boundary it relies on.
+
+A stale file list had kept six real controls, two of them consequential,
+outside the traceability layer that document exists to be — and it did so
+silently, because the only thing that would have noticed was the checker that
+had gone stale. Worth stating plainly: the gap was invisible precisely because
+its detector was the thing that broke.
+
+Four other rows were genuine removals and are retired with this document's own
+existing convention. `upload.limits.formats`'s row **records a consequence
+rather than only a retirement**: the accepted-formats list and the
+`MAX_CONTENT_LENGTH`-derived maximum are no longer stated anywhere the user
+reads *before* choosing a file — `max_upload_mb` still reaches the template,
+but only as `upload.file`'s `data-max-upload-mb`, feeding the error shown
+*after* a too-large file is picked. That is a ratified removal, not a defect.
+It is written into the row so the next reader does not have to rediscover it.
+
+One ref, `upload.folder.domain-summary`, had rendered since `c81536e` with no
+row. Registering it produced this tranche's one self-inflicted failure: the
+first draft cited the commit as a backticked `` `c81536e` ``, and
+`_REF_TOKEN_RE` correctly read that hash as a `data-ui-ref` value. Caught by
+the test doing its job, and left as a note in the row.
+
+### The recording gap, now with a second cost
+
+`bc37b97` and `53e1ca0` — the two commits responsible for most of the eight
+superseded assertions — **both landed with empty message bodies**, as did
+`fdc2dd9`. Recovering what was intended required reading
+`templates/upload.html`'s own inline comments and a sibling test, because no
+commit says. This is the same gap named in the `7dac0ca` entry below, which
+recorded eleven such commits across six undocumented production deployments.
+It has now cost a second session real time. The comments inside the template
+are what made the recovery possible at all, which is an argument for continuing
+to write them.
+
+### Still owed
+
+**Nothing is red.** The two `.mono` colour-audit items recorded in the
+`aeb203f` entry below remain open and unchanged: Deep Ocean has zero contrast
+coverage (`parse_tokens` matches 6-digit hex only, so 17 of Ocean's 35 tokens
+are invisible), and the heading scale has seven sizes with no named tiers, with
+`.mono`'s 1.1rem still larger than the 0.95rem section headings it sits
+beneath.
+
+New and small: `UI_REFERENCE_MAP.md`'s prose "Surfaces:" line still lists only
+the original six and is stale for a dozen prefixes. Not fixed in `56faf88`
+deliberately — the regex in `test_p40vw7a_ui_reference_map.py` is the enforced
+authority, and widening that prose is its own change rather than a side effect
+of a burn-down.
+
 ## 2026-09-05 (application) — `89207d8`: the orphan check stops being something to remember
 
 **`89207d8` is the latest application commit and is pushed to `origin/main`.**
