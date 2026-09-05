@@ -1,5 +1,106 @@
 # Continuation checkpoint
 
+## 2026-09-05 (deploy) — `d6f6605` live at `v=155`: the green tranche ships
+
+**`d6f6605` is live on `https://archiosk.com`**, replacing `2c43a5d`. Confirmed
+from systemd: `Gunicorn - ArchiOSK GO (accepted build d6f6605)`. Rollback marker
+`/var/www/archiosk-backup-2c43a5d`, with `.env` copied into that tree at
+`600 archiosk:archiosk` — outside the sync target, per
+CLAUDE-DEPLOY-ENV-BACKUP-01.
+
+Appended beside the entries below, none of which is altered. The application
+entry immediately below states that this tranche "owes a version step to a
+commit that has not yet deployed"; that was accurate when written and is
+answered here rather than edited there.
+
+### What shipped
+
+Everything undeployed since `2c43a5d`: the four Track 1 burn-down commits
+(`327296e`, `3fd2f3d`, `56faf88`, `12e79d9`), the parallel-execution and
+orphan-guard test infrastructure (`a560e46`, `f856c02`, `98b7e1a`), and the
+documentation that accompanied both. Only one of those is user-facing — the
+`.elapsed-action-status` z-index correction — which is why the tranche waited
+for a reason to ship rather than deploying test infrastructure on its own.
+
+### `STATIC_VERSION` 154 → 155, computed rather than typed
+
+The live `.env` was read first and returned **154**; `CURRENT + 1` produced
+**155**. The target value was known in advance and still was not written as a
+literal, because `DEPLOYMENT.md`'s own warning is that the recorded near-miss
+was a bump to a value *below* what production served — which leaves every
+browser on its cached stylesheet and looks exactly like a successful deploy.
+Had the live file not read 154, the deploy would have stopped there instead of
+forcing the expected number.
+
+**Verified served by content, not by marker.** The rendered `/login` carries
+`?v=155` on all three stylesheets, and the served `main.css` is **md5-identical
+to the committed local file** (`0983d86fa4ac0b14ec121094602bc1d4`), containing
+`z-index: 90` and zero occurrences of `1200`. So the deployed tree is genuinely
+this commit and not a cached artefact.
+
+### The runbook, step by step
+
+Steps 1–6, 9, 10, 12 and 13 executed as written. Preconditions clean, with
+`HEAD == origin/main == d6f6605`. `git archive` produced 861 files with `.env`
+and `instance/` structurally absent. The step-5 dry-run showed **zero
+`deleting` lines**, and the single `.env`-shaped match was the tracked
+`.env.example` at timestamp-only difference — exactly the case the two precise
+exclude patterns exist to permit, rather than the broad `.env*` that would have
+silently withheld it. Restart clean, error grep empty, internal and public
+`/health` both 200, and `/`, `/login`, `/explore`, `/start-trial` all 200.
+
+**Steps 7 and 8 were skipped on measured evidence, not assumption:**
+`git diff 2c43a5d..HEAD -- requirements.txt` and
+`git diff 2c43a5d..HEAD -- migrations/ models.py` are both empty. No pinned
+install and no schema work was owed.
+
+Step 12's unit-file edit was backed up first
+(`archiosk-go.service.bak-2c43a5d`) and its `diff` confirmed exactly one changed
+line before `daemon-reload`.
+
+### Step 11 is incomplete, and that is recorded rather than glossed
+
+`DEPLOYMENT.md` step 11 asks for verification **in a real browser**, including
+authentication and opening a project. That did not happen. The Chrome extension
+reported not connected, and this session held no sign-in credentials, so the
+authenticated surfaces were **not exercised at all**.
+
+What was done instead is HTTP-level: the md5-identical stylesheet above, the
+`?v=155` in served markup, five unauthenticated routes at 200, and both
+`/health` endpoints at 200. That is stronger than checking a deploy marker and
+weaker than a rendered signed-in pass, and the difference is stated here because
+a deploy record that implies a check nobody performed is exactly the failure
+this file exists to prevent — the same discipline as the `7dac0ca` entry's
+correction of its own predecessor's wrong diagnosis.
+
+**Owed: a manual authenticated browser pass on `https://archiosk.com`, started
+from the sign-in page.** The exposure is small — this deploy's only user-visible
+change is a z-index on a transient status toast, and the CSS carrying it is
+byte-verified — but small is not none, and it is not yet checked.
+
+### Two hygiene findings, for a future maintenance pass
+
+Found while executing step 13, surfaced rather than acted on because neither is
+this deploy's own scratch and both are deletions:
+
+- **Five stale `/tmp/archiosk-*` staging directories, 82 MB** —
+  `archiosk-deploy-staging-62fcfb1` plus `archiosk-stage-` `61c088b` /
+  `9d9bd0b` / `b99597a` / `f4e422c`. This is `CLAUDE-DEV-CLEANUP-01` recurring:
+  that finding made per-deploy cleanup an explicit step, and the step works —
+  this deploy removed its own tarball and staging on both ends — but it is
+  scoped to the current deploy and so never reaches an earlier session's
+  leftovers. If this keeps recurring, the honest fix is a sweep of prior
+  artefacts at the START of a deploy, mirroring what `tests/conftest.py` already
+  does for the test stores, rather than trusting each session to tidy up after
+  itself.
+- **Twelve rollback trees in `/var/www`, 242 MB total.** `DEPLOYMENT.md` wants
+  the current one plus optionally the previous, and says pruning older ones is
+  "a separate, deliberate decision each time, not part of routine per-deploy
+  cleanup — don't automate away your only rollback point." So they stand until
+  someone decides otherwise.
+
+Neither is urgent: `/var/www` is at 9% of 97G.
+
 ## 2026-09-05 (application) — `12e79d9`: the suite is green, for the first time in this record
 
 **`12e79d9` is the latest application commit and is pushed to `origin/main`.**
