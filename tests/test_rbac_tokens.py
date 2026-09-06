@@ -1437,9 +1437,23 @@ class FooterPlacementTests(_ManagePanelTestCase):
     """Where the footer belongs, and - more importantly - where it must not."""
 
     def test_the_footer_is_on_the_public_landing_page(self):
+        """CLAUDE-LANDING-FOOTER-SCOPE-01: updated, not weakened.
+
+        This class is FooterPlacementTests and its subject is WHERE the footer
+        renders. "ARCHIOSK Platform" was standing in as a proxy for "the footer
+        is here" - and that column heading was removed on Product Owner
+        direction, with an independent marketing review concurring, because the
+        three-column block cost the landing page clarity and trust.
+
+        The placement invariant is unchanged and is now asserted against the
+        footer's own marker plus the minimal variant it must render in, which
+        is stricter than the proxy it replaces: the old assertion would have
+        passed on a landing page that wrongly showed the full feature list.
+        """
         body = self.flask_app.test_client().get("/").get_data(as_text=True)
         self.assertIn('data-ui-ref="footer.public"', body)
-        self.assertIn("ARCHIOSK Platform", body)
+        self.assertIn("site-footer-aux", body)
+        self.assertNotIn("ARCHIOSK Platform", body)
         # Whitespace-normalised: the legal line wraps across two source lines,
         # and asserting the rendered FORMATTING rather than the words would
         # fail on a reflow that changed nothing anyone reads.

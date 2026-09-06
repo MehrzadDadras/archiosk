@@ -62,3 +62,9 @@
 @media (max-width: 420px) {
     .site-footer-columns { grid-template-columns: 1fr; gap: 18px; }
 }
+
+/* The minimal variant's single auxiliary link (CLAUDE-LANDING-FOOTER-SCOPE-01).
+   Same measure and restraint as the legal line it sits above; it is an
+   auxiliary link, not a call to action competing with the landing actions. */
+.site-footer-aux { margin: 0; font-size: 12px; opacity: .72; max-width: 980px; }
+.site-footer-aux a { text-decoration: underline; }

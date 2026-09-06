@@ -17,8 +17,44 @@
 
    Deliberately NOT included: social icons, a newsletter box, "About us", or a
    status page. None of them exist.
+
+   CLAUDE-LANDING-FOOTER-SCOPE-01 (2026-09-06). Product Owner direction, with an
+   independent marketing review concurring: the three-column block does not
+   belong on the PUBLIC LANDING PAGE. It introduces internal terminology,
+   project-specific information and compliance assertions before a visitor has
+   any reason to parse them, which costs clarity and trust rather than building
+   either.
+
+   Pass `footer_minimal = true` for that case. The minimal footer carries the
+   legal line and support only. It links neither privacy nor terms because
+   NEITHER PAGE EXISTS - adding them would break this file's one founding rule
+   in the same edit that was meant to tighten it.
+
+   TWO ITEMS WERE REMOVED OUTRIGHT RATHER THAN HIDDEN, on direction:
+
+     "Proactive grounding officer" - internal vocabulary; it describes something
+     real but names it in language only we use.
+
+     "Pilot: 1860 Alstep Dr (by invitation)" - a REAL project street address.
+     It was rendering on the signed-out landing page, so a live project's
+     existence and location were public. It also announced that project to every
+     authenticated user regardless of their access, which is the one thing
+     services/project_access.py exists to prevent. Removed from the component,
+     not merely from the public variant.
+
+   WHERE THE REST BELONGS, so it is classified rather than lost:
+
+     -> Explore / product (/explore exists): vector coordination desk,
+        split-pane comparison, structural & MEP coordination.
+     -> About / positioning (/about exists): architect of record.
+     -> Trust / security (NO page exists yet): project RBAC drawing
+        confidentiality, and any code/compliance statement that is properly
+        qualified. "OBC / code compliance" as a bare noun phrase is not such a
+        statement and must not be republished as one.
+     -> Support stays an ordinary auxiliary link, never a marketing feature.
 #}
 <footer class="site-footer" data-ui-ref="footer.public">
+    {% if not footer_minimal %}
     <nav class="site-footer-columns" aria-label="Footer">
 
         <section class="site-footer-column">
@@ -28,7 +64,6 @@
                    not linked. Each one is a thing the product actually does. #}
                 <li>Vector coordination desk</li>
                 <li>Split-pane comparison</li>
-                <li>Proactive grounding officer</li>
                 <li><a href="{{ url_for('portal.explore') }}" data-ui-ref="footer.explore">Explore Archiosk</a></li>
             </ul>
         </section>
@@ -38,10 +73,6 @@
             <ul class="site-footer-list">
                 <li>Architect of record</li>
                 <li>Structural &amp; MEP coordination</li>
-                {# The pilot is named, not linked: reaching it requires a
-                   project pass, and a public link to a project page would
-                   promise access the footer cannot grant. #}
-                <li>Pilot: 1860 Alstep Dr <span class="site-footer-qualifier">(by invitation)</span></li>
             </ul>
         </section>
 
@@ -59,6 +90,15 @@
             </ul>
         </section>
     </nav>
+    {% else %}
+    {# Minimal: one auxiliary link, no feature list. Support is a real mailto,
+       so it stays; privacy and terms have no pages and are therefore absent
+       rather than dead. #}
+    <p class="site-footer-aux">
+        <a href="mailto:{{ admin_contact_email | default('admin@archiosk.com') }}"
+           data-ui-ref="footer.support">Support</a>
+    </p>
+    {% endif %}
 
     <p class="site-footer-legal">
         &copy; {{ current_year | default(2026) }} ARCHIOSK. Confidential &amp;
