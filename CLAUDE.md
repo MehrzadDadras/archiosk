@@ -269,6 +269,48 @@ itself has continuing value — as it does in the `329f5cd` example above.
 **Every meaningful iteration should improve two things: the application, and the
 method by which the application is being built.**
 
+### Keep the cockpit clean. Keep the black box recoverable.
+
+The previous rule discards the episode. This one says where it goes when it is
+worth keeping.
+
+ARCHIOSK may preserve scratchpad history — for a major activity or a meaningful
+checkpoint — as **cold investigative history**: material for reconstructing how
+a governed decision was reached, investigating a contradiction, auditing, or
+analysing a failure. That is its whole purpose and its whole permission.
+
+**It is not active project knowledge.** Ordinary GO reasoning consumes governed
+records; archived scratchpads sit outside ordinary retrieval and outside
+model-visible context. Reaching for one is a deliberate, investigation-driven
+act, never something that happens because a retriever swept it up.
+
+> **Retention confers no authority.** An archived scratchpad cannot override
+> governed evidence, a governed decision, or current authority — and it does not
+> acquire standing by having survived.
+
+This is `GOV-P-007`'s rule arriving at a different subject. That record already
+says retained material "is evidence about the system, never evidence within it",
+for invalid generated output; the same line holds for reasoning archives. Both
+exist because the tempting error is identical: treating what was kept as what
+was decided.
+
+Three practical constraints, so the archive stays an archive:
+
+- **Archive milestones, not noise.** Continuous capture produces a corpus nobody
+  can investigate, which is the same as having none.
+- **Carry enough provenance to be investigable** — when it existed, under what
+  task, and why it was kept. An archive that cannot say what it was for is a
+  pile, not a record.
+- **Promote only distilled conclusions or durable principles.** Raw reasoning
+  does not become promotable by having been archived, and periodic
+  compaction is expected rather than deferred.
+
+This does not change the existing rule that exploratory scripts stay in the
+session scratchpad and out of the repository. That rule governs what enters
+version control; this one governs a product-level cold archive. They agree on
+the point that matters — **a scratchpad is never active knowledge** — and
+neither authorizes a storage architecture, which remains unbuilt.
+
 ## Environment quirks that have cost real debugging time
 
 - **`STATIC_VERSION` (and any env var with a `config.py` default) is
