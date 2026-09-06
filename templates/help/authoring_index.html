@@ -1,0 +1,63 @@
+{# CLAUDE-HELP-AUTHORING-01 — the reviewer's list of Help Scripts.
+
+   Reuses the Fish Tank, same as help/index.html, for the same reason: a set of
+   things you pick one of. The status shown is DERIVED on read, never stored -
+   there is no readiness field to render.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Help authoring &mdash; Archiosk</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+<header class="pm-head">
+    <h1>Help authoring</h1>
+    <p class="pm-note">
+        Help Scripts live in the reserved Help Library. They carry no customer
+        project context, and nothing here reaches a project record.
+    </p>
+</header>
+
+{# Without this the routes' own flash() calls were discarded silently, which
+   made a refused save look identical to a successful one. #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-stack">
+    {% for category, message in messages %}
+    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endwith %}
+
+<section class="pm-section">
+    <h2>New Help Script</h2>
+    <form method="post" action="{{ url_for('help_center.authoring_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="question">The question it answers</label>
+        <input id="question" name="question" type="text" required
+               placeholder="What is Survival Mode, and is it another kind of Spin?">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" required placeholder="Survival Mode">
+        <button type="submit">Create draft</button>
+    </form>
+</section>
+
+{% import "components/fish_tank_container.html" as tank %}
+{% call tank.fish_tank(trail=[{'label': 'Help'}, {'label': 'Authoring'}]) %}
+    {% for row in scripts %}
+    {{ tank.node(href=url_for('help_center.authoring_edit', script_id=row.id),
+                 title=row.title or 'Untitled',
+                 meta=row.label ~ ' — ' ~ (row.question or 'no question recorded')) }}
+    {% endfor %}
+{% endcall %}
+
+<p class="pm-note"><a href="{{ url_for('help_center.index') }}">Back to Help</a></p>
+</body>
+</html>

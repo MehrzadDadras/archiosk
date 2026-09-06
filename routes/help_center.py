@@ -17,11 +17,19 @@ content (see templates/auth_shell.html and CLAUDE-P40-D1).
 """
 from __future__ import annotations
 
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
+from flask import (
+    Blueprint, abort, current_app, flash, jsonify, redirect,
+    render_template, request, session, url_for,
+)
 
 from services.auth import is_admin, login_required
 from services.case_workspace import CaseWorkspaceStore
 from services.help_mode import (
+    add_help_claim,
+    add_help_script_scene,
+    create_help_script,
+    help_script_detail,
+    list_help_scripts,
     HELP_LIBRARY_PROJECT_ID,
     HelpContext,
     HelpModeError,
@@ -29,6 +37,7 @@ from services.help_mode import (
     read_help_conversation,
     record_help_message,
 )
+from services.case_workspace import SCRIPT_VALIDATION_VALIDATED
 from services.script_fit import help_status_for, run_script_trust_chain
 
 help_bp = Blueprint("help_center", __name__)
@@ -141,7 +150,10 @@ GUIDES = {
 @help_bp.route("/help")
 @login_required
 def index():
-    return render_template("help/index.html", guides=GUIDES)
+    # can_author gates a link, never access - authoring_index re-checks for
+    # itself. A hidden link is not authorization, and a template that has to
+    # be right for a route to be safe is one edit away from not being.
+    return render_template("help/index.html", guides=GUIDES, can_author=is_admin())
 
 
 @help_bp.route("/help/<guide>")
@@ -346,3 +358,164 @@ def help_mode_transition():
     if not question:
         return jsonify({"error": "A question is required."}), 400
     return jsonify(propose_project_transition(question, payload.get("project_id")))
+
+
+# --- Help Script authoring (reviewer surface) -------------------------------
+# CLAUDE-HELP-AUTHORING-01. The smallest surface that removes the need for a
+# scratchpad script. Admin-gated throughout: authoring governed Help content is
+# a reviewer act, and Re-check spends real external-AI calls.
+#
+# SAVE IS NOT A MODEL CHECKPOINT. Creating or editing persists content and
+# nothing else - no model call is made. Re-check is the deliberate action that
+# spends calls. That is what makes "no continuous model calls" true by
+# construction rather than by restraint, and it costs nothing in safety: a
+# material edit already retires the prior verdicts, so an edited Script cannot
+# read as checked while it waits for its re-check.
+
+
+def _require_reviewer():
+    if not is_admin():
+        abort(403)
+
+
+@help_bp.route("/help/authoring")
+@login_required
+def authoring_index():
+    """Every Help Script and its DERIVED status. No stored status anywhere."""
+    _require_reviewer()
+    return render_template("help/authoring_index.html",
+                           scripts=list_help_scripts(_help_store()),
+                           guides=GUIDES)
+
+
+@help_bp.route("/help/authoring/scripts", methods=["POST"])
+@login_required
+def authoring_create():
+    """Create a DRAFT Help Script. Persists content; spends no model call."""
+    _require_reviewer()
+    try:
+        script = create_help_script(
+            _help_store(),
+            question=request.form.get("question", ""),
+            title=request.form.get("title", ""),
+            actor=session.get("username", "reviewer"),
+        )
+    except HelpModeError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("help_center.authoring_index"))
+    return redirect(url_for("help_center.authoring_edit", script_id=script["id"]))
+
+
+@help_bp.route("/help/authoring/scripts/<script_id>")
+@login_required
+def authoring_edit(script_id):
+    """The editor: the Script, its scenes, the claims available to cite, and
+    the reviewer detail a reader never sees - which verdicts still apply, which
+    have gone stale, and what is blocking."""
+    _require_reviewer()
+    detail = help_script_detail(_help_store(), script_id)
+    if detail is None:
+        abort(404)
+    return render_template("help/authoring_edit.html", script=detail, guides=GUIDES)
+
+
+@help_bp.route("/help/authoring/scripts/<script_id>/scenes", methods=["POST"])
+@login_required
+def authoring_add_scene(script_id):
+    """Add a narrative unit citing the claims it rests on. Save only."""
+    _require_reviewer()
+    store = _help_store()
+    if help_script_detail(store, script_id) is None:
+        abort(404)
+    try:
+        add_help_script_scene(
+            store, script_id=script_id,
+            text=request.form.get("text", ""),
+            actor=session.get("username", "reviewer"),
+            claim_ids=request.form.getlist("claim_ids"),
+        )
+    except Exception as exc:  # noqa: BLE001 - surfaced to the reviewer, not swallowed
+        flash(str(exc), "error")
+    return redirect(url_for("help_center.authoring_edit", script_id=script_id))
+
+
+@help_bp.route("/help/authoring/scripts/<script_id>/claims", methods=["POST"])
+@login_required
+def authoring_add_claim(script_id):
+    """Record a Claim answering this Script's own question.
+
+    Save only - no model call. The claim starts `proposed`; authoring one is not
+    adopting it, and REUSABLE still waits for that separate human act.
+    """
+    _require_reviewer()
+    store = _help_store()
+    if help_script_detail(store, script_id) is None:
+        abort(404)
+    try:
+        add_help_claim(
+            store, script_id=script_id,
+            statement=request.form.get("statement", ""),
+            actor=session.get("username", "reviewer"),
+            evidence_item_ids=request.form.getlist("evidence_item_ids"),
+        )
+    except Exception as exc:  # noqa: BLE001 - surfaced to the reviewer
+        flash(str(exc), "error")
+    return redirect(url_for("help_center.authoring_edit", script_id=script_id))
+
+
+@help_bp.route("/help/authoring/scripts/<script_id>/recheck", methods=["POST"])
+@login_required
+def authoring_recheck(script_id):
+    """Re-check from the editor, and come back to the editor.
+
+    Deliberately a sibling of the JSON `script_recheck` rather than content
+    negotiation on it. They run the identical chain via `_run_chain` and differ
+    only in what they hand back: one serves the concierge, which wants the
+    detailed result; this one serves a person who pressed a button and needs to
+    be returned to the page they pressed it on. Branching a single route on an
+    Accept header would have made the reviewer's outcome depend on a header they
+    never see, which is how a button silently starts rendering JSON.
+    """
+    _require_reviewer()
+    store = _help_store()
+    workspace = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    if store.get_work_product(workspace, script_id) is None:
+        abort(404)
+
+    result = _run_chain(store, workspace, script_id)
+    chain = result["chain"]
+    flash(f"Re-checked: {result['status']['label']}.", "info")
+    # Say which stage stopped it, not merely that something did - "blocked" with
+    # no name sends the reviewer back to re-read the whole Script.
+    for stage in chain.get("could_not_run") or []:
+        flash(f"Could not run: {stage}. This is not a pass.", "error")
+    if chain.get("blocked_by"):
+        flash(f"Blocked by: {chain['blocked_by']}.", "error")
+    return redirect(url_for("help_center.authoring_edit", script_id=script_id))
+
+
+@help_bp.route("/help/authoring/scripts/<script_id>/validate", methods=["POST"])
+@login_required
+def authoring_validate(script_id):
+    """The human authority transition, and the only one.
+
+    Deliberately separate from Re-check and from claim adoption: a reviewer
+    validating the writing is not the same act as accepting the claims beneath
+    it, and collapsing them would let one click do both. Readiness is still
+    derived - this records a decision, it does not set a state.
+    """
+    _require_reviewer()
+    store = _help_store()
+    workspace = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    if store.get_work_product(workspace, script_id) is None:
+        abort(404)
+    decision = request.form.get("decision", SCRIPT_VALIDATION_VALIDATED)
+    try:
+        store.record_script_validation(
+            workspace, work_product_id=script_id, decision=decision,
+            actor=session.get("username", "reviewer"),
+            comments=request.form.get("comments") or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        flash(str(exc), "error")
+    return redirect(url_for("help_center.authoring_edit", script_id=script_id))

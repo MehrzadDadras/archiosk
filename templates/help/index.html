@@ -32,6 +32,16 @@
     {% endfor %}
 {% endcall %}
 
+{% if can_author %}
+{# CLAUDE-HELP-AUTHORING-01. Reviewers only, and deliberately below the guides:
+   the guides are what everyone came here for, and an authoring entrance placed
+   above them would put the rarer task in front of the common one. #}
+<p class="pm-note">
+    <a href="{{ url_for('help_center.authoring_index') }}">Help Script authoring</a>
+    &mdash; create and review the Scripts behind Help answers.
+</p>
+{% endif %}
+
 {% include "components/public_footer.html" %}
 </body>
 </html>

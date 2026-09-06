@@ -264,3 +264,24 @@ body.pm {
     border-left: 3px solid var(--pm-machine); background: var(--pm-surface-2);
     font-style: italic;
 }
+
+/* ============================================================
+   Flash messages on standalone Help pages (CLAUDE-HELP-AUTHORING-01)
+   ============================================================ */
+/* The authoring pages are the first Help pages that flash anything - the
+   guides beside them are static prose with nothing to report. They load
+   this file rather than main.css, where .flash-stack/.flash-message are
+   defined for the app shells, so the class NAMES are shared deliberately
+   and only the declarations are restated here. Same tokens on both sides,
+   so the two cannot drift apart in appearance without drifting in the
+   token they both read. */
+.flash-stack { display: grid; gap: 0.5rem; padding-top: 0.8rem; }
+.flash-message {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    padding: 0.7rem 1rem;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+}
+.flash-error { color: var(--failure-red); border-color: var(--failure-red); background: var(--failure-red-tint); }
+.flash-success { color: var(--accepted-green); border-color: var(--accepted-green); background: var(--accepted-green-tint); }

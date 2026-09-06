@@ -1,0 +1,152 @@
+{# CLAUDE-HELP-AUTHORING-01 — the editor.
+
+   Three things a reader never sees, because only a reviewer can act on them:
+   which recorded verdicts still APPLY, which have gone stale after an edit,
+   and what is blocking. Readiness itself is derived on every read; nothing on
+   this page sets it.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ script.title }} &mdash; Help authoring</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+<header class="pm-head">
+    <h1>{{ script.title }}</h1>
+    <p class="pm-note">{{ script.question or 'No originating question recorded.' }}</p>
+    <p><strong>{{ script.status.label }}</strong> &middot; readiness: {{ script.readiness }}</p>
+</header>
+
+{# Without this the routes' own flash() calls were discarded silently, which
+   made a refused save look identical to a successful one. #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-stack">
+    {% for category, message in messages %}
+    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endwith %}
+
+{% if script.stale.question_fit or script.stale.evidence_consistency or script.stale.validation %}
+<section class="pm-section">
+    <h2>Stale after edit</h2>
+    <p class="pm-note">
+        These were recorded against earlier content and no longer apply. They are
+        kept, not deleted &mdash; re-check to record fresh ones.
+    </p>
+    <ul>
+        {% if script.stale.question_fit %}<li>Question fit</li>{% endif %}
+        {% if script.stale.evidence_consistency %}<li>Evidence consistency</li>{% endif %}
+        {% if script.stale.validation %}<li>Human validation</li>{% endif %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="pm-section">
+    <h2>Checks</h2>
+    <ul>
+        {% for name, outcome in script.checks.items() %}
+        <li>{{ name }}: <strong>{{ outcome }}</strong></li>
+        {% endfor %}
+    </ul>
+    {% if script.reasons %}
+    <h3>Blocking reasons</h3>
+    <ul>{% for reason in script.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+    {% endif %}
+</section>
+
+<section class="pm-section">
+    <h2>Narrative units</h2>
+    {% for scene in script.scenes %}
+    <article>
+        <p>{{ scene.text }}</p>
+        <p class="pm-note">
+            {{ scene.section_type }} &middot; {{ scene.content_class }} &middot;
+            cites {{ scene.claim_ids | length }} claim(s)
+        </p>
+    </article>
+    {% else %}
+    <p class="pm-note">No narrative units yet.</p>
+    {% endfor %}
+
+    <h3>Record a claim for this question</h3>
+    <p class="pm-note">
+        Claims are recorded against this Script's own question, which is what
+        lets a narrative unit cite them. A claim recorded elsewhere belongs to a
+        different question and would not satisfy question fit.
+    </p>
+    <form method="post" action="{{ url_for('help_center.authoring_add_claim', script_id=script.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="statement">Statement</label>
+        <input id="statement" name="statement" type="text" required>
+        <fieldset>
+            <legend>Help evidence it rests on</legend>
+            {% for item in script.available_evidence %}
+            <label><input type="checkbox" name="evidence_item_ids" value="{{ item.id }}">
+                {{ item.excerpt }}</label>
+            {% else %}
+            <p class="pm-note">No Help evidence registered yet.</p>
+            {% endfor %}
+        </fieldset>
+        <button type="submit">Record claim</button>
+    </form>
+
+    <h3>Add a unit</h3>
+    <form method="post" action="{{ url_for('help_center.authoring_add_scene', script_id=script.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="text">What it says</label>
+        <textarea id="text" name="text" required rows="3"></textarea>
+        <fieldset>
+            <legend>Claims it rests on</legend>
+            {% for claim in script.available_claims %}
+            <label>
+                <input type="checkbox" name="claim_ids" value="{{ claim.id }}">
+                {{ claim.statement }} <em>({{ claim.claim_class }}, {{ claim.adoption_state }})</em>
+            </label>
+            {% else %}
+            <p class="pm-note">No claims available in the Help Library yet.</p>
+            {% endfor %}
+        </fieldset>
+        <button type="submit">Save unit</button>
+    </form>
+</section>
+
+<section class="pm-section">
+    <h2>Re-check</h2>
+    <p class="pm-note">
+        Runs question fit and evidence consistency and records the verdicts.
+        This is the only action here that spends external-AI calls &mdash; saving
+        never does.
+    </p>
+    <form method="post" action="{{ url_for('help_center.authoring_recheck', script_id=script.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Re-check</button>
+    </form>
+</section>
+
+<section class="pm-section">
+    <h2>Validation</h2>
+    <p class="pm-note">
+        A human decision, separate from re-check and separate from adopting the
+        claims beneath the Script. Neither the checks nor this action promotes
+        anything on its own.
+    </p>
+    <form method="post" action="{{ url_for('help_center.authoring_validate', script_id=script.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="comments">Comments</label>
+        <input id="comments" name="comments" type="text">
+        <button type="submit" name="decision" value="validated">Validate</button>
+        <button type="submit" name="decision" value="rejected">Reject</button>
+    </form>
+</section>
+
+<p class="pm-note"><a href="{{ url_for('help_center.authoring_index') }}">Back to authoring</a></p>
+</body>
+</html>
