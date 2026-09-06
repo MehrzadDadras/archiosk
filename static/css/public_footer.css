@@ -1,0 +1,64 @@
+/* ============================================================
+   Public footer (CLAUDE-PUBLIC-FOOTER-CSS-01)
+   ============================================================ */
+/* WHY THIS IS ITS OWN FILE.
+
+   These rules lived in project_manage.css, which is loaded by seven of the
+   nine templates that include components/public_footer.html - and NOT by the
+   two that matter most. templates/landing.html extends landing_shell.html
+   (landing.css only) and templates/projects.html extends base.html
+   (fish_tank/tokens/main), so on the public front door and the projects list
+   the footer rendered with NO styling at all: browser-default 24px <h2>
+   headings and bare <ul> lists, stacking into large blocks on a phone. It had
+   been that way since the footer was integrated on 2026-08-29.
+
+   The fix is not to load project_manage.css in those shells - it also carries
+   .flash-* rules that main.css already defines, so adding it to base.html
+   would silently restyle every flash message in the workspace. And it is not
+   tokens.css, which is 221 custom properties and zero selectors; putting real
+   rules there would break the one contract that file has.
+
+   So: the component's styles live beside the component, and every template
+   that includes the footer links this file. A future consumer that forgets it
+   gets an unstyled footer - the same bug - which is why the link sits in the
+   same edit as the include in all nine templates today.
+
+   Self-contained by design: the single variable reference carries its own
+   fallback, so this file styles the footer correctly in a shell that defines
+   no design tokens at all. */
+
+.site-footer {
+    margin-top: 40px;
+    padding: 26px 18px 30px;
+    border-top: 1px solid var(--pm-line, currentColor);
+    font-size: 13px;
+    line-height: 1.6;
+}
+.site-footer-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 22px 32px;
+    max-width: 980px;
+}
+.site-footer-heading {
+    margin: 0 0 8px;
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    opacity: .7;
+}
+.site-footer-list { list-style: none; margin: 0; padding: 0; }
+.site-footer-list li { margin-bottom: 5px; opacity: .82; }
+/* A named capability is NOT a link and must not look like one - a
+   disabled-looking link invites a click and then refuses it. */
+.site-footer-list a { text-decoration: underline; }
+.site-footer-qualifier { opacity: .6; font-size: 12px; }
+.site-footer-legal {
+    margin: 24px 0 0;
+    font-size: 12px;
+    opacity: .6;
+    max-width: 980px;
+}
+@media (max-width: 420px) {
+    .site-footer-columns { grid-template-columns: 1fr; gap: 18px; }
+}
