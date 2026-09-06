@@ -57,6 +57,11 @@
 
 {% include "_bidding_portal.html" %}
 
+{# CLAUDE-AUTH-FOOTER-SCOPE-01: an operational surface ends cleanly. The
+   marketing block was trailing chrome here, not content; a deliberate link
+   back to Explore remains. #}
+{% set footer_minimal = true %}
+{% set footer_explore = true %}
 {% include "components/public_footer.html" %}
 
 <script src="{{ url_for('static', filename='js/friction_telemetry.js') }}?v={{ static_version }}"></script>

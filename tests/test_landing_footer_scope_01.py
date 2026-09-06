@@ -143,5 +143,46 @@ class LandingFooterScopeTests(unittest.TestCase):
             self.assertNotIn("OBC", self._public(path))
 
 
+class AuthenticatedFooterScopeTests(unittest.TestCase):
+    """CLAUDE-AUTH-FOOTER-SCOPE-01: no operational surface carries the block.
+
+    The footer was trailing chrome on all eight - after </article> or
+    </section>, never inside guide content - so removing it took no
+    instructional material with it. A deliberate link back to Explore remains,
+    because the objection was a persistent marketing block, not the route.
+    """
+
+    def _consumers(self):
+        root = _REPO_ROOT / "templates"
+        return sorted(p for p in root.rglob("*.html")
+                      if p.name != "public_footer.html"
+                      and "public_footer.html" in p.read_text(encoding="utf-8"))
+
+    def test_every_consumer_uses_the_minimal_variant(self):
+        found = self._consumers()
+        self.assertGreaterEqual(len(found), 8, "consumer scan found too few files")
+        for path in found:
+            self.assertIn("footer_minimal", path.read_text(encoding="utf-8"),
+                          "%s still renders the marketing block" % path.name)
+
+    def test_the_full_branch_has_no_consumer_and_is_kept_anyway(self):
+        """Kept because it carries the classified content and the record of
+        where each item belongs. Its return must be deliberate, not drift."""
+        component = (_REPO_ROOT / "templates" / "components"
+                     / "public_footer.html").read_text(encoding="utf-8")
+        self.assertIn("site-footer-columns", component)
+        self.assertIn("Vector coordination desk", component)
+
+    def test_operational_surfaces_keep_a_route_back_to_explore(self):
+        for name in ("projects.html", "help/index.html"):
+            markup = (_REPO_ROOT / "templates" / name).read_text(encoding="utf-8")
+            self.assertIn("footer_explore", markup)
+
+    def test_the_landing_page_does_not_duplicate_explore(self):
+        """Explore is already one of the landing page's three primary actions."""
+        markup = (_REPO_ROOT / "templates" / "landing.html").read_text(encoding="utf-8")
+        self.assertNotIn("footer_explore", markup)
+
+
 if __name__ == "__main__":
     unittest.main()

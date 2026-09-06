@@ -18,6 +18,18 @@
    Deliberately NOT included: social icons, a newsletter box, "About us", or a
    status page. None of them exist.
 
+   CLAUDE-AUTH-FOOTER-SCOPE-01 (2026-09-06). The three-column branch below now
+   has NO CONSUMER: every surface that includes this component renders the
+   minimal variant. It is kept rather than deleted because it carries the
+   classified marketing content and the record of where each item belongs - see
+   the classification list further down. A test asserts no template opts back
+   into it, so its return would be a deliberate act rather than a drift.
+
+   Product Owner direction: the full block must not render as permanent chrome
+   on authenticated operational surfaces. It was trailing chrome on all eight -
+   sitting after </article> or </section>, never inside the guide content - so
+   removing it takes no instructional material with it.
+
    CLAUDE-LANDING-FOOTER-SCOPE-01 (2026-09-06). Product Owner direction, with an
    independent marketing review concurring: the three-column block does not
    belong on the PUBLIC LANDING PAGE. It introduces internal terminology,
@@ -91,10 +103,21 @@
         </section>
     </nav>
     {% else %}
-    {# Minimal: one auxiliary link, no feature list. Support is a real mailto,
-       so it stays; privacy and terms have no pages and are therefore absent
-       rather than dead. #}
+    {# Minimal: auxiliary links, no feature list. Support is a real mailto, so
+       it stays; privacy and terms have no pages and are therefore absent
+       rather than dead.
+
+       `footer_explore` is opt-in per surface rather than automatic. The
+       objection was never the ROUTE back to Explore - it was a persistent
+       marketing block as chrome - so a deliberate link is allowed and a feature
+       list is not. The landing page does NOT set it: Explore is already one of
+       its three primary actions, and a footer link would be the same
+       destination offered twice on a page whose whole point is sparseness. #}
     <p class="site-footer-aux">
+        {% if footer_explore %}
+        <a href="{{ url_for('portal.explore') }}" data-ui-ref="footer.explore">Explore Archiosk</a>
+        &middot;
+        {% endif %}
         <a href="mailto:{{ admin_contact_email | default('admin@archiosk.com') }}"
            data-ui-ref="footer.support">Support</a>
     </p>
