@@ -60,10 +60,12 @@ from typing import Callable, Optional
 
 from services.case_workspace import (
     CaseWorkspaceStore,
-    CLAIM_CLASS_DIRECTLY_VERIFIED,
+    CLAIM_CLASS_AI_PROPOSAL,
     CLAIM_CLASS_UNKNOWN,
     CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE,
     CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT,
+    CONTENT_CLASS_AI_PROPOSED,
+    OBSERVATION_AUTHOR_AI,
     ProjectWorkspace,
     SCRIPT_CHECK_PASS,
 )
@@ -367,28 +369,47 @@ def generate_help_clip(
     claim_ids, ungrounded = [], []
     for proposed in compilation.claims:
         bound = [eid for eid in proposed["evidence_ids"] if eid in known_evidence]
-        # An ungrounded proposal is recorded as the kernel's own honest
-        # abstention - `unknown` class, insufficient evidence - not as a
-        # directly-verified claim with nothing under it. The kernel refuses the
-        # latter outright, and it is right to: a claim citing no evidence that
-        # is dressed as verified is the exact shape of a laundered assertion.
-        # Recording it rather than dropping it keeps the gap visible; the
-        # structural gate then fails the Script honestly, which is the point.
+        # PROVENANCE IS THE MODEL'S, PERMANENTLY.
+        #
+        # A model wrote this statement, so it is recorded as an AI proposal by
+        # an AI author - never as a human, directly-verified observation. This
+        # was wrong once and reached live: generation left author_type at the
+        # human default, so model text entered the record as human observation.
+        # The kernel already forbids AI + directly_verified, precisely because
+        # it "would claim deterministic computation for a result that was
+        # AI-generated" - but the guard cannot fire on an author it was never
+        # told about. Passing the true author is what arms it.
+        #
+        # `created_by` stays the human actor: a person did request this
+        # generation, and that is a different fact from who wrote the words.
+        #
+        # An ungrounded proposal additionally becomes the kernel's own honest
+        # abstention - `unknown` class, insufficient evidence - rather than a
+        # confident claim with nothing under it. Recording it rather than
+        # dropping it keeps the gap visible; the structural gate then fails the
+        # Script honestly, which is the point.
         claim = add_help_claim(
             store, script_id=script_id, statement=proposed["statement"],
             actor=actor, evidence_item_ids=bound,
-            claim_class=CLAIM_CLASS_DIRECTLY_VERIFIED if bound else CLAIM_CLASS_UNKNOWN,
+            claim_class=CLAIM_CLASS_AI_PROPOSAL if bound else CLAIM_CLASS_UNKNOWN,
             confidence_state=(CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT if bound
                               else CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE),
+            author_type=OBSERVATION_AUTHOR_AI,
         )
         claim_ids.append(claim["id"])
         if not bound:
             ungrounded.append(proposed["statement"])
 
     for scene in compilation.scenes:
+        # ai_proposed, and it stays that way forever. WorkProductSection's own
+        # contract is explicit that accepting AI content does NOT rewrite its
+        # origin - acceptance and authorship are two different facts, and a
+        # human validating this Script later must not turn model prose into
+        # human-authored prose.
         add_help_script_scene(
             store, script_id=script_id, text=scene["text"], actor=actor,
             claim_ids=[claim_ids[i] for i in scene["claim_indexes"] if i < len(claim_ids)],
+            content_class=CONTENT_CLASS_AI_PROPOSED,
         )
 
     # Directions AFTER scenes so the narration is the Script's spine and the

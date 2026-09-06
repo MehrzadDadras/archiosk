@@ -299,6 +299,7 @@ def add_help_claim(
     evidence_item_ids: Optional[list[str]] = None,
     claim_class: str = CLAIM_CLASS_DIRECTLY_VERIFIED,
     confidence_state: str = CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT,
+    author_type: str = OBSERVATION_AUTHOR_HUMAN,
 ) -> dict:
     """Record a Claim answering THIS Script's question, against THIS Script's step.
 
@@ -318,13 +319,21 @@ def add_help_claim(
     one is not adopting it, and REUSABLE still waits for a human to do that
     separately.
 
-    `claim_class`/`confidence_state` are parameters rather than constants
-    because a generated claim is not always a verified one. The kernel refuses
-    a claim citing no evidence unless its class is `unknown`, which is its own
-    designated honest abstention - so a proposal the Help Library could not
-    ground is recorded AS an abstention rather than dropped or, worse, dressed
-    as directly_verified. The defaults keep the hand-authoring path exactly as
-    it was.
+    `claim_class`/`confidence_state`/`author_type` are parameters rather than
+    constants because a generated claim is not always a verified one, and is
+    never a human observation. The kernel refuses a claim citing no evidence
+    unless its class is `unknown`, which is its own designated honest
+    abstention - so a proposal the Help Library could not ground is recorded AS
+    an abstention rather than dropped or, worse, dressed as directly_verified.
+
+    **`author_type` is a parameter because of a real defect.** Generation
+    originally left it at the human default, so model-written statements entered
+    the record as human, directly_verified observations. The kernel already
+    forbids that combination - an AI-authored claim may not be
+    `directly_verified`, because that would claim deterministic computation for
+    a generated result - but the guard never fired, since it was never told the
+    true author. The defaults here remain correct for the hand-authoring path
+    they were written for; the caller that is NOT a human must say so.
     """
     statement = (statement or "").strip()
     if not statement:
@@ -343,7 +352,7 @@ def add_help_claim(
         claim_class=claim_class,
         method=ANALYTICAL_METHOD_DIRECT_RETRIEVAL,
         confidence_state=confidence_state,
-        author_type=OBSERVATION_AUTHOR_HUMAN, created_by=actor,
+        author_type=author_type, created_by=actor,
         evidence_links=[{"object_type": "evidence_item", "object_id": eid}
                         for eid in (evidence_item_ids or []) if eid],
     )
