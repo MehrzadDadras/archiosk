@@ -119,6 +119,23 @@
 </section>
 
 <section class="pm-section">
+    <h2>Controls this explains</h2>
+    <p class="pm-note">
+        Bind this Script to the UI references it answers questions about, one
+        per line (for example <code>toolbox.spin.world-survival</code>). Someone
+        asking &ldquo;what does this do?&rdquo; from a bound control gets this
+        Script without having to name it. Binding says what the Script is about;
+        it does not validate it or make it releasable.
+    </p>
+    <form method="post" action="{{ url_for('help_center.authoring_ui_refs', script_id=script.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <textarea name="ui_refs" rows="3">{{ script.ui_refs | join('
+') }}</textarea>
+        <button type="submit">Save bindings</button>
+    </form>
+</section>
+
+<section class="pm-section">
     <h2>Re-check</h2>
     <p class="pm-note">
         Runs question fit and evidence consistency and records the verdicts.

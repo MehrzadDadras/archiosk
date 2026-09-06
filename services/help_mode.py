@@ -157,6 +157,7 @@ def record_help_message(
     author: str,
     body: str,
     context: Optional[HelpContext] = None,
+    answering_script_id: Optional[str] = None,
 ) -> dict:
     """Append one message to this user's Help conversation.
 
@@ -175,6 +176,10 @@ def record_help_message(
         "body": body,
         "scope": HELP_SCOPE,
         "help_context": payload,
+        # Which Help Script answered, so a follow-up ("why?", "what happens
+        # next?") can continue the same topic. A Script id in the Help library,
+        # never a project object - the boundary is unchanged.
+        "answering_script_id": answering_script_id,
         "created_at": _timestamp(),
     }
     workspace.project_conversation.append(message)
@@ -424,6 +429,7 @@ def help_script_detail(store: CaseWorkspaceStore, script_id: str) -> Optional[di
             "claim_ids": [l["object_id"] for l in s.get("evidence_links", [])
                           if l.get("object_type") == "claim"],
         } for s in scenes],
+        "ui_refs": list(script.get("help_ui_refs") or []),
         "readiness": readiness["readiness"],
         "checks": readiness["checks"],
         "reasons": readiness["reasons"],

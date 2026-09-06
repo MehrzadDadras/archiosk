@@ -549,6 +549,12 @@ CLAIM_CLASS_DETERMINISTIC_CALCULATION = "deterministic_calculation"
 CLAIM_CLASS_SUPPORTED_INTERPRETATION = "supported_interpretation"
 CLAIM_CLASS_AI_PROPOSAL = "ai_proposal"
 CLAIM_CLASS_CONFLICTING = "conflicting"
+# A data-ui-ref as the templates emit it: dotted lowercase segments of
+# letters, digits and hyphens. Mirrors the scanner regex in
+# tests/test_p40vw7a_ui_reference_map.py rather than inventing a second
+# idea of what a reference looks like.
+_UI_REF_RE = re.compile(r"[a-z0-9]+(?:[a-z0-9._\-]*[a-z0-9])?")
+
 CLAIM_CLASS_UNKNOWN = "unknown"
 CLAIM_CLASS_DECISION_REQUIRING_AUTHORITY = "decision_requiring_authority"
 KNOWN_CLAIM_CLASSES = (
@@ -9655,6 +9661,68 @@ class CaseWorkspaceStore:
         if successor_supersession is not None:
             result["superseded_by_claim_id"] = successor_supersession["successor_id"]
         return result
+
+    def record_script_ui_refs(
+        self, workspace: ProjectWorkspace, work_product_id: str, ui_refs: list, actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> list:
+        """Bind a Help Script to the UI identities it explains.
+
+        CLAUDE-HELP-CONTEXT-01, and the smallest possible addition: one list of
+        strings, reusing the `data-ui-ref` vocabulary the application already
+        has rather than inventing a topic taxonomy beside it. A Script bound to
+        `toolbox.spin.world-survival` is the answer to "what does this do?"
+        asked from that control, and because the refs are dotted-hierarchical a
+        panel-level question finds the same Script by prefix - so page, panel
+        and control identity all come from one field with no second registry.
+
+        VALIDATED FOR SHAPE HERE, FOR EXISTENCE BY TEST. This accepts any
+        well-formed ref and does not read UI_REFERENCE_MAP.md, deliberately:
+        parsing a Markdown document at request time to authorize a write would
+        make the registry a runtime dependency of the kernel, and a malformed
+        document would then break Help authoring. The registry stays the human
+        record it already is, and `tests/test_help_context_resolution.py`
+        asserts every bound ref really exists in it - the same split the
+        template refs already use, where the scanner is a test rather than a
+        service.
+
+        Binding is NOT evidence and confers NO authority. It says what a Script
+        is about, never that the Script is correct or releasable; readiness is
+        still derived and REUSABLE still requires the two human acts. Nor does
+        it enter the content checksum - what a Script explains is not what it
+        says, and re-binding a Script whose text nobody touched must not retire
+        its verdicts.
+        """
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError("No work product %s in this project." % work_product_id)
+        if not (actor or "").strip():
+            raise CaseWorkspaceError("A ui_ref binding must record who made it.")
+
+        cleaned = []
+        for raw in (ui_refs or []):
+            ref = str(raw or "").strip().lower()
+            if not ref:
+                continue
+            if not _UI_REF_RE.fullmatch(ref):
+                raise CaseWorkspaceError(
+                    "%r is not a well-formed UI reference. Expected dotted lowercase "
+                    "segments, e.g. 'toolbox.spin.world-survival'." % raw
+                )
+            if ref not in cleaned:
+                cleaned.append(ref)
+
+        work_product["help_ui_refs"] = cleaned
+        work_product["modified_at"] = _now()
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="script_ui_refs_recorded",
+                actor=actor, role="system",
+                payload={"work_product_id": work_product_id, "ui_refs": cleaned},
+                correlation_id=work_product_id,
+            )
+        return cleaned
 
     def record_script_scenario(
         self, workspace: ProjectWorkspace, work_product_id: str, scenario: str, actor: str,

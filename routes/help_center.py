@@ -45,6 +45,7 @@ from services.help_clip_studio import (
     generate_help_clip,
     guide_documents,
 )
+from services.help_resolution import resolve_help_subject
 from services.script_fit import help_status_for, run_script_trust_chain
 
 help_bp = Blueprint("help_center", __name__)
@@ -310,32 +311,63 @@ def help_mode_ask():
     except HelpModeError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    # The answer: a REUSABLE Help Script for this question, or an honest
-    # nothing. Help never invents an answer when the library has none - the
-    # same discipline the Help Center's own guides already state.
-    library = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
-    answer = None
-    for script in library.work_products:
-        if script.get("artifact_type") != "script":
-            continue
-        readiness = store.resolve_script_readiness(library, script["id"])
-        status = help_status_for(readiness)
-        if status["answerable"] and (readiness.get("question") or "").strip() == question:
-            from services.script_fit import script_narrative_text
+    # CLAUDE-HELP-CONTEXT-01: resolve, THEN look up.
+    #
+    # This replaced an exact string equality on the Script's originating
+    # question, which meant "What does this do?" could only ever match a Script
+    # literally asking that - a question with no meaning apart from the control
+    # it was asked from. Meaning is now settled from application context first,
+    # and the Script is retrieved for the resolved subject.
+    resolution = resolve_help_subject(
+        store, question, context=context.to_dict(),
+        active_script_id=_active_help_script(store, username),
+        project_id=payload.get("project_id"),
+    )
 
+    answer = None
+    if resolution.script_id is not None:
+        from services.script_fit import script_narrative_text
+
+        library = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+        script = store.get_work_product(library, resolution.script_id)
+        # Re-checked here rather than trusted from the resolver: release is the
+        # reader boundary and belongs on the path that actually releases text.
+        if script is not None and help_status_for(
+                store.resolve_script_readiness(library, script["id"]))["answerable"]:
             answer = {"script_id": script["id"], "text": script_narrative_text(script)}
-            break
 
     if answer is not None:
-        record_help_message(store, username, author="help", body=answer["text"])
+        record_help_message(store, username, author="help", body=answer["text"],
+                            answering_script_id=answer["script_id"])
+    elif resolution.clarification:
+        # A question back is a real Help response and belongs in the
+        # conversation - otherwise the user's next message answers something
+        # the record never shows them being asked.
+        record_help_message(store, username, author="help", body=resolution.clarification)
 
     return jsonify({
         "mode": "help",
         "question": question,
         "answer": answer,
+        "resolution": resolution.to_dict(),
         "context": context.to_dict(),
         "project_context_used": False,
     })
+
+
+def _active_help_script(store, username: str):
+    """The Script this user was last shown, for resolving a follow-up.
+
+    Help conversation only - this reads the user's own Help session workspace
+    and nothing else, so a follow-up can continue a topic without any path to a
+    project or to another user's history.
+    """
+    from services.help_mode import read_help_conversation
+
+    for message in reversed(read_help_conversation(store, username)):
+        if message.get("answering_script_id"):
+            return message["answering_script_id"]
+    return None
 
 
 @help_bp.route("/help/mode/history")
@@ -654,3 +686,30 @@ def studio_regenerate(script_id):
         return redirect(url_for("help_center.studio_review", script_id=script_id))
     flash("Regenerated from the same scenario. The previous draft is kept.", "info")
     return redirect(url_for("help_center.studio_review", script_id=result["script_id"]))
+
+
+@help_bp.route("/help/authoring/scripts/<script_id>/ui-refs", methods=["POST"])
+@login_required
+def authoring_ui_refs(script_id):
+    """Bind this Script to the UI controls it explains.
+
+    In the manual-correction editor rather than the Studio's primary view: it
+    is reviewer metadata, not part of describing a scenario. Binding says what
+    a Script is ABOUT and confers nothing - readiness is still derived, and a
+    bound Script that is not REUSABLE still cannot be shown to a reader.
+    """
+    _require_reviewer()
+    store = _help_store()
+    workspace = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    if store.get_work_product(workspace, script_id) is None:
+        abort(404)
+    raw = request.form.get("ui_refs", "")
+    try:
+        store.record_script_ui_refs(
+            workspace, work_product_id=script_id,
+            ui_refs=[r.strip() for r in raw.replace(",", "\n").splitlines() if r.strip()],
+            actor=session.get("username", "reviewer"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        flash(str(exc), "error")
+    return redirect(url_for("help_center.authoring_edit", script_id=script_id))
