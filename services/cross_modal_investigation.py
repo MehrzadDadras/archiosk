@@ -339,27 +339,21 @@ def propose_ai_assisted_claim(
     if flagged:
         logger.warning("AI-assisted claim synthesis: %d evidence item(s) flagged for likely prompt injection.", len(flagged))
 
-    import anthropic  # imported lazily so the dep is optional in dev
+    from services.llm_gateway import call_llm_json
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    # CLAUDE-E1-GATEWAY-BOUNDARY-01: routed through the shared gateway.
+    # Construction, timeout, fence-stripping, JSON parsing and every degrade
+    # message are identical to what this site did inline - the gateway was
+    # extracted from exactly this shape. What changes is that CONSTRUCTION now
+    # sits inside the failure boundary, which is the defect E1 closes.
     prompt = _build_ai_prompt(question, evidence_summaries)
-
-    try:
-        response = client.messages.create(model=model, max_tokens=800, messages=[{"role": "user", "content": prompt}])
-    except anthropic.APITimeoutError:
-        logger.warning("AI-assisted claim synthesis timed out after %.0fs.", timeout)
-        return AIAssistedClaimResult(ran=False, skipped_reason=f"Request timed out after {timeout:.0f}s.")
-    except Exception:  # noqa: BLE001 - best-effort, mirrors project_qa.py's own discipline
-        logger.warning("AI-assisted claim synthesis failed.", exc_info=True)
-        return AIAssistedClaimResult(ran=False, skipped_reason="An error occurred calling the model.")
-
-    text_out = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.warning("AI-assisted claim synthesis returned non-JSON output: %r", text_out[:200])
-        return AIAssistedClaimResult(ran=False, skipped_reason="Model returned malformed output.")
+    call_outcome = call_llm_json(
+        prompt, api_key=api_key, model=model, timeout=timeout,
+        max_tokens=800, log_label="AI-assisted claim synthesis",
+    )
+    if not call_outcome.ran:
+        return AIAssistedClaimResult(ran=False, skipped_reason=call_outcome.skipped_reason)
+    parsed = call_outcome.parsed
 
     return AIAssistedClaimResult(
         ran=True,
@@ -515,31 +509,21 @@ def assess_question_fit(
     if flagged:
         logger.warning("Question-fit assessment: %d input(s) flagged for likely prompt injection.", len(flagged))
 
-    import anthropic  # imported lazily so the dep is optional in dev
+    from services.llm_gateway import call_llm_json
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    # CLAUDE-E1-GATEWAY-BOUNDARY-01: routed through the shared gateway.
+    # Construction, timeout, fence-stripping, JSON parsing and every degrade
+    # message are identical to what this site did inline - the gateway was
+    # extracted from exactly this shape. What changes is that CONSTRUCTION now
+    # sits inside the failure boundary, which is the defect E1 closes.
     prompt = _build_question_fit_prompt(question, script_text)
-
-    try:
-        response = client.messages.create(
-            model=model, max_tokens=400, messages=[{"role": "user", "content": prompt}]
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Question-fit assessment timed out after %.0fs.", timeout)
-        return _unavailable("Request timed out after %.0fs." % timeout)
-    except Exception:  # noqa: BLE001 - mirrors this module's own degrade discipline
-        logger.warning("Question-fit assessment failed.", exc_info=True)
-        return _unavailable("An error occurred calling the model.")
-
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    outcome = call_llm_json(
+        prompt, api_key=api_key, model=model, timeout=timeout,
+        max_tokens=400, log_label="Question-fit assessment",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.warning("Question-fit assessment returned non-JSON output: %r", text_out[:200])
-        return _unavailable("Model returned malformed output.")
+    if not outcome.ran:
+        return _unavailable(outcome.skipped_reason)
+    parsed = outcome.parsed
 
     raw_outcome = str(parsed.get("outcome", "")).strip().lower()
     outcome = _QUESTION_FIT_OUTCOMES.get(raw_outcome)
@@ -702,31 +686,21 @@ def assess_evidence_consistency(
     if flagged:
         logger.warning("Evidence consistency: %d unit(s) flagged for likely prompt injection.", len(flagged))
 
-    import anthropic  # imported lazily so the dep is optional in dev
+    from services.llm_gateway import call_llm_json
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    # CLAUDE-E1-GATEWAY-BOUNDARY-01: routed through the shared gateway.
+    # Construction, timeout, fence-stripping, JSON parsing and every degrade
+    # message are identical to what this site did inline - the gateway was
+    # extracted from exactly this shape. What changes is that CONSTRUCTION now
+    # sits inside the failure boundary, which is the defect E1 closes.
     prompt = _build_consistency_prompt(usable)
-
-    try:
-        response = client.messages.create(
-            model=model, max_tokens=600, messages=[{"role": "user", "content": prompt}]
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Evidence consistency assessment timed out after %.0fs.", timeout)
-        return _unavailable("Request timed out after %.0fs." % timeout)
-    except Exception:  # noqa: BLE001 - mirrors this module's own degrade discipline
-        logger.warning("Evidence consistency assessment failed.", exc_info=True)
-        return _unavailable("An error occurred calling the model.")
-
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    outcome_call = call_llm_json(
+        prompt, api_key=api_key, model=model, timeout=timeout,
+        max_tokens=600, log_label="Evidence consistency assessment",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.warning("Evidence consistency returned non-JSON output: %r", text_out[:200])
-        return _unavailable("Model returned malformed output.")
+    if not outcome_call.ran:
+        return _unavailable(outcome_call.skipped_reason)
+    parsed = outcome_call.parsed
 
     raw_outcome = str(parsed.get("outcome", "")).strip().lower()
     outcome = _CONSISTENCY_OUTCOMES.get(raw_outcome)
@@ -898,36 +872,26 @@ def compile_help_scenario(
         logger.warning(
             "Scenario compilation: %d input(s) flagged for likely prompt injection.", len(flagged))
 
-    import anthropic  # imported lazily so the dep is optional in dev
+    from services.llm_gateway import call_llm_json
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    # CLAUDE-E1-GATEWAY-BOUNDARY-01: routed through the shared gateway.
+    # Construction, timeout, fence-stripping, JSON parsing and every degrade
+    # message are identical to what this site did inline - the gateway was
+    # extracted from exactly this shape. What changes is that CONSTRUCTION now
+    # sits inside the failure boundary, which is the defect E1 closes.
+    #
+    # This site previously carried a comment defending three inline copies of
+    # the extract-strip-parse idiom, on the grounds that a fourth caller would
+    # leave the file half-converted. E1 converts ALL of them, so the argument
+    # is spent and the duplication is gone rather than justified.
     prompt = _build_scenario_prompt(scenario, evidence, ui_ref_catalogue or [])
-
-    try:
-        response = client.messages.create(
-            model=model, max_tokens=2000, messages=[{"role": "user", "content": prompt}]
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Scenario compilation timed out after %.0fs.", timeout)
-        return _unavailable("Request timed out after %.0fs." % timeout)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Scenario compilation failed: %s", exc)
-        return _unavailable("The request failed (%s)." % type(exc).__name__)
-
-    # The same extract-strip-parse the two assessors above use, deliberately
-    # written out rather than factored into a shared helper: this module's
-    # existing idiom is three inline copies, and introducing a helper for a
-    # fourth caller would leave the file half-converted, which is worse than
-    # either shape on its own.
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    call_outcome = call_llm_json(
+        prompt, api_key=api_key, model=model, timeout=timeout,
+        max_tokens=2000, log_label="Scenario compilation",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        payload = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.warning("Scenario compilation returned non-JSON output: %r", text_out[:200])
-        return _unavailable("Model returned malformed output.")
+    if not call_outcome.ran:
+        return _unavailable(call_outcome.skipped_reason)
+    payload = call_outcome.parsed
     if not isinstance(payload, dict):
         return _unavailable("Model returned JSON that was not an object.")
 

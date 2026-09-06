@@ -684,7 +684,24 @@ class BHiveParser:
         """Batch-classify chunks via the Anthropic API. Requires ANTHROPIC_API_KEY."""
         import anthropic  # imported lazily so the dep is optional in dev
 
-        client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout)
+        from services.llm_gateway import anthropic_client
+
+        # CLAUDE-E1-GATEWAY-BOUNDARY-01: construction goes through the gateway's
+        # boundary. This site keeps its own batched call loop - one client
+        # reused across batches, with a per-batch timeout that degrades that
+        # batch to rule-based classification - because that is feature-specific
+        # mechanics, not a second model abstraction. Only the CONSTRUCTION is
+        # shared, which is where the unhandled failure actually lived.
+        #
+        # A construction failure degrades to exactly what a timeout on the very
+        # first batch already degraded to: rule-based classification of
+        # everything. The document is still parsed; it is simply not
+        # model-classified.
+        client, construction_failure = anthropic_client(
+            self.api_key, self.timeout, "Requirement classification")
+        if construction_failure is not None:
+            return self._classify_with_rules(chunks)
+
         items: list[RequirementItem] = []
 
         batch_size = 25
@@ -883,7 +900,16 @@ class BHiveParser:
         candidates = requirements[:DEFAULT_CONSISTENCY_MAX_ITEMS]
         truncated = len(requirements) > len(candidates)
 
-        client = anthropic.Anthropic(api_key=self.api_key, timeout=self.consistency_timeout)
+        # CLAUDE-E1-GATEWAY-BOUNDARY-01: same treatment, same reason. The
+        # retry-once semantics below are this check's own contract and stay
+        # here; only construction is shared.
+        from services.llm_gateway import anthropic_client
+
+        client, construction_failure = anthropic_client(
+            self.api_key, self.consistency_timeout, "Consistency check")
+        if construction_failure is not None:
+            return [], False, "Skipped: an error occurred calling the model."
+
         prompt = self._build_consistency_prompt(candidates)
 
         def call_once() -> tuple[str, Any, float] | None:

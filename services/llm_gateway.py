@@ -121,6 +121,40 @@ def scale_timeout_for_prompt_size(
     return min(scaled, max_timeout)
 
 
+def anthropic_client(api_key: str, timeout: float, log_label: str = "LLM call"):
+    """Construct an Anthropic client inside the governed failure boundary.
+
+    Returns `(client, failure_outcome)` - exactly one of which is None.
+
+    CLAUDE-E1-GATEWAY-BOUNDARY-01. This exists because construction itself can
+    fail, and did: on 2026-09-06 a drifted httpx raised
+    `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'`
+    from inside the SDK, which reached the user as a 500. Every AI call site in
+    this application shared that defect, because they all constructed the client
+    BEFORE their try block and only guarded `messages.create`.
+
+    The pattern is not invented here - the Gemini path in this same module
+    already wraps `genai.Client(...)` with the comment "an SDK surface mismatch
+    must not 500 a request". This gives the Anthropic path the treatment its
+    sibling always had.
+
+    Separated from `call_llm_json` so a caller with genuinely bespoke call
+    mechanics - `bhive_parser`'s batched classification loop and its
+    retry-once consistency check - can obtain a safely-constructed client
+    without a second model abstraction being forked to serve it. Callers that
+    need one plain JSON round trip should still use `call_llm_json`.
+    """
+    import anthropic  # imported lazily so the dep is optional in dev
+
+    try:
+        return anthropic.Anthropic(api_key=api_key, timeout=timeout), None
+    except Exception:  # noqa: BLE001 - an SDK surface mismatch must not 500 a request
+        logger.warning("%s: could not construct the Anthropic client.", log_label, exc_info=True)
+        return None, LLMCallOutcome(
+            ran=False, skipped_reason="An error occurred calling the model.",
+        )
+
+
 def call_llm_json(
     user_prompt: str,
     system_prompt: Optional[str] = None,
@@ -171,7 +205,9 @@ def call_llm_json(
 
     import anthropic  # imported lazily so the dep is optional in dev
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    client, construction_failure = anthropic_client(api_key, timeout, log_label)
+    if construction_failure is not None:
+        return construction_failure
 
     if image_base64 and image_media_type:
         content = [

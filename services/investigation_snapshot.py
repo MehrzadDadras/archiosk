@@ -87,34 +87,22 @@ def build_archive_snapshot(
     )
     requested_at = datetime.now(timezone.utc).isoformat()
 
-    import anthropic  # imported lazily so the dep is optional in dev
+    from services.llm_gateway import call_llm_json
 
-    client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    # CLAUDE-E1-GATEWAY-BOUNDARY-01: routed through the shared gateway.
+    # Construction, timeout, fence-stripping, JSON parsing and the
+    # max_tokens/malformed degrade messages are byte-identical to what
+    # this site did inline - the gateway was extracted FROM this shape.
+    # Client construction now sits inside the failure boundary, which is
+    # the defect E1 exists to close.
     prompt = _build_prompt(case, findings, conversation)
-
-    try:
-        response = client.messages.create(
-            model=model, max_tokens=1200, messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic.APITimeoutError:
-        logger.warning("Investigation Snapshot timed out after %.0fs.", timeout)
-        return InvestigationSnapshotResult(ran=False, skipped_reason=f"Request timed out after {timeout:.0f}s.")
-    except Exception:  # noqa: BLE001 - best-effort, mirrors project_qa.py's own discipline
-        logger.warning("Investigation Snapshot failed.", exc_info=True)
-        return InvestigationSnapshotResult(ran=False, skipped_reason="An error occurred calling the model.")
-
-    text_out = "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
+    outcome = call_llm_json(
+        prompt, api_key=api_key, model=model, timeout=timeout, max_tokens=1200,
+        log_label="Investigation Snapshot",
     )
-    cleaned = re.sub(r"^```(json)?|```$", "", text_out.strip(), flags=re.MULTILINE).strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        if response.stop_reason == "max_tokens":
-            logger.warning("Investigation Snapshot was truncated at max_tokens: %r", text_out[-200:])
-            return InvestigationSnapshotResult(ran=False, skipped_reason="Model's response was cut off before it finished (max_tokens).")
-        logger.warning("Investigation Snapshot returned non-JSON output: %r", text_out[:200])
-        return InvestigationSnapshotResult(ran=False, skipped_reason="Model returned malformed output.")
+    if not outcome.ran:
+        return InvestigationSnapshotResult(ran=False, skipped_reason=outcome.skipped_reason)
+    parsed = outcome.parsed
 
     not_covered = parsed.get("not_covered")
     return InvestigationSnapshotResult(
