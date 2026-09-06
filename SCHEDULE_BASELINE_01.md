@@ -1,9 +1,10 @@
 # ARCHIOSK Development Master Schedule — BASELINE SCHEDULE 01
 
 **Status:** BASELINE, authorized by the Product Owner 2026-09-06.
-**Revision:** 02 (2026-09-06) — duration unit defined as **Virtual Engineering
+**Revision:** 02A (2026-09-06) — duration unit defined as **Virtual Engineering
 Days (VED)**, third clock added, measured velocity recorded. **The logic network
-is unchanged from Rev 01.** See the revision history at the end.
+is unchanged from Rev 01.** Rev 02A adds the CH0–CH3 milestone ids (§6.2) and
+the two-VED-remainder reporting rule (§8.4.4). See the revision history at the end.
 **As-built basis:** the flight-test audit of 2026-09-06 (product completeness
 34%, pilot readiness 45%, sovereign intelligence maturity 58%, overall ~42%,
 between 33% and 50% DD). Rev 02 does not restate the audit; E1, E2 and D1
@@ -239,6 +240,48 @@ consumes them.
 | Preserve PM authority | GOV-P-006 | COMPLETE |
 | Reconstruct *why* it changed | A3 | PARTIAL |
 
+### 6.2 Release overlay — CHASSIS milestones CH0–CH3 (Rev 02A)
+
+**Product Owner direction, 2026-09-06.** These are the product-release overlay
+from the Chassis Boundary Audit. That audit said explicitly *"Do NOT replace
+Baseline Schedule 01. This is a product-release overlay on top of it"* — which
+is why no chassis milestone was ever written into this document. Rev 02A records
+them here **for identification only**, so the labels stop being ambiguous.
+
+| ID | Milestone | Meaning |
+|---|---|---|
+| **CH0** | Chassis Boundary Agreed | The Pilot Chassis / Core / future-module split is settled |
+| **CH1** | Pilot Chassis Ready | The stable chassis is releasable to a controlled pilot |
+| **CH2** | Pilot Chassis Validated | The chassis has survived real pilot use |
+| **CH3** | ARCHIOSK Core Release | Core capability envelope released |
+
+**Identifier mapping — the collision this fixes.**
+
+| Old label | New ID | Why it had to change |
+|---|---|---|
+| C0 | **CH0** | — |
+| C1 | **CH1** | Collided with **activity C1**, Change-triggered Spin mode |
+| C2 | **CH2** | Collided with **historical activity C2**, drawing coordination, absorbed into B3-B (§4.2) |
+| C3 | **CH3** | — |
+
+> **The collision was not theoretical.** Rev 02 answered a question about
+> "P0 / C1" using **activity** C1 (Change-triggered Spin mode, TF 4) when the
+> **chassis** milestone C1 (Pilot Chassis Ready) was meant. The sentence was
+> internally consistent and answered the wrong object, which is exactly why one
+> label meaning two things is a defect rather than a cosmetic issue.
+
+**Activity IDs are unchanged.** Activity `C1` keeps its ID; historical activity
+`C2` keeps its name in §4.2's absorption note. Renaming activities would break
+every reference in this document to preserve a newer overlay, which is backwards.
+
+**These carry no duration, float or predecessor in this network.** They are
+release states, not CPM activities, and the audit's own key result was that the
+Pilot Chassis and ARCHIOSK Core sit **off the 1.0 critical path**. Do not
+schedule against them here.
+
+**Alignment to this network:** CH1 ↔ **P0**; CH2 ↔ **P1**; CH3 has no single
+equivalent — the Core envelope is a product scope decision, not a CPM milestone.
+
 ---
 
 ## 7. CRITICAL AND NEAR-CRITICAL PATHS
@@ -386,6 +429,31 @@ is now dominated by the pilot and the decision gates rather than by engineering
 throughput. Refine it after each completed activity rather than trusting the
 range.
 
+### 8.4.4 Two VED remainders — never quote one as the other (Rev 02A)
+
+Every report must carry **both**. They answer different questions and differ by
+roughly a factor of two, for the same reason §1's two forecasts do.
+
+| | Value | What it means |
+|---|---|---|
+| **A. Critical-path VED remaining** | **61–98 VED** | Effort along the controlling chain A2 → B1 → B2 → B3-A → B3-B → D3 → G4 → G5. What R1 waits on **if capacity is available**. |
+| **B. Total resource-loaded VED remaining** | **~120–200 VED** | Every incomplete activity (19 of them). What matters at 1.0 lane, where off-path work still consumes the only resource. |
+
+**A is the floor, B is the bill.** Quoting A alone understates the work at the
+capacity that actually exists; quoting B alone implies dependencies that do not
+exist. At 1.0 effective lane the program pays B, not A — that gap is the same
+parallelism cost §1 already names.
+
+**A discrepancy this surfaces rather than fixes.** §8.2's headline "~106 base +
+17–29 contingency ≈ ~125 VED" sits slightly *below* its own table: summing every
+activity's base gives ~111.5 at the optimistic end, so the full table totals
+~128.5–216.5 VED. On the §8.2 basis, remaining reads ~110–117 VED; on the
+table's own sum it reads ~120–200. Both are quoted above rather than reconciled,
+because reconciling them means re-estimating, which Rev 02A is not authorized to
+do. Note also that summing pessimistic endpoints across 19 activities is
+over-pessimistic in the ordinary way — they will not all land at maximum — so
+the top of range B is an envelope, not a forecast.
+
 ### 8.5 Parallel-agent capacity (Rev 02)
 
 §1.1 assumed no concurrent agent tracks. Actual observed lanes:
@@ -486,6 +554,39 @@ It does not alter §4, §5 float, or the critical path — see §1.1.
 |---|---|---|---|---|
 | 01 | 2026-09-06 | Product Owner | Baseline established | — |
 | 02 | 2026-09-06 | Product Owner | Duration unit renamed to **Virtual Engineering Days (VED)** (§1.0); third clock — actual elapsed forecast — added (§8.4); measured delivery velocity recorded (§8.4.1); parallel-agent capacity recorded (§8.5); E1, E2, D1 marked COMPLETE | **LOGIC: NO MOVEMENT.** Elapsed forecast revised from ~25 weeks to ~8–14 weeks on measured long-run velocity |
+| 02A | 2026-09-06 | Product Owner | Chassis release milestones recorded as **CH0–CH3** with the C0–C3 mapping (§6.2); reporting must carry **two** VED remainders, critical-path and total resource-loaded (§8.4.4) | **LOGIC: NO MOVEMENT.** No duration, float, status or dependency altered |
+
+**Rev 02A — what changed, why, and what it deliberately did not touch.**
+
+*What changed.* Two reporting corrections and nothing else. §6.2 records the
+chassis release milestones as CH0–CH3 with their mapping from C0–C3. §8.4.4
+requires every report to carry the critical-path remainder and the total
+resource-loaded remainder as separate figures.
+
+*Why.* Two ambiguities were producing wrong sentences rather than merely untidy
+ones. **First**, `C1` named both an activity (Change-triggered Spin mode) and a
+chassis milestone (Pilot Chassis Ready), and Rev 02 answered a question about
+"P0 / C1" using the activity when the milestone was meant — a fluent, internally
+consistent, wrong answer. **Second**, a single "VED remaining" figure was being
+quoted where the critical-path number (61–98) and the resource-loaded number
+(~120–200) differ by roughly a factor of two and mean different things.
+
+*A correction to how Rev 02 described the chassis milestones.* They were never
+"in" this baseline to rename. The Chassis Boundary Audit that defined them said
+explicitly *"Do NOT replace Baseline Schedule 01. This is a product-release
+overlay on top of it"*, and "chassis" appeared nowhere in this document before
+Rev 02A. §6.2 therefore **records them for the first time** under unambiguous
+ids; it does not rename an existing entry, and it does not make them CPM
+activities — they carry no duration, float or predecessor here.
+
+*Authority.* Product Owner, 2026-09-06.
+
+*Effect on the LOGIC schedule.* **None.** No activity id, duration, contingency,
+float, predecessor, status or critical-path entry changed. Activity `C1` keeps
+its id deliberately: renaming activities to accommodate a newer overlay would
+break every existing reference in this document to protect the newer label.
+
+*Effect on the elapsed forecast.* None. §8.4.3 stands as written.
 
 **Rev 02 — what changed, why, and what it must not be read as.**
 
