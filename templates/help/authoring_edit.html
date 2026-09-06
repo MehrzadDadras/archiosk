@@ -126,13 +126,28 @@
 
 <section class="pm-section">
     <h2>Controls this explains</h2>
-    <p class="pm-note">
-        Bind this Script to the UI references it answers questions about, one
-        per line (for example <code>toolbox.spin.world-survival</code>). Someone
-        asking &ldquo;what does this do?&rdquo; from a bound control gets this
-        Script without having to name it. Binding says what the Script is about;
-        it does not validate it or make it releasable.
+    {# State first, explanation second. These three sections used to carry
+       fixed prose describing what their button does, which told a reviewer
+       nothing about where THIS Script stands - the one thing they came to
+       find out. #}
+    {% if script.ui_refs %}
+    <p><strong>Bound to {{ script.ui_refs | length }} control{{ '' if script.ui_refs | length == 1 else 's' }}:</strong>
+        {% for ref in script.ui_refs %}<code>{{ ref }}</code>{{ ", " if not loop.last }}{% endfor %}
     </p>
+    <p class="pm-note">
+        Someone asking &ldquo;what does this do?&rdquo; from
+        {{ 'one of these controls' if script.ui_refs | length > 1 else 'this control' }}
+        gets this Script without having to name it &mdash; once it is REUSABLE.
+    </p>
+    {% else %}
+    <p><strong>Not bound to any control.</strong></p>
+    <p class="pm-note">
+        Contextual Help cannot reach this Script, and a generated clip cannot
+        target a control that no Script has been bound to. Add one reference per
+        line, for example <code>toolbox.spin.world-survival</code>. Binding says
+        what the Script is about; it does not validate it or make it releasable.
+    </p>
+    {% endif %}
     <form method="post" action="{{ url_for('help_center.authoring_ui_refs', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <textarea name="ui_refs" rows="3">{{ script.ui_refs | join('
@@ -143,10 +158,34 @@
 
 <section class="pm-section">
     <h2>Re-check</h2>
+    {% set fit = script.verdicts.question_fit %}
+    {% set consistency = script.verdicts.evidence_consistency %}
+    {% if script.stale.question_fit or script.stale.evidence_consistency %}
+    <p><strong>Out of date.</strong> The Script changed after it was last
+        checked, so the previous verdicts no longer apply.</p>
+    {% elif fit or consistency %}
+    <ul>
+        {% if fit %}
+        <li>Question fit: <strong>{{ fit.outcome }}</strong>
+            {% if not fit.ran %}<em>(did not run)</em>{% endif %}
+            &mdash; {{ fit.assessed_at[:16] | replace('T', ' ') }}</li>
+        {% endif %}
+        {% if consistency %}
+        <li>Evidence consistency: <strong>{{ consistency.outcome }}</strong>
+            {% if not consistency.ran %}<em>(did not run)</em>{% endif %}
+            &mdash; {{ consistency.assessed_at[:16] | replace('T', ' ') }}</li>
+        {% endif %}
+    </ul>
+    {% if fit and fit.reason %}<p class="pm-note">{{ fit.reason }}</p>{% endif %}
+    {% if consistency and consistency.reason %}<p class="pm-note">{{ consistency.reason }}</p>{% endif %}
+    {% else %}
+    <p><strong>Never checked.</strong> Nobody has looked yet, which is not the
+        same as nothing being wrong.</p>
+    {% endif %}
     <p class="pm-note">
-        Runs question fit and evidence consistency and records the verdicts.
-        This is the only action here that spends external-AI calls &mdash; saving
-        never does.
+        Re-checking runs question fit and evidence consistency and records the
+        verdicts. This is the only action here that spends external-AI calls
+        &mdash; saving never does.
     </p>
     <form method="post" action="{{ url_for('help_center.authoring_recheck', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -156,6 +195,25 @@
 
 <section class="pm-section">
     <h2>Validation</h2>
+    {% set validation = script.verdicts.validation %}
+    {% if script.stale.validation %}
+    <p><strong>A validation was recorded, then the Script changed.</strong>
+        It no longer applies, and this Script needs deciding again.</p>
+    {% elif validation %}
+    <p><strong>{{ validation.decision | capitalize }}</strong>
+        by {{ validation.actor }} on {{ validation.validated_at[:16] | replace('T', ' ') }}.
+        {% if validation.comments %}&ldquo;{{ validation.comments }}&rdquo;{% endif %}
+    </p>
+    {% if script.checks.reuse_eligibility != 'pass' %}
+    <p class="pm-note">
+        Validated, and still not reusable: the claims beneath this Script have
+        not all been adopted. That is the second human act, and it is
+        deliberately separate from this one.
+    </p>
+    {% endif %}
+    {% else %}
+    <p><strong>Not yet decided.</strong></p>
+    {% endif %}
     <p class="pm-note">
         A human decision, separate from re-check and separate from adopting the
         claims beneath the Script. Neither the checks nor this action promotes

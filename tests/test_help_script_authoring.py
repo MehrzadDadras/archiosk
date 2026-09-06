@@ -472,6 +472,31 @@ class AuthoringSurfaceTests(unittest.TestCase):
         page = self._client().get("/help/authoring").get_data(as_text=True)
         self.assertIn('"/help/studio"', page)
 
+    def test_the_editor_reports_state_not_just_what_the_buttons_do(self):
+        """Those three sections used to carry fixed prose describing their own
+        control, which told a reviewer nothing about where THIS Script stands."""
+        client = self._client()
+        script_id = self._create(client)
+        page = client.get("/help/authoring/scripts/%s" % script_id).get_data(as_text=True)
+        self.assertIn("Not bound to any control", page)
+        self.assertIn("Never checked", page)
+        self.assertIn("Not yet decided", page)
+
+    def test_the_editor_shows_the_bindings_and_the_decision_once_made(self):
+        client = self._client()
+        script_id = self._create(client)
+        client.post("/help/authoring/scripts/%s/ui-refs" % script_id,
+                    data={"ui_refs": "toolbox.spin.world-survival"})
+        client.post("/help/authoring/scripts/%s/validate" % script_id,
+                    data={"decision": "validated", "comments": "reads well"})
+        page = client.get("/help/authoring/scripts/%s" % script_id).get_data(as_text=True)
+        self.assertIn("Bound to 1 control", page)
+        self.assertIn("toolbox.spin.world-survival", page)
+        self.assertIn("Validated", page)
+        self.assertIn("reviewer", page)
+        self.assertIn("reads well", page)
+        self.assertNotIn("Not yet decided", page)
+
     def test_the_existing_help_centre_still_works(self):
         client = self._client()
         self.assertEqual(client.get("/help").status_code, 200)
