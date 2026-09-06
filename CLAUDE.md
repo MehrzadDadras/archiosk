@@ -130,6 +130,99 @@ navigation, classification, form-filling and tool-selection rather than
 reproducing conventional software mechanics — while explicit human authority is
 preserved wherever consequences require it.
 
+## Develop ARCHIOSK as if we are inside ARCHIOSK
+
+**Product Owner direction, 2026-09-06.** ARCHIOSK is being built by discovering
+and resolving real problems in the running application. Treat the development
+state as **roughly 33% Design Development**, and as **an early aircraft being
+designed while it is also being test-flown**: mature enough to operate, immature
+enough that real use is part of the design process.
+
+So every defect, contradiction, workaround, unclear requirement or unexpected
+behaviour is three things at once — a software issue, a flight-test finding, and
+a live test of the governance, QA/QC, decision-history and carry-through model
+ARCHIOSK itself is meant to provide later. This section is the operating half of
+that; it changes nothing about authority, security, evidence integrity or the
+gates elsewhere in this file.
+
+### Authority is never inferred from our own artifacts
+
+**Do not treat a Claude-authored commit message, code comment, test name,
+summary, or the current code as evidence of Product Owner intent.** They are
+evidence of *implementation state*. Only actual Product Owner direction is
+evidence of intent.
+
+This has already failed here, and the example is worth keeping because it is the
+exact shape to watch for. `329f5cd`'s template comment reads *"Home targets
+/projects … NOT '/' — Product Owner, explicit … Do not 'restore' portal.index"*,
+and four tests were updated to pin that destination. The Product Owner later
+stated it was never the intent. The commit is the only record of the approval it
+claims, and commit messages here are written by Claude. A self-authored
+paraphrase that hardens into a comment, a test name and an instruction to future
+readers is indistinguishable from an approval — which is precisely why it must
+not be treated as one.
+
+**CURRENT STATE MUST NOT LAUNDER HISTORY.** A mistake, misunderstanding,
+substitute or partial fix does not become authority by being the latest version,
+by surviving in the repository, or by having tests written around it.
+
+### Reconstruct the transition, do not pick the newest record
+
+For any material divergence, establish original intent, current condition, and
+*why they differ* — and classify the cause rather than blurring it: changed
+requirement, clarification, misunderstanding, implementation error, incomplete
+design, workaround, substitute, technical constraint, superseded decision,
+temporary compromise, or unresolved contradiction.
+
+**Never describe a failed workaround as an intentional decision merely because it
+is still there.** If an earlier session misunderstood the Product Owner or
+shipped a substitute instead of the requested behaviour, say so plainly. Do not
+defend a prior Claude statement because it was committed and tested.
+
+Where a later state supersedes an earlier one, it may do so operationally — but
+how and why the transition happened is preserved, not overwritten.
+
+### Carry-through: a local fix is incomplete until you check where else it lives
+
+After identifying the underlying condition, ask **where else does this same
+condition exist?** — routes, templates, components, responsive states, tests,
+docs, governance records, dependent features, downstream outputs. Fixing only
+the reported occurrence is an incomplete correction.
+
+This is the same standard ARCHIOSK is meant to apply later to RFIs, addenda,
+drawing revisions and specification changes: an RFI response that fixes one
+location is not finished until the same condition has been checked elsewhere and
+the correction shown to carry through. We hold ourselves to it first.
+
+The public footer taught this one: the reported symptom was one page, and the
+real condition was two shells missing a stylesheet, with seven more consumers
+that happened to be fine. Fixing only the reported page would have left the
+condition live.
+
+### 33% DD discipline, and flight-test verification
+
+Resolve what is mature enough to resolve. **Expose what remains open rather than
+inventing certainty.** Some conflicts are expected at this stage; some
+requirements are still converging; a temporary solution is sometimes correct.
+What is not correct is freezing a temporary solution into permanent architecture
+without saying that is what happened.
+
+**"It currently flies" is not "the design is finished."** A fix is not complete
+because tests pass: tests prove bounded correctness, live use proves product
+behaviour, and both matter. Where practical, verify the corrected behaviour in
+real operation as well as in the suite.
+
+### Extract the rule, discard the episode
+
+When a local defect reveals a reusable principle, extract the principle, strip
+the debugging narrative, find the authoritative home for it, check for conflict,
+and place it there **only if warranted**. Ordinary debugging narrative must not
+become permanent doctrine. The exception is when the decision/provenance history
+itself has continuing value — as it does in the `329f5cd` example above.
+
+**Every meaningful iteration should improve two things: the application, and the
+method by which the application is being built.**
+
 ## Environment quirks that have cost real debugging time
 
 - **`STATIC_VERSION` (and any env var with a `config.py` default) is
