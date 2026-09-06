@@ -419,14 +419,28 @@ class AuthoringSurfaceTests(unittest.TestCase):
         self.assertIn(b"/help/authoring/scripts/%s/recheck" % script_id.encode(), page.data)
         self.assertNotIn(b'action="/help/scripts/', page.data)
 
-    def test_a_reviewer_can_reach_authoring_from_the_help_index(self):
-        """The surface has to be findable, or it is a URL only its author knows."""
-        page = self._client().get("/help")
-        self.assertIn(b"/help/authoring", page.data)
+    def test_a_reviewer_can_reach_manual_authoring_from_the_help_index(self):
+        """The surface has to be findable, or it is a URL only its author knows.
+
+        The route changed when the Clip Studio became the entrance
+        (CLAUDE-HELP-CLIP-STUDIO-01): /help now leads to the Studio, and manual
+        authoring is reached from there. The intent this test was written to
+        defend is unchanged and is asserted along the whole chain rather than
+        against the old destination - checking only the first hop would let the
+        editor become unreachable while this stayed green.
+        """
+        client = self._client()
+        index = client.get("/help")
+        self.assertIn(b"/help/studio", index.data)
+        studio = client.get("/help/studio")
+        self.assertEqual(studio.status_code, 200)
+        self.assertIn(b"/help/authoring", studio.data)
 
     def test_a_reader_is_not_shown_the_authoring_entrance(self):
+        """And the reader sees neither hop."""
         page = self._client("reader").get("/help")
         self.assertNotIn(b"/help/authoring", page.data)
+        self.assertNotIn(b"/help/studio", page.data)
 
     def test_hiding_the_link_is_not_the_gate(self):
         """A reader who types the URL is refused by the route, not by the template.

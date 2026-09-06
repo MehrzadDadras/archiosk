@@ -1,0 +1,82 @@
+{# CLAUDE-HELP-CLIP-STUDIO-01 — the scenario-first way in.
+
+   One field. The reviewer describes what the clip should explain; ARCHIOSK
+   builds the question, title, claims, scenes and evidence bindings. None of
+   that vocabulary appears on this page, because none of it is a decision the
+   reviewer has to make to get a candidate.
+
+   The governance did not go away — it moved underneath. Everything generated
+   here is DRAFT and faces the same gate a hand-authored Script faces.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Help Clip Studio &mdash; Archiosk</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Clip Studio'}]) }}
+
+<header class="pm-head">
+    <h1>Help Clip Studio</h1>
+    <p class="lead">
+        Describe what the clip should explain. ARCHIOSK drafts it from the
+        published Help guides and checks it before you review.
+    </p>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-stack">
+    {% for category, message in messages %}
+    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+<section class="pm-section">
+    <form method="post" action="{{ url_for('help_center.studio_generate') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="scenario"><strong>Scenario</strong></label>
+        <textarea id="scenario" name="scenario" rows="6" required
+                  placeholder="{{ example }}"></textarea>
+        <p class="pm-note">
+            Say who it is for, what they should end up understanding, and
+            anything they must not walk away believing. Generating makes the
+            model calls needed to draft and check one clip &mdash; nothing runs
+            while you type.
+        </p>
+        <button type="submit">Generate Help Clip</button>
+    </form>
+</section>
+
+<section class="pm-section">
+    <h2>Existing Help Clips</h2>
+    {% if scripts %}
+    {% call tank.fish_tank(trail=[{'label': 'Help'}, {'label': 'Clips'}]) %}
+        {% for row in scripts %}
+        {{ tank.node(href=url_for('help_center.studio_review', script_id=row.id),
+                     title=row.title or 'Untitled',
+                     meta=row.label ~ ' — ' ~ (row.question or 'no question recorded')) }}
+        {% endfor %}
+    {% endcall %}
+    {% else %}
+    <p class="pm-note">None yet. The first scenario above will make one.</p>
+    {% endif %}
+</section>
+
+<p class="pm-note">
+    <a href="{{ url_for('help_center.index') }}">Back to Help</a>
+    &middot;
+    <a href="{{ url_for('help_center.authoring_index') }}">Manual authoring</a>
+</p>
+</body>
+</html>

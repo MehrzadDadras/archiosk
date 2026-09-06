@@ -65,6 +65,8 @@ from services.case_workspace import (
     CaseWorkspaceStore,
     CLAIM_CLASS_DIRECTLY_VERIFIED,
     CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT,
+    CLAIM_CLASS_UNKNOWN,
+    CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE,
     CONTENT_CLASS_HUMAN_AUTHORED,
     OBSERVATION_AUTHOR_HUMAN,
     ProjectWorkspace,
@@ -289,6 +291,8 @@ def create_help_script(
 def add_help_claim(
     store: CaseWorkspaceStore, script_id: str, statement: str, actor: str,
     evidence_item_ids: Optional[list[str]] = None,
+    claim_class: str = CLAIM_CLASS_DIRECTLY_VERIFIED,
+    confidence_state: str = CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT,
 ) -> dict:
     """Record a Claim answering THIS Script's question, against THIS Script's step.
 
@@ -307,6 +311,14 @@ def add_help_claim(
     Claims start `proposed` like every other claim in this kernel - authoring
     one is not adopting it, and REUSABLE still waits for a human to do that
     separately.
+
+    `claim_class`/`confidence_state` are parameters rather than constants
+    because a generated claim is not always a verified one. The kernel refuses
+    a claim citing no evidence unless its class is `unknown`, which is its own
+    designated honest abstention - so a proposal the Help Library could not
+    ground is recorded AS an abstention rather than dropped or, worse, dressed
+    as directly_verified. The defaults keep the hand-authoring path exactly as
+    it was.
     """
     statement = (statement or "").strip()
     if not statement:
@@ -322,9 +334,9 @@ def add_help_claim(
 
     return store.record_investigation_claim(
         workspace, investigation_step_id=step_id, statement=statement,
-        claim_class=CLAIM_CLASS_DIRECTLY_VERIFIED,
+        claim_class=claim_class,
         method=ANALYTICAL_METHOD_DIRECT_RETRIEVAL,
-        confidence_state=CONFIDENCE_STATE_STRONG_DIRECT_SUPPORT,
+        confidence_state=confidence_state,
         author_type=OBSERVATION_AUTHOR_HUMAN, created_by=actor,
         evidence_links=[{"object_type": "evidence_item", "object_id": eid}
                         for eid in (evidence_item_ids or []) if eid],

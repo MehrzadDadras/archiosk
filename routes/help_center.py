@@ -38,6 +38,13 @@ from services.help_mode import (
     record_help_message,
 )
 from services.case_workspace import SCRIPT_VALIDATION_VALIDATED
+from services.help_clip_studio import (
+    ClipGenerationError,
+    clip_package,
+    ensure_help_sources,
+    generate_help_clip,
+    guide_documents,
+)
 from services.script_fit import help_status_for, run_script_trust_chain
 
 help_bp = Blueprint("help_center", __name__)
@@ -519,3 +526,131 @@ def authoring_validate(script_id):
     except Exception as exc:  # noqa: BLE001
         flash(str(exc), "error")
     return redirect(url_for("help_center.authoring_edit", script_id=script_id))
+
+
+# --- Help Clip Studio (CLAUDE-HELP-CLIP-STUDIO-01) --------------------------
+# The scenario-first surface. The authoring editor beneath it is not deleted -
+# it becomes the manual-correction path, reached from a review screen rather
+# than being the way in. That split is the whole product change: the normal
+# workflow is one scenario, and the kernel vocabulary is available to a reviewer
+# who needs it rather than mandatory for one who does not.
+
+
+def _studio_sources():
+    """Refresh the Help Library's governed guide evidence, and report failure.
+
+    Called on entry to the Studio rather than on a schedule, because there is no
+    background worker here and inventing one to keep a handful of guides current
+    would be a dependency this repository has already declined. It is idempotent
+    on unchanged text, so the ordinary visit writes nothing.
+    """
+    return ensure_help_sources(
+        _help_store(),
+        guide_documents(lambda template: render_template(template, guides=GUIDES), GUIDES),
+        actor=session.get("username", "help-clip-studio"),
+    )
+
+
+@help_bp.route("/help/studio")
+@login_required
+def studio():
+    """Scenario in, clip out. One field, one button, everything else derived."""
+    _require_reviewer()
+    try:
+        _studio_sources()
+    except Exception:  # noqa: BLE001
+        # A library that could not be refreshed is a real condition to surface,
+        # not a reason to refuse the page: previously-registered guides are
+        # still there and a generation grounded in them is still honest.
+        current_app.logger.warning("Help Clip Studio: source refresh failed.", exc_info=True)
+        flash("Help sources could not be refreshed; generation will use what is already registered.",
+              "error")
+    return render_template("help/studio.html", scripts=list_help_scripts(_help_store()),
+                           guides=GUIDES, example=STUDIO_EXAMPLE)
+
+
+# The pilot scenario, shown as placeholder text rather than pre-filled: a
+# reviewer should see the SHAPE of a good scenario without having to clear
+# someone else's words out of the box first.
+STUDIO_EXAMPLE = (
+    "Explain Survival Mode to a new ARCHIOSK user. Show where the checkbox is, "
+    "explain that it applies to First Spin or Delta Spin, and make clear that it "
+    "is not a third kind of Spin."
+)
+
+
+@help_bp.route("/help/studio/generate", methods=["POST"])
+@login_required
+def studio_generate():
+    """The one deliberate action that spends model calls, and says so.
+
+    Generation is a checkpoint: it compiles the scenario and runs the trust
+    chain once. It is not a background loop, it does not run on typing, and
+    nothing it produces is validated, adopted or promoted - the Script it
+    creates is DRAFT like any other.
+    """
+    _require_reviewer()
+    store = _help_store()
+    scenario = request.form.get("scenario", "")
+    try:
+        result = generate_help_clip(
+            store, scenario=scenario, actor=session.get("username", "reviewer"),
+            policy_decision=_external_ai_decision(store.get_or_create(HELP_LIBRARY_PROJECT_ID)),
+            title=request.form.get("title"),
+        )
+    except ClipGenerationError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("help_center.studio"))
+
+    for missing in result["unsupported"]:
+        flash("Not supported by the Help Library: %s" % missing, "error")
+    for statement in result["ungrounded"]:
+        flash("Recorded without evidence, so it will not pass review: %s" % statement, "error")
+    return redirect(url_for("help_center.studio_review", script_id=result["script_id"]))
+
+
+@help_bp.route("/help/studio/<script_id>")
+@login_required
+def studio_review(script_id):
+    """The reviewer-facing clip package. Kernel vocabulary lives in a
+    collapsed section, not in the primary view."""
+    _require_reviewer()
+    package = clip_package(_help_store(), script_id)
+    if package is None:
+        abort(404)
+    return render_template("help/studio_review.html", clip=package, guides=GUIDES)
+
+
+@help_bp.route("/help/studio/<script_id>/regenerate", methods=["POST"])
+@login_required
+def studio_regenerate(script_id):
+    """Recompile the SAME recorded scenario into a NEW draft.
+
+    A new Script rather than an in-place rewrite. The previous attempt keeps its
+    own verdicts and history, so a reviewer can compare two candidates and
+    discard the worse one - overwriting would destroy the thing that makes a
+    second attempt worth making, and would silently retire verdicts on content
+    that no longer exists to explain them.
+    """
+    _require_reviewer()
+    store = _help_store()
+    workspace = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    script = store.get_work_product(workspace, script_id)
+    if script is None:
+        abort(404)
+    scenario = (script.get("script_scenario") or {}).get("scenario")
+    if not scenario:
+        flash("This Script was not generated from a scenario, so there is nothing to regenerate.",
+              "error")
+        return redirect(url_for("help_center.studio_review", script_id=script_id))
+
+    try:
+        result = generate_help_clip(
+            store, scenario=scenario, actor=session.get("username", "reviewer"),
+            policy_decision=_external_ai_decision(workspace),
+        )
+    except ClipGenerationError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("help_center.studio_review", script_id=script_id))
+    flash("Regenerated from the same scenario. The previous draft is kept.", "info")
+    return redirect(url_for("help_center.studio_review", script_id=result["script_id"]))

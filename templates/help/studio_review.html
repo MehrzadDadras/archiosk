@@ -1,0 +1,152 @@
+{# CLAUDE-HELP-CLIP-STUDIO-01 — the review screen.
+
+   PRIMARY VIEW: title, scenario, scenes, sources, status, four actions. It says
+   what the clip says and whether it can be relied on.
+
+   ADVANCED REVIEW DETAILS is collapsed and holds the kernel vocabulary — the
+   seven checks, the recorded verdicts, what went stale. A reviewer who needs
+   to know WHY a gate is holding can open it; nobody has to read it to do the
+   ordinary job. That is the same reasoning help_status_for already applies in
+   collapsing seven checks into four statuses: internal distinctions have to
+   earn their visibility.
+#}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{{ clip.title }} &mdash; Help Clip Studio</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
+</head>
+<body class="pm">
+
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Clip Studio', 'href': url_for('help_center.studio')},
+                   {'label': clip.title or 'Draft'}]) }}
+
+<header class="pm-head">
+    <h1>{{ clip.title }}</h1>
+    <p class="lead">{{ clip.question or 'No originating question recorded.' }}</p>
+    <p><strong>{{ clip.status.label }}</strong></p>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-stack">
+    {% for category, message in messages %}
+    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+{% if clip.unsupported or clip.ungrounded %}
+<section class="pm-section">
+    <h2>What the Help Library could not support</h2>
+    <p class="pm-note">
+        These parts of the scenario have no governed Help material behind them.
+        Nothing was invented to cover the gap &mdash; the clip is short of them
+        instead, and will not pass review until they are grounded or dropped.
+    </p>
+    <ul>
+        {% for item in clip.unsupported %}<li>{{ item }}</li>{% endfor %}
+        {% for item in clip.ungrounded %}<li>{{ item }} <em>(recorded, no evidence)</em></li>{% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if clip.scenario %}
+<section class="pm-section">
+    <h2>Scenario</h2>
+    <p>{{ clip.scenario }}</p>
+</section>
+{% endif %}
+
+<section class="pm-section">
+    <h2>Help Clip</h2>
+    {% for scene in clip.scenes %}
+    <article class="clip-scene">
+        <p><strong>{{ loop.index }}.</strong> {{ scene.text }}</p>
+    </article>
+    {% else %}
+    <p class="pm-note">This clip has no scenes yet.</p>
+    {% endfor %}
+</section>
+
+<section class="pm-section">
+    <h2>Sources used</h2>
+    {% if clip.sources %}
+    <ul>{% for source in clip.sources %}<li>{{ source }}</li>{% endfor %}</ul>
+    {% else %}
+    <p class="pm-note">
+        No governed source is bound to this clip yet, which is why it cannot
+        pass review.
+    </p>
+    {% endif %}
+</section>
+
+<section class="pm-section">
+    <h2>Actions</h2>
+    <form method="post" action="{{ url_for('help_center.studio_regenerate', script_id=clip.script_id) }}"
+          style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Regenerate</button>
+    </form>
+    <a href="{{ url_for('help_center.authoring_edit', script_id=clip.script_id) }}">Edit Script</a>
+    <form method="post" action="{{ url_for('help_center.authoring_recheck', script_id=clip.script_id) }}"
+          style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Re-check</button>
+    </form>
+    <form method="post" action="{{ url_for('help_center.authoring_validate', script_id=clip.script_id) }}"
+          style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="decision" value="validated">Validate</button>
+    </form>
+    <p class="pm-note">
+        Regenerate and Re-check each make model calls. Editing does not.
+        Validating records your decision; it does not adopt the claims beneath
+        the clip, which stays a separate act.
+    </p>
+</section>
+
+<details class="pm-section">
+    <summary>Advanced review details</summary>
+
+    <h3>Checks</h3>
+    <ul>
+        {% for name, outcome in clip.checks.items() %}
+        <li>{{ name }}: <strong>{{ outcome }}</strong></li>
+        {% endfor %}
+    </ul>
+
+    {% if clip.reasons %}
+    <h3>Blocking reasons</h3>
+    <ul>{% for reason in clip.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    {% if clip.stale.question_fit or clip.stale.evidence_consistency or clip.stale.validation %}
+    <h3>Stale after edit</h3>
+    <ul>
+        {% if clip.stale.question_fit %}<li>Question fit</li>{% endif %}
+        {% if clip.stale.evidence_consistency %}<li>Evidence consistency</li>{% endif %}
+        {% if clip.stale.validation %}<li>Human validation</li>{% endif %}
+    </ul>
+    {% endif %}
+
+    <h3>Readiness</h3>
+    <p>{{ clip.readiness }}</p>
+
+    <p class="pm-note">
+        Manual correction &mdash; recording a claim by hand, adding or editing a
+        narrative unit, changing which claims a unit rests on &mdash; lives in
+        the <a href="{{ url_for('help_center.authoring_edit', script_id=clip.script_id) }}">Script
+        editor</a>.
+    </p>
+</details>
+
+<p class="pm-note"><a href="{{ url_for('help_center.studio') }}">Back to the Studio</a></p>
+</body>
+</html>

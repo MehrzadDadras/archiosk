@@ -9656,6 +9656,62 @@ class CaseWorkspaceStore:
             result["superseded_by_claim_id"] = successor_supersession["successor_id"]
         return result
 
+    def record_script_scenario(
+        self, workspace: ProjectWorkspace, work_product_id: str, scenario: str, actor: str,
+        compiled_by: Optional[str] = None, model: Optional[str] = None,
+        unsupported: Optional[list] = None, ungrounded: Optional[list] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Record the plain-language scenario a generated Script was compiled from.
+
+        CLAUDE-HELP-CLIP-STUDIO-01. Provenance, not content: this is what a
+        reviewer ASKED for, beside what the machine produced, so a Script that
+        drifted from its brief can be seen to have drifted. Keeping the request
+        is also what makes Regenerate meaningful - without it the second attempt
+        would be a different scenario typed from memory rather than the same one
+        recompiled.
+
+        Deliberately NOT part of _work_product_content_checksum, which covers
+        active sections only. The scenario is how the narrative came to exist,
+        not the narrative, and folding it into the checksum would make recording
+        it retire every verdict on a Script whose text nobody touched.
+
+        Overwrites rather than appends. There is one originating scenario per
+        Script; a regeneration that produced different text records itself
+        through the ordinary section history, and a list here would imply a
+        Script could be answering two briefs at once.
+        """
+        if not (scenario or "").strip():
+            raise CaseWorkspaceError("A script scenario needs text.")
+        if not (actor or "").strip():
+            raise CaseWorkspaceError("A script scenario must record who supplied it.")
+
+        work_product = self._find(workspace.work_products, work_product_id)
+        if work_product is None or work_product["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError("No work product %s in this project." % work_product_id)
+
+        record = {
+            "scenario": scenario.strip(),
+            "actor": actor,
+            "recorded_at": _now(),
+            "compiled_by": compiled_by,
+            "model": model,
+            "unsupported": list(unsupported or []),
+            "ungrounded": list(ungrounded or []),
+        }
+        work_product["script_scenario"] = record
+        work_product["modified_at"] = record["recorded_at"]
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="script_scenario_recorded",
+                actor=actor, role="system",
+                payload={"work_product_id": work_product_id,
+                         "compiled_by": compiled_by, "model": model},
+                correlation_id=work_product_id,
+            )
+        return record
+
     def record_script_validation(
         self, workspace: ProjectWorkspace, work_product_id: str, decision: str, actor: str,
         comments: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
