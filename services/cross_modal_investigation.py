@@ -816,6 +816,10 @@ class ScenarioCompilation:
     title: Optional[str] = None
     claims: tuple = ()
     scenes: tuple = ()
+    # Presentation instructions. Separate from scenes because a direction
+    # ASSERTS NOTHING - it says where to point, never what is true - and the
+    # canonical Script contract has always drawn that line.
+    directions: tuple = ()
     ran: bool = False
     reason: str = ""
     skipped_reason: Optional[str] = None
@@ -828,11 +832,18 @@ class ScenarioCompilation:
 def compile_help_scenario(
     scenario: str,
     evidence: list,
+    ui_ref_catalogue: Optional[list] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> ScenarioCompilation:
     """Propose a Help question, title, grounded claims and ordered scenes.
+
+    `ui_ref_catalogue` is the stable UI identities a direction may target. It is
+    supplied rather than discovered for the same reason evidence is: a model that
+    chooses its own targets is not grounded. An empty catalogue is a supported
+    state - the compilation then produces directions carrying instruction text
+    and no target, which still keeps "show me where" OUT of the claims.
 
     `evidence` is the governed Help material the caller already selected - a
     list of {"id", "text"}. The model may ground a claim ONLY in these, and the
@@ -890,7 +901,7 @@ def compile_help_scenario(
     import anthropic  # imported lazily so the dep is optional in dev
 
     client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
-    prompt = _build_scenario_prompt(scenario, evidence)
+    prompt = _build_scenario_prompt(scenario, evidence, ui_ref_catalogue or [])
 
     try:
         response = client.messages.create(
@@ -960,18 +971,45 @@ def compile_help_scenario(
     if not scenes:
         return _unavailable("The model returned no usable scenes.")
 
+    # Directions are parsed with the same discipline as claims: only targets we
+    # actually offered survive. A target the model invented is dropped rather
+    # than stored, and because a direction asserts nothing, losing it costs a
+    # highlight and never an answer.
+    offered = {str(r) for r in (ui_ref_catalogue or [])}
+    directions = []
+    for entry in (payload.get("directions") or []):
+        if not isinstance(entry, dict):
+            continue
+        text = str(entry.get("text") or "").strip()
+        refs = [str(r) for r in (entry.get("ui_refs") or []) if str(r) in offered]
+        if not text and not refs:
+            continue
+        directions.append({
+            "action": str(entry.get("action") or "highlight").strip() or "highlight",
+            "ui_refs": refs,
+            "text": text,
+        })
+
     unsupported = tuple(
         str(item).strip() for item in (payload.get("unsupported") or []) if str(item).strip()
     )
     return ScenarioCompilation(
         question=question, title=title or question, claims=tuple(claims), scenes=tuple(scenes),
+        directions=tuple(directions),
         ran=True, reason=str(payload.get("reason") or "").strip(),
         provider=PROVIDER_NAME, model=model, requested_at=requested_at, unsupported=unsupported,
     )
 
 
-def _build_scenario_prompt(scenario: str, evidence: list) -> str:
-    """Compose a Help Script from a scenario, grounded only in what is shown."""
+def _build_scenario_prompt(scenario: str, evidence: list, ui_ref_catalogue: list) -> str:
+    """Compose a Help Script from a scenario, grounded only in what is shown.
+
+    The load-bearing instruction here is the scene/direction split. "Show where
+    the checkbox is" is a request to POINT at something, not an assertion about
+    the world - and routing it to a claim was making the Help Library answer for
+    a fact it does not hold and should not have to. Directions carry that
+    request without ever entering the evidence gate.
+    """
     lines = [
         "You are drafting an ARCHIOSK Help Clip Script from a reviewer's scenario.",
         "",
@@ -982,6 +1020,9 @@ def _build_scenario_prompt(scenario: str, evidence: list) -> str:
         '             "evidence_ids": ["<id from the EVIDENCE list>", ...]}, ...],',
         ' "scenes": [{"text": "<one caption, one or two sentences>",',
         '             "claim_indexes": [<0-based index into claims>, ...]}, ...],',
+        ' "directions": [{"action": "highlight",',
+        '                 "ui_refs": ["<id from the UI TARGETS list>", ...],',
+        '                 "text": "<what the viewer is being shown>"}, ...],',
         ' "unsupported": ["<part of the scenario the evidence cannot support>", ...],',
         ' "reason": "<one or two sentences>"}',
         "",
@@ -989,6 +1030,16 @@ def _build_scenario_prompt(scenario: str, evidence: list) -> str:
         "  - Ground EVERY claim in the EVIDENCE below. `evidence_ids` may contain",
         "    ONLY ids that appear there. Never invent an id, and never cite one you",
         "    were not shown.",
+        "  - A request to SHOW, POINT AT, or LOCATE something on screen is a",
+        "    DIRECTION, never a claim and never a scene. \"Show where the checkbox",
+        "    is\" asks you to point at a control; it does not assert a fact, so it",
+        "    needs no evidence and must NOT appear in `unsupported` merely because",
+        "    the evidence does not describe screen positions.",
+        "  - A direction may target ONLY ids from the UI TARGETS list below. If the",
+        "    control is not listed, still write the direction, with an empty",
+        "    `ui_refs` - the instruction is real even when the target is unknown.",
+        "  - Directions assert nothing. Never put a factual statement in one, and",
+        "    never use a direction to carry something you could not ground.",
         "  - If the evidence does not support part of the scenario, do NOT write a",
         "    claim for it. Name that part in `unsupported` instead. An honest gap is",
         "    the useful answer; a confident sentence with nothing under it is not.",
@@ -1011,5 +1062,12 @@ def _build_scenario_prompt(scenario: str, evidence: list) -> str:
     for item in evidence:
         lines.append("  id: %s" % item.get("id"))
         lines.append("    %s" % str(item.get("text", "")).strip())
+    lines.append("")
+    lines.append("UI TARGETS (the only ids a direction may point at)")
+    if ui_ref_catalogue:
+        for ref in ui_ref_catalogue:
+            lines.append("  %s" % ref)
+    else:
+        lines.append("  (none available - write directions with empty ui_refs)")
     lines.append("")
     return "\n".join(lines)

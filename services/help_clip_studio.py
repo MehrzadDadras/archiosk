@@ -71,6 +71,7 @@ from services.help_mode import (
     HELP_LIBRARY_PROJECT_ID,
     HelpModeError,
     add_help_claim,
+    add_help_script_direction,
     add_help_script_scene,
     create_help_script,
 )
@@ -291,6 +292,27 @@ def select_help_evidence(
             for _, _, item_id, text, name in scored[:limit]]
 
 
+def help_ui_ref_catalogue(store: CaseWorkspaceStore) -> list:
+    """Stable UI identities a generated direction is allowed to target.
+
+    Sourced from refs a reviewer has already bound to Help Scripts, so the
+    catalogue grows by curation rather than by a model naming controls it
+    imagines. Empty is a supported state and simply yields directions with no
+    target - the instruction survives, the highlight waits for a binding.
+
+    Deliberately NOT parsed from UI_REFERENCE_MAP.md: that would make a Markdown
+    document a runtime dependency of generation, and a malformed document would
+    then break authoring rather than a test.
+    """
+    workspace = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    refs = []
+    for script in workspace.work_products:
+        for ref in (script.get("help_ui_refs") or []):
+            if ref not in refs:
+                refs.append(str(ref))
+    return refs
+
+
 class ClipGenerationError(HelpModeError):
     """Generation could not produce a candidate at all."""
 
@@ -329,7 +351,8 @@ def generate_help_clip(
 
     evidence = select_help_evidence(store, scenario)
     compilation = compile_help_scenario(
-        scenario, evidence, api_key=api_key, model=model, timeout=timeout,
+        scenario, evidence, ui_ref_catalogue=help_ui_ref_catalogue(store),
+        api_key=api_key, model=model, timeout=timeout,
     )
     if not compilation.ran:
         raise ClipGenerationError(compilation.reason)
@@ -366,6 +389,14 @@ def generate_help_clip(
         add_help_script_scene(
             store, script_id=script_id, text=scene["text"], actor=actor,
             claim_ids=[claim_ids[i] for i in scene["claim_indexes"] if i < len(claim_ids)],
+        )
+
+    # Directions AFTER scenes so the narration is the Script's spine and the
+    # pointing follows it. They carry no claims by construction.
+    for direction in compilation.directions:
+        add_help_script_direction(
+            store, script_id=script_id, ui_refs=direction["ui_refs"], actor=actor,
+            action=direction["action"], text=direction["text"],
         )
 
     store.record_script_scenario(
@@ -426,8 +457,17 @@ def clip_package(store: CaseWorkspaceStore, script_id: str) -> Optional[dict]:
                     sources[source["id"]] = _readable_source_name(source.get("name"))
         captions.append({"order": scene["order_index"], "text": scene["text"]})
 
+    # WHAT IT SAYS and WHERE TO SHOW IT, surfaced separately. A renderer needs
+    # both; conflating them is how a highlight target would start reading as a
+    # supporting citation.
+    visual_targets = [{
+        "order": d["order_index"], "action": d["action"],
+        "ui_refs": d["ui_refs"], "text": d["text"],
+    } for d in detail["directions"]]
+
     scenario = (script or {}).get("script_scenario") or {}
     return {
+        "visual_targets": visual_targets,
         "script_id": script_id,
         "scenario": scenario.get("scenario"),
         "title": detail["title"],

@@ -68,6 +68,7 @@ from services.case_workspace import (
     CLAIM_CLASS_UNKNOWN,
     CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE,
     CONTENT_CLASS_HUMAN_AUTHORED,
+    CONTENT_CLASS_TEMPLATE_CONTENT,
     OBSERVATION_AUTHOR_HUMAN,
     ProjectWorkspace,
 )
@@ -369,6 +370,69 @@ def add_help_script_scene(
     )
 
 
+DIRECTION_ACTION_HIGHLIGHT = "highlight"
+
+
+def add_help_script_direction(
+    store: CaseWorkspaceStore, script_id: str, ui_refs: list, actor: str,
+    action: str = DIRECTION_ACTION_HIGHLIGHT, text: str = "",
+) -> dict:
+    """Append a presentation direction targeting stable ARCHIOSK UI identities.
+
+    CLAUDE-HELP-VISUAL-TARGET-01. This is the "WHERE TO SHOW IT" half of the
+    separation, and it exists because the alternative was worse: asking the Help
+    Library to hold a factual claim about where a checkbox sits on screen. That
+    would have made prose the authority for something the UI itself already
+    knows, and it would have to be re-verified every time the layout moved.
+
+    A DIRECTION ASSERTS NOTHING, and three properties keep that true rather than
+    merely intended:
+
+      - `evidence_links` is empty and is not a parameter. The kernel validates
+        links against really-persisted governed objects, so a ui_ref could never
+        be stored there anyway - but not offering the argument means no caller
+        can try.
+      - Every semantic gate reads `section_type == "scene"` only, so a direction
+        is invisible to question fit, evidence fidelity, unsupported claims,
+        current applicability, semantic fit and evidence consistency.
+      - `content_class` is template_content: this is scaffolding, not authored
+        assertion, and its provenance should say so.
+
+    Refs are validated for SHAPE here and for EXISTENCE by test, exactly as
+    `record_script_ui_refs` does - reading UI_REFERENCE_MAP.md at request time
+    would make a Markdown document a runtime dependency of Help authoring. A ref
+    that is well-formed but no longer real degrades to an unavailable highlight,
+    never to a blocked answer.
+    """
+    from services.case_workspace import _UI_REF_RE
+
+    cleaned = []
+    for raw in (ui_refs or []):
+        ref = str(raw or "").strip().lower()
+        if not ref:
+            continue
+        if not _UI_REF_RE.fullmatch(ref):
+            raise HelpModeError(
+                "%r is not a well-formed UI reference. Expected dotted lowercase "
+                "segments, e.g. 'toolbox.spin.world-survival'." % raw
+            )
+        if ref not in cleaned:
+            cleaned.append(ref)
+
+    text = (text or "").strip()
+    if not cleaned and not text:
+        raise HelpModeError("A direction needs either a target or instruction text.")
+
+    workspace = store.get_or_create(HELP_LIBRARY_PROJECT_ID)
+    return store.add_work_product_section(
+        workspace, work_product_id=script_id, section_type="direction",
+        content={"action": (action or DIRECTION_ACTION_HIGHLIGHT).strip(),
+                 "ui_refs": cleaned, "text": text},
+        content_class=CONTENT_CLASS_TEMPLATE_CONTENT,
+        author=actor, evidence_links=[],
+    )
+
+
 def list_help_scripts(store: CaseWorkspaceStore) -> list[dict]:
     """Every Help Script with its derived readiness - never a stored status."""
     from services.script_fit import help_status_for
@@ -411,10 +475,15 @@ def help_script_detail(store: CaseWorkspaceStore, script_id: str) -> Optional[di
     applicable_consistency = store._applicable_script_record(script, "script_consistency_verdicts")
     applicable_validation = store._applicable_script_record(script, "script_validations")
 
-    scenes = sorted(
+    active = sorted(
         (s for s in script.get("sections", []) if not s.get("removed")),
         key=lambda s: s.get("order_index", 0),
     )
+    # Scenes and directions are separated on the way OUT as well as on the way
+    # in. A reviewer reading "what does this Clip say" must not have rendering
+    # instructions mixed into the answer.
+    scenes = [s for s in active if s.get("section_type") != "direction"]
+    directions = [s for s in active if s.get("section_type") == "direction"]
     return {
         "id": script_id,
         "title": script.get("title"),
@@ -429,6 +498,13 @@ def help_script_detail(store: CaseWorkspaceStore, script_id: str) -> Optional[di
             "claim_ids": [l["object_id"] for l in s.get("evidence_links", [])
                           if l.get("object_type") == "claim"],
         } for s in scenes],
+        "directions": [{
+            "id": d["id"],
+            "order_index": d.get("order_index"),
+            "action": d.get("content", {}).get("action"),
+            "ui_refs": list(d.get("content", {}).get("ui_refs") or []),
+            "text": d.get("content", {}).get("text"),
+        } for d in directions],
         "ui_refs": list(script.get("help_ui_refs") or []),
         "readiness": readiness["readiness"],
         "checks": readiness["checks"],

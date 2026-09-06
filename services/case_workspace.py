@@ -10773,7 +10773,24 @@ class CaseWorkspaceStore:
         """Section 6/18: a checksum of the GOVERNED content (active
         sections only, in stable id order) - deliberately independent of
         any one export format's own byte-for-byte rendering (that is
-        WorkProductExportRecord.checksum's own, separate job)."""
+        WorkProductExportRecord.checksum's own, separate job).
+
+        POSSIBLE FUTURE REFINEMENT, deliberately NOT done (CLAUDE-HELP-VISUAL-
+        TARGET-01). This covers EVERY active section, including Help Script
+        `direction` sections, which carry presentation targeting and no
+        assertions. The two model verdicts read scenes only - `script_narrative_
+        text` and `script_claim_pairs` both filter to `section_type == "scene"` -
+        so editing a direction retires a question-fit or evidence-consistency
+        verdict whose input provably did not change, costing two API calls to
+        re-assess identical narration.
+
+        The refinement would be to scope the MODEL-verdict checksum to scene
+        content while human validation stays bound to the full Script package,
+        since a human signs off on the whole presentation including where it
+        points. It is not done here because it changes the meaning of checksums
+        already stored on existing verdict records, which is a migration rather
+        than a tweak. The current behaviour is conservative in the safe
+        direction: it over-retires, never under-retires."""
         active_sections = sorted(
             (s for s in work_product["sections"] if not s["removed"]), key=lambda s: s["id"],
         )
