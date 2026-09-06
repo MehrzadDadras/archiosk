@@ -26,13 +26,30 @@ protects nothing across fifteen processes. Optimistic version checking would
 work but turns every collision into a retry.
 
 Neither is needed if two workers never write the same file. Each request is its
-own JSON document, and every state change is an os.rename between directories:
+own JSON document, and it moves between directories as its state changes:
 
-    pending/<id>.json  --rename-->  claimed/<id>.json  --rename-->  served/<id>.json
+    pending/<id>.json  -->  claimed/<id>.json  -->  served/<id>.json
 
-rename(2) is atomic and fails if the source is gone, so two workers racing to
-claim the same request produce exactly one winner and one FileNotFoundError. No
-lock, no version, no retry loop - the filesystem already provides the primitive.
+The claim - the ONE genuinely contended transition - is an atomic exclusive
+create, `os.open(target, O_CREAT | O_EXCL)`. Exactly one worker creates the
+file; every other gets FileExistsError. No lock, no version, no retry loop; the
+filesystem still provides the primitive, just not the one originally chosen.
+
+WHY NOT rename, WHICH THIS MODULE ORIGINALLY USED
+
+The original reasoning was that "rename(2) is atomic and fails if the source is
+gone, so two workers racing produce exactly one winner and one
+FileNotFoundError." That is a POSIX guarantee and it does not hold on Windows,
+where this application also runs. Instrumenting four real processes racing a
+single request showed BOTH renames returning success, repeatedly - each loser
+then wrote the record and reported itself the winner, so a request could be
+claimed twice. `tests/test_storage_bridge_durable_05.py` had been failing
+intermittently on exactly this, roughly one run in three.
+
+The lesson is worth more than the fix: the old comment named rename as "THE
+concurrency primitive", and that confident label is why a wrong guarantee
+survived review. A concurrency claim is only as good as the platform it was
+tested on.
 
 BYTES ARE STAGED, NOT KEPT
 
@@ -137,14 +154,45 @@ class BridgeQueueStore:
             if record is None or record.get("project_id") != project_id:
                 continue
             target = self._path(_CLAIMED, record["id"])
-            try:
-                # THE concurrency primitive. Atomic, and it raises rather than
-                # silently succeeding if another worker got there first.
-                os.rename(path, target)
-            except (FileNotFoundError, OSError):
-                continue
             record["claimed_at"] = now if now is not None else time.time()
-            self._write(target, record)
+
+            # THE concurrency primitive - EXCLUSIVE CREATE, not rename.
+            #
+            # This was `os.rename(pending, claimed)` on the stated reasoning
+            # that "rename is atomic and fails if the source is gone, so two
+            # workers produce exactly one winner and one FileNotFoundError".
+            # That is true on POSIX and NOT true here. Instrumenting four real
+            # processes racing one request showed BOTH renames returning
+            # success, repeatedly - the losing worker then also wrote the
+            # record and reported itself the winner. The old comment named
+            # rename as the guarantee, which is exactly why the wrong
+            # guarantee survived: it read as settled.
+            #
+            # O_CREAT|O_EXCL is the primitive that actually holds on both
+            # platforms. Exactly one process creates the file; every other gets
+            # FileExistsError. The winner writes through its own exclusive
+            # descriptor, so there is no shared temp file to collide on either.
+            try:
+                handle = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                continue          # someone else holds this claim
+            except OSError:
+                continue          # transient contention; the next poll retries
+            try:
+                with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                    json.dump(record, stream, indent=2)
+            except Exception:
+                # Never leave an empty claim standing - it would block every
+                # future claim of this request until the TTL swept it.
+                target.unlink(missing_ok=True)
+                raise
+
+            # Retire the pending entry only AFTER the claim exists. A crash
+            # between the two leaves a pending file whose claim already exists,
+            # so the next poll simply loses the O_EXCL and moves on, and the
+            # stray is swept by request_ttl. The opposite order would lose the
+            # request outright.
+            path.unlink(missing_ok=True)
             claimed.append(record)
         return claimed
 
@@ -248,11 +296,22 @@ class BridgeQueueStore:
     # -- io ----------------------------------------------------------------
     @staticmethod
     def _write(path: Path, record: dict) -> None:
-        """Write via a temp file and rename, so a reader never sees half a
-        record - the same reason the rest of this module leans on rename."""
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(record, indent=2), encoding="utf-8")
-        os.replace(temporary, path)
+        """Write via a temp file and replace, so a reader never sees half a
+        record.
+
+        The temp name carries a per-writer token. It used to be
+        `<id>.tmp`, which is the SAME path for every process writing the same
+        request - so two writers raced on one temp file and `os.replace` raised
+        PermissionError out of `claim_pending`, crashing the worker rather than
+        degrading. Uniqueness costs nothing and removes the collision entirely.
+        """
+        temporary = path.parent / ("%s.%s.tmp" % (path.name, uuid.uuid4().hex[:12]))
+        try:
+            temporary.write_text(json.dumps(record, indent=2), encoding="utf-8")
+            os.replace(temporary, path)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def _read(path: Path) -> Optional[dict]:

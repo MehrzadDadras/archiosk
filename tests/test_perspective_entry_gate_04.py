@@ -211,15 +211,72 @@ class PositionIsContextNotAuthorityTests(_GateCase):
             self._store().get(doc.project_id).operating_environment, DESIGN_BUILDER_PROPONENT,
         )
 
+    #: Contract/Delivery forms that declaring an entry position must never select.
+    CONTRACT_FORMS = ("ccdc", "cca 1", "cca1", "raic", "acec")
+
+    @staticmethod
+    def _semantic_blob(value):
+        """Every SEMANTIC string in a workspace, with machine identifiers and
+        filesystem paths excluded.
+
+        The scan used to be `repr(workspace.__dict__)`, which swept in
+        opaque machine-generated values - and `ccdc`, `cca1` and `acec` are all
+        spelled entirely from hexadecimal characters, so a random uuid, record
+        id or file hash could contain one and fail this test for no reason. It
+        did: a file hash of `...0393de4cca174cd6...` failed the `cca1` subtest
+        on an otherwise clean gate.
+
+        That was a defect in the TEST CONTRACT, not in the boundary. The
+        boundary is about what the product SELECTS, and a selection lands in a
+        semantic field, never in a digest. Excluding the opaque keys keeps the
+        original substring strictness everywhere it actually means something.
+        """
+        opaque_suffixes = ("_id", "_path", "_hash", "_digest", "_signature", "_encrypted")
+        out = []
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_l = str(key).lower()
+                if key_l == "id" or key_l.endswith(opaque_suffixes):
+                    continue
+                out.extend(PositionIsContextNotAuthorityTests._semantic_blob(item))
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                out.extend(PositionIsContextNotAuthorityTests._semantic_blob(item))
+        elif isinstance(value, str):
+            out.append(value)
+        return out
+
     def test_it_selects_no_contract_form(self):
         """Entry context does not select Contract/Delivery DNA."""
         doc = self._ingest()
         self._declare(doc.project_id, ENTRY_TRADE_BIDDER, RETAINED_BY_PRIME_CONTRACTOR)
         workspace = self._store().get(doc.project_id)
-        blob = repr(workspace.__dict__).lower()
-        for form in ("ccdc", "cca 1", "cca1", "raic", "acec"):
+        blob = " ".join(self._semantic_blob(workspace.__dict__)).lower()
+        for form in self.CONTRACT_FORMS:
             with self.subTest(form=form):
                 self.assertNotIn(form, blob)
+
+    def test_the_contract_form_scan_still_catches_a_real_selection(self):
+        """Guard-the-guard, and the proof the correction did not weaken the
+        boundary: with a contract form genuinely present in a semantic field,
+        the scan above must fail."""
+        doc = self._ingest()
+        self._declare(doc.project_id, ENTRY_TRADE_BIDDER, RETAINED_BY_PRIME_CONTRACTOR)
+        workspace = self._store().get(doc.project_id)
+        workspace.display_description = "Delivered under CCDC 2 stipulated price."
+        blob = " ".join(self._semantic_blob(workspace.__dict__)).lower()
+        self.assertIn("ccdc", blob,
+                      "the corrected scan no longer detects a real contract form")
+
+    def test_the_contract_form_scan_ignores_an_opaque_hex_identifier(self):
+        """The exact false positive that broke the gate: a hash containing
+        `cca1` must not be read as a contract-form selection."""
+        doc = self._ingest()
+        workspace = self._store().get(doc.project_id)
+        workspace.sources[0]["file_hash"] = "0393de4cca174cd6aa2f4d8a9241d917"
+        workspace.sources[0]["file_path"] = "/tmp/0393de4cca174cd6_rfp.txt"
+        blob = " ".join(self._semantic_blob(workspace.__dict__)).lower()
+        self.assertNotIn("cca1", blob)
 
     def test_the_declaration_is_a_governed_event(self):
         doc = self._ingest()
