@@ -141,8 +141,8 @@ into base durations.
 | ID | Activity | Pred | Base | Cont. | ES–EF | TF | Crit | Status | Conf |
 |---|---|---|---|---|---|---|---|---|---|
 | A1 | Correct stale supersession docstring | ∥ | 0.5 | — | 0–0.5 | 12 | | NOT STARTED | HIGH |
-| E1 | Client construction in degrade path (8 sites) | ∥ | 2–3 | — | 0–3 | 2 | | NOT STARTED | HIGH |
-| **E2** | Resolve httpx/anthropic/google-genai conflict | ∥ | 2–5 | +1–2 | 0–5 | 0 | ★ | NOT STARTED | MED |
+| E1 | Client construction in degrade path (8 sites) | ∥ | 2–3 | — | 0–3 | 2 | | COMPLETE | HIGH |
+| **E2** | Resolve httpx/anthropic/google-genai conflict | ∥ | 2–5 | +1–2 | 0–5 | 0 | ★ | COMPLETE | MED |
 | **D1** | Zone-scoped retrieval proof | ∥ | 3–5 | — | 0–5 | 0 | ★ | IMPLEMENTED / NEEDS PROOF | MED |
 | **G1** | **P0** pilot gate assessment | E1,E2,D1 | 2 | — | 5–7 | 0 | ★ | NOT STARTED | HIGH |
 | **G2** | Controlled 3–5 user pilot (RFI bounded) | G1 | 15–25 | — | 7–32 | 0 | ★ | NOT STARTED | LOW |
