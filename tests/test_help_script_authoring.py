@@ -497,6 +497,37 @@ class AuthoringSurfaceTests(unittest.TestCase):
         self.assertIn("reads well", page)
         self.assertNotIn("Not yet decided", page)
 
+    def test_help_surfaces_use_the_shared_responsive_primitives(self):
+        """Every control reflows, rather than sitting at the browser default.
+
+        Measured on live before this: a textarea rendered 168px wide at 390px,
+        768px and 1024px alike - it fit at every width and reflowed at none,
+        which is the failure that looks responsive and is not. .pm-field is the
+        primitive project_access_manage.html already used; the Help surfaces
+        simply never adopted it.
+        """
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent / "templates" / "help"
+        for name in ("studio.html", "studio_review.html",
+                     "authoring_edit.html", "authoring_index.html"):
+            markup = (root / name).read_text(encoding="utf-8")
+            if "<textarea" in markup or 'type="text"' in markup:
+                self.assertIn("pm-field", markup, "%s has bare controls" % name)
+            if "<button" in markup:
+                self.assertIn("pm-submit", markup, "%s has untouchable buttons" % name)
+            # Desktop-only layout must not creep back in.
+            self.assertNotIn("display:inline", markup, "%s cannot wrap" % name)
+            self.assertNotIn("position: absolute", markup)
+
+    def test_the_shared_stylesheet_makes_controls_fluid(self):
+        from pathlib import Path
+        css = (Path(__file__).resolve().parent.parent
+               / "static" / "css" / "project_manage.css").read_text(encoding="utf-8")
+        self.assertIn(".pm-field textarea", css)
+        self.assertIn("box-sizing: border-box", css)
+        self.assertIn("@media (max-width: 560px)", css)
+        self.assertIn("overflow-wrap", css)
+
     def test_the_existing_help_centre_still_works(self):
         client = self._client()
         self.assertEqual(client.get("/help").status_code, 200)

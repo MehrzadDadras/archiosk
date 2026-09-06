@@ -40,12 +40,16 @@
     <h2>New Help Script</h2>
     <form method="post" action="{{ url_for('help_center.authoring_create') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="question">The question it answers</label>
-        <input id="question" name="question" type="text" required
-               placeholder="What is Survival Mode, and is it another kind of Spin?">
-        <label for="title">Title</label>
-        <input id="title" name="title" type="text" required placeholder="Survival Mode">
-        <button type="submit">Create draft</button>
+        <div class="pm-field">
+            <label for="question">The question it answers</label>
+            <input id="question" name="question" type="text" required
+                   placeholder="What is Survival Mode, and is it another kind of Spin?">
+        </div>
+        <div class="pm-field">
+            <label for="title">Title</label>
+            <input id="title" name="title" type="text" required placeholder="Survival Mode">
+        </div>
+        <button class="pm-submit" type="submit">Create draft</button>
     </form>
 </section>
 

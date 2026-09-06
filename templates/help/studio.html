@@ -45,16 +45,18 @@
 <section class="pm-section">
     <form method="post" action="{{ url_for('help_center.studio_generate') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="scenario"><strong>Scenario</strong></label>
-        <textarea id="scenario" name="scenario" rows="6" required
-                  placeholder="{{ example }}"></textarea>
+        <div class="pm-field">
+            <label for="scenario"><strong>Scenario</strong></label>
+            <textarea id="scenario" name="scenario" rows="6" required
+                      placeholder="{{ example }}"></textarea>
+        </div>
         <p class="pm-note">
             Say who it is for, what they should end up understanding, and
             anything they must not walk away believing. Generating makes the
             model calls needed to draft and check one clip &mdash; nothing runs
             while you type.
         </p>
-        <button type="submit">Generate Help Clip</button>
+        <button class="pm-submit" type="submit">Generate Help Clip</button>
     </form>
 </section>
 

@@ -90,8 +90,10 @@
     </p>
     <form method="post" action="{{ url_for('help_center.authoring_add_claim', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="statement">Statement</label>
-        <input id="statement" name="statement" type="text" required>
+        <div class="pm-field">
+            <label for="statement">Statement</label>
+            <input id="statement" name="statement" type="text" required>
+        </div>
         <fieldset>
             <legend>Help evidence it rests on</legend>
             {% for item in script.available_evidence %}
@@ -101,14 +103,16 @@
             <p class="pm-note">No Help evidence registered yet.</p>
             {% endfor %}
         </fieldset>
-        <button type="submit">Record claim</button>
+        <button class="pm-submit" type="submit">Record claim</button>
     </form>
 
     <h3>Add a unit</h3>
     <form method="post" action="{{ url_for('help_center.authoring_add_scene', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="text">What it says</label>
-        <textarea id="text" name="text" required rows="3"></textarea>
+        <div class="pm-field">
+            <label for="text">What it says</label>
+            <textarea id="text" name="text" required rows="3"></textarea>
+        </div>
         <fieldset>
             <legend>Claims it rests on</legend>
             {% for claim in script.available_claims %}
@@ -120,7 +124,7 @@
             <p class="pm-note">No claims available in the Help Library yet.</p>
             {% endfor %}
         </fieldset>
-        <button type="submit">Save unit</button>
+        <button class="pm-submit" type="submit">Save unit</button>
     </form>
 </section>
 
@@ -150,9 +154,12 @@
     {% endif %}
     <form method="post" action="{{ url_for('help_center.authoring_ui_refs', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <textarea name="ui_refs" rows="3">{{ script.ui_refs | join('
+        <div class="pm-field">
+            <label for="ui_refs">UI references, one per line</label>
+            <textarea id="ui_refs" name="ui_refs" rows="3">{{ script.ui_refs | join('
 ') }}</textarea>
-        <button type="submit">Save bindings</button>
+        </div>
+        <button class="pm-submit" type="submit">Save bindings</button>
     </form>
 </section>
 
@@ -189,7 +196,7 @@
     </p>
     <form method="post" action="{{ url_for('help_center.authoring_recheck', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit">Re-check</button>
+        <button class="pm-submit" type="submit">Re-check</button>
     </form>
 </section>
 
@@ -221,10 +228,14 @@
     </p>
     <form method="post" action="{{ url_for('help_center.authoring_validate', script_id=script.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="comments">Comments</label>
-        <input id="comments" name="comments" type="text">
-        <button type="submit" name="decision" value="validated">Validate</button>
-        <button type="submit" name="decision" value="rejected">Reject</button>
+        <div class="pm-field">
+            <label for="comments">Comments</label>
+            <input id="comments" name="comments" type="text">
+        </div>
+        <div class="pm-actions">
+            <button class="pm-submit" type="submit" name="decision" value="validated">Validate</button>
+            <button class="pm-submit" type="submit" name="decision" value="rejected">Reject</button>
+        </div>
     </form>
 </section>
 

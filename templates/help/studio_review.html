@@ -89,22 +89,21 @@
 
 <section class="pm-section">
     <h2>Actions</h2>
-    <form method="post" action="{{ url_for('help_center.studio_regenerate', script_id=clip.script_id) }}"
-          style="display:inline">
+    <div class="pm-actions">
+    <form method="post" action="{{ url_for('help_center.studio_regenerate', script_id=clip.script_id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit">Regenerate</button>
+        <button class="pm-submit" type="submit">Regenerate</button>
     </form>
     <a href="{{ url_for('help_center.authoring_edit', script_id=clip.script_id) }}">Edit Script</a>
-    <form method="post" action="{{ url_for('help_center.authoring_recheck', script_id=clip.script_id) }}"
-          style="display:inline">
+    <form method="post" action="{{ url_for('help_center.authoring_recheck', script_id=clip.script_id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit">Re-check</button>
+        <button class="pm-submit" type="submit">Re-check</button>
     </form>
-    <form method="post" action="{{ url_for('help_center.authoring_validate', script_id=clip.script_id) }}"
-          style="display:inline">
+    <form method="post" action="{{ url_for('help_center.authoring_validate', script_id=clip.script_id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="decision" value="validated">Validate</button>
+        <button class="pm-submit" type="submit" name="decision" value="validated">Validate</button>
     </form>
+    </div>
     <p class="pm-note">
         Regenerate and Re-check each make model calls. Editing does not.
         Validating records your decision; it does not adopt the claims beneath
@@ -112,7 +111,7 @@
     </p>
 </section>
 
-<details class="pm-section">
+<details class="pm-inspector">
     <summary>Advanced review details</summary>
 
     <h3>Checks</h3>

@@ -56,11 +56,19 @@ body.pm {
 .pm-field--inline { flex-direction: row; align-items: center; gap: 9px; margin-top: 8px; }
 .pm-field legend { padding: 0; font-weight: 700; font-size: 13px; }
 .pm-field > span { font-size: 12.5px; color: var(--pm-ink-2); }
-.pm-field input[type="text"], .pm-field input[type="date"] {
+.pm-field input[type="text"], .pm-field input[type="date"], .pm-field textarea,
+.pm-field select {
     padding: 9px 11px; font: inherit;
     color: var(--pm-ink); background: var(--pm-surface);
     border: 1px solid var(--pm-line); border-radius: 4px;
+    /* Fill the flex column rather than sit at the browser's default `size`/
+       `cols` width. Without this a control is the SAME width at 390px and
+       1440px - it fits without ever reflowing, which is the failure mode that
+       looks responsive and is not. box-sizing keeps the padding inside the
+       100%, so a full-width control cannot push its own container wider. */
+    width: 100%; max-width: 100%; box-sizing: border-box;
 }
+.pm-field textarea { resize: vertical; min-height: 5em; }
 .pm-choice { display: inline-flex; align-items: center; gap: 6px; margin: 4px 14px 4px 0; font-size: 13px; }
 .pm-hint { margin: 6px 0 0; font-size: 12px; color: var(--pm-ink-3); max-width: 62ch; }
 .pm-submit {
@@ -285,3 +293,55 @@ body.pm {
 }
 .flash-error { color: var(--failure-red); border-color: var(--failure-red); background: var(--failure-red-tint); }
 .flash-success { color: var(--accepted-green); border-color: var(--accepted-green); background: var(--accepted-green-tint); }
+
+/* ============================================================
+   Help / Clip Studio responsive surfaces (CLAUDE-HELP-RESPONSIVE-01)
+   ============================================================ */
+/* These reuse the .pm-form / .pm-field / .pm-submit primitives above rather
+   than introducing a Help-only system. What is added here is only what those
+   primitives did not already cover: a section container, wrapping for long
+   ungoverned strings, an action row that wraps, and touch sizing. */
+
+/* The Help surfaces' own container, matching .pm-form-wrap's measure so a
+   Clip reads at the same width as every other pm page. */
+.pm-section { max-width: 760px; margin: 0 0 28px; }
+.pm-section > h2 { font-size: 15px; margin: 0 0 10px; }
+.pm-section > h3 { font-size: 13.5px; margin: 18px 0 8px; }
+.lead { max-width: 62ch; }
+
+/* A ui_ref, an id or a URL is one unbroken token. Without this it cannot wrap
+   and becomes the widest thing on the page, forcing horizontal scroll on a
+   phone for a string nobody needs to read in full. `anywhere` rather than
+   `break-word` because these tokens have no spaces to break at. */
+.pm-section code, .pm-ref { overflow-wrap: anywhere; }
+/* Claim statements and evidence excerpts are arbitrary length and arrive from
+   generation, so they are governed by content rather than by design. */
+.pm-section label, .pm-section li, .pm-section p, .pm-scene { overflow-wrap: break-word; }
+
+/* Several small forms sitting side by side. Wrapping is the whole point: on a
+   phone these stack, and no button is ever pushed off-screen. */
+.pm-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 10px; }
+.pm-actions form { margin: 0; }
+.pm-actions a { align-self: center; }
+
+/* Touch sizing. The Help surfaces previously used bare <button>, which renders
+   ~21px tall - usable with a mouse, not with a thumb. */
+.pm-submit, .pm-actions button, .pm-actions .pm-submit { min-height: 44px; }
+
+/* The Inspector. A <details> reflows on its own; these only give the summary a
+   real touch target and stop a long open panel from inheriting odd spacing. */
+.pm-inspector { max-width: 760px; margin: 0 0 28px; }
+.pm-inspector > summary {
+    cursor: pointer; padding: 12px 0; font-weight: 700; font-size: 14px;
+    min-height: 44px; display: flex; align-items: center;
+}
+
+@media (max-width: 560px) {
+    /* One column, edge to edge. Buttons go full width because a thumb targets
+       a row more reliably than a small box, and because at this width there is
+       no second column for them to share. */
+    .pm-actions { flex-direction: column; align-items: stretch; }
+    .pm-actions form, .pm-actions button, .pm-actions .pm-submit { width: 100%; }
+    .pm-actions a { align-self: flex-start; padding: 10px 0; }
+    .pm-section, .pm-inspector { margin-bottom: 22px; }
+}
