@@ -397,6 +397,15 @@ class ContextResolutionTests(unittest.TestCase):
         self.assertEqual(client.get("/help/authoring").status_code, 200)
 
     def test_no_vocabulary_surface_returned(self):
+        """The dropped chips stay dropped.
+
+        Note the near-miss: the resolver legitimately produces "Do you mean X or
+        Y?" as a CLARIFICATION, which is a different thing from the removed
+        "Did you mean" suggestion chip. The distinction is real - one asks the
+        user which of two Help topics they meant, the other told them which word
+        to use - and this asserts against the authoring page, where neither
+        belongs.
+        """
         page = self._client("reviewer").get("/help/studio").get_data(as_text=True)
         for forbidden in ("Preferred term", "Did you mean", "vocab-chip", "accept_term"):
             self.assertNotIn(forbidden, page)
