@@ -16,6 +16,12 @@
 </head>
 <body class="pm">
 
+{% import "components/fish_tank_container.html" as tank %}
+{{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
+                   {'label': 'Clip Studio', 'href': url_for('help_center.studio')},
+                   {'label': script.title or 'Script', 'href': url_for('help_center.studio_review', script_id=script.id)},
+                   {'label': 'Edit'}]) }}
+
 <header class="pm-head">
     <h1>{{ script.title }}</h1>
     <p class="pm-note">{{ script.question or 'No originating question recorded.' }}</p>
@@ -164,6 +170,12 @@
     </form>
 </section>
 
-<p class="pm-note"><a href="{{ url_for('help_center.authoring_index') }}">Back to authoring</a></p>
+<p class="pm-note">
+    <a href="{{ url_for('help_center.studio_review', script_id=script.id) }}">Back to the clip</a>
+    &middot;
+    <a href="{{ url_for('help_center.studio') }}">Help Clip Studio</a>
+    &middot;
+    <a href="{{ url_for('help_center.authoring_index') }}">All Scripts</a>
+</p>
 </body>
 </html>

@@ -454,6 +454,24 @@ class AuthoringSurfaceTests(unittest.TestCase):
         self.assertEqual(client.post("/help/authoring/scripts",
                                      data={"question": "q", "title": "t"}).status_code, 403)
 
+    def test_the_editor_is_not_a_one_way_door(self):
+        """The scenario-first path must be walkable in both directions.
+
+        A reviewer reaches the editor from a clip via "Edit Script". Before
+        this, the only way out was "Back to authoring" - the manual index -
+        so the primary workflow dead-ended in the secondary one and the clip
+        you were reviewing became unreachable without the back button.
+        """
+        client = self._client()
+        script_id = self._create(client)
+        page = client.get("/help/authoring/scripts/%s" % script_id).get_data(as_text=True)
+        self.assertIn("/help/studio/%s" % script_id, page, "no way back to the clip")
+        self.assertIn('"/help/studio"', page, "no way back to the Studio")
+
+    def test_the_authoring_index_can_return_to_the_studio(self):
+        page = self._client().get("/help/authoring").get_data(as_text=True)
+        self.assertIn('"/help/studio"', page)
+
     def test_the_existing_help_centre_still_works(self):
         client = self._client()
         self.assertEqual(client.get("/help").status_code, 200)
