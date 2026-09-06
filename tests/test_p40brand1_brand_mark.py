@@ -200,7 +200,8 @@ class HeaderMarkupTests(unittest.TestCase):
         idx = self.app_menu_source.index('data-ui-ref="menu.archiosk.home"')
         tag = self.app_menu_source[self.app_menu_source.rindex("<a", 0, idx):self.app_menu_source.index(">", idx) + 1]
         self.assertIn('aria-label="Archiosk Home"', tag)
-        self.assertIn("url_for('portal.projects_list')", tag)
+        # CLAUDE-MENU-HOME-RESTORE-01 supersedes CLAUDE-MENU-HOME-TARGET-01: Home shows the LANDING PAGE (portal.home). The /projects destination this used to pin was a Claude-chosen substitute recorded as "Product Owner, explicit" in 329f5cd; the Product Owner has since stated it was never the intent. Updated, not weakened - the invariant was always "the destination cannot move as a side effect", and it still pins one. The Projects Directory is asserted separately by menu.file.all-projects.
+        self.assertIn("url_for('portal.home')", tag)
 
 
 class HeaderRenderingTests(unittest.TestCase):
@@ -238,13 +239,14 @@ class HeaderRenderingTests(unittest.TestCase):
         self.assertIn(">Archiosk</summary>", block)
 
     def test_home_navigation_still_renders_and_links_home(self):
-        # CLAUDE-MENU-HOME-TARGET-01: /projects, not "/" - see the source-level
+        # CLAUDE-MENU-HOME-RESTORE-01 supersedes CLAUDE-MENU-HOME-TARGET-01: Home shows the LANDING PAGE (portal.home). The /projects destination this used to pin was a Claude-chosen substitute recorded as "Product Owner, explicit" in 329f5cd; the Product Owner has since stated it was never the intent. Updated, not weakened - the invariant was always "the destination cannot move as a side effect", and it still pins one. The Projects Directory is asserted separately by menu.file.all-projects.
+        # (superseding the CLAUDE-MENU-HOME-TARGET-01 note that stood here)
         # test above. Still asserted as a REAL rendered href rather than a
         # url_for string, so a broken endpoint name fails here.
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         idx = body.index('data-ui-ref="menu.archiosk.home"')
         tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn('href="/projects"', tag)
+        self.assertIn('href="/home"', tag)
 
 
 class BrandCssTests(unittest.TestCase):

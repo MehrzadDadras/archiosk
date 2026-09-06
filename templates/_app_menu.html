@@ -135,13 +135,21 @@
                     <details class="workspace-menubar-menu" data-ui-ref="menu.archiosk">
                         <summary class="workspace-topbar-btn">Archiosk</summary>
                         <div class="workspace-menubar-panel" role="group" aria-label="Archiosk">
-                            {# CLAUDE-MENU-HOME-TARGET-01: Home targets /projects (the full
-                               directory - search, environment filters, project cards), NOT
-                               "/" - Product Owner, explicit. The "/" route itself is
-                               deliberately UNCHANGED and still serves the public landing
-                               page signed-out and the entry shell signed-in; only this
-                               item's destination moved. Do not "restore" portal.index. #}
-                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.projects_list') }}" aria-label="Archiosk Home">Home</a>
+                            {# CLAUDE-MENU-HOME-RESTORE-01: Home shows the LANDING PAGE -
+                               Product Owner direction, 2026-09-06.
+
+                               This SUPERSEDES CLAUDE-MENU-HOME-TARGET-01, whose comment
+                               here asserted "/projects ... Product Owner, explicit" and
+                               told future readers not to restore the landing destination.
+                               That assertion was Claude-authored and the Product Owner has
+                               since stated it was never the intent; the transition is
+                               recorded in routes/portal.py's `home` docstring rather than
+                               erased. 329f5cd was right that "/" splits on auth and cannot
+                               serve this need - hence portal.home, not portal.index.
+
+                               The Projects Directory remains directly reachable from
+                               File > All Projects (menu.file.all-projects). #}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.home" href="{{ url_for('portal.home') }}" aria-label="Archiosk Home">Home</a>
                             <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.about" href="{{ url_for('portal.about') }}">About</a>
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {% if is_admin %}

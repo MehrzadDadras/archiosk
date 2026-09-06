@@ -835,6 +835,41 @@ def index():
         return render_template('landing.html')
     return redirect(url_for('portal.projects_list'))
 
+
+@portal_bp.route('/home')
+def home():
+    """The landing page, for anyone who deliberately asks for it.
+
+    CLAUDE-MENU-HOME-RESTORE-01. Product Owner direction, 2026-09-06: the
+    Archiosk menu's Home item must show the LANDING PAGE to a signed-in user.
+
+    WHY THIS IS A SEPARATE ROUTE RATHER THAN A CHANGE TO `/`.
+
+    `/` splits on authentication and is depended on both ways: signed-out it is
+    the public front door, and signed-in it redirects into the directory, which
+    a large number of tests and the post-sign-in flow rely on. Making `/` render
+    the landing page for everyone would have satisfied this direction by
+    breaking that contract. A dedicated path lets a signed-in user reach the
+    landing page ON PURPOSE without changing what `/` means to anyone.
+
+    Unauthenticated too, deliberately: this is the public page, and gating the
+    public page behind a login would be its own contradiction. A signed-out
+    visitor following this link sees exactly what `/` gives them.
+
+    WHAT THIS CORRECTS, STATED PLAINLY.
+
+    329f5cd pointed this menu item at the Projects Directory and recorded the
+    destination in a template comment as "Product Owner, explicit", with four
+    tests updated to pin it. The Product Owner has since stated that was never
+    the intent. Commit messages in this repository are Claude-authored, so that
+    paraphrase was the only evidence for the authority it claimed - the exact
+    condition CLAUDE.md's "Develop ARCHIOSK as if we are inside ARCHIOSK"
+    section now warns about. The earlier diagnosis in 329f5cd was correct about
+    the MECHANISM (one URL serving two pages); the substitute it chose was not
+    the requested behaviour.
+    """
+    return render_template('landing.html')
+
 @portal_bp.route('/health')
 def health():
     """Liveness/readiness probe for the load balancer and systemd.

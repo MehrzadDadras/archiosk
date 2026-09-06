@@ -189,14 +189,17 @@ class ViewBoxContainmentTests(unittest.TestCase):
         viewbox = _numbers(re.search(r'viewBox="([^"]+)"', svg).group(1))
         self.assertEqual(viewbox, [0.0, 0.0, 512.0, 512.0])
 
-        # CLAUDE-LETTERMARK-PURGE-01: one path, now carrying three subpaths
-        # (two legs and a crossbar), and no <circle> - the retired mark's
-        # accent dot went with it. Every coordinate in the path is checked
-        # rather than a sampled subset.
+        # CLAUDE-MARK-RESTORE-01: the constructed mark is restored, and its
+        # accent dot with it - the waist dot is part of that mark's identity,
+        # not decoration. CLAUDE-LETTERMARK-PURGE-01's assertion that no
+        # <circle> may appear belonged to the letterform that replaced it, and
+        # is inverted here rather than deleted: the dot must be PRESENT, so a
+        # future regeneration that silently drops it still fails.
+        # Every coordinate in the path is checked rather than a sampled subset.
         coords = _numbers(re.search(r'<path[^>]*\sd="([^"]+)"', svg).group(1))
         xs, ys = coords[0::2], coords[1::2]
         self.assertTrue(xs, "no path geometry found in the app icon")
-        self.assertNotIn("<circle", svg, "the accent dot was retired with the old mark")
+        self.assertIn("<circle", svg, "the restored mark's accent dot is missing")
 
         self.assertGreaterEqual(min(xs), viewbox[0])
         self.assertGreaterEqual(min(ys), viewbox[1])

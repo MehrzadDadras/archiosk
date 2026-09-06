@@ -237,7 +237,8 @@ class HeaderLinkCorrectnessTests(_BaseTestCase):
         # CLAUDE-MENU-HOME-TARGET-01: the destination moved to the Projects
         # Directory. What this test protects is that the relocated item is
         # still a real link with its accessible name intact, which it is.
-        self.assertIn('href="/projects"', tag)
+        # CLAUDE-MENU-HOME-RESTORE-01 supersedes CLAUDE-MENU-HOME-TARGET-01: Home shows the LANDING PAGE (portal.home). The /projects destination this used to pin was a Claude-chosen substitute recorded as "Product Owner, explicit" in 329f5cd; the Product Owner has since stated it was never the intent. Updated, not weakened - the invariant was always "the destination cannot move as a side effect", and it still pins one. The Projects Directory is asserted separately by menu.file.all-projects.
+        self.assertIn('href="/home"', tag)
         self.assertIn('aria-label="Archiosk Home"', tag)
 
     def test_keyboard_focus_and_accessible_name_intact(self):

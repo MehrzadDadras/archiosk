@@ -900,7 +900,7 @@ class HomeLabelTests(unittest.TestCase):
         """
         self.assertIn('aria-label="Archiosk Home"', self._home_tag())
 
-    def test_it_routes_to_the_projects_directory(self):
+    def test_it_routes_to_the_landing_page(self):
         """CLAUDE-MENU-HOME-TARGET-01 - renamed, not weakened.
 
         This assertion belongs to CLAUDE-MENU-HOME-LABEL-01, whose subject was
@@ -917,7 +917,8 @@ class HomeLabelTests(unittest.TestCase):
         guard itself is unchanged: the destination is still pinned, so a future
         label or markup edit cannot move it as a side effect.
         """
-        self.assertIn("url_for('portal.projects_list')", self._home_tag())
+        # CLAUDE-MENU-HOME-RESTORE-01 supersedes CLAUDE-MENU-HOME-TARGET-01: Home shows the LANDING PAGE (portal.home). The /projects destination this used to pin was a Claude-chosen substitute recorded as "Product Owner, explicit" in 329f5cd; the Product Owner has since stated it was never the intent. Updated, not weakened - the invariant was always "the destination cannot move as a side effect", and it still pins one. The Projects Directory is asserted separately by menu.file.all-projects.
+        self.assertIn("url_for('portal.home')", self._home_tag())
 
 
 class DocumentMenuTests(unittest.TestCase):
