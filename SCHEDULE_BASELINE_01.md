@@ -1,10 +1,12 @@
 # ARCHIOSK Development Master Schedule — BASELINE SCHEDULE 01
 
 **Status:** BASELINE, authorized by the Product Owner 2026-09-06.
-**Revision:** 02A (2026-09-06) — duration unit defined as **Virtual Engineering
+**Revision:** 02B (2026-09-06) — duration unit defined as **Virtual Engineering
 Days (VED)**, third clock added, measured velocity recorded. **The logic network
-is unchanged from Rev 01.** Rev 02A adds the CH0–CH3 milestone ids (§6.2) and
-the two-VED-remainder reporting rule (§8.4.4). See the revision history at the end.
+is unchanged from Rev 01.** Rev 02A added the CH0–CH3 milestone ids (§6.2) and
+the two-VED-remainder reporting rule (§8.4.4). Rev 02B records **P0 / CH1 as
+ACHIEVED** (§6.3) after the rollback path was exercised end-to-end. See the
+revision history at the end.
 **As-built basis:** the flight-test audit of 2026-09-06 (product completeness
 34%, pilot readiness 45%, sovereign intelligence maturity 58%, overall ~42%,
 between 33% and 50% DD). Rev 02 does not restate the audit; E1, E2 and D1
@@ -176,7 +178,7 @@ durations.
 | E1 | Client construction in degrade path (8 sites) | ∥ | 2–3 | — | 0–3 | 2 | | COMPLETE | HIGH |
 | **E2** | Resolve httpx/anthropic/google-genai conflict | ∥ | 2–5 | +1–2 | 0–5 | 0 | ★ | COMPLETE | MED |
 | **D1** | Zone-scoped retrieval proof | ∥ | 3–5 | — | 0–5 | 0 | ★ | COMPLETE | MED |
-| **G1** | **P0** pilot gate assessment | E1,E2,D1 | 2 | — | 5–7 | 0 | ★ | NOT STARTED | HIGH |
+| **G1** | **P0** pilot gate assessment | E1,E2,D1 | 2 | — | 5–7 | 0 | ★ | COMPLETE | HIGH |
 | **G2** | Controlled 3–5 user pilot (RFI bounded) | G1 | 15–25 | — | 7–32 | 0 | ★ | NOT STARTED | LOW |
 | **G3** | **P1** pilot findings closeout | G2 | 5–10 | +3–5 | 32–42 | 0 | ★ | NOT STARTED | LOW |
 | E3 | External-model fault-injection tests | E1 | 3–4 | — | 3–7 | 5 | | NOT STARTED | MED |
@@ -281,6 +283,61 @@ schedule against them here.
 
 **Alignment to this network:** CH1 ↔ **P0**; CH2 ↔ **P1**; CH3 has no single
 equivalent — the Core envelope is a product scope decision, not a CPM milestone.
+
+### 6.3 P0 / CH1 — ACHIEVED 2026-09-06 (Rev 02B)
+
+**Verdict: PASS.** All five P0 clauses are met against committed, gate-backed,
+live-verified evidence.
+
+| P0 clause | Evidence | SHA |
+|---|---|---|
+| AI failure degrades honestly | Gateway boundary; construction inside the failure boundary; AST carry-through guard. Demonstrated in production, not only in tests — a live Gemini call returned 404 and produced `ran=False` with no 500 | `5637ede` |
+| Dependency environment satisfiable | `requirements.txt` installs; `pip check` clean in repository, dev venv and **production**; both providers construct on the live host | `06e9d35` |
+| Zone-scoped retrieval / RBAC proof passes | 32 adversarial tests, two actors, marker-based leak detection; whole route table driven unauthenticated | `081cf59` |
+| Deploy / rollback healthy | Deploy exercised repeatedly; **rollback exercised end-to-end 2026-09-06** — see below | `06e9d35`, `7d58a97` |
+| No known critical public/private leakage | Exactly 10 routes answer an anonymous GET, all intended, now held by an allowlist test; the Help session-id collision was found and closed | `081cf59` |
+
+**The rollback exercise, because a backup nobody restored is a belief.** Product
+Owner decision, 2026-09-06: a structurally valid backup was not sufficient for a
+real external-user pilot. Exercised end-to-end against the live host —
+`/var/www/archiosk-backup-4b5da42` restored over production using
+`deploy/DEPLOYMENT.md`'s own documented Rollback procedure verbatim; service
+restarted; `/health` 200 locally and publicly; `/` and `/login` served; no
+journal errors. The code genuinely reverted (the gateway helper was absent and
+the old pins were back), so the exercise tested a real restore rather than a
+no-op. Production then returned to `7d58a97` and was re-verified, including a
+real Anthropic call through the application's own gateway.
+
+Two properties worth recording, because both are non-obvious and both held:
+
+- **No data was touched.** `instance/` and `.env` are excluded from the rollback
+  exactly as they are from a deploy. 28 registry files and 37 MB of project data
+  were identical before, during and after; `.env` survived; the SQLite database
+  was untouched. There are no migrations between the two builds, so the restore
+  was schema-safe.
+- **Version skew is survivable.** The rollback deliberately does not revert
+  `.venv/`, so pre-gateway code — which constructs provider clients directly in
+  four places — ran against the *forward* dependency set. It worked. A rollback
+  therefore does not reintroduce the dependency outage that E2 closed, which is
+  the failure this exercise most needed to rule out.
+
+**Accepted pilot limitations**, recorded as known and accepted rather than
+discovered later:
+
+1. **Gemini is reachable but its configured model id returns 404.**
+   `GEMINI_MODEL` is pinned to `gemini-2.5-flash`, which Google no longer serves
+   to new users. The dependency path is proven healthy — the client constructs,
+   authenticates and reaches the API — and the gateway degrades honestly rather
+   than failing. **Not a pilot blocker unless Gemini is presented as supported
+   pilot capability.** Model selection is a Product Owner decision and was
+   deliberately not changed.
+2. **D1 proves project and discipline isolation, not multi-organization
+   tenancy.** There is no `Organization` model in this codebase and
+   `governance/specified-unbuilt/tenancy-and-project-authorization.md` remains
+   unimplemented. The controlled pilot must not be positioned as tenant-isolated.
+
+**CH1 (Pilot Chassis Ready) is achieved with P0.** Next controlling pilot
+activity is **G2**. The R1 critical path is unchanged.
 
 ---
 
@@ -555,6 +612,7 @@ It does not alter §4, §5 float, or the critical path — see §1.1.
 | 01 | 2026-09-06 | Product Owner | Baseline established | — |
 | 02 | 2026-09-06 | Product Owner | Duration unit renamed to **Virtual Engineering Days (VED)** (§1.0); third clock — actual elapsed forecast — added (§8.4); measured delivery velocity recorded (§8.4.1); parallel-agent capacity recorded (§8.5); E1, E2, D1 marked COMPLETE | **LOGIC: NO MOVEMENT.** Elapsed forecast revised from ~25 weeks to ~8–14 weeks on measured long-run velocity |
 | 02A | 2026-09-06 | Product Owner | Chassis release milestones recorded as **CH0–CH3** with the C0–C3 mapping (§6.2); reporting must carry **two** VED remainders, critical-path and total resource-loaded (§8.4.4) | **LOGIC: NO MOVEMENT.** No duration, float, status or dependency altered |
+| 02B | 2026-09-06 | Product Owner | Rollback path exercised end-to-end on the live host at Product Owner direction; **G1 → COMPLETE**; **P0 / CH1 recorded as ACHIEVED** (§6.3) with the two accepted pilot limitations | **LOGIC: NO MOVEMENT.** G1 sits off the R1 critical path, so R1 does not move |
 
 **Rev 02A — what changed, why, and what it deliberately did not touch.**
 
