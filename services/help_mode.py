@@ -57,6 +57,7 @@ contamination this module exists to prevent.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
@@ -117,13 +118,36 @@ class HelpContext:
 
 
 def help_session_project_id(username: str) -> str:
-    """The reserved workspace id holding one user's Help conversation."""
+    """The reserved workspace id holding one user's Help conversation.
+
+    CLAUDE-D1-HELP-SESSION-COLLISION-01. The readable part is a sanitised
+    username, and sanitising alone is NOT injective: it lowercases and drops
+    every character outside `[a-z0-9-_.]`, so `Alice`/`alice` and `a@b`/`ab`
+    all collapsed onto one id. `models.User.username` is unique but
+    case-sensitive, and `services/auth.py` matches it exactly, so both members
+    of such a pair can exist as separate accounts - and both were handed the
+    SAME Help workspace, where each could read the other's conversation. That
+    contradicts this module's own guarantee that one reader's questions are
+    "private by the same mechanism that keeps two customers apart".
+
+    The digest of the exact username is what makes the mapping injective; the
+    sanitised part is kept only so the id stays legible when someone is
+    looking at stored workspaces. Distinct usernames therefore cannot share a
+    Help workspace regardless of case or punctuation.
+
+    The id is opaque - nothing in this codebase parses a username back out of
+    it - so the suffix costs nothing beyond invalidating Help conversations
+    stored under the old scheme. That is accepted deliberately: a Help
+    conversation is learning scratch that this module already forbids from
+    becoming project evidence, and a privacy boundary outranks its retention.
+    """
     if not (username or "").strip():
         raise HelpModeError("A Help conversation needs to belong to someone.")
     safe = "".join(c for c in username.strip().lower() if c.isalnum() or c in "-_.")
     if not safe:
         raise HelpModeError("Username %r has no characters usable in a workspace id." % username)
-    return HELP_SESSION_PREFIX + safe
+    digest = hashlib.sha256(username.encode("utf-8")).hexdigest()[:12]
+    return HELP_SESSION_PREFIX + safe + "-" + digest
 
 
 def is_help_workspace(project_id: str) -> bool:
