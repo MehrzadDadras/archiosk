@@ -338,6 +338,37 @@ Roughly a 10x recovery, with the pytest process untouched because it sits under
 a different parent. Under the standing live-only, no-localhost policy these
 processes should not be running at all.
 
+### Gate sequencing - one gate, last, on a frozen tree
+
+Established 2026-09-06 after a session started five full gates and killed three.
+Two of those kills were self-inflicted, and the mechanism is repo-specific:
+**`tests/conftest.py`'s `pytest_sessionstart` clears
+`instance/test_registry_gw*`**, so a second pytest session started while a
+parallel `-n 8` gate is in flight **destroys the running gate's worker stores**
+and corrupts it. The gate does not fail loudly when this happens; it produces a
+result you then cannot trust.
+
+- Finish all edits before the full gate.
+- Run the targeted lane first, and fix everything it finds.
+- Freeze the tree before starting the full gate.
+- Run ONE full gate, last.
+- Do NOT run any other pytest command while the full gate is in flight - lane,
+  single file, `--collect-only`, anything.
+- Do NOT edit the tree while the full gate is in flight.
+- If a real defect requires an edit, stop the gate explicitly, say why, fix it,
+  re-run the targeted lane, then restart the full gate on the re-frozen tree.
+- Do not use gate wait time for opportunistic improvements. Note them and do
+  them afterward - an edit landed mid-run invalidates the run that was about to
+  vouch for it.
+- Before changing routes, links, labels, selectors or any other test-visible
+  identifier, search `tests/` for it first. This is the cheapest rule here and
+  the one that pays most: a single grep would have removed a 15-minute gate
+  re-run caused by repointing the `/help` entrance without checking the test
+  asserting on it.
+
+The failure mode this prevents is not a slow gate but a **wasted** one, and the
+root cause it addresses is sequencing rather than over-verification.
+
 ### Anomaly and degradation thresholds
 
 - **Parallel (`-n 8`) anomaly threshold: 15 minutes.** Against an ~8 minute
