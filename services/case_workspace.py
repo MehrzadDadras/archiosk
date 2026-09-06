@@ -12448,6 +12448,16 @@ class CaseWorkspaceStore:
         # another WorkProduct (Section 31's based_on/cites/etc.).
         OBJECT_KIND_CLAIM: "claims",
         OBJECT_KIND_WORK_PRODUCT: "work_products",
+        # CLAUDE-A2-DEPENDENCY-GRAPH-01: a Requirement and a
+        # TemporalObligation must resolve as relationship endpoints, or
+        # every dependency edge whose whole point is a requirement reads
+        # as BROKEN and the graph is unusable for the question A2 exists
+        # to answer. Both are already flat, top-level, project-scoped
+        # lists carrying their own `project_id`, so they satisfy the same
+        # contract every kind above does - this adds them to the map, it
+        # does not add a new kind of endpoint or a new store.
+        OBJECT_KIND_REQUIREMENT: "requirements",
+        OBJECT_KIND_TEMPORAL_OBLIGATION: "temporal_obligations",
     }
 
     def _resolve_mm6_endpoint(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> Optional[dict]:
