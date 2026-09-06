@@ -21,12 +21,21 @@ naming because only the first is obvious:
    refuses. These are asserted by observing that the provider seam was
    never touched, not by trusting the code's ordering by inspection.
 
-Hermetic by construction. `google-genai` is an optional pin that is not
-installed in this venv, so every test here drives a fake injected at
-services/llm_gateway.py's own `_import_google_genai` seam - which also
-means the "package is absent" degrade path is exercised for real
-rather than simulated. No test in this file makes a network call, and
-none requires the package to be installed.
+Hermetic by construction - now genuinely so, rather than by accident.
+Every test here drives a fake injected at services/llm_gateway.py's own
+`_import_google_genai` seam, the "package is absent" degrade path
+included.
+
+That last one was originally left unsimulated, on the reasoning that
+`google-genai` was an optional pin absent from this venv and so the
+real ImportError path was exercised for free. That made the test depend
+on an environmental accident. When CLAUDE-E2-DEPENDENCY-RESOLUTION-01
+installed the package to bring the venv into parity with
+requirements.txt, this test stopped taking the ImportError path,
+constructed a real client, and called Google's API for real - a live
+network call from the unit suite, against CLAUDE.md's hermeticity rule.
+It is driven at the seam now. No test in this file makes a network
+call, and none depends on whether the package is installed.
 """
 from __future__ import annotations
 
@@ -318,9 +327,15 @@ def test_no_gemini_key_skips_without_importing_the_package(monkeypatch):
     assert "Sheet read" in outcome.skipped_reason
 
 
-def test_absent_google_genai_package_degrades_honestly():
-    # Not simulated: google-genai genuinely is not installed in this
-    # venv, so this exercises the real ImportError path.
+def test_absent_google_genai_package_degrades_honestly(monkeypatch):
+    # Driven at the seam, deliberately - see this module's docstring. Relying
+    # on the package genuinely being absent made this test hermetic by
+    # accident, and it made a real API call the moment the venv was brought
+    # into parity with requirements.txt.
+    monkeypatch.setattr(
+        llm_gateway, "_import_google_genai",
+        lambda: (_ for _ in ()).throw(ImportError("No module named 'google.genai'")),
+    )
     outcome = call_gemini_json(user_prompt="x", api_key="fake-gemini-key")
     assert outcome.ran is False
     assert "google-genai package is not installed" in outcome.skipped_reason

@@ -3,8 +3,45 @@ Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.32
 gunicorn==22.0.0
 python-dotenv==1.0.1
-anthropic==0.34.2
-httpx==0.27.2
+# CLAUDE-E2-DEPENDENCY-RESOLUTION-01: these two pins are load-bearing
+# TOGETHER and must not be moved independently.
+#
+# Before this change `pip install -r requirements.txt` did not work at all.
+# pip returned ResolutionImpossible, because google-genai (below) requires
+# httpx>=0.28.1 while httpx was pinned here at 0.27.2. A fresh clone could not
+# build an environment from this file, so every working environment - including
+# production - had necessarily been hand-assembled out of order. That is what
+# produced the 2026-09-06 live 500: production ended up on httpx 0.28.x to
+# satisfy google-genai, and anthropic 0.34.2 then raised
+#     TypeError: Client.__init__() got an unexpected keyword argument 'proxies'
+# on CLIENT CONSTRUCTION - which is why it took out every AI capability at once
+# rather than one feature, and why it went a week unnoticed until a new feature
+# happened to exercise the path.
+#
+# The graph was never unsatisfiable, and it is worth being exact about that.
+# anthropic 0.34.2 DECLARES httpx<1,>=0.23.0, which includes 0.28.1, but its
+# code passed `proxies=` to httpx unconditionally and httpx removed that
+# argument in 0.28. The package's declared range was wider than the range its
+# code actually supported. No resolver can see that, which is why the floor is
+# asserted directly in tests/test_e2_dependency_resolution.py rather than left
+# to metadata.
+#
+# anthropic 0.40.0 is the FIRST release whose code guards that argument - it
+# builds the httpx client with `**kwargs` under an `if proxies is not None`
+# test. 0.34.2, 0.36.2, 0.37.1, 0.38.0 and 0.39.0 all still pass it
+# unconditionally; that was established by unpacking each wheel and reading
+# `_base_client.py`, not by reading changelogs. httpx 0.28.1 is likewise not a
+# preference: it is the ONLY published release satisfying google-genai's
+# httpx>=0.28.1,<1.0.0.
+#
+# The surface this repository actually uses is unchanged at 0.40.0 and was
+# verified rather than assumed: Anthropic(api_key=, timeout=),
+# messages.create(model=, max_tokens=, messages=, system=), APITimeoutError,
+# response.content[].text, and response.stop_reason. `model` is typed
+# ModelParam but is not validated at runtime, so `claude-sonnet-4-6` passes
+# through as before.
+anthropic==0.40.0
+httpx==0.28.1
 python-docx==1.1.2
 pypdf==4.3.1
 openpyxl==3.1.5
