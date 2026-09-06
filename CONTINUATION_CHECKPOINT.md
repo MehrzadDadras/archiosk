@@ -12318,3 +12318,94 @@ agent/process against the same working directory, not leftover work
 from this session. Left entirely untouched (neither committed nor
 discarded) rather than guessed at - a future session should investigate
 provenance before acting on it either way.
+
+
+## Session checkpoint: Help Clip Studio, contextual Help, brand/Home reconciliation
+## — 19 commits pushed, live at `4b5da42`, three docs commits undeployed
+
+**Live: `4b5da42`. Pushed HEAD: `3e64329`.** The three commits between them are
+markdown only (`CLAUDE.md` doctrine ×2, GOV-P-007 draft) and need no deployment.
+`STATIC_VERSION` live is **161**.
+
+### What was built
+
+The Help Script authoring surface (`44ee511`), then the **Help Clip Studio**
+(`02848fc`) — one scenario in, one governed DRAFT clip out, composing existing
+kernel primitives with no new object family. Then **contextual resolution**
+(`fe52ef6`): `/help/mode/ask` matched Scripts by exact string equality on their
+originating question, so "What does this do?" could only ever match a Script
+literally asking that. `services/help_resolution.py` now resolves control →
+panel → conversation → free text → clarification, reusing `data-ui-ref` rather
+than inventing a taxonomy. **Visual targets** (`877b88a`) separated WHERE TO SHOW
+IT from WHAT IT SAYS, which unblocked the live pilot: "show where the checkbox
+is" became a direction, not a claim needing textual evidence.
+
+### Two defects of ours that reached production
+
+**Provenance** (`6253246`). `generate_help_clip` left the authoring helpers'
+human defaults in place, so model-written statements entered the record as
+HUMAN, `directly_verified` observations. Five Scripts shipped that way. The
+kernel already forbids `ai` + `directly_verified` — the guard never fired because
+it was never told the true author, which is why the fix was passing
+`author_type`, not adding a check.
+
+**Home + icon** (`6866daf`). `329f5cd` had pointed Archiosk ▸ Home at
+`/projects` and written *"Product Owner, explicit"* into a template comment,
+with four tests updated to pin it and one renamed away from the landing page.
+Commit messages here are Claude-authored, so that paraphrase was the only
+evidence for the authority it claimed; the Product Owner stated it was never the
+intent. Corrected via a new `portal.home` route (NOT a revert — `/` splits on
+auth and is depended on both ways). The app icon was likewise restored to the
+constructed mark, recovered byte-exact from `9d16b8c^`: the letterform that
+replaced it reinstated a form `98086b6` records the Product Owner rejecting by
+name, which `9d16b8c` never surfaced.
+
+### Live-surface findings
+
+A **real project street address** ("Pilot: 1860 Alstep Dr") was rendering on the
+signed-out landing page (`7e197a5`). `auth_shell.html` had already reasoned its
+way to that exact risk for the sign-in page and the landing page shipped it
+anyway — so the test asserts across `/`, `/home` and `/login`. The public footer
+was also **unstyled on two surfaces since 2026-08-29** (`477adf6`) because its
+CSS lived in a stylesheet those shells never load. `httpx` had drifted to 0.28.1
+against a `0.27.2` pin, breaking EVERY Anthropic call site since 2026-08-30;
+corrected in the venv (not a deploy).
+
+### Doctrine recorded this session
+
+`CLAUDE.md` gained **gate sequencing** (one gate, last, on a frozen tree) and
+**"Develop ARCHIOSK as if we are inside ARCHIOSK"** — govern consequences not
+curiosity; authority is never inferred from our own artifacts; consistency is not
+authority; carry-through; 33% DD; keep the cockpit clean and the black box
+recoverable. `GOV-P-007` is drafted and **PROPOSED, not ratified**.
+
+### Open, and genuinely open
+
+- **`GOV-P-007` awaits ratification** (`STATUS: PROPOSED` → `CURRENT`, two dates).
+- **Five Help Scripts carry false provenance.** All DRAFT, all claims
+  `proposed`, so nothing entered the record as fact. Recommendation stands:
+  Reject each with a stated cause, delete none — they are product-learning
+  evidence. This is a human authority act.
+- **The Survival Mode pilot is one step from REUSABLE.** Script
+  `a13c1a30-5064-4467-b45e-735bb1f6a352` passes all six machine checks with a
+  populated visual target; it needs human Validate + claim adoption. Afterwards
+  bind `toolbox.spin.world-survival` to THAT Script — the binding sits on
+  `33db341f` and contextual resolution matches on the Script's own `help_ui_refs`.
+- **Training / Clip-Help split: investigated, not started.** Five-surface IA
+  confirmed. Explore is already clean; the conflation is inside `/help`, where 8
+  static guides serve both deliberate learning and in-app `[?]` clicks.
+- **The footer's three-column branch now has no consumer.** Kept deliberately —
+  it carries the classified marketing content. Once Explore/About/Trust absorb
+  those items, delete the branch rather than keep a dormant one.
+- **Rollback directories: 8**, five above the keep-3 rule. Pruning is a separate
+  deliberate decision by that rule's own terms.
+- `/tmp/archiosk-stage-f4e422c/` on the server is stale August scratch, not ours.
+
+### Two things not verified live
+
+The signed-in menu href (`/home`) and mobile menu behaviour — the browser
+session expired and passwords are not entered here, so both rest on tests
+against an authenticated test client. And the new `@media (max-width: 560px)`
+Help rules: `resize_window` could not drive the viewport below Chrome's minimum,
+so intrinsic reflow is verified and the breakpoint is not. Both are worth a
+minute on a real phone.
