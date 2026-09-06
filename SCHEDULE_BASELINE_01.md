@@ -1,7 +1,7 @@
 # ARCHIOSK Development Master Schedule — BASELINE SCHEDULE 01
 
 **Status:** BASELINE, authorized by the Product Owner 2026-09-06.
-**Revision:** 02B (2026-09-06) — duration unit defined as **Virtual Engineering
+**Revision:** 02C (2026-09-06) — duration unit defined as **Virtual Engineering
 Days (VED)**, third clock added, measured velocity recorded. **The logic network
 is unchanged from Rev 01.** Rev 02A added the CH0–CH3 milestone ids (§6.2) and
 the two-VED-remainder reporting rule (§8.4.4). Rev 02B records **P0 / CH1 as
@@ -182,7 +182,7 @@ durations.
 | **G2** | Controlled 3–5 user pilot (RFI bounded) | G1 | 15–25 | — | 7–32 | 0 | ★ | NOT STARTED | LOW |
 | **G3** | **P1** pilot findings closeout | G2 | 5–10 | +3–5 | 32–42 | 0 | ★ | NOT STARTED | LOW |
 | E3 | External-model fault-injection tests | E1 | 3–4 | — | 3–7 | 5 | | NOT STARTED | MED |
-| **A2** | Requirement/obligation dependency graph | ∥ | 8–13 | +2–3 | 0–13 | 0 | ★ | PRIMITIVE EXISTS / UNWIRED | MED |
+| **A2** | Requirement/obligation dependency graph | ∥ | 8–13 | +2–3 | 0–13 | 0 | ★ | COMPLETE¹ | MED |
 | A3 | Authority-transition reconstruction | A2 | 5–8 | — | 13–21 | 8 | | PARTIAL | MED |
 | **B1** | Change-arrival recognition (Addendum) | A2 | 8–13 | **+3–5** | 13–26 | 0 | ★ | **SPECIFIED ONLY** | LOW |
 | **B2** | Requirement-level supersession linkage | B1 | 3–5 | — | 26–31 | 0 | ★ | PRIMITIVE EXISTS / UNWIRED | MED |
@@ -197,6 +197,21 @@ durations.
 | **G4** | **V3** Addendum-3 scenario end-to-end | B3-B,D3,C1,RWK | 5–8 | — | 66–74 | 0 | ★ | NOT STARTED | MED |
 | **G5** | **R1** 1.0 acceptance gate | G4,G3 | 2 | — | 74–76 | 0 | ★ | NOT STARTED | HIGH |
 | H1–H5 | 2D/3D expansion, University, voice, polish, Airlock | — | — | — | — | ∞ | | DEFERRED | — |
+
+¹ **A2 COMPLETE carries a recorded tension with §5.1, surfaced rather than
+resolved silently.** §5.1 says prototypes and test fixtures are "**not** counted
+as completed product capability unless a real workflow consumes them", and A2's
+only consumer today is its own test suite. That is not an oversight: the
+governing direction for A2 named "a service/query used by tests" as a
+sufficient consumer and said explicitly **"Do not build B1/B3 carry-through"**,
+so wiring a production workflow was out of scope by instruction.
+
+Both readings are defensible and they disagree, so both are recorded. The
+dependency model exists, is governed, is queryable and is proven against real
+Requirements and real drawing regions; no production workflow reads it yet. If
+the Product Owner prefers §5.1's stricter reading, the honest status is
+IMPLEMENTED / NEEDS CONSUMER and B1 closes it — that is a status decision, not
+an engineering one, and it changes no duration, float or logic either way.
 
 \* **RWK float is 0 by placement, not by certainty.** It is a declared unknown,
 not padding hidden inside another activity's estimate. CPM cannot predict
@@ -613,6 +628,7 @@ It does not alter §4, §5 float, or the critical path — see §1.1.
 | 02 | 2026-09-06 | Product Owner | Duration unit renamed to **Virtual Engineering Days (VED)** (§1.0); third clock — actual elapsed forecast — added (§8.4); measured delivery velocity recorded (§8.4.1); parallel-agent capacity recorded (§8.5); E1, E2, D1 marked COMPLETE | **LOGIC: NO MOVEMENT.** Elapsed forecast revised from ~25 weeks to ~8–14 weeks on measured long-run velocity |
 | 02A | 2026-09-06 | Product Owner | Chassis release milestones recorded as **CH0–CH3** with the C0–C3 mapping (§6.2); reporting must carry **two** VED remainders, critical-path and total resource-loaded (§8.4.4) | **LOGIC: NO MOVEMENT.** No duration, float, status or dependency altered |
 | 02B | 2026-09-06 | Product Owner | Rollback path exercised end-to-end on the live host at Product Owner direction; **G1 → COMPLETE**; **P0 / CH1 recorded as ACHIEVED** (§6.3) with the two accepted pilot limitations | **LOGIC: NO MOVEMENT.** G1 sits off the R1 critical path, so R1 does not move |
+| 02C | 2026-09-06 | Product Owner | **A2 → COMPLETE** (`83e9e65`) — the governed dependency graph, built as a query layer over the existing Relationship substrate. Status change only | **LOGIC: NO MOVEMENT**, but A2 is the first completed activity **ON** the R1 critical path, so remaining critical-path effort falls 61–98 → 51–82 VED |
 
 **Rev 02A — what changed, why, and what it deliberately did not touch.**
 
