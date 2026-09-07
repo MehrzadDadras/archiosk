@@ -80,6 +80,52 @@ SNAPSHOT_DIR_NAME = "legend_snapshots"
 #: without storing a megabyte per row.
 SNAPSHOT_DPI = 200
 
+# -- CLAUDE-DRAWING-CONDITIONS-01: review-sized, not analysis-sized ----------
+#
+# A permanent snapshot exists so a human can see the mark. It is not the image
+# an OCR pass should read, and conflating those two jobs is what produced a
+# 1.9 MB title-block crop on the first real E1 run.
+#
+# The rules are deliberately asymmetric. A large crop is DOWNSAMPLED, because
+# past roughly this width a reviewer gains nothing and storage grows without
+# limit. A small crop is NEVER UPSCALED, because inventing pixels makes a
+# marginal symbol look more legible than the evidence actually is - which is
+# precisely the misjudgement a snapshot-first review exists to prevent.
+#
+# Aspect ratio is preserved and the SOURCE bounding coordinates are stored
+# untouched, so the crop stays addressable back to the sheet. Drawing scale and
+# orientation live on the DerivedView and are never inferred from pixel
+# dimensions: resizing an image must never look like rescaling a drawing.
+SNAPSHOT_MAX_LONG_SIDE_PX = 1200
+#: The size below which a dense symbol stops being readable on screen. Recorded
+#: as the review floor; a crop naturally smaller than this is left alone rather
+#: than enlarged.
+SNAPSHOT_TARGET_LONG_SIDE_PX = 800
+
+
+def _review_scale(rect, dpi: int) -> float:
+    """The zoom that keeps a crop review-sized. Never greater than `dpi` asks.
+
+    Returns a matrix scale rather than a pixel count, so the caller renders once
+    at the right size instead of rendering large and shrinking - which would
+    spend exactly the memory the cap exists to avoid.
+    """
+    natural = dpi / 72.0
+    try:
+        width = abs(float(rect[2]) - float(rect[0]))
+        height = abs(float(rect[3]) - float(rect[1]))
+    except (TypeError, IndexError, ValueError):
+        return natural
+    longest = max(width, height) * natural
+    if longest <= SNAPSHOT_MAX_LONG_SIDE_PX or longest <= 0:
+        return natural          # already small enough - and never upscaled
+    # The renderer rounds UP to whole pixels, so scaling to exactly the cap can
+    # land one pixel past it - measured on the real E1 sheet, which produced
+    # 1201px against a stated cap of 1200. Shrinking by a hair makes the cap a
+    # guarantee rather than an aspiration; the visual difference is nil and a
+    # bound that is only usually true is not a bound.
+    return natural * (SNAPSHOT_MAX_LONG_SIDE_PX / longest) * 0.999
+
 #: A decision that settles the row for review purposes. DEFERRED deliberately
 #: does not - deferring is choosing to answer later, not answering.
 SETTLED_STATUSES = (
@@ -109,7 +155,8 @@ def snapshot_region(raw_bytes: bytes, page_index: int, rect, destination_dir: st
         document = pymupdf.open(stream=raw_bytes, filetype="pdf")
         try:
             page = document.load_page(page_index)
-            matrix = pymupdf.Matrix(dpi / 72.0, dpi / 72.0)
+            scale = _review_scale(rect, dpi)
+            matrix = pymupdf.Matrix(scale, scale)
             if rotate:
                 matrix = matrix * pymupdf.Matrix(rotate)
             pixmap = page.get_pixmap(matrix=matrix, clip=pymupdf.Rect(*rect))
@@ -173,6 +220,36 @@ def _scope_matches(item: dict, *, page_id: Optional[str], source_id: Optional[st
     return False
 
 
+def effective_evidence_tier(item: dict) -> str:
+    """What this reading RESTS ON now, which is not always what GO guessed.
+
+    `evidence_tier` records what the PROPOSAL rested on. Once a human confirms
+    a mark at a scope, the reading rests on that person's judgement at that
+    scope - so a generic guess a reviewer confirmed project-wide is a
+    human-confirmed project convention, and ranking it by its original
+    guess would leave it below every other generic guess forever.
+
+    Section 1's precedence list names those human-confirmed tiers explicitly.
+    Without this they existed in the ordering table and could never be reached,
+    which is the quiet kind of wrong: the code looks like it implements the
+    rule and does not.
+
+    An explicit legend stays an explicit legend. It already outranks everything
+    and confirmation cannot promote it further.
+    """
+    recorded = item.get("evidence_tier")
+    if recorded == "explicit_legend":
+        return recorded
+    if item.get("status") not in (LEGEND_STATUS_CONFIRMED,
+                                  LEGEND_STATUS_OVERRIDDEN):
+        return recorded or "generic_inference"
+    return {
+        LEGEND_SCOPE_PROJECT: "confirmed_project",
+        LEGEND_SCOPE_DISCIPLINE: "confirmed_discipline",
+        LEGEND_SCOPE_SOURCE: "confirmed_source_set",
+    }.get(item.get("scope_kind"), recorded or "generic_inference")
+
+
 def resolve_meaning(store, workspace, observed_text: Optional[str] = None, *,
                     proposed_kind: Optional[str] = None,
                     page_id: Optional[str] = None,
@@ -200,7 +277,7 @@ def resolve_meaning(store, workspace, observed_text: Optional[str] = None, *,
                  "generic_inference": 4}
         scope_rank = {LEGEND_SCOPE_PAGE: 0, LEGEND_SCOPE_SOURCE: 1,
                       LEGEND_SCOPE_DISCIPLINE: 2, LEGEND_SCOPE_PROJECT: 3}
-        return (order.get(item.get("evidence_tier"), 4),
+        return (order.get(effective_evidence_tier(item), 4),
                 scope_rank.get(item.get("scope_kind"), 4))
 
     if not candidates:
@@ -211,7 +288,8 @@ def resolve_meaning(store, workspace, observed_text: Optional[str] = None, *,
     resolved = effective_meaning(best)
     return {
         "resolved": True,
-        "tier": best.get("evidence_tier"),
+        "tier": effective_evidence_tier(best),
+        "proposed_tier": best.get("evidence_tier"),
         "meaning": resolved["meaning"],
         "authority": resolved["authority"],
         "scope_kind": best.get("scope_kind"),
@@ -421,9 +499,9 @@ def understanding_report(store, workspace, source_id: str,
 # this scale.
 # ---------------------------------------------------------------------------
 
-#: Two marks are the same size for clustering purposes within this relative
-#: tolerance. Hand-placed symbols and rasterisation both wobble; a section
-#: bubble drawn twice is rarely the same number of pixels.
+#: Two marks share a proportion for clustering purposes within this relative
+#: tolerance. Hand-placed symbols, scanning and rasterisation all wobble; a
+#: section bubble drawn twice is rarely the same shape to the pixel.
 FAMILY_SIZE_TOLERANCE = 0.25
 
 #: Kinds whose meaning depends on which way the mark points. For these, an
@@ -459,35 +537,52 @@ def _label_shape(text: Optional[str]) -> str:
     return "".join(collapsed)
 
 
-def _size_bucket(region: Optional[dict]) -> tuple:
-    """A coarse size key. Rounded so near-identical marks land together."""
+def _aspect_bucket(region: Optional[dict]) -> int:
+    """A coarse SHAPE key - proportion, deliberately not size.
+
+    Absolute size was the first thing tried here and it was wrong. The same
+    section bubble drawn on a 1:50 enlargement and a 1:100 overall plan is one
+    symbol at two scales, and a size key splits it into two families - which is
+    exactly the per-occurrence outcome families exist to prevent. Scan
+    resolution and drawing scale both move size and neither changes meaning.
+
+    Proportion does carry meaning: a circle and a long thin tag are different
+    marks however they are scaled. So the signature keeps the ratio and drops
+    the magnitude, with enough tolerance to absorb scan distortion and line
+    weight.
+    """
     region = region or {}
     width = float(region.get("width") or 0)
     height = float(region.get("height") or 0)
     if width <= 0 or height <= 0:
-        return (0, 0)
+        return 0
+    ratio = width / height
     step = 1.0 + FAMILY_SIZE_TOLERANCE
-    def bucket(value):
-        power = 0
-        while value >= step:
-            value /= step
-            power += 1
-        return power
-    return (bucket(width), bucket(height))
+    bucket, flipped = 0, ratio < 1.0
+    if flipped:
+        ratio = 1.0 / ratio
+    while ratio >= step:
+        ratio /= step
+        bucket += 1
+    # A mark and its 90-degree rotation share a family: rotation is variance,
+    # not identity, so the two orientations of one proportion land together.
+    return bucket
 
 
 def family_signature(candidate: dict) -> tuple:
     """What makes two marks visually equivalent FOR CLUSTERING.
 
-    Deliberately excludes rotation, mirror state, direction and target. Those
-    are the per-instance facts the family is not claiming to determine, and
-    including them would produce one family per occurrence - the outcome this
-    whole mechanism exists to avoid.
+    Deliberately excludes rotation, mirror state, direction, target AND SIZE.
+    Those are the per-instance facts the family is not claiming to determine,
+    and including any of them would produce one family per occurrence - the
+    outcome this whole mechanism exists to avoid. Family equivalence is meant
+    to survive rotation, mirroring, scale difference, scan distortion and line
+    weight, because none of those change what a mark MEANS.
     """
     return (
         candidate.get("proposed_kind"),
         _label_shape(candidate.get("observed_text") or candidate.get("nearby_label")),
-        _size_bucket(candidate.get("region")),
+        _aspect_bucket(candidate.get("region")),
     )
 
 
@@ -588,8 +683,10 @@ def instance_differs_materially(instance: dict, reference: dict) -> list:
             "label grammar differs: %r vs the family's %r"
             % (instance_shape, reference_shape))
 
-    if _size_bucket(instance.get("region")) != _size_bucket(reference.get("region")):
-        reasons.append("size falls outside the family's range")
+    if _aspect_bucket(instance.get("region")) != _aspect_bucket(reference.get("region")):
+        # PROPORTION, not size. A mark drawn at another scale is the same mark;
+        # a mark of another shape is not.
+        reasons.append("proportions differ from the family's shape")
 
     kind = reference.get("proposed_kind")
     if kind in DIRECTION_DEPENDENT_KINDS:
@@ -892,3 +989,177 @@ def confirm_family(store, workspace, family_id: str, action: str, actor: str, *,
             "governed_instances": carried["governed_instances"],
         })
     return result
+
+
+# ---------------------------------------------------------------------------
+# LEGEND-FIRST INTERPRETATION
+#
+# Before a symbol is given a meaning, the project's own explanation of that
+# symbol is looked for. This is the cheapest correctness win available on real
+# drawing sets and the most consequential one: a generic symbol recogniser that
+# outranks a project's own legend will be confidently wrong on exactly the
+# projects whose conventions are unusual - which is most of them.
+#
+# What this does NOT do is block ingestion. A set with no legend is still read;
+# it is read with lower confidence and without authoritative interpretation,
+# which is a different and more honest thing than refusing to look.
+# ---------------------------------------------------------------------------
+
+#: Markers that a document, page or region is the project's own explanation of
+#: its drawing language. Matched case-insensitively as whole phrases, which is
+#: deliberately conservative - "note" alone would match half of every sheet.
+LEGEND_EVIDENCE_MARKERS = (
+    ("legend", "legend"),
+    ("symbol legend", "legend"),
+    ("keynote legend", "keynote_legend"),
+    ("key notes", "keynote_legend"),
+    ("keynotes", "keynote_legend"),
+    ("abbreviation", "abbreviations"),
+    ("abbreviations", "abbreviations"),
+    ("general notes", "general_notes"),
+    ("drawing index", "drawing_index"),
+    ("sheet index", "drawing_index"),
+    ("list of drawings", "drawing_index"),
+    ("symbol key", "symbol_key"),
+    ("graphic symbols", "symbol_key"),
+    ("material legend", "legend"),
+    ("hatch legend", "legend"),
+    ("line types", "symbol_key"),
+)
+
+#: Where a piece of legend evidence was found, in precedence order. This is the
+#: same order `resolve_meaning` already walks; it is repeated here as data so
+#: the search and the resolver cannot drift apart silently.
+LEGEND_EVIDENCE_SCOPE_PROJECT = "project"
+LEGEND_EVIDENCE_SCOPE_SHEET = "sheet"
+LEGEND_EVIDENCE_SCOPE_PAGE = "page"
+
+LEGEND_EVIDENCE_PRECEDENCE = (
+    LEGEND_EVIDENCE_SCOPE_PROJECT,
+    LEGEND_EVIDENCE_SCOPE_SHEET,
+    LEGEND_EVIDENCE_SCOPE_PAGE,
+)
+
+
+def _matches_legend_marker(text: Optional[str]) -> Optional[str]:
+    """Which kind of legend evidence this text announces, if any."""
+    haystack = (text or "").strip().lower()
+    if not haystack:
+        return None
+    best = None
+    for phrase, kind in LEGEND_EVIDENCE_MARKERS:
+        if phrase in haystack:
+            # Prefer the longest matching phrase: "keynote legend" is more
+            # specific than "legend" and must not be reported as the latter.
+            if best is None or len(phrase) > best[0]:
+                best = (len(phrase), kind)
+    return best[1] if best else None
+
+
+def find_legend_evidence(store, workspace, *, source_id: Optional[str] = None) -> list:
+    """Look for the project's own explanation of its drawing language.
+
+    Searches the places a legend actually lives - source names and document
+    ids, page labels, and the text already recovered from pages - rather than
+    requiring a legend to have been tagged as one in advance. Returns evidence,
+    ordered by precedence, with enough provenance to cite.
+
+    Finding nothing is a real answer and is returned as one. It is not a
+    failure, and it must not be dressed up as a project convention.
+    """
+    found = []
+    for source in workspace.sources:
+        if source_id is not None and source["id"] != source_id:
+            continue
+        kind = (_matches_legend_marker(source.get("name"))
+                or _matches_legend_marker(source.get("document_id")))
+        if kind:
+            found.append({
+                "kind": kind,
+                "scope": (LEGEND_EVIDENCE_SCOPE_PROJECT
+                          if source_id is None else LEGEND_EVIDENCE_SCOPE_SHEET),
+                "source_id": source["id"],
+                "source_name": source.get("name"),
+                "page_structural_unit_id": None,
+                "found_in": "source_name",
+                "evidence": source.get("name") or source.get("document_id"),
+            })
+
+    for unit in workspace.structural_units:
+        if source_id is not None and unit.get("source_id") != source_id:
+            continue
+        kind = _matches_legend_marker(unit.get("label"))
+        if kind:
+            found.append({
+                "kind": kind,
+                "scope": LEGEND_EVIDENCE_SCOPE_PAGE,
+                "source_id": unit.get("source_id"),
+                "source_name": None,
+                "page_structural_unit_id": unit["id"],
+                "found_in": "page_label",
+                "evidence": unit.get("label"),
+            })
+
+    for item in workspace.legend_items:
+        if source_id is not None and item.get("source_id") != source_id:
+            continue
+        kind = _matches_legend_marker(item.get("observed_text"))
+        if kind:
+            found.append({
+                "kind": kind,
+                "scope": LEGEND_EVIDENCE_SCOPE_PAGE,
+                "source_id": item.get("source_id"),
+                "source_name": None,
+                "page_structural_unit_id": item.get("page_structural_unit_id"),
+                "found_in": "observed_text",
+                "evidence": item.get("observed_text"),
+            })
+
+    order = {scope: index for index, scope in enumerate(LEGEND_EVIDENCE_PRECEDENCE)}
+    return sorted(found, key=lambda row: order.get(row["scope"], len(order)))
+
+
+def legend_first_readiness(store, workspace, source_id: str) -> dict:
+    """May GO interpret this sheet's symbols authoritatively yet?
+
+    Three honest outcomes, and the middle one is the common one on real sets:
+    explicit legend evidence exists; human-confirmed convention exists but no
+    explicit legend does; or neither, in which case reading continues at
+    reduced confidence and nothing is asserted as settled.
+    """
+    evidence = find_legend_evidence(store, workspace, source_id=source_id)
+    confirmed = [item for item in store.legend_items_for(workspace)
+                 if item.get("status") in (LEGEND_STATUS_CONFIRMED,
+                                           LEGEND_STATUS_OVERRIDDEN)
+                 and item.get("scope_kind") in (LEGEND_SCOPE_PROJECT,
+                                                LEGEND_SCOPE_DISCIPLINE,
+                                                LEGEND_SCOPE_SOURCE)]
+    if evidence:
+        return {
+            "state": "explicit_legend_available",
+            "may_interpret_authoritatively": True,
+            "confidence_ceiling": None,
+            "legend_evidence": evidence,
+            "confirmed_conventions": len(confirmed),
+            "reason": "The project explains its own drawing language here.",
+        }
+    if confirmed:
+        return {
+            "state": "confirmed_convention_only",
+            "may_interpret_authoritatively": True,
+            "confidence_ceiling": None,
+            "legend_evidence": [],
+            "confirmed_conventions": len(confirmed),
+            "reason": ("No explicit legend, but a human has confirmed "
+                       "conventions at a scope that reaches this sheet."),
+        }
+    return {
+        "state": "no_legend_evidence",
+        "may_interpret_authoritatively": False,
+        #: Reading continues - only the authority of the reading is capped.
+        "confidence_ceiling": 0.5,
+        "legend_evidence": [],
+        "confirmed_conventions": 0,
+        "reason": ("Nothing in this project explains its drawing language yet. "
+                   "Ingestion continues; interpretation stays provisional."),
+    }

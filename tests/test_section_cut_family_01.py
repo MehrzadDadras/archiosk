@@ -182,6 +182,31 @@ class ClusteringTests(_FamilyBase):
                          second[0]["representative_indexes"])
 
 
+    def test_rotated_and_mirrored_marks_share_one_family(self):
+        # Section 6: family equivalence must survive rotation, mirroring and
+        # scale. None of those change what a mark MEANS.
+        candidates = [
+            self._cut("1/E2", 0, instance_rotation_degrees=0.0,
+                      instance_mirrored=False),
+            self._cut("2/E2", 90, instance_rotation_degrees=90.0,
+                      instance_mirrored=False),
+            self._cut("3/E2", 180, instance_rotation_degrees=180.0,
+                      instance_mirrored=True),
+            self._cut("4/E2", 270, instance_rotation_degrees=270.0,
+                      instance_mirrored=True,
+                      region={"x": 40, "y": 120, "width": 132, "height": 132}),
+        ]
+        families = lou.cluster_candidates(candidates)
+        self.assertEqual(len(families), 1)
+        self.assertEqual(families[0]["member_count"], 4)
+
+    def test_a_ninety_degree_rotation_does_not_split_a_rectangular_family(self):
+        upright = self._cut("1/E2", 0, region={"x": 0, "y": 0, "width": 40, "height": 160})
+        turned = self._cut("2/E2", 90, region={"x": 0, "y": 0, "width": 160, "height": 40})
+        self.assertEqual(len(lou.cluster_candidates([upright, turned])), 1)
+
+
+
 class RepresentativeTests(_FamilyBase):
     """B. A SMALL representative set - and the saving must be real."""
 
@@ -376,10 +401,20 @@ class MaterialDifferenceTests(_FamilyBase):
         odd = dict(reference, observed_text="N", nearby_label="N")
         self.assertTrue(lou.instance_differs_materially(odd, reference))
 
-    def test_a_size_well_outside_the_family_is_material(self):
+    def test_a_different_proportion_is_material(self):
         reference = self._cut("1/E2", 0)
-        odd = dict(reference, region={"x": 0, "y": 0, "width": 400, "height": 400})
+        odd = dict(reference, region={"x": 0, "y": 0, "width": 40, "height": 200})
         self.assertTrue(lou.instance_differs_materially(odd, reference))
+
+    def test_pure_scale_difference_is_NOT_material(self):
+        # SUPERSEDES an earlier assertion in this file that a size well outside
+        # the family was material. That rule split one symbol drawn on a 1:50
+        # enlargement from the same symbol on a 1:100 plan, which is the
+        # per-occurrence outcome families exist to prevent. Proportion carries
+        # meaning; magnitude does not.
+        reference = self._cut("1/E2", 0)
+        larger = dict(reference, region={"x": 0, "y": 0, "width": 132, "height": 132})
+        self.assertEqual(lou.instance_differs_materially(larger, reference), [])
 
     def test_an_unrecorded_direction_is_material_for_a_section_cut(self):
         reference = self._cut("1/E2", 0)

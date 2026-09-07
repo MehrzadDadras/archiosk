@@ -463,6 +463,25 @@ RELATIONSHIP_TYPE_ASSOCIATED_WITH = "associated_with"
 # assigned_to/accepted_by/rejected_by/closed_by -> deferred, no governed
 # Decision/RFI/closure object exists yet for them to name honestly.
 RELATIONSHIP_TYPE_OBSERVES = "observes"  # field-reality evidence (image/photo) observing a design-intent or coordination condition - Section 4's own tributary distinction, not the same claim as CORRESPONDS_TO (which makes no field-vs-design claim)
+
+
+# CLAUDE-DRAWING-CONDITIONS-01: physical edges between drawing conditions.
+# Host/dependent and load-path edges are Relationships like any other - the
+# substrate already carries provenance, confidence, provisional state and
+# human validation, and a second graph for "physical" edges would split the
+# one A2 already queries.
+RELATIONSHIP_TYPE_HOSTED_BY = "hosted_by"
+RELATIONSHIP_TYPE_ATTACHED_TO = "attached_to"
+RELATIONSHIP_TYPE_BONDED_TO = "bonded_to"
+RELATIONSHIP_TYPE_ANCHORED_TO = "anchored_to"
+RELATIONSHIP_TYPE_SUSPENDED_FROM = "suspended_from"
+RELATIONSHIP_TYPE_BACKED_BY = "backed_by"
+RELATIONSHIP_TYPE_CONTAINED_BY = "contained_by"
+RELATIONSHIP_TYPE_SUPPORTED_BY = "supported_by"
+RELATIONSHIP_TYPE_BEARS_ON = "bears_on"
+RELATIONSHIP_TYPE_HUNG_FROM = "hung_from"
+RELATIONSHIP_TYPE_TRANSFERS_LOAD_TO = "transfers_load_to"
+RELATIONSHIP_TYPE_BRACED_BY = "braced_by"
 RELATIONSHIP_TYPE_DEVIATES_FROM = "deviates_from"  # a built/observed condition diverges from what a requirement or specification calls for - distinct from CONTRADICTS (evidence vs. evidence), this is condition vs. requirement
 RELATIONSHIP_TYPE_REQUIRES_FOLLOW_UP = "requires_follow_up"  # evidence/observation/Finding -> Task, the one governed action-chain edge this stage adds
 # CLAUDE-MM8 Section 31: four genuinely new types for the relationships
@@ -495,6 +514,19 @@ KNOWN_RELATIONSHIP_TYPES = (
     RELATIONSHIP_TYPE_INVALIDATES,
     RELATIONSHIP_TYPE_ASSOCIATED_WITH,
     RELATIONSHIP_TYPE_OBSERVES,
+    # CLAUDE-DRAWING-CONDITIONS-01: physical edges between conditions.
+    RELATIONSHIP_TYPE_HOSTED_BY,
+    RELATIONSHIP_TYPE_ATTACHED_TO,
+    RELATIONSHIP_TYPE_BONDED_TO,
+    RELATIONSHIP_TYPE_ANCHORED_TO,
+    RELATIONSHIP_TYPE_SUSPENDED_FROM,
+    RELATIONSHIP_TYPE_BACKED_BY,
+    RELATIONSHIP_TYPE_CONTAINED_BY,
+    RELATIONSHIP_TYPE_SUPPORTED_BY,
+    RELATIONSHIP_TYPE_BEARS_ON,
+    RELATIONSHIP_TYPE_HUNG_FROM,
+    RELATIONSHIP_TYPE_TRANSFERS_LOAD_TO,
+    RELATIONSHIP_TYPE_BRACED_BY,
     RELATIONSHIP_TYPE_DEVIATES_FROM,
     RELATIONSHIP_TYPE_REQUIRES_FOLLOW_UP,
     RELATIONSHIP_TYPE_BASED_ON,
@@ -2612,6 +2644,366 @@ class DerivedView:
     title_block_overrides: dict = field(default_factory=dict)
     overridden_by: Optional[str] = None
     overridden_at: Optional[str] = None
+
+
+# -- CLAUDE-DRAWING-CONDITIONS-01: conditions, boundaries, and what happens ---
+#    at the threshold.
+#
+# WHY A CONDITION IS NOT A REGION
+#
+# `AddressableRegion` already locates a piece of a page, and it is reused here
+# rather than duplicated - every condition and boundary carries a region dict in
+# the same shape. What it cannot carry is the thing the drawing is ABOUT: a
+# window head detail is a condition whose parent is a window perimeter, whose
+# parent is an exterior wall assembly, whose parent is the building envelope.
+# None of those upper levels is a rectangle on a sheet, so the hierarchy lives
+# on the condition and not on the geometry - the same separation
+# `StructuralUnit.parent_structural_unit_id` already makes between a page and
+# what the page contains.
+#
+# WHY THE EDGES ARE `Relationship` AND NOT A NEW GRAPH
+#
+# Host/dependent and structural support are EDGES between conditions, and
+# `Relationship` is this repository's general typed edge with provenance,
+# confidence, provisional state and human validation already on it. Adding a
+# second graph for "physical" edges would split the one substrate A2 already
+# queries. Only the relationship TYPES are new.
+#
+# EVERY STATE HERE IS DERIVED AT READ TIME
+#
+# Nothing below stores a continuity verdict, a load-path verdict or an
+# alignment verdict. Those are computed from the observations and the human
+# decisions each time they are asked for, which is what keeps a boundary that
+# was UNRESOLVED yesterday resolvable the moment the missing evidence arrives -
+# with no reprocessing and nothing to unwrite.
+
+# -- what kind of thing a condition is (open world) --------------------------
+CONDITION_KIND_DETAIL = "detail"
+CONDITION_KIND_ASSEMBLY = "assembly"
+CONDITION_KIND_SYSTEM = "system"
+CONDITION_KIND_ELEMENT = "element"
+CONDITION_KIND_INTERFACE = "interface"
+CONDITION_KIND_OPENING = "opening"
+CONDITION_KIND_ZONE = "zone"
+
+KNOWN_CONDITION_KINDS = (
+    CONDITION_KIND_DETAIL, CONDITION_KIND_ASSEMBLY, CONDITION_KIND_SYSTEM,
+    CONDITION_KIND_ELEMENT, CONDITION_KIND_INTERFACE, CONDITION_KIND_OPENING,
+    CONDITION_KIND_ZONE,
+)
+
+# -- what made a boundary visible (evidence, never meaning) ------------------
+BOUNDARY_EVIDENCE_MATERIAL_CHANGE = "material_change"
+BOUNDARY_EVIDENCE_THICKNESS_CHANGE = "thickness_change"
+BOUNDARY_EVIDENCE_LINE_WEIGHT_CHANGE = "line_weight_change"
+BOUNDARY_EVIDENCE_HATCH_CHANGE = "hatch_change"
+BOUNDARY_EVIDENCE_FINISH_CHANGE = "finish_change"
+BOUNDARY_EVIDENCE_VOID_OR_OPENING = "void_or_opening"
+BOUNDARY_EVIDENCE_JOINT = "joint"
+BOUNDARY_EVIDENCE_GEOMETRIC_DISCONTINUITY = "geometric_discontinuity"
+BOUNDARY_EVIDENCE_LEVEL_CHANGE = "level_change"
+BOUNDARY_EVIDENCE_ASSEMBLY_INTERFACE = "assembly_interface"
+BOUNDARY_EVIDENCE_MEMBRANE_TRANSITION = "membrane_transition"
+BOUNDARY_EVIDENCE_STRUCTURAL_GRID = "structural_grid"
+BOUNDARY_EVIDENCE_DIMENSION_BREAK = "dimension_break"
+BOUNDARY_EVIDENCE_ANNOTATION = "annotation"
+BOUNDARY_EVIDENCE_CONTINUATION_MARKER = "continuation_marker"
+
+KNOWN_BOUNDARY_EVIDENCE = (
+    BOUNDARY_EVIDENCE_MATERIAL_CHANGE, BOUNDARY_EVIDENCE_THICKNESS_CHANGE,
+    BOUNDARY_EVIDENCE_LINE_WEIGHT_CHANGE, BOUNDARY_EVIDENCE_HATCH_CHANGE,
+    BOUNDARY_EVIDENCE_FINISH_CHANGE, BOUNDARY_EVIDENCE_VOID_OR_OPENING,
+    BOUNDARY_EVIDENCE_JOINT, BOUNDARY_EVIDENCE_GEOMETRIC_DISCONTINUITY,
+    BOUNDARY_EVIDENCE_LEVEL_CHANGE, BOUNDARY_EVIDENCE_ASSEMBLY_INTERFACE,
+    BOUNDARY_EVIDENCE_MEMBRANE_TRANSITION, BOUNDARY_EVIDENCE_STRUCTURAL_GRID,
+    BOUNDARY_EVIDENCE_DIMENSION_BREAK, BOUNDARY_EVIDENCE_ANNOTATION,
+    BOUNDARY_EVIDENCE_CONTINUATION_MARKER,
+)
+
+# -- edge behaviour: two families, deliberately not one ----------------------
+#
+# A brick coursing that stops and a vapour barrier that stops are not the same
+# event. The first is a hard edge and the question is how it is finished; the
+# second is a continuity question and the answer decides whether the assembly
+# works. Collapsing them into "TERMINATE" would lose exactly the distinction
+# that matters, so the two vocabularies stay separate and a boundary declares
+# which family it is being read in.
+EDGE_CLASS_DISCRETE = "discrete_material_edge"
+EDGE_CLASS_CONTINUITY = "continuity_layer_edge"
+EDGE_CLASS_UNKNOWN = "unknown_edge_class"
+
+KNOWN_EDGE_CLASSES = (EDGE_CLASS_DISCRETE, EDGE_CLASS_CONTINUITY,
+                      EDGE_CLASS_UNKNOWN)
+
+EDGE_BEHAVIOR_CUT = "cut"
+EDGE_BEHAVIOR_BUTT = "butt"
+EDGE_BEHAVIOR_STOP = "stop"
+EDGE_BEHAVIOR_RETURN = "return"
+EDGE_BEHAVIOR_JOINT = "joint"
+EDGE_BEHAVIOR_TERMINATE = "terminate"
+
+DISCRETE_EDGE_BEHAVIORS = (
+    EDGE_BEHAVIOR_CUT, EDGE_BEHAVIOR_BUTT, EDGE_BEHAVIOR_STOP,
+    EDGE_BEHAVIOR_RETURN, EDGE_BEHAVIOR_JOINT, EDGE_BEHAVIOR_TERMINATE,
+)
+
+EDGE_BEHAVIOR_OVERLAP = "overlap"
+EDGE_BEHAVIOR_PASS_BY = "pass_by"
+EDGE_BEHAVIOR_WRAP = "wrap"
+EDGE_BEHAVIOR_CONTINUE = "continue"
+EDGE_BEHAVIOR_TURN_UP = "turn_up"
+EDGE_BEHAVIOR_TURN_DOWN = "turn_down"
+EDGE_BEHAVIOR_TERMINATE_AND_SEAL = "terminate_and_seal"
+EDGE_BEHAVIOR_TRANSITION_TO_ADJACENT_LAYER = "transition_to_adjacent_layer"
+EDGE_BEHAVIOR_INTERRUPTED = "interrupted"
+EDGE_BEHAVIOR_UNKNOWN = "unknown"
+
+CONTINUITY_EDGE_BEHAVIORS = (
+    EDGE_BEHAVIOR_OVERLAP, EDGE_BEHAVIOR_PASS_BY, EDGE_BEHAVIOR_WRAP,
+    EDGE_BEHAVIOR_CONTINUE, EDGE_BEHAVIOR_TURN_UP, EDGE_BEHAVIOR_TURN_DOWN,
+    EDGE_BEHAVIOR_TERMINATE_AND_SEAL,
+    EDGE_BEHAVIOR_TRANSITION_TO_ADJACENT_LAYER, EDGE_BEHAVIOR_INTERRUPTED,
+    EDGE_BEHAVIOR_UNKNOWN,
+)
+
+KNOWN_EDGE_BEHAVIORS = DISCRETE_EDGE_BEHAVIORS + CONTINUITY_EDGE_BEHAVIORS
+
+# -- thresholds: where deeper reasoning is worth spending --------------------
+THRESHOLD_KIND_CHANGE = "change"
+THRESHOLD_KIND_INTERSECT = "intersect"
+THRESHOLD_KIND_TERMINATE = "terminate"
+THRESHOLD_KIND_PENETRATE = "penetrate"
+THRESHOLD_KIND_OVERLAP = "overlap"
+THRESHOLD_KIND_TRANSFER = "transfer"
+THRESHOLD_KIND_TRANSITION = "transition"
+THRESHOLD_KIND_RESPONSIBILITY_CHANGE = "responsibility_change"
+
+KNOWN_THRESHOLD_KINDS = (
+    THRESHOLD_KIND_CHANGE, THRESHOLD_KIND_INTERSECT, THRESHOLD_KIND_TERMINATE,
+    THRESHOLD_KIND_PENETRATE, THRESHOLD_KIND_OVERLAP, THRESHOLD_KIND_TRANSFER,
+    THRESHOLD_KIND_TRANSITION, THRESHOLD_KIND_RESPONSIBILITY_CHANGE,
+)
+
+# -- functional layers: what the material is there to DO ---------------------
+FUNCTION_AIR_CONTROL = "air_control"
+FUNCTION_WATER_CONTROL = "water_control"
+FUNCTION_VAPOUR_CONTROL = "vapour_control"
+FUNCTION_THERMAL_CONTROL = "thermal_control"
+FUNCTION_SOUND_CONTROL = "sound_control"
+FUNCTION_FIRE_SMOKE_CONTROL = "fire_smoke_control"
+FUNCTION_DRAINAGE = "drainage"
+FUNCTION_STRUCTURAL = "structural"
+FUNCTION_FINISH = "finish"
+
+KNOWN_LAYER_FUNCTIONS = (
+    FUNCTION_AIR_CONTROL, FUNCTION_WATER_CONTROL, FUNCTION_VAPOUR_CONTROL,
+    FUNCTION_THERMAL_CONTROL, FUNCTION_SOUND_CONTROL,
+    FUNCTION_FIRE_SMOKE_CONTROL, FUNCTION_DRAINAGE, FUNCTION_STRUCTURAL,
+    FUNCTION_FINISH,
+)
+
+CONTINUITY_STATE_CONTINUOUS = "continuous"
+CONTINUITY_STATE_TRANSFERRED = "transferred"
+CONTINUITY_STATE_INTERRUPTED = "interrupted"
+CONTINUITY_STATE_REVIEW_NEEDED = "review_needed"
+CONTINUITY_STATE_UNKNOWN = "unknown"
+
+KNOWN_CONTINUITY_STATES = (
+    CONTINUITY_STATE_CONTINUOUS, CONTINUITY_STATE_TRANSFERRED,
+    CONTINUITY_STATE_INTERRUPTED, CONTINUITY_STATE_REVIEW_NEEDED,
+    CONTINUITY_STATE_UNKNOWN,
+)
+
+# -- host/dependent and structural edges, as Relationship types --------------
+
+#: A dependent material's relationship to whatever it needs to exist at all.
+HOST_RELATIONSHIP_TYPES = (
+    RELATIONSHIP_TYPE_HOSTED_BY, RELATIONSHIP_TYPE_ATTACHED_TO,
+    RELATIONSHIP_TYPE_BONDED_TO, RELATIONSHIP_TYPE_ANCHORED_TO,
+    RELATIONSHIP_TYPE_SUSPENDED_FROM, RELATIONSHIP_TYPE_BACKED_BY,
+    RELATIONSHIP_TYPE_CONTAINED_BY, RELATIONSHIP_TYPE_SUPPORTED_BY,
+)
+
+#: Edges that carry force. A subset overlaps HOST_* deliberately: a suspended
+#: ceiling is both hosted and load-bearing on its hangers, and pretending those
+#: are different edges would double-record one physical fact.
+STRUCTURAL_RELATIONSHIP_TYPES = (
+    RELATIONSHIP_TYPE_SUPPORTED_BY, RELATIONSHIP_TYPE_BEARS_ON,
+    RELATIONSHIP_TYPE_HUNG_FROM, RELATIONSHIP_TYPE_TRANSFERS_LOAD_TO,
+    RELATIONSHIP_TYPE_BRACED_BY, RELATIONSHIP_TYPE_ANCHORED_TO,
+    RELATIONSHIP_TYPE_SUSPENDED_FROM,
+)
+
+STRUCTURAL_STATE_SUPPORTED = "structurally_supported"
+STRUCTURAL_STATE_REVIEW_NEEDED = "review_needed"
+STRUCTURAL_STATE_PATH_INCOMPLETE = "structural_path_incomplete"
+STRUCTURAL_STATE_CONFLICT = "structural_conflict"
+
+KNOWN_STRUCTURAL_STATES = (
+    STRUCTURAL_STATE_SUPPORTED, STRUCTURAL_STATE_REVIEW_NEEDED,
+    STRUCTURAL_STATE_PATH_INCOMPLETE, STRUCTURAL_STATE_CONFLICT,
+)
+
+# -- discipline alignment ----------------------------------------------------
+ALIGNMENT_STATE_ALIGNED = "aligned"
+ALIGNMENT_STATE_POTENTIAL_MISMATCH = "potential_mismatch"
+ALIGNMENT_STATE_ASSUMPTION_MISMATCH = "assumption_mismatch"
+ALIGNMENT_STATE_STALE_CROSS_DISCIPLINE_INPUT = "stale_cross_discipline_input"
+ALIGNMENT_STATE_UNRECONCILED = "unreconciled"
+ALIGNMENT_STATE_CONFLICT = "conflict"
+ALIGNMENT_STATE_REVIEW_NEEDED = "review_needed"
+ALIGNMENT_STATE_RESOLVED_BY_PROFESSIONAL = "resolved_by_professional"
+
+KNOWN_ALIGNMENT_STATES = (
+    ALIGNMENT_STATE_ALIGNED, ALIGNMENT_STATE_POTENTIAL_MISMATCH,
+    ALIGNMENT_STATE_ASSUMPTION_MISMATCH,
+    ALIGNMENT_STATE_STALE_CROSS_DISCIPLINE_INPUT,
+    ALIGNMENT_STATE_UNRECONCILED, ALIGNMENT_STATE_CONFLICT,
+    ALIGNMENT_STATE_REVIEW_NEEDED, ALIGNMENT_STATE_RESOLVED_BY_PROFESSIONAL,
+)
+
+#: Whether a claim is something a designer may simply choose, or something the
+#: physics decides regardless of preference. GO may question the second without
+#: ever criticising the first - FORM MAY BE CHOSEN, PHYSICS CANNOT BE
+#: NEGOTIATED, and the two must not be argued in the same voice.
+SUPPORT_DEPENDENCY_SELF_SUPPORTING = "self_supporting"
+SUPPORT_DEPENDENCY_DEPENDENT = "dependent"
+
+KNOWN_SUPPORT_DEPENDENCIES = (SUPPORT_DEPENDENCY_SELF_SUPPORTING,
+                              SUPPORT_DEPENDENCY_DEPENDENT)
+
+EXPRESSION_DESIGN_CHOICE = "design_choice"
+EXPRESSION_PERFORMANCE_CONSTRAINED = "performance_constrained"
+
+KNOWN_EXPRESSION_CLASSES = (EXPRESSION_DESIGN_CHOICE,
+                            EXPRESSION_PERFORMANCE_CONSTRAINED)
+
+
+@dataclass
+class DrawingCondition:
+    """One thing a drawing is about, and where it sits in the larger assembly.
+
+    `parent_condition_id` is the island/branch/mainland chain: a window head
+    detail belongs to a window perimeter, which belongs to an exterior wall
+    assembly, which belongs to the building envelope. Flattening that would
+    make "what else is like this?" and "what does this belong to?" the same
+    question, and they are not.
+
+    `discipline` is recorded per condition rather than inferred from the sheet,
+    because a single interface is exactly where two disciplines both have a
+    view and the point is to keep those views apart.
+
+    OBSERVATION AND INTERPRETATION SEPARATE, as everywhere else here:
+    `region`/`observed_materials`/`observed_text` are what is on the sheet;
+    `proposed_meaning` is a reading that may be corrected. `decisions` appends.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    page_structural_unit_id: str
+    region: dict
+    condition_kind: str
+    proposed_meaning: str
+    interpretation_method: str
+    created_at: str
+    created_by: str
+
+    parent_condition_id: Optional[str] = None
+    derived_view_id: Optional[str] = None
+    discipline: Optional[str] = None
+    observed_materials: list = field(default_factory=list)
+    observed_text: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    confidence: Optional[float] = None
+    evidence: Optional[str] = None
+    #: design_choice | performance_constrained - see KNOWN_EXPRESSION_CLASSES.
+    expression_class: Optional[str] = None
+    #: Whether this can stand on its own. Kept SEPARATE from the host edge,
+    #: because a dependent material with NO recorded host is precisely the case
+    #: worth flagging - and inferring dependency from the presence of an edge
+    #: would make that case invisible by construction.
+    support_dependency: Optional[str] = None
+    status: str = "proposed"
+    #: Append-only, same contract as LegendItem.decisions.
+    decisions: list = field(default_factory=list)
+    style_context: dict = field(default_factory=dict)
+
+
+@dataclass
+class ConditionBoundary:
+    """Where a condition stops, meets, or changes - and what happens there.
+
+    A boundary is EVIDENCE OF TRANSITION, never proof of meaning. The fields
+    say what was seen (`boundary_evidence`, `side_a`, `side_b`) and what is
+    proposed about it (`edge_class`, `edge_behavior`, `functional_layers`); the
+    verdicts - is this continuous, is the load path complete - are derived at
+    read time by `services/drawing_conditions.py` and are never written here.
+
+    `side_a` and `side_b` are BOTH kept. A boundary recorded from one side only
+    is half an observation, and the missing half is exactly what a coordination
+    question is usually about.
+
+    `functional_layers` entries are [{function, intended, continues,
+    transfer_mechanism, evidence, note}] - structured rather than free prose so
+    a missing answer is visibly missing instead of absent from a sentence
+    nobody wrote.
+    """
+
+    id: str
+    project_id: str
+    condition_id: str
+    region: dict
+    boundary_evidence: list
+    created_at: str
+    created_by: str
+
+    side_a: dict = field(default_factory=dict)
+    side_b: dict = field(default_factory=dict)
+    edge_class: str = EDGE_CLASS_UNKNOWN
+    edge_behavior: Optional[str] = None
+    threshold_kinds: list = field(default_factory=list)
+    functional_layers: list = field(default_factory=list)
+    derived_view_id: Optional[str] = None
+    confidence: Optional[float] = None
+    status: str = "proposed"
+    decisions: list = field(default_factory=list)
+
+
+@dataclass
+class DisciplineAssumption:
+    """What one discipline believes about a shared condition, kept apart.
+
+    Architecture and structure are interdependent systems with distinct
+    professional authorities, and neither is subordinate. So each discipline's
+    belief is stored as its own record against the same condition, and
+    agreement is DERIVED rather than asserted - which is what lets
+    "internally consistent but mutually incompatible" be a reportable state
+    instead of an argument nobody notices.
+
+    `informed_by_revision` is how staleness becomes visible: a structural
+    assumption drawn on an architectural background two revisions old is not
+    wrong, it is out of date, and those need different coordination responses.
+    """
+
+    id: str
+    project_id: str
+    condition_id: str
+    discipline: str
+    assumption: str
+    created_at: str
+    created_by: str
+
+    evidence: Optional[str] = None
+    source_id: Optional[str] = None
+    confidence: Optional[float] = None
+    #: The revision of the OTHER discipline's information this was based on.
+    informed_by_source_id: Optional[str] = None
+    informed_by_revision: Optional[str] = None
+    #: Set only by a human with the professional authority to settle it.
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[str] = None
+    resolution_note: Optional[str] = None
 
 
 @dataclass
@@ -4799,6 +5191,13 @@ class ProjectWorkspace:
     change_arrival_assessments: list[dict] = field(default_factory=list)  # CLAUDE-B1-CHANGE-ARRIVAL-01 - see ChangeArrivalAssessment
     derived_views: list[dict] = field(default_factory=list)  # CLAUDE-DERIVED-VIEW-01 - see DerivedView
     legend_items: list[dict] = field(default_factory=list)  # CLAUDE-LEGEND-OF-UNDERSTANDING-01 - see LegendItem
+    # CLAUDE-DRAWING-CONDITIONS-01 - see DrawingCondition/ConditionBoundary/
+    # DisciplineAssumption. Three lists rather than one because they answer
+    # three different questions: what this is, where it stops, and who
+    # believes what about it.
+    drawing_conditions: list[dict] = field(default_factory=list)
+    condition_boundaries: list[dict] = field(default_factory=list)
+    discipline_assumptions: list[dict] = field(default_factory=list)
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
@@ -7252,6 +7651,332 @@ class CaseWorkspaceStore:
             rows = [r for r in rows if r.get("status") == status]
         if group_id is not None:
             rows = [r for r in rows if r.get("group_id") == group_id]
+        return rows
+
+    # -- CLAUDE-DRAWING-CONDITIONS-01 ------------------------------------
+    #
+    # These four writers record OBSERVATIONS and HUMAN DECISIONS only. Not one
+    # of them writes a verdict: whether a layer is continuous, whether a load
+    # path is complete, whether two disciplines agree - all of that is derived
+    # at read time in `services/drawing_conditions.py` and
+    # `services/discipline_alignment.py`. That is what lets a boundary whose
+    # evidence was missing yesterday resolve the moment the evidence arrives,
+    # with nothing to reprocess and nothing to unwrite.
+
+    def record_drawing_condition(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        page_structural_unit_id: str,
+        region: dict,
+        condition_kind: str,
+        proposed_meaning: str,
+        interpretation_method: str,
+        actor: str,
+        parent_condition_id: Optional[str] = None,
+        derived_view_id: Optional[str] = None,
+        discipline: Optional[str] = None,
+        observed_materials: Optional[list] = None,
+        observed_text: Optional[str] = None,
+        snapshot_path: Optional[str] = None,
+        confidence: Optional[float] = None,
+        evidence: Optional[str] = None,
+        expression_class: Optional[str] = None,
+        support_dependency: Optional[str] = None,
+        style_context: Optional[dict] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """One condition, proposed. Never decided at creation."""
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        page = self._find(workspace.structural_units, page_structural_unit_id)
+        if page is None or page["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(
+                f"Structural unit {page_structural_unit_id} was not found.")
+        if parent_condition_id is not None:
+            parent = self._find(workspace.drawing_conditions, parent_condition_id)
+            if parent is None or parent["project_id"] != workspace.project_id:
+                raise CaseWorkspaceError(
+                    f"Parent condition {parent_condition_id} was not found.")
+
+        condition = DrawingCondition(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=source_id,
+            page_structural_unit_id=page_structural_unit_id,
+            region=dict(region or {}),
+            condition_kind=normalize_open_world_value(
+                condition_kind, KNOWN_CONDITION_KINDS),
+            proposed_meaning=proposed_meaning,
+            interpretation_method=interpretation_method,
+            created_at=_now(),
+            created_by=actor,
+            parent_condition_id=parent_condition_id,
+            derived_view_id=derived_view_id,
+            discipline=discipline,
+            observed_materials=list(observed_materials or []),
+            observed_text=observed_text,
+            snapshot_path=snapshot_path,
+            confidence=confidence,
+            evidence=evidence,
+            expression_class=(
+                normalize_open_world_value(expression_class,
+                                           KNOWN_EXPRESSION_CLASSES)
+                if expression_class else None),
+            support_dependency=(
+                normalize_open_world_value(support_dependency,
+                                           KNOWN_SUPPORT_DEPENDENCIES)
+                if support_dependency else None),
+            style_context=dict(style_context or {}),
+        )
+        workspace.drawing_conditions.append(asdict(condition))
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="drawing_condition_recorded",
+                actor=actor, role="system",
+                reason="Proposed %s condition on %s." % (
+                    condition.condition_kind, source_id),
+                payload={"condition_id": condition.id, "source_id": source_id,
+                         "condition_kind": condition.condition_kind})
+        return asdict(condition)
+
+    def record_condition_boundary(
+        self,
+        workspace: ProjectWorkspace,
+        condition_id: str,
+        region: dict,
+        boundary_evidence: list,
+        actor: str,
+        side_a: Optional[dict] = None,
+        side_b: Optional[dict] = None,
+        edge_class: str = EDGE_CLASS_UNKNOWN,
+        edge_behavior: Optional[str] = None,
+        threshold_kinds: Optional[list] = None,
+        functional_layers: Optional[list] = None,
+        derived_view_id: Optional[str] = None,
+        confidence: Optional[float] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Where a condition stops, meets or changes.
+
+        A boundary with no evidence is refused. "There is a boundary here"
+        with nothing behind it is an assertion, and this record exists
+        precisely to keep assertions and observations apart.
+        """
+        condition = self._find(workspace.drawing_conditions, condition_id)
+        if condition is None or condition["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Condition {condition_id} was not found.")
+        if not boundary_evidence:
+            raise CaseWorkspaceError(
+                "A boundary needs at least one piece of evidence. A transition "
+                "nobody can point at is an assertion, not an observation.")
+
+        boundary = ConditionBoundary(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            condition_id=condition_id,
+            region=dict(region or {}),
+            boundary_evidence=[
+                normalize_open_world_value(item, KNOWN_BOUNDARY_EVIDENCE)
+                for item in boundary_evidence],
+            created_at=_now(),
+            created_by=actor,
+            side_a=dict(side_a or {}),
+            side_b=dict(side_b or {}),
+            edge_class=normalize_open_world_value(edge_class, KNOWN_EDGE_CLASSES),
+            edge_behavior=(
+                normalize_open_world_value(edge_behavior, KNOWN_EDGE_BEHAVIORS)
+                if edge_behavior else None),
+            threshold_kinds=[
+                normalize_open_world_value(kind, KNOWN_THRESHOLD_KINDS)
+                for kind in (threshold_kinds or [])],
+            functional_layers=[dict(layer) for layer in (functional_layers or [])],
+            derived_view_id=derived_view_id,
+            confidence=confidence,
+        )
+        workspace.condition_boundaries.append(asdict(boundary))
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="condition_boundary_recorded",
+                actor=actor, role="system",
+                reason="Boundary on condition %s from %s." % (
+                    condition_id, ", ".join(boundary.boundary_evidence)),
+                payload={"boundary_id": boundary.id, "condition_id": condition_id,
+                         "edge_class": boundary.edge_class})
+        return asdict(boundary)
+
+    def decide_drawing_observation(
+        self,
+        workspace: ProjectWorkspace,
+        record_id: str,
+        action: str,
+        actor: str,
+        meaning: Optional[str] = None,
+        note: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """One human decision on a condition or a boundary. APPEND-ONLY.
+
+        Deliberately one method over both records rather than two near-identical
+        ones: the decision contract is the same, and duplicating it is how two
+        copies drift into disagreeing about what CONFIRMED means.
+        """
+        record = (self._find(workspace.drawing_conditions, record_id)
+                  or self._find(workspace.condition_boundaries, record_id))
+        if record is None:
+            raise CaseWorkspaceError(
+                f"No condition or boundary {record_id} was found.")
+        if action not in ("confirmed", "overridden", "unknown", "informative",
+                          "deferred", "review_needed"):
+            raise CaseWorkspaceError(
+                f"'{action}' is not a decision a reviewer may record.")
+        if action == "overridden" and not (meaning or "").strip():
+            raise CaseWorkspaceError(
+                "An override must say what the condition actually is.")
+
+        record.setdefault("decisions", []).append({
+            "action": action, "meaning": meaning, "actor": actor,
+            "at": _now(), "note": note,
+        })
+        record["status"] = action
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="drawing_observation_decided",
+                actor=actor, role="reviewer",
+                reason="%s: %s." % (record_id, action),
+                payload={"record_id": record_id, "action": action})
+        return record
+
+    def record_discipline_assumption(
+        self,
+        workspace: ProjectWorkspace,
+        condition_id: str,
+        discipline: str,
+        assumption: str,
+        actor: str,
+        evidence: Optional[str] = None,
+        source_id: Optional[str] = None,
+        confidence: Optional[float] = None,
+        informed_by_source_id: Optional[str] = None,
+        informed_by_revision: Optional[str] = None,
+    ) -> dict:
+        """What ONE discipline believes about a shared condition.
+
+        Stored per discipline and never merged. Agreement is derived; merging
+        would destroy the only evidence that a disagreement exists.
+        """
+        condition = self._find(workspace.drawing_conditions, condition_id)
+        if condition is None or condition["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Condition {condition_id} was not found.")
+        if not (discipline or "").strip():
+            raise CaseWorkspaceError(
+                "An assumption must say which discipline holds it.")
+
+        record = DisciplineAssumption(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            condition_id=condition_id,
+            discipline=discipline.strip(),
+            assumption=assumption,
+            created_at=_now(),
+            created_by=actor,
+            evidence=evidence,
+            source_id=source_id,
+            confidence=confidence,
+            informed_by_source_id=informed_by_source_id,
+            informed_by_revision=informed_by_revision,
+        )
+        workspace.discipline_assumptions.append(asdict(record))
+        self.save(workspace)
+        return asdict(record)
+
+    def resolve_discipline_assumption(
+        self,
+        workspace: ProjectWorkspace,
+        assumption_id: str,
+        actor: str,
+        note: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """A professional settles it. GO never sets this by itself.
+
+        GOV-P-006 at the scale of a drawing: a model may show that two
+        disciplines disagree; it may never decide which of them is right.
+        """
+        record = self._find(workspace.discipline_assumptions, assumption_id)
+        if record is None:
+            raise CaseWorkspaceError(f"Assumption {assumption_id} was not found.")
+        if not (note or "").strip():
+            raise CaseWorkspaceError(
+                "A professional disposition must say what was decided.")
+        record["resolved_by"] = actor
+        record["resolved_at"] = _now()
+        record["resolution_note"] = note
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="discipline_assumption_resolved",
+                actor=actor, role="professional",
+                reason="Assumption %s dispositioned." % assumption_id,
+                payload={"assumption_id": assumption_id})
+        return record
+
+    def drawing_conditions_for(
+        self, workspace: ProjectWorkspace, *,
+        source_id: Optional[str] = None,
+        page_structural_unit_id: Optional[str] = None,
+        parent_condition_id: Optional[str] = None,
+        discipline: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> list[dict]:
+        rows = list(workspace.drawing_conditions)
+        if source_id is not None:
+            rows = [r for r in rows if r["source_id"] == source_id]
+        if page_structural_unit_id is not None:
+            rows = [r for r in rows
+                    if r["page_structural_unit_id"] == page_structural_unit_id]
+        if parent_condition_id is not None:
+            rows = [r for r in rows
+                    if r.get("parent_condition_id") == parent_condition_id]
+        if discipline is not None:
+            rows = [r for r in rows if r.get("discipline") == discipline]
+        if status is not None:
+            rows = [r for r in rows if r.get("status") == status]
+        return rows
+
+    def condition_boundaries_for(
+        self, workspace: ProjectWorkspace, *,
+        condition_id: Optional[str] = None,
+        edge_class: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> list[dict]:
+        rows = list(workspace.condition_boundaries)
+        if condition_id is not None:
+            rows = [r for r in rows if r["condition_id"] == condition_id]
+        if edge_class is not None:
+            rows = [r for r in rows if r.get("edge_class") == edge_class]
+        if status is not None:
+            rows = [r for r in rows if r.get("status") == status]
+        return rows
+
+    def discipline_assumptions_for(
+        self, workspace: ProjectWorkspace, *,
+        condition_id: Optional[str] = None,
+        discipline: Optional[str] = None,
+    ) -> list[dict]:
+        rows = list(workspace.discipline_assumptions)
+        if condition_id is not None:
+            rows = [r for r in rows if r["condition_id"] == condition_id]
+        if discipline is not None:
+            rows = [r for r in rows if r.get("discipline") == discipline]
         return rows
 
     def mark_change_arrival_applied(

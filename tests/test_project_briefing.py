@@ -18,6 +18,7 @@ Run via:
 """
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import unittest
@@ -60,13 +61,46 @@ _MILESTONES = [{"id": "m1", "label": "Substantial performance within 18 months."
 
 class ProjectBriefingServiceTests(unittest.TestCase):
     def test_no_api_key_returns_an_honest_skip_not_a_fabricated_result(self):
-        result = generate_project_briefing(
-            document_filename="rfp.txt", candidate_requirements=[], governed_requirements=[],
-            milestones=[], api_key="",
-        )
+        # PRE-EXISTING DEFECT, found by a gate run and fixed here.
+        #
+        # This passed `api_key=""` and asserted the honest-skip path, but
+        # `call_llm_json` resolves `api_key or os.getenv("ANTHROPIC_API_KEY")`,
+        # so an empty string falls straight through to whatever `.env` holds.
+        # With a real key present the call was NOT skipped - it reached the
+        # live Anthropic API, and the assertion failed for the right reason
+        # while the test was doing the one thing this repository's testing
+        # rules forbid outright.
+        #
+        # It was order-dependent, which is why it survived: under
+        # `-n 8 --dist loadfile` it only fails on a worker where no
+        # app-creating test has already cleared the variable, so the same
+        # tree passed one gate and failed the next.
+        #
+        # The precondition is now actually established rather than assumed.
+        # The assertion is unchanged; only its setup was ever wrong.
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False):
+            result = generate_project_briefing(
+                document_filename="rfp.txt", candidate_requirements=[],
+                governed_requirements=[], milestones=[], api_key="",
+            )
         self.assertFalse(result.ran)
         self.assertIsNone(result.executive_summary)
         self.assertIn("ANTHROPIC_API_KEY", result.skipped_reason)
+
+    def test_an_absent_key_is_not_quietly_replaced_by_the_environment(self):
+        """The guard for the defect above: prove no live call is reachable.
+
+        Asserted against the BOUNDARY rather than the result, because a result
+        assertion is exactly what failed to notice the real call being made.
+        """
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False):
+            with patch("anthropic.Anthropic") as MockClient:
+                result = generate_project_briefing(
+                    document_filename="rfp.txt", candidate_requirements=[],
+                    governed_requirements=[], milestones=[], api_key="",
+                )
+        MockClient.assert_not_called()
+        self.assertFalse(result.ran)
 
     def test_real_call_parses_the_model_json_output_correctly(self):
         with patch("anthropic.Anthropic") as MockClient:
