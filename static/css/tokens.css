@@ -38,6 +38,12 @@
                     selection stays tonal)
      --accepted-green   accepted / confirmed
      --attention-amber  needs evidence / pending attention
+     --go-accent        GO intelligence / GO action - where GO has
+                    reasoned or where a person can hand work to it.
+                    A SEPARATE MEANING from --attention-amber even
+                    though it currently aliases it: "GO is here" and
+                    "you owe this a decision" must be able to diverge
+                    without one restyling the other
      --failure-red      contradiction / failure - distinct from the
                     deeper --seal-red authority accent
 
@@ -160,6 +166,23 @@
     --qr-plate-light: #FFFFFF;
     --qr-plate-dark: #000000;
     --attention-amber-tint: #F2E2C4;
+    /* CLAUDE-ASREAD-NAV-01A: GO's own identity, as a SEMANTIC ALIAS.
+       "GO is thinking / GO can act here" is a different meaning from "this
+       needs evidence / is pending attention", even though both currently
+       render in the accepted amber. Spending --attention-amber directly as
+       GO's identity would weld the two together: every future change to the
+       pending-attention colour would silently restyle GO, and a GO entry
+       point would keep reading as an outstanding task even once nothing is
+       outstanding.
+       Declared as var(--attention-amber) rather than a literal, so the
+       accepted appearance is preserved exactly and follows every theme remap
+       for free - custom properties substitute lazily, so the dark/tint/
+       forest/ocean overrides in main.css carry through with no per-theme
+       --go-accent needed. If GO's identity is ever meant to diverge, this is
+       the one line that changes, and nothing about attention semantics moves
+       with it. NOT a new colour, and NOT a visual-system pass. */
+    --go-accent: var(--attention-amber);
+    --go-accent-tint: var(--attention-amber-tint);
     --failure-red: #8C2E22;
     --failure-red-tint: #F3DAD4;
     /* CLAUDE-P13: perspective-sensitive risk exposure (PerspectiveAssessment,

@@ -1165,13 +1165,26 @@
                end - two different features both called "understanding", one of
                them wrongly admin-only.
 
-               Rendered only when this Source actually HAS As-Read state, so
-               the entry never opens an empty page. Counts are derived here
-               rather than in the route because `workspace` is already in
-               context - no route change, and the arithmetic matches
-               legend_of_understanding.understanding_report: every item is
-               "proposed", and "awaiting" is anything not in SETTLED_STATUSES
-               (confirmed/overridden/unknown/informative). #}
+               CLAUDE-ASREAD-NAV-01A: rendered for EVERY Source with a file,
+               including one uploaded a moment ago with no records yet. The
+               first version showed it only where As-Read state already
+               existed - no dead links, but it also meant a new drawing hid
+               the entry until some earlier processing had happened, so the
+               one case that most needs the journey visible was the case that
+               could not see it. The route itself was verified to render an
+               honest empty state (HTTP 200, "Proposed 0 / Awaiting you 0",
+               with its held-back work listed), so "Not started" is a real
+               destination rather than a link to a blank page.
+
+               Source -> As-Read -> Spin has to be legible from the Source,
+               not inferred after the fact.
+
+               Counts are derived here rather than in the route because
+               `workspace` is already in context - no route change, and the
+               arithmetic matches legend_of_understanding.understanding_report:
+               every item is "proposed", and "awaiting" is anything not in
+               SETTLED_STATUSES (confirmed/overridden/unknown/informative). #}
+            {% if selected_source.file_path %}
             {% set _asread = namespace(total=0, awaiting=0) %}
             {% for _item in workspace.legend_items if _item.source_id == selected_source.id %}
                 {% set _asread.total = _asread.total + 1 %}
@@ -1179,11 +1192,18 @@
                 {% set _asread.awaiting = _asread.awaiting + 1 %}
                 {% endif %}
             {% endfor %}
-            {% if _asread.total %}
             <a class="btn btn-ghost document-asread-action" data-ui-ref="display.document.as-read"
                href="{{ url_for('workspace.drawing_understanding_review', project_id=project_id, source_id=selected_source.id) }}">
                 As-Read
-                <span class="document-asread-counts" data-ui-ref="display.document.as-read-counts">{{ _asread.total }} proposed &middot; {{ _asread.awaiting }} awaiting review</span>
+                <span class="document-asread-counts" data-ui-ref="display.document.as-read-counts">
+                    {%- if not _asread.total -%}
+                    Not started
+                    {%- elif not _asread.awaiting -%}
+                    Reviewed &middot; {{ _asread.total }} mark(s)
+                    {%- else -%}
+                    {{ _asread.total }} proposed &middot; {{ _asread.awaiting }} awaiting review
+                    {%- endif -%}
+                </span>
             </a>
             {% endif %}
         </div>

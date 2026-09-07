@@ -864,15 +864,18 @@ html.launcher-hidden .launcher-panel { display: none; }
 .workspace-menubar-item-danger {
     color: var(--failure-red);
 }
-/* CLAUDE-ASREAD-NAV-01: GO intelligence/action = BOLD + AMBER. The first
-   application of that standing rule, and deliberately only the first - this
-   is one entry point, not a visual-system pass.
+/* CLAUDE-ASREAD-NAV-01 / -01A: GO intelligence/action = BOLD + GO ACCENT. The
+   first application of that standing rule, and deliberately only the first -
+   this is one entry point, not a visual-system pass.
 
-   --attention-amber, not a new eighth semantic colour: tokens.css's own
-   grammar reads it as "needs evidence / pending attention", and a sheet with
-   25 marks awaiting a human decision is exactly that. Red is reserved for
-   real conflict/error (--failure-red, one rule above on Remove), and this is
-   neither - so it must not borrow that weight.
+   --go-accent, NOT --attention-amber. The appearance is identical today (the
+   token aliases the accepted amber), but the MEANING is not: "GO is here" and
+   "you owe this a decision" are different claims, and the first version of
+   this rule spent the attention token on GO's identity, which welded them.
+   That mattered immediately - this entry renders for a Source with NO
+   outstanding work ("Not started", "Reviewed"), where an attention colour
+   would assert a pending task that does not exist. Red stays reserved for
+   real conflict/error (--failure-red, one rule above on Remove).
 
    Text-weight amber rather than the filled badge used by
    .workspace-verification-session-badge: this sits in a row of ghost buttons
@@ -885,10 +888,14 @@ html.launcher-hidden .launcher-panel { display: none; }
    belong and a hex copied into a comment goes stale in silence the moment the
    token moves:
 
-     --attention-amber      on --surface-primary        7.08:1  (dark 10.92:1)
-     --attention-amber      on --attention-amber-tint   5.85:1  (dark  7.01:1)
+     --go-accent            on --surface-primary        7.08:1  (dark 10.92:1)
+     --go-accent            on --go-accent-tint         5.85:1  (dark  7.01:1)
      --text-metadata        on --surface-primary       11.85:1  (dark 10.23:1)
-     --text-metadata        on --attention-amber-tint   9.79:1  (dark  6.57:1)
+     --text-metadata        on --go-accent-tint         9.79:1  (dark  6.57:1)
+
+   (--go-accent aliases --attention-amber, so these are the same measured
+   values as before the rename - the appearance did not change, only what the
+   rule is allowed to MEAN.)
 
    Worst pairing 5.85:1, clear of the 4.5:1 normal-text floor. The hover tint
    is the binding case and is the reason this was measured rather than assumed
@@ -896,7 +903,7 @@ html.launcher-hidden .launcher-panel { display: none; }
 
    Nothing here touches source-drawing colours. */
 .document-asread-action {
-    color: var(--attention-amber);
+    color: var(--go-accent);
     font-weight: 600;
     display: inline-flex;
     align-items: baseline;
@@ -904,8 +911,8 @@ html.launcher-hidden .launcher-panel { display: none; }
 }
 .document-asread-action:hover,
 .document-asread-action:focus-visible {
-    color: var(--attention-amber);
-    background: var(--attention-amber-tint);
+    color: var(--go-accent);
+    background: var(--go-accent-tint);
 }
 .document-asread-counts {
     font-weight: 400;

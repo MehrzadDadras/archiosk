@@ -141,10 +141,35 @@ class AsReadNavigationTests(unittest.TestCase):
         self.assertIn("3 proposed", body)
         self.assertIn("2 awaiting review", body)
 
-    def test_entry_is_hidden_when_there_is_no_as_read_state(self):
-        """No dead link. A Source with no legend items offers no entry."""
+    def test_entry_is_present_before_any_as_read_state_exists(self):
+        """CLAUDE-ASREAD-NAV-01A: discoverability does not depend on state.
+
+        The first version rendered the entry only where legend items already
+        existed. That avoided a dead link and created a worse problem: a newly
+        uploaded drawing - the case that most needs Source -> As-Read -> Spin
+        to be visible - was the one case that could not see it. The route
+        renders an honest empty state, so the entry is always offered.
+        """
         body = self._client().get(self.workspace_url).get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="display.document.as-read"', body)
+        self.assertIn('data-ui-ref="display.document.as-read"', body)
+        self.assertIn("Not started", body)
+
+    def test_not_started_entry_opens_a_real_page(self):
+        """"Not started" must be a destination, not a link to nothing."""
+        client = self._client()
+        body = client.get(self.workspace_url).get_data(as_text=True)
+        match = re.search(
+            r'data-ui-ref="display\.document\.as-read"\s+href="([^"]+)"', body)
+        self.assertIsNotNone(match)
+        self.assertEqual(client.get(match.group(1)).status_code, 200)
+
+    def test_fully_reviewed_source_does_not_read_as_outstanding(self):
+        """Nothing awaits a human, so the entry must not claim otherwise."""
+        self._add_items(["confirmed", "confirmed"])
+        body = self._client().get(self.workspace_url).get_data(as_text=True)
+        self.assertIn('data-ui-ref="display.document.as-read"', body)
+        self.assertIn("Reviewed", body)
+        self.assertNotIn("awaiting review", body)
 
     def test_entry_is_not_admin_gated(self):
         """The route is @login_required, not @admin_required.
@@ -188,14 +213,50 @@ class AsReadNavigationTests(unittest.TestCase):
         self.assertIn("%d proposed" % report["proposed_items"], body)
         self.assertIn("%d awaiting review" % report["awaiting_confirmation"], body)
 
-    def test_amber_treatment_is_applied(self):
-        """GO intelligence/action = bold + amber, and never the danger red."""
+    def _asread_css_block(self):
+        css = (_REPO_ROOT / "static" / "css" / "main.css").read_text(encoding="utf-8")
+        start = css.index(".document-asread-action {")
+        return css[start:css.index("}", start)]
+
+    def test_go_treatment_is_applied(self):
+        """GO intelligence/action = bold + GO accent, never the danger red."""
         self._add_items(["proposed"])
         body = self._client().get(self.workspace_url).get_data(as_text=True)
         self.assertIn("document-asread-action", body)
-        css = (_REPO_ROOT / "static" / "css" / "main.css").read_text(encoding="utf-8")
-        block = css[css.index(".document-asread-action"):]
-        block = block[:block.index("}")]
-        self.assertIn("var(--attention-amber)", block)
+        block = self._asread_css_block()
+        self.assertIn("var(--go-accent)", block)
         self.assertIn("font-weight: 600", block)
         self.assertNotIn("--failure-red", block)
+
+    def test_go_identity_is_not_the_attention_token(self):
+        """CLAUDE-ASREAD-NAV-01A: GO identity and pending-attention must be
+        separately changeable.
+
+        They render identically today - --go-accent aliases --attention-amber -
+        but the RULE must not spend the attention token, or every future change
+        to "needs evidence" silently restyles GO, and a GO entry point on a
+        finished Source keeps reading as an outstanding task.
+        """
+        block = self._asread_css_block()
+        self.assertNotIn("--attention-amber", block)
+        tokens = (_REPO_ROOT / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
+        self.assertIn("--go-accent:", tokens)
+        self.assertIn("--go-accent-tint:", tokens)
+
+    def test_go_token_introduces_no_raw_colour_literal(self):
+        """tokens.css stays the only home for raw values; the alias adds none."""
+        tokens = (_REPO_ROOT / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
+        # DECLARATIONS only. The grammar header at the top of tokens.css also
+        # opens a line with "--go-accent" while documenting what it MEANS, and
+        # matching that comment instead of the declaration is exactly how this
+        # test passed for the wrong reason on its first run.
+        declarations = [
+            line for line in tokens.splitlines()
+            if re.match(r"\s*--go-accent(-tint)?\s*:", line)
+        ]
+        self.assertEqual(len(declarations), 2, declarations)
+        for line in declarations:
+            self.assertNotRegex(line, r"#[0-9a-fA-F]{3,8}\b")
+            self.assertIn("var(", line)
+        css = (_REPO_ROOT / "static" / "css" / "main.css").read_text(encoding="utf-8")
+        self.assertNotRegex(css, r"#[0-9a-fA-F]{6}\b")
