@@ -376,6 +376,7 @@ OBJECT_KIND_REQUIREMENT_PHASE_ASSESSMENT = "requirement_phase_assessment"
 OBJECT_KIND_DOCUMENT_CONTEXT_CLAIM = "document_context_claim"
 OBJECT_KIND_CHANGE_ARRIVAL_ASSESSMENT = "change_arrival_assessment"  # CLAUDE-B1-CHANGE-ARRIVAL-01
 OBJECT_KIND_DERIVED_VIEW = "derived_view"  # CLAUDE-DERIVED-VIEW-01
+OBJECT_KIND_LEGEND_ITEM = "legend_item"  # CLAUDE-LEGEND-OF-UNDERSTANDING-01
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -2256,6 +2257,187 @@ KNOWN_CHANGE_ARRIVAL_STATES = (
     CHANGE_ARRIVAL_STATE_ACCEPTED,
     CHANGE_ARRIVAL_STATE_REJECTED,
 )
+
+
+# -- CLAUDE-LEGEND-OF-UNDERSTANDING-01 --------------------------------------
+#
+# Cheap perception first, human confirmation second, expensive interpretation
+# only afterwards. GO proposes what a mark probably means; a person confirms or
+# corrects it beside the actual cropped image; the confirmed meaning is then
+# reusable at a chosen scope. Deep parsing waits until that grammar exists.
+#
+# THE ONE THING THIS RECORD REFUSES TO DO IS COLLAPSE OBSERVATION INTO
+# INTERPRETATION
+#
+# `region`, `snapshot_path` and `observed_text` are what was SEEN. `proposed_*`
+# is what GO THINKS it means. They are separate fields because they have
+# different truth conditions and different lifetimes: the observation stays true
+# forever, while the interpretation can be wrong, corrected, or superseded. A
+# schema that stored "this is a section marker" as one fact would have no way to
+# say "that mark is still there, we were simply wrong about it".
+
+LEGEND_KIND_SECTION_REFERENCE = "section_reference"
+LEGEND_KIND_DETAIL_REFERENCE = "detail_reference"
+LEGEND_KIND_ELEVATION_MARKER = "elevation_marker"
+LEGEND_KIND_NORTH_ARROW = "north_arrow"
+LEGEND_KIND_GRID_BUBBLE = "grid_bubble"
+LEGEND_KIND_REVISION_DELTA = "revision_delta"
+LEGEND_KIND_KEYNOTE = "keynote"
+LEGEND_KIND_DISCIPLINE_SYMBOL = "discipline_symbol"
+LEGEND_KIND_ABBREVIATION = "abbreviation"
+LEGEND_KIND_LINE_CONVENTION = "line_convention"
+LEGEND_KIND_SCALE_NOTATION = "scale_notation"
+LEGEND_KIND_DRAWING_TITLE = "drawing_title"
+LEGEND_KIND_TITLE_BLOCK = "title_block"
+#: Not a failure state. An honestly unknown mark shown with its snapshot is more
+#: useful than a confident guess, and it is what a human is being asked about.
+LEGEND_KIND_UNKNOWN_SYMBOL = "unknown_symbol"
+LEGEND_KIND_UNKNOWN_ANNOTATION = "unknown_annotation"
+
+KNOWN_LEGEND_KINDS = (
+    LEGEND_KIND_SECTION_REFERENCE, LEGEND_KIND_DETAIL_REFERENCE,
+    LEGEND_KIND_ELEVATION_MARKER, LEGEND_KIND_NORTH_ARROW,
+    LEGEND_KIND_GRID_BUBBLE, LEGEND_KIND_REVISION_DELTA, LEGEND_KIND_KEYNOTE,
+    LEGEND_KIND_DISCIPLINE_SYMBOL, LEGEND_KIND_ABBREVIATION,
+    LEGEND_KIND_LINE_CONVENTION, LEGEND_KIND_SCALE_NOTATION,
+    LEGEND_KIND_DRAWING_TITLE, LEGEND_KIND_TITLE_BLOCK,
+    LEGEND_KIND_UNKNOWN_SYMBOL, LEGEND_KIND_UNKNOWN_ANNOTATION,
+)
+
+FAMILY_ROLE_REPRESENTATIVE = "representative"
+FAMILY_ROLE_INSTANCE = "instance"
+
+KNOWN_FAMILY_ROLES = (FAMILY_ROLE_REPRESENTATIVE, FAMILY_ROLE_INSTANCE)
+
+#: How many snapshots a human is asked to look at for one family. Small on
+#: purpose: the whole point is few confirmations, many governed instances.
+FAMILY_REPRESENTATIVE_LIMIT = 3
+
+LEGEND_STATUS_PROPOSED = "proposed"
+LEGEND_STATUS_CONFIRMED = "confirmed"
+LEGEND_STATUS_OVERRIDDEN = "overridden"
+LEGEND_STATUS_UNKNOWN = "unknown"
+#: The mark is real and understood to not matter here. Distinct from UNKNOWN:
+#: somebody looked and decided, rather than nobody knowing.
+LEGEND_STATUS_INFORMATIVE = "informative"
+LEGEND_STATUS_DEFERRED = "deferred"
+#: A group assumption contradicted by this page. Never silently resolved.
+LEGEND_STATUS_REVIEW_NEEDED = "review_needed"
+
+KNOWN_LEGEND_STATUSES = (
+    LEGEND_STATUS_PROPOSED, LEGEND_STATUS_CONFIRMED, LEGEND_STATUS_OVERRIDDEN,
+    LEGEND_STATUS_UNKNOWN, LEGEND_STATUS_INFORMATIVE, LEGEND_STATUS_DEFERRED,
+    LEGEND_STATUS_REVIEW_NEEDED,
+)
+
+#: How widely a human decision applies. Narrowest first, and the DEFAULT is the
+#: narrowest - a convention confirmed on one sheet is not evidence about a
+#: consultant's whole office until somebody says it is.
+LEGEND_SCOPE_INSTANCE = "instance"
+LEGEND_SCOPE_PAGE = "page"
+LEGEND_SCOPE_SOURCE = "source"
+LEGEND_SCOPE_DISCIPLINE = "discipline"
+LEGEND_SCOPE_PROJECT = "project"
+
+KNOWN_LEGEND_SCOPES = (
+    LEGEND_SCOPE_INSTANCE, LEGEND_SCOPE_PAGE, LEGEND_SCOPE_SOURCE,
+    LEGEND_SCOPE_DISCIPLINE, LEGEND_SCOPE_PROJECT,
+)
+
+#: Ordered widest-to-narrowest for precedence walking. An explicit project
+#: legend outranks a generic guess, always.
+LEGEND_PRECEDENCE_ORDER = (
+    "explicit_legend", "confirmed_project", "confirmed_discipline",
+    "confirmed_source_set", "generic_inference", "unresolved",
+)
+
+
+@dataclass
+class LegendItem:
+    """One mark on a drawing, what GO thinks it means, and what a human decided.
+
+    OBSERVATION and INTERPRETATION are deliberately separate groups of fields.
+    The observation - region, snapshot, observed text - is what is actually on
+    the sheet and stays true regardless of how the reading changes. The
+    interpretation is a proposal that may be confirmed, corrected or abandoned.
+
+    `decisions` is an append-only history. A human changing their mind adds an
+    entry; it never edits an earlier one and never touches `proposed_meaning`.
+    CURRENT STATE MUST NOT LAUNDER HISTORY applies literally here: the effective
+    meaning is derived at read time from the newest decision, so both what GO
+    said and every correction since remain readable forever.
+
+    `style_context` records drafting era, office and discipline where known.
+    It may raise or lower CONFIDENCE and must never by itself DETERMINE meaning -
+    a 1970s hand-drafted convention is evidence about how to read a mark, not a
+    licence to assert what the mark is.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    page_structural_unit_id: str
+
+    # -- OBSERVATION: what is actually on the sheet ------------------------
+    region: dict
+    snapshot_path: Optional[str]
+    observed_text: Optional[str]
+
+    # -- INTERPRETATION: what GO proposes it means -------------------------
+    proposed_kind: str
+    proposed_meaning: str
+    interpretation_method: str
+    created_at: str
+    created_by: str
+
+    derived_view_id: Optional[str] = None
+    confidence: Optional[float] = None
+    #: What the proposal rests on - an explicit sheet legend, a convention, or
+    #: nothing but shape. Named so precedence can be applied honestly later.
+    legend_evidence: Optional[str] = None
+    evidence_tier: str = "generic_inference"
+
+    status: str = LEGEND_STATUS_PROPOSED
+    scope_kind: str = LEGEND_SCOPE_INSTANCE
+    scope_id: Optional[str] = None
+
+    #: Append-only. [{action, meaning, scope_kind, scope_id, actor, at, note}]
+    decisions: list = field(default_factory=list)
+
+    style_context: dict = field(default_factory=dict)
+    #: Set when this item was inherited from a group understanding rather than
+    #: observed independently - so a reader can tell one sheet's evidence from
+    #: a family assumption.
+    group_id: Optional[str] = None
+    inherited_from_item_id: Optional[str] = None
+
+    # -- SYMBOL FAMILY (CLAUDE-SECTION-CUT-FAMILY-01) ----------------------
+    #
+    # A sheet may carry the same section-cut symbol twenty times. Asking a human
+    # about each one is both wasted review effort and - at roughly half a
+    # megabyte per crop - a real storage cost. So visually equivalent marks join
+    # one FAMILY, a person confirms the family once from a few representative
+    # snapshots, and the meaning applies to the members.
+    #
+    # `family_id` is a DIFFERENT axis from `group_id`. A group is a family of
+    # SHEETS; a family is a family of MARKS. One field serving both would
+    # collapse two unrelated questions.
+    family_id: Optional[str] = None
+    #: "representative" carries the snapshot a human actually judges;
+    #: "instance" inherits that judgment.
+    family_role: Optional[str] = None
+
+    # Per-instance variance. Real fields rather than a free dict because these
+    # have consequences: DIRECTION decides which view a section cut refers to,
+    # and a mirrored head points the other way. Normalising them away would
+    # silently repoint the reference - so they are preserved per instance even
+    # though the MEANING is shared.
+    instance_rotation_degrees: Optional[float] = None
+    instance_mirrored: Optional[bool] = None
+    section_line_direction_degrees: Optional[float] = None
+    view_direction_degrees: Optional[float] = None
+    nearby_label: Optional[str] = None
+    candidate_target_reference: Optional[str] = None
 
 
 # -- CLAUDE-DERIVED-VIEW-01: scaled/oriented views within one drawing page ---
@@ -4616,6 +4798,7 @@ class ProjectWorkspace:
     document_context_claims: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
     change_arrival_assessments: list[dict] = field(default_factory=list)  # CLAUDE-B1-CHANGE-ARRIVAL-01 - see ChangeArrivalAssessment
     derived_views: list[dict] = field(default_factory=list)  # CLAUDE-DERIVED-VIEW-01 - see DerivedView
+    legend_items: list[dict] = field(default_factory=list)  # CLAUDE-LEGEND-OF-UNDERSTANDING-01 - see LegendItem
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
@@ -6877,6 +7060,198 @@ class CaseWorkspaceStore:
             rows = [r for r in rows if r["source_id"] == source_id]
         if page_structural_unit_id is not None:
             rows = [r for r in rows if r["page_structural_unit_id"] == page_structural_unit_id]
+        return rows
+
+
+    # -- CLAUDE-LEGEND-OF-UNDERSTANDING-01 ---------------------------------
+
+    def propose_legend_item(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        page_structural_unit_id: str,
+        region: dict,
+        proposed_kind: str,
+        proposed_meaning: str,
+        interpretation_method: str,
+        actor: str,
+        snapshot_path: Optional[str] = None,
+        observed_text: Optional[str] = None,
+        derived_view_id: Optional[str] = None,
+        confidence: Optional[float] = None,
+        legend_evidence: Optional[str] = None,
+        evidence_tier: str = "generic_inference",
+        style_context: Optional[dict] = None,
+        group_id: Optional[str] = None,
+        inherited_from_item_id: Optional[str] = None,
+        family_id: Optional[str] = None,
+        family_role: Optional[str] = None,
+        instance_rotation_degrees: Optional[float] = None,
+        instance_mirrored: Optional[bool] = None,
+        section_line_direction_degrees: Optional[float] = None,
+        view_direction_degrees: Optional[float] = None,
+        nearby_label: Optional[str] = None,
+        candidate_target_reference: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """GO proposes one reading of one mark. Always PROPOSED, never decided.
+
+        A proposal with no snapshot is refused. The whole point of this workflow
+        is that a human judges the actual mark rather than a detached label, and
+        a row that cannot show its evidence cannot be reviewed honestly.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        page = self._find(workspace.structural_units, page_structural_unit_id)
+        if page is None or page["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(
+                f"Structural unit {page_structural_unit_id} was not found.")
+        if not snapshot_path and family_role != FAMILY_ROLE_INSTANCE:
+            raise CaseWorkspaceError(
+                "A legend item needs a snapshot. A reviewer must see the mark, "
+                "not just a label describing it.")
+        if not snapshot_path and not family_id:
+            # An instance with no family has nothing to show a reviewer either.
+            raise CaseWorkspaceError(
+                "A family instance must name the family whose representative "
+                "snapshot a reviewer judged.")
+
+        item = LegendItem(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=source_id,
+            page_structural_unit_id=page_structural_unit_id,
+            region=dict(region or {}),
+            snapshot_path=snapshot_path,
+            observed_text=observed_text,
+            proposed_kind=normalize_open_world_value(proposed_kind, KNOWN_LEGEND_KINDS),
+            proposed_meaning=proposed_meaning,
+            interpretation_method=interpretation_method,
+            created_at=_now(),
+            created_by=actor,
+            derived_view_id=derived_view_id,
+            confidence=confidence,
+            legend_evidence=legend_evidence,
+            evidence_tier=evidence_tier,
+            style_context=dict(style_context or {}),
+            group_id=group_id,
+            inherited_from_item_id=inherited_from_item_id,
+            family_id=family_id,
+            family_role=family_role,
+            instance_rotation_degrees=instance_rotation_degrees,
+            instance_mirrored=instance_mirrored,
+            section_line_direction_degrees=section_line_direction_degrees,
+            view_direction_degrees=view_direction_degrees,
+            nearby_label=nearby_label,
+            candidate_target_reference=candidate_target_reference,
+        )
+        workspace.legend_items.append(asdict(item))
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="legend_item_proposed",
+                actor=actor, role="system",
+                reason="Proposed %s for a mark on %s." % (item.proposed_kind, source_id),
+                payload={"legend_item_id": item.id, "source_id": source_id,
+                         "proposed_kind": item.proposed_kind,
+                         "evidence_tier": evidence_tier},
+            )
+        return asdict(item)
+
+    def decide_legend_item(
+        self,
+        workspace: ProjectWorkspace,
+        legend_item_id: str,
+        action: str,
+        actor: str,
+        meaning: Optional[str] = None,
+        scope_kind: str = LEGEND_SCOPE_INSTANCE,
+        scope_id: Optional[str] = None,
+        note: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """A human decides. APPEND-ONLY - nothing earlier is ever rewritten.
+
+        The proposal, the observation and every previous decision stay exactly
+        as they were; this adds one entry and moves the derived status. Changing
+        your mind twice leaves three readable states, which is the point.
+        """
+        item = self._find(workspace.legend_items, legend_item_id)
+        if item is None:
+            raise CaseWorkspaceError(f"Legend item {legend_item_id} was not found.")
+        if action not in (LEGEND_STATUS_CONFIRMED, LEGEND_STATUS_OVERRIDDEN,
+                          LEGEND_STATUS_UNKNOWN, LEGEND_STATUS_INFORMATIVE,
+                          LEGEND_STATUS_DEFERRED):
+            raise CaseWorkspaceError(
+                f"'{action}' is not a decision a reviewer may record.")
+        if action == LEGEND_STATUS_OVERRIDDEN and not (meaning or "").strip():
+            raise CaseWorkspaceError(
+                "An override must say what the mark actually means.")
+
+        item.setdefault("decisions", []).append({
+            "action": action,
+            "meaning": meaning,
+            "scope_kind": normalize_open_world_value(scope_kind, KNOWN_LEGEND_SCOPES),
+            "scope_id": scope_id,
+            "actor": actor,
+            "at": _now(),
+            "note": note,
+        })
+        item["status"] = action
+        item["scope_kind"] = normalize_open_world_value(scope_kind, KNOWN_LEGEND_SCOPES)
+        item["scope_id"] = scope_id
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="legend_item_decided",
+                actor=actor, role="reviewer",
+                reason="Legend item %s: %s at %s scope." % (legend_item_id, action, scope_kind),
+                payload={"legend_item_id": legend_item_id, "action": action,
+                         "scope_kind": scope_kind, "scope_id": scope_id},
+            )
+        return item
+
+    def flag_legend_item_review(
+        self, workspace: ProjectWorkspace, legend_item_id: str, reason: str,
+        actor: str = "system",
+    ) -> dict:
+        """A page contradicted a group assumption. Never resolved silently."""
+        item = self._find(workspace.legend_items, legend_item_id)
+        if item is None:
+            raise CaseWorkspaceError(f"Legend item {legend_item_id} was not found.")
+        item["status"] = LEGEND_STATUS_REVIEW_NEEDED
+        item.setdefault("decisions", []).append({
+            "action": LEGEND_STATUS_REVIEW_NEEDED, "meaning": None,
+            "scope_kind": item.get("scope_kind"), "scope_id": item.get("scope_id"),
+            "actor": actor, "at": _now(), "note": reason,
+        })
+        self.save(workspace)
+        return item
+
+    def legend_items_for(
+        self, workspace: ProjectWorkspace, *,
+        source_id: Optional[str] = None,
+        page_structural_unit_id: Optional[str] = None,
+        status: Optional[str] = None,
+        group_id: Optional[str] = None,
+        family_id: Optional[str] = None,
+        family_role: Optional[str] = None,
+    ) -> list[dict]:
+        rows = list(workspace.legend_items)
+        if family_id is not None:
+            rows = [r for r in rows if r.get("family_id") == family_id]
+        if family_role is not None:
+            rows = [r for r in rows if r.get("family_role") == family_role]
+        if source_id is not None:
+            rows = [r for r in rows if r["source_id"] == source_id]
+        if page_structural_unit_id is not None:
+            rows = [r for r in rows
+                    if r["page_structural_unit_id"] == page_structural_unit_id]
+        if status is not None:
+            rows = [r for r in rows if r.get("status") == status]
+        if group_id is not None:
+            rows = [r for r in rows if r.get("group_id") == group_id]
         return rows
 
     def mark_change_arrival_applied(

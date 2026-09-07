@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{#
+  CLAUDE-LEGEND-OF-UNDERSTANDING-01 - the confirmation table.
+
+  Snapshot | GO thinks this is | Confidence | Human decision, and nothing else.
+  Every row shows the real cropped mark: a reviewer asked to agree with a
+  detached label will agree with a plausible sentence, whereas someone looking
+  at the mark answers the question that was actually asked.
+#}
+{% block title %}Drawing understanding{% endblock %}
+
+{% block content %}
+<section class="panel" data-ui-ref="drawing-understanding.panel">
+  <h2 class="panel-title">Drawing understanding &mdash; {{ source.name }}</h2>
+
+  <p class="muted">
+    ARCHIOSK has proposed what these marks mean. Confirm, correct, or say it is
+    unknown. Nothing here is treated as settled until you decide.
+  </p>
+
+  <dl class="understanding-summary" data-ui-ref="drawing-understanding.summary">
+    <dt>Sheet</dt>
+    <dd>{{ report.title_block.document_id or "not established" }}
+        {%- if report.title_block.revision %} &middot; rev {{ report.title_block.revision }}{% endif %}</dd>
+    <dt>Pages</dt><dd>{{ report.pages }}</dd>
+    <dt>Views</dt><dd>{{ report.view_count }}</dd>
+    <dt>Proposed</dt><dd>{{ report.proposed_items }}</dd>
+    <dt>Awaiting you</dt><dd>{{ report.awaiting_confirmation }}</dd>
+    {% if report.inherited_from_group %}
+      <dt>Inherited</dt><dd>{{ report.inherited_from_group }} from this sheet set</dd>
+    {% endif %}
+    {% if report.review_needed %}
+      <dt>Contradictions</dt><dd>{{ report.review_needed }} need review</dd>
+    {% endif %}
+  </dl>
+
+  {% if report.deferred_work %}
+    <details class="deferred-work" data-ui-ref="drawing-understanding.deferred">
+      <summary>Work deliberately held back ({{ report.deferred_work|length }})</summary>
+      <ul>
+        {% for reason in report.deferred_work %}<li>{{ reason }}</li>{% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  {% if families %}
+  <h3 class="panel-subtitle" data-ui-ref="drawing-understanding.families-title">
+    Repeated marks &mdash; confirm once
+  </h3>
+  <p class="muted">
+    These marks repeat across the sheet. Answer once for the family and the
+    answer carries to every matching instance; anything that does not match
+    comes back to you below rather than being assumed.
+  </p>
+  <table class="understanding-table" data-ui-ref="drawing-understanding.family-table">
+    <thead>
+      <tr>
+        <th scope="col">Representative marks</th>
+        <th scope="col">ARCHIOSK thinks this is</th>
+        <th scope="col">Applies to</th>
+        <th scope="col">Your decision</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for family in families %}
+      <tr data-ui-ref="drawing-understanding.family-row">
+        <td class="snapshot-cell">
+          {% for representative in family.representatives %}
+            {% if representative.has_snapshot %}
+              <img class="legend-snapshot"
+                   src="{{ url_for('workspace.legend_item_snapshot',
+                                   project_id=project_id,
+                                   legend_item_id=representative.legend_item_id) }}"
+                   alt="One of the repeated marks being reviewed">
+            {% endif %}
+          {% endfor %}
+        </td>
+        <td>
+          <strong>{{ family.proposed_meaning }}</strong>
+          <span class="muted">({{ family.proposed_kind|replace("_", " ") }})</span>
+          {% if family.effective_meaning %}
+            <div class="muted">now read as: <strong>{{ family.effective_meaning }}</strong></div>
+          {% endif %}
+          {% if family.confidence is not none %}
+            <div class="muted">{{ "%.0f"|format(family.confidence * 100) }}% confident</div>
+          {% endif %}
+        </td>
+        <td>
+          {{ family.instance_count }} other mark(s)
+          {% if family.instances_needing_review %}
+            <div class="muted">{{ family.instances_needing_review }} need your review</div>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post"
+                action="{{ url_for('workspace.decide_legend_family_route',
+                                   project_id=project_id, family_id=family.family_id) }}">
+            {{ csrf_field() if csrf_field is defined }}
+            <input type="hidden" name="source_id" value="{{ family.source_id }}">
+            <label class="visually-hidden" for="family-meaning-{{ family.family_id }}">
+              Correct meaning for this family
+            </label>
+            <input type="text" id="family-meaning-{{ family.family_id }}" name="meaning"
+                   placeholder="what these actually are (for Correct)">
+            <label class="visually-hidden" for="family-scope-{{ family.family_id }}">
+              How widely this applies
+            </label>
+            <select id="family-scope-{{ family.family_id }}" name="scope_kind">
+              <option value="source">this sheet</option>
+              <option value="discipline">this discipline</option>
+              <option value="project">this project</option>
+            </select>
+            <div class="decision-actions">
+              <button type="submit" name="action" value="confirmed">Confirm all</button>
+              <button type="submit" name="action" value="overridden">Correct all</button>
+              <button type="submit" name="action" value="unknown">Unknown</button>
+              <button type="submit" name="action" value="deferred">Later</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if not rows and not families %}
+    <p class="muted" data-ui-ref="drawing-understanding.empty">
+      Nothing has been proposed for this drawing yet.
+    </p>
+  {% else %}
+  <table class="understanding-table" data-ui-ref="drawing-understanding.table">
+    <thead>
+      <tr>
+        <th scope="col">Mark</th>
+        <th scope="col">ARCHIOSK thinks this is</th>
+        <th scope="col">Confidence</th>
+        <th scope="col">Your decision</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr data-ui-ref="drawing-understanding.row">
+        <td class="snapshot-cell">
+          {% if row.has_snapshot %}
+            <img class="legend-snapshot"
+                 src="{{ url_for('workspace.legend_item_snapshot',
+                                 project_id=project_id, legend_item_id=row.legend_item_id) }}"
+                 alt="Cropped image of the mark being reviewed">
+          {% else %}
+            <span class="muted">no snapshot</span>
+          {% endif %}
+          {% if row.observed_text %}<code class="observed">{{ row.observed_text }}</code>{% endif %}
+        </td>
+        <td>
+          <strong>{{ row.proposed_meaning }}</strong>
+          <span class="muted">({{ row.proposed_kind|replace("_", " ") }})</span>
+          {% if row.inherited %}
+            <span class="tag" title="Carried from another sheet in this set">inherited</span>
+          {% endif %}
+          {% if row.status == "overridden" %}
+            <div class="muted">now read as: <strong>{{ row.effective_meaning }}</strong></div>
+          {% endif %}
+          {% if row.history_length %}
+            <div class="muted">{{ row.history_length }} recorded decision(s)</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.confidence is not none %}{{ "%.0f"|format(row.confidence * 100) }}%
+          {% else %}<span class="muted">&mdash;</span>{% endif %}
+          <div class="muted">{{ row.evidence_tier|replace("_", " ") }}</div>
+        </td>
+        <td>
+          <form method="post"
+                action="{{ url_for('workspace.decide_legend_item_route',
+                                   project_id=project_id, legend_item_id=row.legend_item_id) }}">
+            {{ csrf_field() if csrf_field is defined }}
+            <input type="hidden" name="source_id" value="{{ row.source_id }}">
+            <label class="visually-hidden" for="meaning-{{ row.legend_item_id }}">
+              Correct meaning
+            </label>
+            <input type="text" id="meaning-{{ row.legend_item_id }}" name="meaning"
+                   placeholder="what it actually is (for Correct)">
+            <label class="visually-hidden" for="scope-{{ row.legend_item_id }}">
+              How widely this applies
+            </label>
+            <select id="scope-{{ row.legend_item_id }}" name="scope_kind">
+              <option value="instance">this mark only</option>
+              <option value="page">this page</option>
+              <option value="source">this sheet</option>
+              <option value="discipline">this discipline</option>
+              <option value="project">this project</option>
+            </select>
+            <div class="decision-actions">
+              <button type="submit" name="action" value="confirmed">Confirm</button>
+              <button type="submit" name="action" value="overridden">Correct</button>
+              <button type="submit" name="action" value="unknown">Unknown</button>
+              <button type="submit" name="action" value="informative">Not important</button>
+              <button type="submit" name="action" value="deferred">Later</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

@@ -97,6 +97,11 @@ _DIAGNOSTICS_HTML_PATH = _REPO_ROOT / "templates" / "diagnostics.html"
 # Adding the path also surfaced six `developer-tools.*` controls that had
 # never been registered at all, which is the coverage this staleness hid.
 _DEVELOPER_TOOLS_HTML_PATH = _REPO_ROOT / "templates" / "developer_tools.html"
+# CLAUDE-SECTION-CUT-FAMILY-01: the scanned set below is a hand-kept list,
+# so a new instrumented template is only really enforced once it is added
+# here. Adding the surface and leaving it out of the scan would register
+# rows nothing checks - which is the drift this test exists to catch.
+_DRAWING_UNDERSTANDING_HTML_PATH = _REPO_ROOT / "templates" / "drawing_understanding.html"
 # CLAUDE-SPIN-00A: _spin_prototype.html is included (not extended) by
 # case_workspace.html's own {% block toolbox %} - its own refs are real
 # rendered markup (when ?spin=1), same as any other template here, just
@@ -274,6 +279,7 @@ def _all_template_refs() -> set[str]:
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
+        _DRAWING_UNDERSTANDING_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -367,13 +373,20 @@ class RegistryConsistencyTests(unittest.TestCase):
         # two prefixes name genuinely different things - "developer.*" is
         # the Developer Composer wherever it renders, "developer-tools.*"
         # is this one page's synthetic/test reset controls.
+        # CLAUDE-LEGEND-OF-UNDERSTANDING-01 / CLAUDE-SECTION-CUT-FAMILY-01 added
+        # "drawing-understanding" - the surface where GO's proposed reading of a
+        # mark is put in front of a human beside its actual crop, and where a
+        # repeated symbol is confirmed once as a family rather than per
+        # occurrence (see UI_REFERENCE_MAP.md's own "Drawing understanding"
+        # section).
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
                 r"^(menu|lists|display|toolbox|chat|eye|shell|gateway|auth|upload|errors|"
                 r"security|operations|projects-directory|removed-projects|developer|"
                 r"developer-tools|"
-                r"landing|explore|start-trial|spin|pdm|index|tank|help)\.[a-z0-9._\-]+$",
+                r"landing|explore|start-trial|spin|pdm|index|tank|help|"
+                r"drawing-understanding)\.[a-z0-9._\-]+$",
                 ref,
             )
 

@@ -2932,6 +2932,127 @@ def apply_change_arrival_route(project_id, assessment_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/understanding")
+@login_required
+def drawing_understanding_review(project_id, source_id):
+    """CLAUDE-LEGEND-OF-UNDERSTANDING-01: the compact confirmation table.
+
+    Snapshot | GO thinks this is | Confidence | Human decision. Deliberately a
+    review surface and not a configuration screen: a reviewer should be able to
+    clear a sheet quickly, and every row shows the actual cropped mark rather
+    than a detached label.
+    """
+    from services.legend_of_understanding import (
+        family_review_rows, review_rows, understanding_report)
+
+    _document, store, workspace = _load_workspace_or_404(project_id)
+    source = next((s for s in workspace.sources if s["id"] == source_id), None)
+    if source is None:
+        flash("Source not found.", "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    return render_template(
+        "drawing_understanding.html",
+        project_id=project_id,
+        source=source,
+        rows=review_rows(store, workspace, source_id=source_id),
+        families=family_review_rows(store, workspace, source_id=source_id),
+        report=understanding_report(store, workspace, source_id),
+    )
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/understanding/<legend_item_id>/decide",
+                    methods=["POST"])
+@login_required
+def decide_legend_item_route(project_id, legend_item_id):
+    """One reviewer decision, appended - never overwriting GO's proposal.
+
+    Scope is chosen by the human and defaults to the NARROWEST: a convention
+    confirmed on one sheet is not evidence about a whole discipline until
+    somebody says so.
+    """
+    _document, store, workspace = _load_workspace_or_404(project_id)
+    source_id = (request.form.get("source_id") or "").strip()
+    try:
+        store.decide_legend_item(
+            workspace, legend_item_id,
+            action=(request.form.get("action") or "").strip(),
+            actor=_reviewer(),
+            meaning=(request.form.get("meaning") or "").strip() or None,
+            scope_kind=(request.form.get("scope_kind") or "instance").strip(),
+            scope_id=(request.form.get("scope_id") or "").strip() or None,
+            note=(request.form.get("note") or "").strip() or None,
+            governance_log=_log(),
+        )
+        flash("Recorded.", "success")
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    if source_id:
+        return redirect(url_for("workspace.drawing_understanding_review",
+                                project_id=project_id, source_id=source_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/understanding/family/<family_id>/decide",
+                    methods=["POST"])
+@login_required
+def decide_legend_family_route(project_id, family_id):
+    """CLAUDE-SECTION-CUT-FAMILY-01: one answer, many governed instances.
+
+    The reviewer judges a few representative crops and answers once. Every
+    representative records that answer through the ordinary append-only
+    transition, the members inherit it, and any member that differs materially
+    goes back for review rather than being forced into the family.
+    """
+    from services.legend_of_understanding import LegendError, confirm_family
+
+    _document, store, workspace = _load_workspace_or_404(project_id)
+    source_id = (request.form.get("source_id") or "").strip()
+    try:
+        result = confirm_family(
+            store, workspace, family_id,
+            action=(request.form.get("action") or "").strip(),
+            actor=_reviewer(),
+            meaning=(request.form.get("meaning") or "").strip() or None,
+            scope_kind=(request.form.get("scope_kind") or "source").strip(),
+            scope_id=(request.form.get("scope_id") or "").strip() or None,
+            note=(request.form.get("note") or "").strip() or None,
+            governance_log=_log(),
+        )
+        flagged = len(result.get("flagged_for_review") or [])
+        message = "Recorded for %d mark(s)." % len(result.get("applied") or [])
+        if flagged:
+            message += " %d did not match the family and need your review." % flagged
+        flash(message, "success")
+    except (CaseWorkspaceError, LegendError) as exc:
+        flash(str(exc), "error")
+    if source_id:
+        return redirect(url_for("workspace.drawing_understanding_review",
+                                project_id=project_id, source_id=source_id))
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/understanding/<legend_item_id>/snapshot")
+@login_required
+def legend_item_snapshot(project_id, legend_item_id):
+    """Serve one crop, behind the SAME project boundary as everything else.
+
+    Reads only the path stored on the item and only after
+    `_load_workspace_or_404` has authorised the project, so a snapshot is no
+    more reachable than the drawing it came from.
+    """
+    from flask import send_file
+
+    _document, store, workspace = _load_workspace_or_404(project_id)
+    item = next((i for i in workspace.legend_items if i["id"] == legend_item_id), None)
+    if item is None or not item.get("snapshot_path"):
+        abort(404)
+    path = Path(item["snapshot_path"])
+    if not path.is_file():
+        abort(404)
+    return send_file(str(path), mimetype="image/png")
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/document-context-claims/<claim_id>/review", methods=["POST"])
 @admin_required
 def review_document_context_claim_route(project_id, claim_id):

@@ -1123,6 +1123,20 @@ Reached via `menu.account.removed-projects` (relocated from `lists.removed-proje
 
 ---
 
+## Drawing understanding (`templates/drawing_understanding.html` — CLAUDE-LEGEND-OF-UNDERSTANDING-01 / CLAUDE-SECTION-CUT-FAMILY-01)
+
+| Reference | Element | Label | Behavior | Visibility | Status |
+| --- | --- | --- | --- | --- | --- |
+| `drawing-understanding.panel` | `<section>` | "Drawing understanding — <sheet>" | Wraps the whole confirmation surface | Project-scoped, `@login_required` | active |
+| `drawing-understanding.summary` | `<dl>` | Sheet / Pages / Views / Proposed / Awaiting you | Read-only counts derived from `understanding_report` | Same as above | active |
+| `drawing-understanding.deferred` | `<details>` | "Work deliberately held back" | Names the expensive work not attempted yet, and why. Present only when `report.deferred_work` is non-empty | Same as above | active |
+| `drawing-understanding.families-title` | `<h3>` | "Repeated marks — confirm once" | Heading for the collapsed family table. Rendered only when at least one symbol family exists | Same as above | active |
+| `drawing-understanding.family-table` | `<table>` | Representative marks / thinks this is / Applies to / Your decision | One row per SYMBOL FAMILY, not per occurrence — a repeated section cut is one question, not twenty | Same as above | active |
+| `drawing-understanding.family-row` | `<tr>` (pattern) | one family | Shows the representative crops a human judges and how many instances ride on the answer; POSTs to `workspace.decide_legend_family_route` | Same as above | active |
+| `drawing-understanding.table` | `<table>` | Mark / thinks this is / Confidence / Your decision | One row per individually-reviewed mark. Marks belonging to a family are collapsed out of it, EXCEPT any returned to `review_needed` — those are real questions and must not be hidden inside a family | Same as above | active |
+| `drawing-understanding.row` | `<tr>` (pattern) | one mark | Shows the actual crop; POSTs to `workspace.decide_legend_item_route` | Same as above | active |
+| `drawing-understanding.empty` | `<p>` | "Nothing has been proposed for this drawing yet." | Empty state, shown only when there are neither rows nor families | Same as above | active |
+
 ## Deliberately NOT instrumented this stage
 
 Per-instance content inside a family (a single Finding card, a single
