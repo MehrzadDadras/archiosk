@@ -21,6 +21,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pymupdf
 
@@ -182,6 +183,40 @@ class ExtractionTests(unittest.TestCase):
 
     def test_availability_never_raises(self):
         self.assertIn("available", rx.ocr_availability())
+
+    def test_availability_reports_available_when_the_binary_is_present(self):
+        """The regression guard for a defect these tests originally MISSED.
+
+        The first version of `_ocr_engine` asked
+        `pymupdf.TOOLS.tesseract_version()`, which does not exist in PyMuPDF
+        1.28.2 on either dev or production - so availability was False
+        unconditionally and would have stayed False after Tesseract was
+        correctly installed. Every test still passed, because they all asserted
+        the DEGRADE path and the degrade path was firing for the wrong reason.
+
+        Asserting the positive direction is what closes that: with the binary
+        discoverable, availability must become True.
+        """
+        import subprocess as sp
+
+        completed = sp.CompletedProcess(args=[], returncode=0,
+                                        stdout="tesseract 4.1.1\n", stderr="")
+        with mock.patch.object(rx.shutil, "which", return_value="/usr/bin/tesseract"), \
+                mock.patch.object(rx, "tessdata_path", return_value="/usr/share/tessdata"), \
+                mock.patch.object(rx.subprocess, "run", return_value=completed):
+            availability = rx.ocr_availability()
+        self.assertTrue(availability["available"])
+        self.assertEqual(availability["engine"], rx.ENGINE_TESSERACT)
+        self.assertEqual(availability["engine_version"], "4.1.1")
+
+    def test_missing_language_data_is_reported_distinctly_from_a_missing_binary(self):
+        """Tesseract installed but unusable is its own condition, and saying
+        "not installed" would send someone to fix the wrong thing."""
+        with mock.patch.object(rx.shutil, "which", return_value="/usr/bin/tesseract"), \
+                mock.patch.object(rx, "tessdata_path", return_value=None):
+            availability = rx.ocr_availability()
+        self.assertFalse(availability["available"])
+        self.assertIn("language data", availability["reason"])
 
 
 class DeduplicationTests(unittest.TestCase):

@@ -48,7 +48,11 @@ two would be making a claim about the drawing that nobody measured.
 """
 from __future__ import annotations
 
+import glob
 import logging
+import os
+import shutil
+import subprocess
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -97,17 +101,45 @@ def needs_raster_fallback(native_pages: list) -> list:
     return [i for i, text in enumerate(native_pages or []) if not page_has_usable_text(text)]
 
 
+def tessdata_path(pymupdf_module) -> Optional[str]:
+    """Where Tesseract's language data lives, or None.
+
+    Resolved and passed EXPLICITLY to `get_textpage_ocr` rather than relying on
+    the service environment carrying `TESSDATA_PREFIX`. Mutating a running
+    service's environment to make a feature work is the kind of invisible
+    coupling that survives until the day someone restarts it differently.
+    """
+    try:
+        found = pymupdf_module.get_tessdata()
+        if found:
+            return str(found)
+    except Exception:
+        pass
+    for candidate in sorted(glob.glob("/usr/share/tesseract-ocr/*/tessdata")):
+        if os.path.isdir(candidate):
+            return candidate
+    prefix = os.environ.get("TESSDATA_PREFIX")
+    if prefix and os.path.isdir(prefix):
+        return prefix
+    return None
+
+
 def _ocr_engine():
-    """The optional OCR seam. Returns (engine_name, version, ocr_callable).
+    """The optional OCR seam. Returns (engine_name, version, pymupdf module).
 
     PyMuPDF is already a pinned dependency and can both rasterise a page and
     drive Tesseract through `get_textpage_ocr`, so the Python dependency graph
-    gains NOTHING here - which mattered: the alternative pure-pip engine pulls
+    gains NOTHING here - which mattered: the pure-pip alternative pulls
     onnxruntime, opencv, shapely and protobuf (~89 MB) and has no cp310
     manylinux wheel for the production interpreter.
 
-    What it does require is the Tesseract binary. Raising rather than returning
-    a stub keeps the absence loud at exactly one place.
+    Availability is decided by the ACTUAL executable, not by a PyMuPDF helper.
+    An earlier version of this check asked `pymupdf.TOOLS.tesseract_version()`,
+    which does not exist in PyMuPDF 1.28.2 on either dev or production - so it
+    reported "no engine" unconditionally, and would have kept reporting it after
+    Tesseract was correctly installed. The tests still passed because they
+    asserted the degrade path, and the degrade path was firing for the wrong
+    reason. Probing the binary is the check that cannot be wrong in that way.
     """
     try:
         import pymupdf
@@ -115,16 +147,33 @@ def _ocr_engine():
         raise RasterExtractionUnavailable(
             "PyMuPDF is not installed, so PDF pages cannot be rendered.") from exc
 
-    try:
-        have = pymupdf.TOOLS.tesseract_version()
-    except Exception:
-        have = None
-    if not have:
+    if not hasattr(pymupdf.Page, "get_textpage_ocr"):  # pragma: no cover
+        raise RasterExtractionUnavailable(
+            "This PyMuPDF build cannot drive OCR (no get_textpage_ocr).")
+
+    executable = shutil.which("tesseract")
+    if not executable:
         raise RasterExtractionUnavailable(
             "The Tesseract OCR engine is not installed on this host, so an "
-            "image-only page cannot be read. Install tesseract-ocr and set "
-            "TESSDATA_PREFIX.")
-    return ENGINE_TESSERACT, str(have), pymupdf
+            "image-only page cannot be read. Install tesseract-ocr "
+            "(deploy/DEPLOYMENT.md section 7A).")
+
+    if tessdata_path(pymupdf) is None:
+        raise RasterExtractionUnavailable(
+            "Tesseract is installed but its language data could not be found. "
+            "Set TESSDATA_PREFIX to the tessdata directory.")
+
+    version = "unknown"
+    try:
+        completed = subprocess.run(
+            [executable, "--version"], capture_output=True, text=True, timeout=10)
+        first = (completed.stdout or completed.stderr or "").strip().splitlines()
+        if first:
+            parts = first[0].split()
+            version = parts[1] if len(parts) > 1 else first[0]
+    except Exception:  # noqa: BLE001 - an unreadable version is not a failure
+        pass
+    return ENGINE_TESSERACT, version, pymupdf
 
 
 def ocr_availability() -> dict:
@@ -151,6 +200,7 @@ def extract_raster_pages(raw_bytes: bytes, page_indices: list, *,
         return {"ran": False, "status": RASTER_STATUS_UNREADABLE, "pages": {},
                 "engine": None, "engine_version": None, "reason": str(exc)}
 
+    tessdata = tessdata_path(pymupdf) if hasattr(pymupdf, "get_tessdata") else None
     recovered, failures = {}, []
     try:
         document = pymupdf.open(stream=raw_bytes, filetype="pdf")
@@ -166,7 +216,8 @@ def extract_raster_pages(raw_bytes: bytes, page_indices: list, *,
                 continue
             try:
                 page = document.load_page(index)
-                textpage = page.get_textpage_ocr(dpi=dpi, full=True)
+                textpage = page.get_textpage_ocr(
+                    dpi=dpi, full=True, **({"tessdata": tessdata} if tessdata else {}))
                 text = page.get_text(textpage=textpage) or ""
             except Exception as exc:  # noqa: BLE001 - one bad page must not lose the rest
                 logger.warning("Raster fallback failed on page %d: %s", index, exc)
