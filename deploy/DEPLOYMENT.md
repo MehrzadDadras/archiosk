@@ -319,6 +319,67 @@ Removals and version CHANGES (as opposed to additions) are not routine: they can
 break code still running from the previous release during the window between sync
 and restart. Treat those as outside this document and get explicit authorization.
 
+## 7A. OCR engine for raster drawings (CLAUDE-RASTER-OCR-01) — NOT YET INSTALLED
+
+**Status: declared, not installed.** The raster/OCR fallback ships inert until
+this is done. That is deliberate — it degrades honestly (an image-only PDF is
+reported as "image-based extraction could not recover sufficient readable
+information", never as silence and never as invented text) rather than
+pretending to work.
+
+**Why a system binary and not a Python package.** The fallback drives Tesseract
+through PyMuPDF's `get_textpage_ocr`, and PyMuPDF is already pinned and
+deployed — so the Python dependency graph gains NOTHING. The pure-pip
+alternative (`rapidocr-onnxruntime`) pulls onnxruntime, opencv, shapely and
+protobuf (~89 MB) and current `onnxruntime` publishes **no cp310 manylinux
+wheel**, which this host's Python 3.10 needs. One apt package is a smaller and
+more reproducible dependency than five heavy wheels pinned to old versions —
+especially so soon after CLAUDE-E2-DEPENDENCY-RESOLUTION-01.
+
+**Production (Ubuntu/Debian):**
+
+```bash
+ssh ubuntu@<server> "
+  sudo apt-get update &&
+  sudo apt-get install -y tesseract-ocr &&
+  tesseract --version | head -2
+"
+```
+
+Verify the application can actually reach it — `pip` success proves files were
+written, not that the running interpreter finds the engine:
+
+```bash
+ssh ubuntu@<server> "
+  sudo -u archiosk /var/www/archiosk/.venv/bin/python -c \"
+import pymupdf; print('tesseract:', pymupdf.TOOLS.tesseract_version())
+\""
+```
+
+`None` means PyMuPDF cannot see it; set `TESSDATA_PREFIX` to the tessdata
+directory (`/usr/share/tesseract-ocr/*/tessdata` on Debian/Ubuntu) in the
+service environment and restart.
+
+**Windows development:** Tesseract is a separate installer (the UB Mannheim
+build is the usual source); `TESSDATA_PREFIX` must point at its `tessdata`
+folder. **The test suite does not require it** — `tests/test_raster_ocr_fallback_01.py`
+injects a fake engine at the seam, exactly as the `google-genai` tests do, so a
+developer without Tesseract still gets full coverage and an honest skip on the
+one availability-dependent assertion.
+
+**No service or runtime change.** No new Python pin, no `requirements.txt`
+edit, no gunicorn/systemd change, no schema change.
+
+**Health impact: none.** `/health` does not consult the OCR engine, and its
+absence cannot fail a request — an unreadable drawing is a status on one
+Source, not an application error.
+
+**Rollback:** `sudo apt-get remove tesseract-ocr`. The application returns to
+reporting image-only PDFs as unreadable. No data written by the fallback is
+invalidated by removing the engine, because recovered text is registered as
+ordinary governed evidence carrying the engine name in its
+`extractor_version` — it stays readable and stays attributable.
+
 ## 8. Schema changes: `flask db stamp`, NOT `flask db upgrade`
 
 **CLAUDE-STORAGE-BRIDGE-05.** Written after the first deploy that carried a

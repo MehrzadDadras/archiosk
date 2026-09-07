@@ -570,6 +570,19 @@ def _register_source_content(
         text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - same shared stage ingest_upload's own parse() uses internally
     except ParserError as exc:
         return "skipped", f"Registered as a Source, but its content could not be extracted: {exc}"
+
+    # CLAUDE-RASTER-OCR-01: a PDF whose pages carry no usable text layer is a
+    # raster/scanned drawing, not an unreadable document. Native extraction
+    # stays authoritative wherever it worked - this runs ONLY for the pages it
+    # did not, which is also why the same page can never carry two extractions.
+    if Path(filename).suffix.lower() == ".pdf":
+        registered, reason = _register_pdf_with_raster_fallback(
+            store, workspace, source, raw_bytes, text, parser,
+            actor=actor, governance_log=governance_log,
+        )
+        if registered is not None:
+            return registered, reason
+
     if not text.strip():
         return "skipped", "Registered as a Source, but extraction produced no readable text."
 
@@ -581,6 +594,71 @@ def _register_source_content(
         store, workspace, source["id"], text, actor=actor, governance_log=governance_log,
     )
     return "added", None
+
+
+
+def _register_pdf_with_raster_fallback(
+    store: CaseWorkspaceStore,
+    workspace,
+    source: dict,
+    raw_bytes: bytes,
+    native_text: str,
+    parser,
+    actor: str,
+    governance_log: Optional[GovernanceLog],
+):
+    """CLAUDE-RASTER-OCR-01: per-page native text, OCR only where it is missing.
+
+    Returns (status, reason) when this path handled the Source, or (None, None)
+    to fall through to the unchanged plain-text path. Falling through is the
+    normal case for a healthy digital PDF: if every page carries native text
+    there is nothing for this to do, and it deliberately does not touch a
+    working extraction.
+
+    Never raises - a Source is already durably registered by the time this runs,
+    and an extraction problem must be reported as an honest status rather than
+    lost as an exception.
+    """
+    from services import raster_extraction
+
+    try:
+        native_pages = parser.extract_pdf_pages(raw_bytes)
+    except Exception:  # noqa: BLE001 - fall back to the caller's own handling
+        return None, None
+    if not native_pages:
+        return None, None
+
+    missing = raster_extraction.needs_raster_fallback(native_pages)
+    if not missing:
+        # Every page read natively. The native path owns this document.
+        return None, None
+
+    result = raster_extraction.extract_raster_pages(raw_bytes, missing)
+    if not result["pages"]:
+        if native_text.strip():
+            # Some pages read natively; register what genuinely exists rather
+            # than discarding a partly-readable document.
+            store.register_pdf_page_structure(
+                workspace, source_id=source["id"], pages=native_pages,
+                extractor_version=parser.__class__.__name__,
+                actor=actor, governance_log=governance_log,
+            )
+            return "added", None
+        return "skipped", result.get("reason") or raster_extraction.user_message(
+            raster_extraction.RASTER_STATUS_UNREADABLE, 0, len(missing))
+
+    merged = raster_extraction.merge_pages(native_pages, result["pages"])
+    # DERIVED evidence: the engine, not the parser, is recorded as the
+    # extractor, so recovered text is never mistaken for text the document
+    # actually contained.
+    store.register_pdf_page_structure(
+        workspace, source_id=source["id"], pages=merged,
+        extractor_version="%s+%s %s" % (
+            parser.__class__.__name__, result["engine"], result["engine_version"]),
+        actor=actor, governance_log=governance_log,
+    )
+    return "added", raster_extraction.user_message(
+        result["status"], len(result["pages"]), len(missing))
 
 
 def _register_declared_source_references(
