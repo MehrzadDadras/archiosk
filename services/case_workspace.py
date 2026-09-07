@@ -2295,6 +2295,14 @@ class ChangeArrivalAssessment:
     subject_scope: Optional[str] = None
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[str] = None
+    # CLAUDE-B2-SUPERSESSION-LINKAGE-01: what B2 did with this assessment, and
+    # the reason B2 is idempotent. An assessment carrying an
+    # `applied_supersession_id` has already produced a governed transition;
+    # applying it again must return that one rather than mint a second.
+    applied_supersession_id: Optional[str] = None
+    applied_successor_id: Optional[str] = None
+    applied_at: Optional[str] = None
+    applied_by: Optional[str] = None
 
 
 @dataclass
@@ -6492,6 +6500,33 @@ class CaseWorkspaceStore:
         if state is not None:
             rows = [r for r in rows if r.get("state") == state]
         return rows
+
+
+    def mark_change_arrival_applied(
+        self,
+        workspace: ProjectWorkspace,
+        assessment_id: str,
+        supersession_id: str,
+        successor_id: str,
+        actor: str,
+    ) -> dict:
+        """Stamp the governed transition B2 produced onto its assessment.
+
+        Written in the SAME save() as the revision itself (see
+        services/change_application.py) so an assessment can never claim an
+        application that did not happen, nor a transition exist with nothing
+        recording which accepted change authorised it.
+        """
+        assessment = self._find(workspace.change_arrival_assessments, assessment_id)
+        if assessment is None:
+            raise CaseWorkspaceError(
+                f"Change arrival assessment {assessment_id} was not found.")
+        assessment["applied_supersession_id"] = supersession_id
+        assessment["applied_successor_id"] = successor_id
+        assessment["applied_at"] = _now()
+        assessment["applied_by"] = actor
+        self.save(workspace)
+        return assessment
 
     def extraction_signal_for_source(self, workspace: ProjectWorkspace, source_id: str) -> Optional[str]:
         """

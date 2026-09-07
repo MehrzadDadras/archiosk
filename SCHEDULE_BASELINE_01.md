@@ -1,7 +1,7 @@
 # ARCHIOSK Development Master Schedule — BASELINE SCHEDULE 01
 
 **Status:** BASELINE, authorized by the Product Owner 2026-09-06.
-**Revision:** 02E (2026-09-06) — duration unit defined as **Virtual Engineering
+**Revision:** 02F (2026-09-06) — duration unit defined as **Virtual Engineering
 Days (VED)**, third clock added, measured velocity recorded. **The logic network
 is unchanged from Rev 01.** Rev 02A added the CH0–CH3 milestone ids (§6.2) and
 the two-VED-remainder reporting rule (§8.4.4). Rev 02B records **P0 / CH1 as
@@ -185,7 +185,7 @@ durations.
 | **A2** | Requirement/obligation dependency graph | ∥ | 8–13 | +2–3 | 0–13 | 0 | ★ | COMPLETE¹ | MED |
 | A3 | Authority-transition reconstruction | A2 | 5–8 | — | 13–21 | 8 | | PARTIAL | MED |
 | **B1** | Change-arrival recognition (Addendum) | A2 | 8–13 | **+3–5** | 13–26 | 0 | ★ | **COMPLETE** | LOW |
-| **B2** | Requirement-level supersession linkage | B1 | 3–5 | — | 26–31 | 0 | ★ | PRIMITIVE EXISTS / UNWIRED | MED |
+| **B2** | Requirement-level supersession linkage | B1 | 3–5 | — | 26–31 | 0 | ★ | **COMPLETE** | MED |
 | **B3-A** | Structured carry-through sweep | A2,B2 | 8–12 | **+3–5** | 31–43 | 0 | ★ | NOT STARTED | LOW |
 | **B3-B** | Drawing carry-through sweep (absorbs C2) | B3-A | 6–10 | **+2–4** | 43–53 | 0 | ★ | NOT STARTED | LOW |
 | B4 | Requirement-level reconciliation | B3-A | 8–13 | — | 43–56 | 3 | | **misnamed today** | LOW |
@@ -628,6 +628,7 @@ It does not alter §4, §5 float, or the critical path — see §1.1.
 | 02C | 2026-09-06 | Product Owner | **A2 → COMPLETE** (`83e9e65`) — the governed dependency graph, built as a query layer over the existing Relationship substrate. Status change only | **LOGIC: NO MOVEMENT**, but A2 is the first completed activity **ON** the R1 critical path, so remaining critical-path effort falls 61–98 → 51–82 VED |
 | 02D | 2026-09-06 | Product Owner | **A2 → IMPLEMENTED / NEEDS CONSUMER** (§5.1's stricter reading adopted; B1 becomes its first consumer). Baseline gate recovery: a real multi-process durability defect in `services/bridge_queue.py` fixed, and a flaky test contract in `test_perspective_entry_gate_04` corrected | **LOGIC: NO MOVEMENT.** Reliability work discovered BY A2, not part of the R1 network; A2's VED estimate and critical-path position are unchanged |
 | 02E | 2026-09-06 | Product Owner | **B1 → COMPLETE** and **A2 → COMPLETE** (B1 is A2's first production consumer, satisfying §5.1). Status only | **LOGIC: NO MOVEMENT.** B1 is ON the R1 critical path, so remaining critical-path effort falls 51–82 → 40–64 VED |
+| 02F | 2026-09-06 | Product Owner | **B2 → COMPLETE** — governed old→new Requirement lineage from accepted B1 changes, reusing `revise_requirement`. Status only | **LOGIC: NO MOVEMENT.** B2 is ON the R1 critical path, so remaining critical-path effort falls 40–64 → 37–59 VED |
 
 **Rev 02A — what changed, why, and what it deliberately did not touch.**
 

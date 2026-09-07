@@ -50,6 +50,11 @@ from werkzeug.utils import secure_filename
 
 from services.auth import admin_required, is_admin, login_required, user_can_upload_to_storage
 from services.change_arrival import ChangeArrivalError, propose_change
+from services.change_application import (
+    ChangeApplicationConflict,
+    ChangeApplicationError,
+    apply_accepted_change,
+)
 from services.case_workspace import (
     ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT,
     ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED,
@@ -2880,6 +2885,50 @@ def review_change_arrival_route(project_id, assessment_id):
         )
     except CaseWorkspaceError as exc:
         flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/change-arrival/<assessment_id>/apply",
+                    methods=["POST"])
+@login_required
+def apply_change_arrival_route(project_id, assessment_id):
+    """CLAUDE-B2-SUPERSESSION-LINKAGE-01: apply an ACCEPTED, authority-moving
+    change as a governed old -> new Requirement transition.
+
+    Deliberately a SEPARATE act from the accept in
+    `review_change_arrival_route`, not an automatic consequence of it.
+    Accepting is the human judgment that a change arrived; applying is the
+    transition that makes the successor govern. Collapsing them would remove
+    the moment where a reviewer can see what the change touches and still stop.
+
+    Refuses anything not accepted and authority-moving, refuses a predecessor
+    that already has a successor (a human decides which governs - never the
+    timestamp), and is idempotent: re-applying returns the existing transition
+    rather than minting a second successor.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    overrides = {}
+    amended_text = (request.form.get("text_reference") or "").strip()
+    if amended_text:
+        overrides["text_reference"] = amended_text
+
+    try:
+        result = apply_accepted_change(
+            store, workspace, assessment_id, actor=_reviewer(),
+            governance_log=_log(), **overrides,
+        )
+    except ChangeApplicationConflict as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    except (ChangeApplicationError, CaseWorkspaceError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+    if result["already_applied"]:
+        flash("That change was already applied; nothing was duplicated.", "success")
+    else:
+        flash("Applied. Requirement %s is superseded by %s."
+              % (result["predecessor_id"], result["successor_id"]), "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
