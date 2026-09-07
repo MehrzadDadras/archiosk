@@ -506,3 +506,177 @@ def initial_lifecycle_stage(operating_environment: str) -> str:
     if stage is None:
         raise ValueError(f"{operating_environment!r} has no initial lifecycle stage.")
     return stage
+
+
+# ===========================================================================
+# CLAUDE-DOCUMENT-SHOP-01: contextual TOOL exposure.
+#
+# CAPABILITY MAY BE SHARED. EXPOSURE MUST BE CONTEXTUAL.
+#
+# The capability machinery above already answers "may this operating
+# environment perform this procurement action?" It is the right mechanism and
+# the wrong question for the gap that was actually found: 66 registered
+# toolbox refs, none behind a conditional, so drawing tools appear in a pure
+# RFP project simply because the engine has them.
+#
+# This extends that mechanism to tool GROUPS and adds the one context the
+# procurement axis never needed - what kind of source the reviewer is actually
+# looking at. It is deliberately NOT a realm registry, a second capability
+# framework, or a new project boundary: the governed project remains the one
+# source of truth and this decides only what is SHOWN.
+#
+# ONE DECISION FUNCTION, MANY RENDERERS. `resolve_tool_exposure()` is computed
+# once per request and templates render its result. Scattering `{% if %}`
+# across templates is how the current leak happened - a rule that lives in
+# sixteen places is not a rule.
+#
+# DEGRADE TO GENERAL, NEVER TO EVERYTHING. When context is unknown, the
+# specialised groups are withheld and the general ones remain. An unclassified
+# project should not silently acquire drawing tooling; that is the same
+# "machine inference never becomes authority" instinct the invariants carry,
+# applied to exposure.
+# ===========================================================================
+
+#: The bounded tool groups. Classified from what the tools ACTUALLY do today,
+#: not arranged for symmetry - `spin` stays general because Spin is the
+#: project-wide question every context legitimately asks.
+TOOL_GROUP_GENERAL = "general"
+TOOL_GROUP_DOCUMENT_AS_READ = "document_as_read"
+TOOL_GROUP_RFP_PROCUREMENT = "rfp_procurement"
+TOOL_GROUP_DESIGN_CONSTRUCTION = "design_construction"
+TOOL_GROUP_HELP_SUPPORT = "help_support"
+
+KNOWN_TOOL_GROUPS = (
+    TOOL_GROUP_GENERAL,
+    TOOL_GROUP_DOCUMENT_AS_READ,
+    TOOL_GROUP_RFP_PROCUREMENT,
+    TOOL_GROUP_DESIGN_CONSTRUCTION,
+    TOOL_GROUP_HELP_SUPPORT,
+)
+
+#: Existing `toolbox.*` / surface groups, mapped to the bounded groups above.
+#: Only tools whose current behaviour is genuinely specialised are moved out of
+#: GENERAL. Conversation, tasks, tags, investigations and Spin are how a person
+#: works in ANY context and stay general on purpose.
+TOOL_GROUP_BINDINGS = {
+    # -- general: the product's own furniture -------------------------------
+    "conversation": TOOL_GROUP_GENERAL,
+    "investigations": TOOL_GROUP_GENERAL,
+    "investigation-findings": TOOL_GROUP_GENERAL,
+    "composer-findings": TOOL_GROUP_GENERAL,
+    "tasks": TOOL_GROUP_GENERAL,
+    "tags": TOOL_GROUP_GENERAL,
+    "work-products": TOOL_GROUP_GENERAL,
+    "project-admin": TOOL_GROUP_GENERAL,
+    "project-intelligence": TOOL_GROUP_GENERAL,
+    "q-materials": TOOL_GROUP_GENERAL,
+    "heading": TOOL_GROUP_GENERAL,
+    "panel": TOOL_GROUP_GENERAL,
+    # Spin is the project-wide question, asked from every context. Gating it
+    # by source type would be the over-restriction the brief warns against.
+    "spin": TOOL_GROUP_GENERAL,
+    "spin-launcher": TOOL_GROUP_GENERAL,
+    # -- document preparation: the Document Shop ----------------------------
+    "document": TOOL_GROUP_DOCUMENT_AS_READ,
+    "eye-thumbnails": TOOL_GROUP_DOCUMENT_AS_READ,
+    # -- procurement --------------------------------------------------------
+    "requirements": TOOL_GROUP_RFP_PROCUREMENT,
+    "rfi": TOOL_GROUP_RFP_PROCUREMENT,
+    # -- drawing work: the group that was leaking --------------------------
+    "drawing-understanding": TOOL_GROUP_DESIGN_CONSTRUCTION,
+}
+
+#: Source kinds that make drawing work meaningful.
+_DRAWING_KINDS = frozenset({"drawing"})
+#: Source kinds that make procurement work meaningful.
+_PROCUREMENT_KINDS = frozenset({"rfq_rfp_document"})
+
+#: The workflow a reviewer is currently inside, where the route already knows.
+WORKFLOW_DOCUMENT_SHOP = "document_shop"
+WORKFLOW_PROJECT = "project"
+
+
+def _as_frozenset(values) -> frozenset:
+    return frozenset(v for v in (values or ()) if v)
+
+
+def resolve_tool_exposure(operating_environment: str | None, *,
+                          source_kinds=None,
+                          selected_source_kind: str | None = None,
+                          workflow: str | None = None) -> dict:
+    """Which tool groups may be SHOWN in this context? One answer, computed once.
+
+    Inputs are all signals the application already has - no new classifier, and
+    no new stored field. `source_kinds` is what the project actually contains;
+    `selected_source_kind` is what the reviewer has open, which is what lets one
+    mixed project show drawing tools on a drawing and withhold them on an RFP
+    document without either being a permanent property of the project.
+
+    Returns {group: bool} for every known group, so a caller can never ask
+    about a group that does not exist and silently get False.
+    """
+    kinds = _as_frozenset(source_kinds)
+    project_has_drawings = bool(kinds & _DRAWING_KINDS)
+    project_has_procurement = bool(kinds & _PROCUREMENT_KINDS)
+
+    if workflow == WORKFLOW_DOCUMENT_SHOP:
+        # Inside the workshop the question is what this SOURCE says, so
+        # project-wide procurement tooling is out of scope here - not denied
+        # to the user, just not part of this bench.
+        return {
+            TOOL_GROUP_GENERAL: True,
+            TOOL_GROUP_DOCUMENT_AS_READ: True,
+            TOOL_GROUP_DESIGN_CONSTRUCTION: (
+                selected_source_kind in _DRAWING_KINDS
+                or (selected_source_kind is None and project_has_drawings)),
+            TOOL_GROUP_RFP_PROCUREMENT: False,
+            TOOL_GROUP_HELP_SUPPORT: True,
+        }
+
+    if selected_source_kind is not None:
+        # A source is open: it decides. This is the RFP isolation - an RFP
+        # document open in a project that also holds drawings must not offer
+        # section-reference tooling.
+        design = selected_source_kind in _DRAWING_KINDS
+    else:
+        # Nothing open: fall back to what the project actually contains.
+        # Unknown contents withhold the specialised group rather than granting
+        # it - degrade to general, never to everything.
+        design = project_has_drawings
+
+    return {
+        TOOL_GROUP_GENERAL: True,
+        TOOL_GROUP_DOCUMENT_AS_READ: bool(kinds),
+        TOOL_GROUP_DESIGN_CONSTRUCTION: design,
+        # Procurement follows either a classified environment or real
+        # procurement material; an unclassified project with RFP documents is
+        # still doing procurement work.
+        TOOL_GROUP_RFP_PROCUREMENT: bool(
+            project_has_procurement or operating_environment is not None),
+        TOOL_GROUP_HELP_SUPPORT: True,
+    }
+
+
+def tool_group_available(group: str, exposure: dict) -> bool:
+    """Read one group out of a resolved exposure. Raises on an unknown group.
+
+    Raising is deliberate: a typo'd group name that quietly returned False
+    would hide a tool with no error anywhere, which is exactly how a rule
+    scattered through templates decays.
+    """
+    if group not in KNOWN_TOOL_GROUPS:
+        raise ValueError("%r is not a known tool group. Known: %s"
+                         % (group, ", ".join(KNOWN_TOOL_GROUPS)))
+    return bool(exposure.get(group, False))
+
+
+def tool_available(toolbox_group: str, exposure: dict) -> bool:
+    """Is this EXISTING toolbox group showable here?
+
+    An unmapped toolbox group is treated as GENERAL. That default is the
+    conservative one for this codebase: the specialised groups are enumerated,
+    so a tool nobody classified stays visible exactly as it is today rather
+    than silently disappearing on deploy.
+    """
+    return tool_group_available(
+        TOOL_GROUP_BINDINGS.get(toolbox_group, TOOL_GROUP_GENERAL), exposure)

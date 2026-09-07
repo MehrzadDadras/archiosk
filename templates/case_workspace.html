@@ -1184,7 +1184,10 @@
                arithmetic matches legend_of_understanding.understanding_report:
                every item is "proposed", and "awaiting" is anything not in
                SETTLED_STATUSES (confirmed/overridden/unknown/informative). #}
-            {% if selected_source.file_path %}
+            {# CLAUDE-DOCUMENT-SHOP-01: the Document Shop bench for THIS source.
+               Gated by the one resolved exposure decision rather than a
+               condition invented here - see _tool_exposure(). #}
+            {% if selected_source.file_path and tool_exposure.document_as_read %}
             {% set _asread = namespace(total=0, awaiting=0) %}
             {% for _item in workspace.legend_items if _item.source_id == selected_source.id %}
                 {% set _asread.total = _asread.total + 1 %}
@@ -1193,8 +1196,9 @@
                 {% endif %}
             {% endfor %}
             <a class="btn btn-ghost document-asread-action" data-ui-ref="display.document.as-read"
-               href="{{ url_for('workspace.drawing_understanding_review', project_id=project_id, source_id=selected_source.id) }}">
-                As-Read
+               href="{{ url_for('workspace.drawing_understanding_review', project_id=project_id, source_id=selected_source.id) }}"
+               title="Document Shop - the workshop where a source is examined, recovered and understood before deeper project analysis">
+                Document Shop &middot; As-Read
                 <span class="document-asread-counts" data-ui-ref="display.document.as-read-counts">
                     {%- if not _asread.total -%}
                     Not started

@@ -68,7 +68,13 @@
 
 {% block content %}
 <section class="panel asread-panel" data-ui-ref="drawing-understanding.panel">
-  <h2 class="panel-title">As-Read &mdash; {{ source.name }}</h2>
+  <h2 class="panel-title">Document Shop &mdash; {{ source.name }}</h2>
+  {# The workshop metaphor is explanatory, never the navigational label: a
+     reviewer looking for this surface is looking for their document, not for
+     a period reference. #}
+  <p class="panel-subtitle-note">As-Read &middot; the workshop where a source is
+  examined, recovered where degraded, and understood &mdash; before Spin tests
+  how it lives with the rest of the project.</p>
 
   {# COUNTS, NOT AN ALARM. "Contradictions" was applied to every held mark,
      including 25 held for a MISSING MEASUREMENT rather than a disagreement -
@@ -108,6 +114,16 @@
     </p>
   {% endif %}
 
+  {# CLAUDE-DOCUMENT-SHOP-01, and a correction worth keeping: this block
+     was briefly gated on the design_construction tool group, and the
+     existing suite immediately proved that wrong. `{% if families %}` is
+     ALREADY the right gate, and it is a better one - it asks whether
+     this source actually HAS repeated marks rather than whether its
+     declared kind suggests it might. Evidence beats classification, and
+     adding the group here withheld real governed records from a
+     reviewer who had them. Exposure control belongs on the ENTRY that
+     offers a tool speculatively, not on content that exists only when
+     it is already relevant. #}
   {% if families %}
   <h3 class="panel-subtitle" data-ui-ref="drawing-understanding.families-title">
     Repeated marks &mdash; answer once

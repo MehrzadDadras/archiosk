@@ -1943,6 +1943,7 @@ def show_workspace(project_id):
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
+        tool_exposure=_tool_exposure(workspace, selected_source),
         as_read_card_state=_as_read_card_state(
             store, workspace,
             (active_case or {}).get("conversation"),
@@ -2955,10 +2956,14 @@ def drawing_understanding_review(project_id, source_id):
         flash("Source not found.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
+    from services.environment_capabilities import WORKFLOW_DOCUMENT_SHOP
+
     return render_template(
         "drawing_understanding.html",
         project_id=project_id,
         source=source,
+        tool_exposure=_tool_exposure(workspace, source,
+                                     workflow=WORKFLOW_DOCUMENT_SHOP),
         rows=review_rows(store, workspace, source_id=source_id),
         families=family_review_rows(store, workspace, source_id=source_id),
         report=understanding_report(store, workspace, source_id),
@@ -5316,6 +5321,28 @@ def _propose_capture_names(workspace, message_text, image_b64, media_type):
     if not isinstance(raw, list):
         return []
     return [str(n).strip() for n in raw if str(n).strip()][:3]
+
+
+def _tool_exposure(workspace, selected_source=None, workflow=None):
+    """CLAUDE-DOCUMENT-SHOP-01: the ONE place that answers "may this tool show
+    here?" for a request.
+
+    Computed once and handed to the template as a resolved result. The
+    alternative - a condition per template - is exactly how 66 toolbox refs
+    ended up with none of them gated, and how drawing tooling became reachable
+    from a project that holds no drawings.
+
+    Every input is a signal the application already had. Nothing new is stored
+    and no source is reclassified.
+    """
+    from services.environment_capabilities import resolve_tool_exposure
+
+    return resolve_tool_exposure(
+        getattr(workspace, "operating_environment", None),
+        source_kinds={s.get("kind") for s in (workspace.sources or [])
+                      if not s.get("removed_at")},
+        selected_source_kind=(selected_source or {}).get("kind"),
+        workflow=workflow)
 
 
 def _as_read_card_state(store, workspace, *conversations):
