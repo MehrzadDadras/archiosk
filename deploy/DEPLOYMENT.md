@@ -319,13 +319,29 @@ Removals and version CHANGES (as opposed to additions) are not routine: they can
 break code still running from the previous release during the window between sync
 and restart. Treat those as outside this document and get explicit authorization.
 
-## 7A. OCR engine for raster drawings (CLAUDE-RASTER-OCR-01) — NOT YET INSTALLED
+## 7A. OCR engine for raster drawings (CLAUDE-RASTER-OCR-01) — INSTALLED
 
-**Status: declared, not installed.** The raster/OCR fallback ships inert until
-this is done. That is deliberate — it degrades honestly (an image-only PDF is
-reported as "image-based extraction could not recover sufficient readable
-information", never as silence and never as invented text) rather than
-pretending to work.
+**Status: installed on both hosts.** Verified 2026-09-07:
+
+| Host | Version | Languages | tessdata |
+|---|---|---|---|
+| Production (`archiosk.com`, Ubuntu) | **tesseract 4.1.1** / leptonica 1.82.0 | `eng`, `osd` | `/usr/share/tesseract-ocr/4.00/tessdata` |
+| Windows dev | **tesseract 5.4.0.20240606** / leptonica 1.84.1 | `eng`, `osd` | `C:\Program Files\Tesseract-OCR\tessdata` |
+
+**The two hosts are a major version apart, and that is recorded rather than
+smoothed over.** Tesseract 4 and 5 do not produce identical text on the same
+image, so a recognition result measured on one host is evidence about that
+host. Recovered text carries the engine name and version in its
+`extractor_version`, which is what keeps a reading attributable to the engine
+that produced it. Do not treat a dev-host OCR figure as a production figure.
+
+*This section previously read "declared, not installed" long after both
+installs had happened — a stale status line is worse than none, because it is
+read as current.*
+
+The fallback still degrades honestly where no engine exists (an image-only PDF
+is reported as "image-based extraction could not recover sufficient readable
+information", never as silence and never as invented text).
 
 **Why a system binary and not a Python package.** The fallback drives Tesseract
 through PyMuPDF's `get_textpage_ocr`, and PyMuPDF is already pinned and
@@ -360,12 +376,45 @@ import pymupdf; print('tesseract:', pymupdf.TOOLS.tesseract_version())
 directory (`/usr/share/tesseract-ocr/*/tessdata` on Debian/Ubuntu) in the
 service environment and restart.
 
-**Windows development:** Tesseract is a separate installer (the UB Mannheim
-build is the usual source); `TESSDATA_PREFIX` must point at its `tessdata`
-folder. **The test suite does not require it** — `tests/test_raster_ocr_fallback_01.py`
+**Windows development** — reproducible, no manual installer download:
+
+```bash
+winget install --id UB-Mannheim.TesseractOCR --exact --silent   --accept-package-agreements --accept-source-agreements
+```
+
+**The silent install does NOT add Tesseract to PATH and does NOT set
+`TESSDATA_PREFIX`.** `services/raster_extraction.py` probes
+`shutil.which("tesseract")`, so without both the engine is invisible to the
+application even though the files are on disk — the same "pip success proves
+files were written, not that the interpreter finds the engine" trap as above,
+in a different costume. Set both (User scope is enough and is reversible):
+
+```powershell
+[Environment]::SetEnvironmentVariable("Path",
+  [Environment]::GetEnvironmentVariable("Path","User") + ";C:\Program Files\Tesseract-OCR", "User")
+[Environment]::SetEnvironmentVariable("TESSDATA_PREFIX",
+  "C:\Program Files\Tesseract-OCR\tessdata", "User")
+```
+
+Then verify the RUNNING interpreter agrees, not just the shell:
+
+```bash
+./venv/Scripts/python.exe -c "from services import raster_extraction as r; print(r._ocr_engine()[:2])"
+```
+
+**The test suite does not require it** — `tests/test_raster_ocr_fallback_01.py`
 injects a fake engine at the seam, exactly as the `google-genai` tests do, so a
-developer without Tesseract still gets full coverage and an honest skip on the
-one availability-dependent assertion.
+developer without Tesseract still gets full coverage.
+
+**What installing it changes about the suite, measured 2026-09-07.** Three
+availability-dependent tests SKIP once an engine is present
+(`test_raster_ocr_fallback_01.py` lines 172, 269, 287 — the no-engine degrade
+paths), and the positive-direction guard
+`test_availability_reports_available_when_the_binary_is_present` starts
+exercising a real binary instead of a stub. So a host WITH Tesseract and a host
+WITHOUT it cover different halves of this feature, and both remain necessary:
+the degrade paths are verified on a clean clone, the real-engine path here.
+Lane result with the engine present: 289 passed, 3 skipped.
 
 **No service or runtime change.** No new Python pin, no `requirements.txt`
 edit, no gunicorn/systemd change, no schema change.
@@ -374,7 +423,9 @@ edit, no gunicorn/systemd change, no schema change.
 absence cannot fail a request — an unreadable drawing is a status on one
 Source, not an application error.
 
-**Rollback:** `sudo apt-get remove tesseract-ocr`. The application returns to
+**Rollback:** production `sudo apt-get remove tesseract-ocr`; Windows dev
+`winget uninstall --id UB-Mannheim.TesseractOCR` plus removing the two User
+environment variables added above. The application returns to
 reporting image-only PDFs as unreadable. No data written by the fallback is
 invalidated by removing the engine, because recovered text is registered as
 ordinary governed evidence carrying the engine name in its
