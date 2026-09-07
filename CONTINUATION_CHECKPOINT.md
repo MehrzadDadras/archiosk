@@ -1,5 +1,160 @@
 # Continuation checkpoint
 
+## 2026-09-07 (application) — `e590d87`..`ade441d`: Drawing Intelligence, from raster fallback to what a drawing means at its edges
+
+Appended above the entries below, none of which is altered. Eight commits,
+`e590d87`..`ade441d`, **all pushed** — `origin/main` = local `main` = `ade441d`.
+None deployed. Production is last recorded as `a68a85c` at `v=156` and was not
+re-verified in this session; see "What is NOT recorded here" below.
+
+### The tranche, in the order it was built
+
+| SHA | What it added | Gate |
+|---|---|---|
+| `e590d87` | raster/OCR fallback for image-only PDFs, in ingestion rather than as a separate "Vision Spin" | 6,700 / 2,763 subtests / 8:23 |
+| `84c19d8` | the availability check probed a helper, not the binary — wrong on every host | 6,702 / 2,763 / 8:36 |
+| `4dd97e1` | DerivedView: a sheet is not one scale, and OCR text is not source text | 6,739 / 2,779 / 8:45 |
+| `d885a70` | region OCR, scale segmentation, fitness-for-purpose scale states | 6,768 / 2,798 / 8:36 |
+| `3663825` | view references: a callout is a pointer, never the view it points at | 6,797 / 2,816 / 8:54 |
+| `811eb17` | symbol families: confirm a repeated mark once, govern every instance | 6,873 / 2,829 / 9:07 |
+| `c74eeaf` | DrawingCondition / ConditionBoundary / DisciplineAssumption — conditions, boundaries, disciplines | 6,938 / 2,855 / 9:08 |
+| `ade441d` | `deploy/DEPLOYMENT.md` §7A reconciled: Tesseract is installed on both hosts | 6,935 + 3 skipped / 2,855 / 8:25 |
+
+Every gate parallel (`-n 8 --dist loadfile`), `PYTEST_EXIT=0`, on a frozen tree.
+
+The 6,938 → 6,935 step at `ade441d` is **not** a regression, and is the one
+number in that column worth reading twice: installing Tesseract on the dev host
+moved exactly three availability-dependent tests in
+`tests/test_raster_ocr_fallback_01.py` from passed to skipped. Measured both
+ways rather than reasoned about. A host with an engine and a host without cover
+different halves of this feature and both remain necessary.
+
+### What now exists
+
+**Seven new service/template modules and seven new test files**, all already
+listed in `MANIFEST.md`: `services/raster_extraction.py`,
+`services/derived_view.py`, `services/drawing_segmentation.py`,
+`services/view_reference.py`, `services/legend_of_understanding.py`,
+`services/drawing_conditions.py`, `services/discipline_alignment.py`,
+`templates/drawing_understanding.html`, and
+`tests/test_{raster_ocr_fallback,derived_view,drawing_segmentation,view_reference,legend_of_understanding,drawing_intelligence,section_cut_family}_01.py`.
+
+The distinctions the tranche enforces, each as a load-bearing negative test
+rather than a comment:
+
+- **A callout is not a view.** `classify_marker` is total over the reference
+  kinds and returns `VIEW_REFERENCE` for every one; `register_view_reference`
+  refuses a physical-view kind outright. The load-bearing test is that
+  registering a callout leaves the `DerivedView` count **unchanged** — otherwise
+  the project acquires a section with no geometry behind it, and every later
+  reader inherits the fiction.
+- **A family shares meaning and nothing else.** Rotation, mirror,
+  section-line direction, view direction, nearby label and candidate target stay
+  per-instance on `LegendItem`, because on a section cut the direction decides
+  *which* view is referenced. `family_id` is a deliberately different axis from
+  `group_id`: a group is a family of sheets, a family is a family of marks.
+- **Touching is not continuity, and touching is not support.**
+  `spatially_adjacent` exists so the refusal is a measured fact rather than an
+  absence — callers get the geometry and still cannot call it a load path. And
+  `structural_admission_state` carries `adequacy_claimed=False`: "there is a
+  path" and "the path is sufficient" are different claims, and only the first is
+  answerable from a drawing. GOV-P-006 at drawing scale.
+- **Local consistency does not prove coordination.** Assumptions are stored per
+  discipline and never merged. One discipline agreeing with itself is
+  `UNRECONCILED`, not aligned. An unevidenced difference is an
+  `ASSUMPTION_MISMATCH`, not a `CONFLICT` — they need different coordination
+  responses. Work from a superseded background is out of date, not wrong; an
+  UNKNOWN revision is deliberately *not* called stale, because conflating those
+  manufactures questions with no evidence behind them.
+
+### Defects found and fixed inside the tranche
+
+Recorded because each was a mechanism that *looked* implemented:
+
+- The family signature bucketed by absolute **size**, splitting one symbol drawn
+  at 1:50 from the same symbol at 1:100 — the exact per-occurrence outcome
+  families exist to prevent. It now keys on **proportion**. The superseded
+  assertion is kept as `test_pure_scale_difference_is_NOT_material`, marked as
+  superseding rather than deleted.
+- `resolve_meaning` ranked by the item's stored `evidence_tier`, so a generic
+  guess a reviewer had confirmed project-wide stayed ranked as a generic guess
+  forever. Section 1's human-confirmed tiers were present in the ordering table
+  and unreachable — the code *looked* like it implemented the rule.
+  `effective_evidence_tier` now promotes on the human decision.
+- The review-snapshot cap was stated as 1200px and the real E1 rendered **1201** —
+  the renderer rounds up, and the synthetic test geometry never exercised it. A
+  bound that is only usually true is not a bound.
+- `templates/drawing_understanding.html` had never been rendered by any test,
+  including by previously green gates: `tests/test_p40vw7a_ui_reference_map.py`
+  scans a **hand-kept** template list that did not include it, so its
+  `data-ui-ref` parity was documented but unenforced. The template is now in the
+  scanned set. **The general gap is left open and is a real one** — any newly
+  instrumented template stays unenforced until someone remembers to add it.
+- Predating this work: `tests/test_project_briefing.py` passed `api_key=""` to
+  assert the honest-skip path, but `call_llm_json` resolves
+  `api_key or os.getenv("ANTHROPIC_API_KEY")`, so it fell through to the real key
+  in `.env` and **reached the live Anthropic API**. Order-dependent under
+  `--dist loadfile`, which is why it survived — the same tree passed one gate and
+  failed the next. The precondition is now established rather than assumed, and a
+  second test asserts against the *boundary*, because a result assertion is
+  exactly what failed to notice the real call. **The same
+  `api_key or os.getenv(...)` shape appears in other services and was reported,
+  not swept up.**
+
+### Environment: the hosts are a major version apart, deliberately recorded
+
+Production runs tesseract **4.1.1** (leptonica 1.82.0); Windows dev now runs
+**5.4.0.20240606** (leptonica 1.84.1). Tesseract 4 and 5 do not produce identical
+text on the same image, so **any recognition figure is evidence about the host
+that produced it**. Recovered text carries engine and version in
+`extractor_version`, which is what keeps a reading attributable. Do not read a
+dev-host OCR number as a production number.
+
+The Windows trap, written down because it cost real time:
+`winget install --id UB-Mannheim.TesseractOCR` adds nothing to PATH and does not
+set `TESSDATA_PREFIX`. `services/raster_extraction.py` probes `shutil.which`, so
+the engine stays invisible to the application while the files sit on disk — the
+same "files were written is not the interpreter finds it" trap §7A already warned
+about for pip, wearing a different costume.
+
+### The state that matters for whoever picks this up
+
+**The E1→E2 reference on the real Alstep sheets is UNRESOLVED, and the reason it
+is unresolved changed between commits.** `c74eeaf` states plainly that the dev
+host had no Tesseract, so region OCR, family clustering on real E1 marks and
+E1→E2 resolution **were not attempted** — no families were reported, rather than
+families being invented. That is UNRESOLVED-because-not-run.
+
+An OCR-enabled proof script was later written and run once against the real
+sheets, but **its output was never persisted, and the source PDFs it read are
+gone** from the session scratchpad. There is therefore **no citable artifact for
+any OCR-era E1→E2 finding**, and none is asserted here. Re-establishing it
+requires re-acquiring E1 and E2 read-only from the registered production Sources
+of project **222109 1860 Alstep Dr**.
+
+The rule this episode is worth keeping for: **a proof that prints to a terminal
+has not been performed, as far as the repository is concerned.** Durable evidence
+is part of the proof, not paperwork after it.
+
+### What is NOT recorded here
+
+This entry is scoped to the Drawing Intelligence tranche. **The checkpoint gap
+between `e56e5ff` and `e590d87` is real and is not closed by it** — `cdeee00`,
+`b626682`, `386eaf3`, `83e9e65`, `6b6c647`, `081cf59` and the
+`SCHEDULE_BASELINE_01` revisions remain unsummarized here. Named rather than
+silently skipped.
+
+One naming collision worth knowing before searching: `SCHEDULE_BASELINE_01.md`
+uses **E1 and E2 as schedule milestone ids**. They are unrelated to drawing
+sheets E1 and E2. A grep for "E1" crosses both.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`ade441d`**, working tree clean.
+- Production: last recorded **`a68a85c`** at **`v=156`**. **Not verified in this
+  session** — nothing in this tranche is deployed, and no deployment is proposed.
+- Vectorisation **not built**. B3-A **paused**. Both deliberate.
+
 ## 2026-09-05 (application) — `e56e5ff`: the Script trust chain is complete and has no operator
 
 Appended above the entries below, none of which is altered. Six commits,
