@@ -374,6 +374,7 @@ OBJECT_KIND_WORK_PRODUCT = "work_product"
 # for the identical reasoning.
 OBJECT_KIND_REQUIREMENT_PHASE_ASSESSMENT = "requirement_phase_assessment"
 OBJECT_KIND_DOCUMENT_CONTEXT_CLAIM = "document_context_claim"
+OBJECT_KIND_CHANGE_ARRIVAL_ASSESSMENT = "change_arrival_assessment"  # CLAUDE-B1-CHANGE-ARRIVAL-01
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -2216,6 +2217,84 @@ KNOWN_DOCUMENT_CONTEXT_CLAIM_STATES = (
     DOCUMENT_CONTEXT_CLAIM_STATE_ACCEPTED,
     DOCUMENT_CONTEXT_CLAIM_STATE_REJECTED,
 )
+
+
+# -- CLAUDE-B1-CHANGE-ARRIVAL-01 -------------------------------------------
+# What an arriving authoritative document does to an existing Requirement.
+# Deliberately a SEPARATE vocabulary from KNOWN_RELATIONSHIP_TYPES: a
+# relationship is an assertion about two objects, whereas these describe a
+# proposed CHANGE OF AUTHORITY over one. Collapsing them would let an
+# ordinary edge imply an amendment.
+CHANGE_TYPE_AMENDS = "amends"
+CHANGE_TYPE_QUALIFIES = "qualifies"
+CHANGE_TYPE_SUPERSEDES = "supersedes"
+CHANGE_TYPE_CLARIFIES = "clarifies"
+CHANGE_TYPE_NO_CHANGE = "no_change"
+#: Ambiguous scope. NOT a weak amendment - an explicit refusal to guess.
+CHANGE_TYPE_REVIEW = "review"
+
+KNOWN_CHANGE_TYPES = (
+    CHANGE_TYPE_AMENDS,
+    CHANGE_TYPE_QUALIFIES,
+    CHANGE_TYPE_SUPERSEDES,
+    CHANGE_TYPE_CLARIFIES,
+    CHANGE_TYPE_NO_CHANGE,
+    CHANGE_TYPE_REVIEW,
+)
+
+#: Only AMENDS and SUPERSEDES actually move authority; the rest are context.
+#: B2 acts on these two and no others.
+AUTHORITY_MOVING_CHANGE_TYPES = (CHANGE_TYPE_AMENDS, CHANGE_TYPE_SUPERSEDES)
+
+CHANGE_ARRIVAL_STATE_PROPOSED = "proposed"
+CHANGE_ARRIVAL_STATE_ACCEPTED = "accepted"
+CHANGE_ARRIVAL_STATE_REJECTED = "rejected"
+
+KNOWN_CHANGE_ARRIVAL_STATES = (
+    CHANGE_ARRIVAL_STATE_PROPOSED,
+    CHANGE_ARRIVAL_STATE_ACCEPTED,
+    CHANGE_ARRIVAL_STATE_REJECTED,
+)
+
+
+@dataclass
+class ChangeArrivalAssessment:
+    """B1: one proposed answer to "what does this arriving document change?".
+
+    A PROPOSAL, never a transition. It records that an authoritative document
+    appears to change a specific Requirement, with the evidence and the
+    authority it rests on, and it waits for a human. GOV-P-006 is the whole
+    shape of this record: a model may constrain a governed transition and may
+    never authorize one, so nothing here writes supersession, revises a
+    Requirement, or alters project history. That is B2's act, taken by a
+    person, on an ACCEPTED assessment.
+
+    `authority_basis` is the incoming Source's own declared
+    `document_authority` - copied here because the assessment must be
+    reconstructable later even if the Source's metadata is corrected
+    afterwards, which is the same reason every governed record in this module
+    stamps rather than re-derives its own basis.
+
+    `change_type` may be CHANGE_TYPE_REVIEW, which is an explicit refusal to
+    guess at ambiguous scope rather than a low-confidence amendment. Nothing
+    downstream may treat REVIEW as a weak AMENDS.
+    """
+
+    id: str
+    project_id: str
+    incoming_source_id: str
+    target_requirement_id: str
+    change_type: str            # open-world, KNOWN_CHANGE_TYPES
+    authority_basis: Optional[str]
+    evidence: str
+    created_at: str
+    created_by: str
+    state: str = CHANGE_ARRIVAL_STATE_PROPOSED
+    confidence: Optional[float] = None
+    uncertainty: Optional[str] = None
+    subject_scope: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[str] = None
 
 
 @dataclass
@@ -4352,6 +4431,7 @@ class ProjectWorkspace:
     requirement_adjudications: list[dict] = field(default_factory=list)
     requirement_phase_assessments: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
     document_context_claims: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
+    change_arrival_assessments: list[dict] = field(default_factory=list)  # CLAUDE-B1-CHANGE-ARRIVAL-01 - see ChangeArrivalAssessment
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
@@ -6295,6 +6375,123 @@ class CaseWorkspaceStore:
         this method silently blending two different views."""
         claims = [c for c in workspace.document_context_claims if c["source_id"] == source_id]
         return [c for c in claims if c.get("page_anchor") == page_anchor]
+
+
+    # -- CLAUDE-B1-CHANGE-ARRIVAL-01 ---------------------------------------
+
+    def record_change_arrival_assessment(
+        self,
+        workspace: ProjectWorkspace,
+        incoming_source_id: str,
+        target_requirement_id: str,
+        change_type: str,
+        evidence: str,
+        created_by: str,
+        authority_basis: Optional[str] = None,
+        confidence: Optional[float] = None,
+        uncertainty: Optional[str] = None,
+        subject_scope: Optional[str] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Record ONE proposed change, PROPOSED and awaiting a human.
+
+        Both endpoints are verified to exist in THIS project before anything is
+        written - an assessment pointing at a Requirement from another project
+        would be a cross-project claim wearing a governed record's shape.
+        """
+        source = self._find(workspace.sources, incoming_source_id)
+        if source is None:
+            raise CaseWorkspaceError(f"Source {incoming_source_id} was not found.")
+        requirement = self._find(workspace.requirements, target_requirement_id)
+        if requirement is None:
+            raise CaseWorkspaceError(
+                f"Requirement {target_requirement_id} was not found.")
+
+        assessment = ChangeArrivalAssessment(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            incoming_source_id=incoming_source_id,
+            target_requirement_id=target_requirement_id,
+            change_type=normalize_open_world_value(change_type, KNOWN_CHANGE_TYPES),
+            authority_basis=authority_basis,
+            evidence=evidence,
+            created_at=_now(),
+            created_by=created_by,
+            state=CHANGE_ARRIVAL_STATE_PROPOSED,
+            confidence=confidence,
+            uncertainty=uncertainty,
+            subject_scope=subject_scope,
+        )
+        workspace.change_arrival_assessments.append(asdict(assessment))
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="change_arrival_proposed",
+                actor=created_by, role="system",
+                reason="Proposed %s against requirement %s from source %s."
+                       % (assessment.change_type, target_requirement_id,
+                          incoming_source_id),
+                payload={"assessment_id": assessment.id,
+                         "incoming_source_id": incoming_source_id,
+                         "target_requirement_id": target_requirement_id,
+                         "change_type": assessment.change_type,
+                         "authority_basis": authority_basis},
+            )
+        return asdict(assessment)
+
+    def review_change_arrival_assessment(
+        self,
+        workspace: ProjectWorkspace,
+        assessment_id: str,
+        actor: str,
+        outcome: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """The human act. Accepting records that a person agrees a change
+        arrived; it still does NOT revise the Requirement - that is B2.
+
+        `outcome` may never be PROPOSED: that is the machine's initial state,
+        not somewhere a review returns to.
+        """
+        assessment = self._find(workspace.change_arrival_assessments, assessment_id)
+        if assessment is None:
+            raise CaseWorkspaceError(
+                f"Change arrival assessment {assessment_id} was not found.")
+        if outcome not in (CHANGE_ARRIVAL_STATE_ACCEPTED, CHANGE_ARRIVAL_STATE_REJECTED):
+            raise CaseWorkspaceError(
+                f"'{outcome}' is not a valid review outcome. Use one of: "
+                f"{CHANGE_ARRIVAL_STATE_ACCEPTED}, {CHANGE_ARRIVAL_STATE_REJECTED}."
+            )
+        assessment["state"] = outcome
+        assessment["reviewed_by"] = actor
+        assessment["reviewed_at"] = _now()
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="change_arrival_reviewed",
+                actor=actor, role="reviewer",
+                reason="Change arrival assessment %s was %s." % (assessment_id, outcome),
+                payload={"assessment_id": assessment_id, "outcome": outcome},
+            )
+        return assessment
+
+    def change_arrival_assessments_for(
+        self, workspace: ProjectWorkspace, *,
+        incoming_source_id: Optional[str] = None,
+        target_requirement_id: Optional[str] = None,
+        state: Optional[str] = None,
+    ) -> list[dict]:
+        """Read side. Every filter is optional and combines by AND."""
+        rows = list(workspace.change_arrival_assessments)
+        if incoming_source_id is not None:
+            rows = [r for r in rows if r["incoming_source_id"] == incoming_source_id]
+        if target_requirement_id is not None:
+            rows = [r for r in rows if r["target_requirement_id"] == target_requirement_id]
+        if state is not None:
+            rows = [r for r in rows if r.get("state") == state]
+        return rows
 
     def extraction_signal_for_source(self, workspace: ProjectWorkspace, source_id: str) -> Optional[str]:
         """

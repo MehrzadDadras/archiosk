@@ -1,7 +1,7 @@
 # ARCHIOSK Development Master Schedule — BASELINE SCHEDULE 01
 
 **Status:** BASELINE, authorized by the Product Owner 2026-09-06.
-**Revision:** 02D (2026-09-06) — duration unit defined as **Virtual Engineering
+**Revision:** 02E (2026-09-06) — duration unit defined as **Virtual Engineering
 Days (VED)**, third clock added, measured velocity recorded. **The logic network
 is unchanged from Rev 01.** Rev 02A added the CH0–CH3 milestone ids (§6.2) and
 the two-VED-remainder reporting rule (§8.4.4). Rev 02B records **P0 / CH1 as
@@ -182,9 +182,9 @@ durations.
 | **G2** | Controlled 3–5 user pilot (RFI bounded) | G1 | 15–25 | — | 7–32 | 0 | ★ | NOT STARTED | LOW |
 | **G3** | **P1** pilot findings closeout | G2 | 5–10 | +3–5 | 32–42 | 0 | ★ | NOT STARTED | LOW |
 | E3 | External-model fault-injection tests | E1 | 3–4 | — | 3–7 | 5 | | NOT STARTED | MED |
-| **A2** | Requirement/obligation dependency graph | ∥ | 8–13 | +2–3 | 0–13 | 0 | ★ | IMPLEMENTED / NEEDS CONSUMER¹ | MED |
+| **A2** | Requirement/obligation dependency graph | ∥ | 8–13 | +2–3 | 0–13 | 0 | ★ | COMPLETE¹ | MED |
 | A3 | Authority-transition reconstruction | A2 | 5–8 | — | 13–21 | 8 | | PARTIAL | MED |
-| **B1** | Change-arrival recognition (Addendum) | A2 | 8–13 | **+3–5** | 13–26 | 0 | ★ | **SPECIFIED ONLY** | LOW |
+| **B1** | Change-arrival recognition (Addendum) | A2 | 8–13 | **+3–5** | 13–26 | 0 | ★ | **COMPLETE** | LOW |
 | **B2** | Requirement-level supersession linkage | B1 | 3–5 | — | 26–31 | 0 | ★ | PRIMITIVE EXISTS / UNWIRED | MED |
 | **B3-A** | Structured carry-through sweep | A2,B2 | 8–12 | **+3–5** | 31–43 | 0 | ★ | NOT STARTED | LOW |
 | **B3-B** | Drawing carry-through sweep (absorbs C2) | B3-A | 6–10 | **+2–4** | 43–53 | 0 | ★ | NOT STARTED | LOW |
@@ -198,18 +198,17 @@ durations.
 | **G5** | **R1** 1.0 acceptance gate | G4,G3 | 2 | — | 74–76 | 0 | ★ | NOT STARTED | HIGH |
 | H1–H5 | 2D/3D expansion, University, voice, polish, Airlock | — | — | — | — | ∞ | | DEFERRED | — |
 
-¹ **A2 is IMPLEMENTED / NEEDS CONSUMER, resolving the §5.1 tension Rev 02C
-recorded.** Product Owner decision, 2026-09-06. The governed dependency query
-exists and is proven against real Requirements and real drawing regions, but no
-production workflow consumes it yet, and §5.1 is explicit that a capability
-nothing consumes is not COMPLETE. **B1 is expected to be its first production
-consumer**, and A2 may become COMPLETE when B1 genuinely reads it.
+¹ **A2 is now COMPLETE: B1 is its real production consumer.** §5.1's condition
+— "not counted as completed product capability unless a real workflow consumes
+them" — is met. `services/change_arrival.py:affected_dependents` calls the A2
+query on a production path reached by `routes/workspace.py`'s
+`declare_change_arrival_route`, and it preserves rather than flattens the
+governed distinctions A2 makes: inferred stays labelled, contradictions are
+reported beside dependents rather than inside them, and a human-rejected edge is
+never traversed as an accepted dependency.
 
-Rev 02C had marked it COMPLETE while recording the disagreement rather than
-settling it. Settling it this way is the stricter and more honest reading: the
-model is real, the capability is not yet in anyone's hands. No dependency logic
-and no VED estimate changed — 8–13 +2–3 stands, and A2 remains on the R1
-critical path.
+There is exactly one dependency lookup in this codebase, which was the point of
+building A2 as a query layer rather than letting B1 grow its own.
 
 \* **RWK float is 0 by placement, not by certainty.** It is a declared unknown,
 not padding hidden inside another activity's estimate. CPM cannot predict
@@ -628,6 +627,7 @@ It does not alter §4, §5 float, or the critical path — see §1.1.
 | 02B | 2026-09-06 | Product Owner | Rollback path exercised end-to-end on the live host at Product Owner direction; **G1 → COMPLETE**; **P0 / CH1 recorded as ACHIEVED** (§6.3) with the two accepted pilot limitations | **LOGIC: NO MOVEMENT.** G1 sits off the R1 critical path, so R1 does not move |
 | 02C | 2026-09-06 | Product Owner | **A2 → COMPLETE** (`83e9e65`) — the governed dependency graph, built as a query layer over the existing Relationship substrate. Status change only | **LOGIC: NO MOVEMENT**, but A2 is the first completed activity **ON** the R1 critical path, so remaining critical-path effort falls 61–98 → 51–82 VED |
 | 02D | 2026-09-06 | Product Owner | **A2 → IMPLEMENTED / NEEDS CONSUMER** (§5.1's stricter reading adopted; B1 becomes its first consumer). Baseline gate recovery: a real multi-process durability defect in `services/bridge_queue.py` fixed, and a flaky test contract in `test_perspective_entry_gate_04` corrected | **LOGIC: NO MOVEMENT.** Reliability work discovered BY A2, not part of the R1 network; A2's VED estimate and critical-path position are unchanged |
+| 02E | 2026-09-06 | Product Owner | **B1 → COMPLETE** and **A2 → COMPLETE** (B1 is A2's first production consumer, satisfying §5.1). Status only | **LOGIC: NO MOVEMENT.** B1 is ON the R1 critical path, so remaining critical-path effort falls 51–82 → 40–64 VED |
 
 **Rev 02A — what changed, why, and what it deliberately did not touch.**
 

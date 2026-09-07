@@ -49,6 +49,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.auth import admin_required, is_admin, login_required, user_can_upload_to_storage
+from services.change_arrival import ChangeArrivalError, propose_change
 from services.case_workspace import (
     ADJUDICATION_ATTRIBUTION_AGENT_ASSESSMENT,
     ADJUDICATION_ATTRIBUTION_HUMAN_REVIEWED,
@@ -2804,6 +2805,82 @@ def draft_document_context_claims_route(project_id, source_id):
         )
     flash(f"GO drafted {len(result['claims'])} Document Context claim(s) for review.", "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id, source=source_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/change-arrival",
+                    methods=["POST"])
+@login_required
+def declare_change_arrival_route(project_id, source_id):
+    """CLAUDE-B1-CHANGE-ARRIVAL-01: declare that an arriving document changes a
+    Requirement, and record it as a PROPOSAL.
+
+    This is B1's production seam, and it is a declaration rather than an
+    inference on purpose. No existing route sets `document_authority`, so
+    authority is declared here alongside the change - and the service refuses
+    an amendment whose declared authority cannot carry one. That refusal is the
+    feature: it is what stops an RFI answer or a reference document being
+    recorded as an amendment because someone believed it was one.
+
+    Nothing here revises a Requirement or writes supersession. The assessment
+    is written PROPOSED and waits for a human (GOV-P-006).
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+
+    authority = (request.form.get("document_authority") or "").strip()
+    if authority:
+        try:
+            store.update_source_document_context(
+                workspace, source_id=source_id, document_authority=authority,
+                actor=_reviewer(), governance_log=_log(),
+            )
+        except CaseWorkspaceError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("workspace.show_workspace",
+                                    project_id=project_id, source=source_id))
+
+    try:
+        assessment = propose_change(
+            store, workspace,
+            incoming_source_id=source_id,
+            target_requirement_id=(request.form.get("requirement_id") or "").strip(),
+            change_type=(request.form.get("change_type") or "").strip(),
+            evidence=(request.form.get("evidence") or "").strip(),
+            actor=_reviewer(),
+            uncertainty=(request.form.get("uncertainty") or "").strip() or None,
+            subject_scope=(request.form.get("subject_scope") or "").strip() or None,
+            governance_log=_log(),
+        )
+    except (ChangeArrivalError, CaseWorkspaceError) as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("workspace.show_workspace",
+                                project_id=project_id, source=source_id))
+
+    flash("Recorded a proposed %s for review. Nothing has been changed yet."
+          % assessment["change_type"], "success")
+    return redirect(url_for("workspace.show_workspace",
+                            project_id=project_id, source=source_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/change-arrival/<assessment_id>/review",
+                    methods=["POST"])
+@login_required
+def review_change_arrival_route(project_id, assessment_id):
+    """The human act on a proposed change arrival - accept or reject.
+
+    Accepting records that a person agrees the change arrived. It still does
+    not revise the Requirement; that remains B2's separate, governed step on an
+    accepted assessment.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    try:
+        store.review_change_arrival_assessment(
+            workspace, assessment_id, actor=_reviewer(),
+            outcome=(request.form.get("outcome") or "").strip(),
+            governance_log=_log(),
+        )
+    except CaseWorkspaceError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/document-context-claims/<claim_id>/review", methods=["POST"])
