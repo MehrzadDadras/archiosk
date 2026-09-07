@@ -1,38 +1,259 @@
 {% extends "base.html" %}
 {#
-  CLAUDE-LEGEND-OF-UNDERSTANDING-01 - the confirmation table.
+  CLAUDE-LEGEND-OF-UNDERSTANDING-01 - the confirmation surface.
+  CLAUDE-ASREAD-MATRIX-02 - recompressed into a decision MATRIX.
 
-  Snapshot | GO thinks this is | Confidence | Human decision, and nothing else.
-  Every row shows the real cropped mark: a reviewer asked to agree with a
-  detached label will agree with a plausible sentence, whereas someone looking
-  at the mark answers the question that was actually asked.
+  Evidence in rows, decisions in columns, one click per row. The previous
+  layout was functionally correct and interactively unusable: E1 rendered two
+  family rows followed by TWENTY-FIVE individual rows asking the same question,
+  each preceded by a free-text box and a scope dropdown that made a one-click
+  answer look like a form to fill in. Every decision the reviewer actually
+  needed was already a single button; nothing but presentation stood between
+  them and a one-minute review.
+
+  So: the family row comes first and carries the crops, the correction control
+  is disclosed only when Correct is chosen, and the held instances collapse
+  behind one line that says how many there are and why - grouped by reason,
+  because 25 marks held for the SAME missing measurement is one question, not
+  twenty-five.
+
+  Nothing here changes a record, a scope, a meaning or a status. The routes,
+  their defaults and their append-only semantics are exactly as they were.
 #}
-{% block title %}Drawing understanding{% endblock %}
+{% block title %}As-Read &mdash; {{ source.name }}{% endblock %}
+
+{% macro decision_columns(action_url, id_prefix, source_id, scope_default,
+                          scope_options, extra_actions) %}
+  {# One <form> per row. Each decision is its own column button, so governing a
+     row is a single click - the meaning box and scope selector are progressive
+     disclosure, not a prerequisite. The routes already default scope
+     correctly (source for a family, instance for a mark), so an unopened
+     <details> submits exactly what an unmodified form always did. #}
+  <form method="post" action="{{ action_url }}" class="asread-decision-form">
+    {{ csrf_field() if csrf_field is defined }}
+    <input type="hidden" name="source_id" value="{{ source_id }}">
+    <div class="asread-decision-columns" role="group"
+         aria-label="Your decision for this row">
+      <button type="submit" name="action" value="confirmed"
+              class="asread-decision asread-decision-confirm"
+              data-ui-ref="drawing-understanding.decision.confirm">Confirm</button>
+      <button type="submit" name="action" value="overridden"
+              class="asread-decision asread-decision-correct"
+              data-ui-ref="drawing-understanding.decision.correct">Correct</button>
+      <button type="submit" name="action" value="unknown"
+              class="asread-decision asread-decision-unknown"
+              data-ui-ref="drawing-understanding.decision.unknown">Unknown</button>
+      <button type="submit" name="action" value="deferred"
+              class="asread-decision asread-decision-later"
+              data-ui-ref="drawing-understanding.decision.later">Later</button>
+      {% for value, label in extra_actions %}
+      <button type="submit" name="action" value="{{ value }}"
+              class="asread-decision">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <details class="asread-correction" data-ui-ref="drawing-understanding.correction">
+      <summary>Correcting or narrowing this?</summary>
+      <label for="{{ id_prefix }}-meaning">What it actually is</label>
+      <input type="text" id="{{ id_prefix }}-meaning" name="meaning"
+             placeholder="only needed for Correct">
+      <label for="{{ id_prefix }}-scope">How widely this applies</label>
+      <select id="{{ id_prefix }}-scope" name="scope_kind">
+        {% for value, label in scope_options %}
+        <option value="{{ value }}"{% if value == scope_default %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </details>
+  </form>
+{% endmacro %}
 
 {% block content %}
-<section class="panel" data-ui-ref="drawing-understanding.panel">
-  <h2 class="panel-title">Drawing understanding &mdash; {{ source.name }}</h2>
+<section class="panel asread-panel" data-ui-ref="drawing-understanding.panel">
+  <h2 class="panel-title">As-Read &mdash; {{ source.name }}</h2>
 
-  <p class="muted">
-    ARCHIOSK has proposed what these marks mean. Confirm, correct, or say it is
-    unknown. Nothing here is treated as settled until you decide.
-  </p>
+  {# COUNTS, NOT AN ALARM. "Contradictions" was applied to every held mark,
+     including 25 held for a MISSING MEASUREMENT rather than a disagreement -
+     which reads as 25 things being wrong when nothing is. A real contradiction
+     keeps its own line and its own weight. #}
+  {% set _held = rows | selectattr("status", "equalto", "review_needed") | list %}
+  {% set _counts = namespace(directional=0, contradiction=0) %}
+  {% for _r in _held %}
+    {% if "direction" in (_r.review_reason or "")|lower %}
+      {% set _counts.directional = _counts.directional + 1 %}
+    {% else %}
+      {% set _counts.contradiction = _counts.contradiction + 1 %}
+    {% endif %}
+  {% endfor %}
+  <ul class="asread-summary" data-ui-ref="drawing-understanding.summary">
+    <li><strong>{{ report.proposed_items }}</strong> mark(s) recognised</li>
+    {% if families %}
+    <li><strong>{{ families | length }}</strong> repeated-mark family(ies)</li>
+    {% endif %}
+    <li><strong>{{ report.proposed_items - report.awaiting_confirmation }}</strong> settled</li>
+    {% if _counts.directional %}
+    <li data-ui-ref="drawing-understanding.summary-directional">
+      <strong>{{ _counts.directional }}</strong> need directional review</li>
+    {% endif %}
+    {% if _counts.contradiction %}
+    <li data-ui-ref="drawing-understanding.summary-contradiction">
+      <strong>{{ _counts.contradiction }}</strong> genuinely contradict the family</li>
+    {% endif %}
+    <li class="muted">Sheet {{ report.title_block.document_id or "not established" }}
+        &middot; {{ report.pages }} page(s) &middot; {{ report.view_count }} view(s)</li>
+  </ul>
 
-  <dl class="understanding-summary" data-ui-ref="drawing-understanding.summary">
-    <dt>Sheet</dt>
-    <dd>{{ report.title_block.document_id or "not established" }}
-        {%- if report.title_block.revision %} &middot; rev {{ report.title_block.revision }}{% endif %}</dd>
-    <dt>Pages</dt><dd>{{ report.pages }}</dd>
-    <dt>Views</dt><dd>{{ report.view_count }}</dd>
-    <dt>Proposed</dt><dd>{{ report.proposed_items }}</dd>
-    <dt>Awaiting you</dt><dd>{{ report.awaiting_confirmation }}</dd>
-    {% if report.inherited_from_group %}
-      <dt>Inherited</dt><dd>{{ report.inherited_from_group }} from this sheet set</dd>
-    {% endif %}
-    {% if report.review_needed %}
-      <dt>Contradictions</dt><dd>{{ report.review_needed }} need review</dd>
-    {% endif %}
-  </dl>
+  {% if not rows and not families %}
+    <p class="muted" data-ui-ref="drawing-understanding.empty">
+      Nothing has been proposed for this drawing yet. As-Read has not started
+      on this source.
+    </p>
+  {% endif %}
+
+  {% if families %}
+  <h3 class="panel-subtitle" data-ui-ref="drawing-understanding.families-title">
+    Repeated marks &mdash; answer once
+  </h3>
+  <table class="asread-matrix" data-ui-ref="drawing-understanding.family-table">
+    <thead>
+      <tr>
+        <th scope="col">Evidence</th>
+        <th scope="col">GO reads</th>
+        <th scope="col">Applies to</th>
+        <th scope="col">Your decision</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for family in families %}
+      <tr data-ui-ref="drawing-understanding.family-row"
+          class="asread-row{% if family.state == 'confirmed' %} asread-row-settled{% endif %}">
+        <td class="asread-evidence">
+          {# At most 6 crops. The family mechanism already caps representatives
+             at 3; this is a presentation floor under it, not a second policy. #}
+          {% for representative in family.representatives[:6] %}
+            {% if representative.has_snapshot %}
+              <a class="asread-crop-link"
+                 href="{{ url_for('workspace.legend_item_snapshot',
+                                  project_id=project_id,
+                                  legend_item_id=representative.legend_item_id) }}"
+                 target="_blank" rel="noopener"
+                 data-ui-ref="drawing-understanding.crop">
+                <img class="legend-snapshot asread-crop"
+                     src="{{ url_for('workspace.legend_item_snapshot',
+                                     project_id=project_id,
+                                     legend_item_id=representative.legend_item_id) }}"
+                     alt="Representative of this repeated mark. Open for a larger view.">
+              </a>
+            {% endif %}
+          {% endfor %}
+        </td>
+        <td class="asread-reading">
+          <strong>{{ family.effective_meaning or family.proposed_meaning }}</strong>
+          <div class="muted">
+            {{ family.proposed_kind|replace("_", " ") }}
+            {%- if family.confidence is not none %} &middot; {{ "%.0f"|format(family.confidence * 100) }}% confident{% endif %}
+          </div>
+          {% if family.state == "confirmed" %}
+            <div class="asread-settled-flag" data-ui-ref="drawing-understanding.settled">&#10003; Confirmed by a person</div>
+          {% elif family.state == "contested" %}
+            <div class="asread-contested-flag">Representatives were answered differently &mdash; applying to nothing</div>
+          {% endif %}
+        </td>
+        <td class="asread-applies">
+          <strong>{{ family.instance_count + family.representatives|length }}</strong> mark(s) &middot; this sheet
+          <div class="muted">{{ family.instance_count }} other mark(s) ride on this one answer</div>
+          {% if family.instances_needing_review %}
+            <div class="asread-exception-count">{{ family.instances_needing_review }} held</div>
+          {% endif %}
+        </td>
+        <td class="asread-decision-cell">
+          {{ decision_columns(
+               url_for('workspace.decide_legend_family_route',
+                       project_id=project_id, family_id=family.family_id),
+               'family-' ~ family.family_id, family.source_id, 'source',
+               [('source', 'this sheet'), ('discipline', 'this discipline'),
+                ('project', 'this project')], []) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if _held %}
+  {# COLLAPSED BY DEFAULT. Twenty-five rows asking the same question is not a
+     review surface; it is the reason nobody finishes one. Grouped by the
+     reason the mark was held, so the reviewer sees how many distinct questions
+     they actually have. #}
+  <details class="asread-exceptions" data-ui-ref="drawing-understanding.exceptions">
+    <summary data-ui-ref="drawing-understanding.exceptions-summary">
+      {{ _held | length }} mark(s) held for review &mdash; review exceptions
+    </summary>
+    {% set _seen = namespace(reasons=[]) %}
+    {% for _r in _held %}
+      {% set _reason = _r.review_reason or "No reason recorded" %}
+      {% if _reason not in _seen.reasons %}
+        {% set _seen.reasons = _seen.reasons + [_reason] %}
+      {% endif %}
+    {% endfor %}
+    <p class="muted" data-ui-ref="drawing-understanding.exception-reasons">
+      {{ _seen.reasons | length }} distinct reason(s) across {{ _held | length }} mark(s).
+      {% if families %}These carry the family reading above; only their own
+      identity and the reason they are held differ.{% endif %}
+    </p>
+    <table class="asread-matrix asread-matrix-exceptions"
+           data-ui-ref="drawing-understanding.exception-table">
+      <thead>
+        <tr>
+          <th scope="col">Mark</th>
+          <th scope="col">GO reads</th>
+          <th scope="col">Why it is held</th>
+          <th scope="col">Your decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in _held %}
+        <tr data-ui-ref="drawing-understanding.row" class="asread-row">
+          <td class="asread-evidence">
+            {% if row.has_snapshot %}
+              <a class="asread-crop-link"
+                 href="{{ url_for('workspace.legend_item_snapshot',
+                                  project_id=project_id, legend_item_id=row.legend_item_id) }}"
+                 target="_blank" rel="noopener">
+                <img class="legend-snapshot asread-crop"
+                     src="{{ url_for('workspace.legend_item_snapshot',
+                                     project_id=project_id, legend_item_id=row.legend_item_id) }}"
+                     alt="Cropped image of the mark being reviewed">
+              </a>
+            {% else %}
+              <span class="muted">no crop &mdash; family answered from its representatives</span>
+            {% endif %}
+            {% if row.observed_text %}<code class="observed">{{ row.observed_text }}</code>{% endif %}
+          </td>
+          <td class="asread-reading">
+            {# The family row above already states the reading in full. Repeating
+               it per held mark is the paragraph-repetition this surface exists
+               to remove; what distinguishes these rows is WHICH mark and WHY. #}
+            <strong>{{ row.nearby_label or row.observed_text or "unlabelled" }}</strong>
+            <div class="muted">{{ row.proposed_kind|replace("_", " ") }}</div>
+          </td>
+          <td class="asread-why" data-ui-ref="drawing-understanding.hold-reason">
+            {{ row.review_reason or "No reason recorded." }}
+          </td>
+          <td class="asread-decision-cell">
+            {{ decision_columns(
+                 url_for('workspace.decide_legend_item_route',
+                         project_id=project_id, legend_item_id=row.legend_item_id),
+                 'mark-' ~ row.legend_item_id, row.source_id, 'instance',
+                 [('instance', 'this mark only'), ('page', 'this page'),
+                  ('source', 'this sheet'), ('discipline', 'this discipline'),
+                  ('project', 'this project')],
+                 [('informative', 'Not important')]) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
 
   {% if report.deferred_work %}
     <details class="deferred-work" data-ui-ref="drawing-understanding.deferred">
@@ -41,169 +262,6 @@
         {% for reason in report.deferred_work %}<li>{{ reason }}</li>{% endfor %}
       </ul>
     </details>
-  {% endif %}
-
-  {% if families %}
-  <h3 class="panel-subtitle" data-ui-ref="drawing-understanding.families-title">
-    Repeated marks &mdash; confirm once
-  </h3>
-  <p class="muted">
-    These marks repeat across the sheet. Answer once for the family and the
-    answer carries to every matching instance; anything that does not match
-    comes back to you below rather than being assumed.
-  </p>
-  <table class="understanding-table" data-ui-ref="drawing-understanding.family-table">
-    <thead>
-      <tr>
-        <th scope="col">Representative marks</th>
-        <th scope="col">ARCHIOSK thinks this is</th>
-        <th scope="col">Applies to</th>
-        <th scope="col">Your decision</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for family in families %}
-      <tr data-ui-ref="drawing-understanding.family-row">
-        <td class="snapshot-cell">
-          {% for representative in family.representatives %}
-            {% if representative.has_snapshot %}
-              <img class="legend-snapshot"
-                   src="{{ url_for('workspace.legend_item_snapshot',
-                                   project_id=project_id,
-                                   legend_item_id=representative.legend_item_id) }}"
-                   alt="One of the repeated marks being reviewed">
-            {% endif %}
-          {% endfor %}
-        </td>
-        <td>
-          <strong>{{ family.proposed_meaning }}</strong>
-          <span class="muted">({{ family.proposed_kind|replace("_", " ") }})</span>
-          {% if family.effective_meaning %}
-            <div class="muted">now read as: <strong>{{ family.effective_meaning }}</strong></div>
-          {% endif %}
-          {% if family.confidence is not none %}
-            <div class="muted">{{ "%.0f"|format(family.confidence * 100) }}% confident</div>
-          {% endif %}
-        </td>
-        <td>
-          {{ family.instance_count }} other mark(s)
-          {% if family.instances_needing_review %}
-            <div class="muted">{{ family.instances_needing_review }} need your review</div>
-          {% endif %}
-        </td>
-        <td>
-          <form method="post"
-                action="{{ url_for('workspace.decide_legend_family_route',
-                                   project_id=project_id, family_id=family.family_id) }}">
-            {{ csrf_field() if csrf_field is defined }}
-            <input type="hidden" name="source_id" value="{{ family.source_id }}">
-            <label class="visually-hidden" for="family-meaning-{{ family.family_id }}">
-              Correct meaning for this family
-            </label>
-            <input type="text" id="family-meaning-{{ family.family_id }}" name="meaning"
-                   placeholder="what these actually are (for Correct)">
-            <label class="visually-hidden" for="family-scope-{{ family.family_id }}">
-              How widely this applies
-            </label>
-            <select id="family-scope-{{ family.family_id }}" name="scope_kind">
-              <option value="source">this sheet</option>
-              <option value="discipline">this discipline</option>
-              <option value="project">this project</option>
-            </select>
-            <div class="decision-actions">
-              <button type="submit" name="action" value="confirmed">Confirm all</button>
-              <button type="submit" name="action" value="overridden">Correct all</button>
-              <button type="submit" name="action" value="unknown">Unknown</button>
-              <button type="submit" name="action" value="deferred">Later</button>
-            </div>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-
-  {% if not rows and not families %}
-    <p class="muted" data-ui-ref="drawing-understanding.empty">
-      Nothing has been proposed for this drawing yet.
-    </p>
-  {% else %}
-  <table class="understanding-table" data-ui-ref="drawing-understanding.table">
-    <thead>
-      <tr>
-        <th scope="col">Mark</th>
-        <th scope="col">ARCHIOSK thinks this is</th>
-        <th scope="col">Confidence</th>
-        <th scope="col">Your decision</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-      <tr data-ui-ref="drawing-understanding.row">
-        <td class="snapshot-cell">
-          {% if row.has_snapshot %}
-            <img class="legend-snapshot"
-                 src="{{ url_for('workspace.legend_item_snapshot',
-                                 project_id=project_id, legend_item_id=row.legend_item_id) }}"
-                 alt="Cropped image of the mark being reviewed">
-          {% else %}
-            <span class="muted">no snapshot</span>
-          {% endif %}
-          {% if row.observed_text %}<code class="observed">{{ row.observed_text }}</code>{% endif %}
-        </td>
-        <td>
-          <strong>{{ row.proposed_meaning }}</strong>
-          <span class="muted">({{ row.proposed_kind|replace("_", " ") }})</span>
-          {% if row.inherited %}
-            <span class="tag" title="Carried from another sheet in this set">inherited</span>
-          {% endif %}
-          {% if row.status == "overridden" %}
-            <div class="muted">now read as: <strong>{{ row.effective_meaning }}</strong></div>
-          {% endif %}
-          {% if row.history_length %}
-            <div class="muted">{{ row.history_length }} recorded decision(s)</div>
-          {% endif %}
-        </td>
-        <td>
-          {% if row.confidence is not none %}{{ "%.0f"|format(row.confidence * 100) }}%
-          {% else %}<span class="muted">&mdash;</span>{% endif %}
-          <div class="muted">{{ row.evidence_tier|replace("_", " ") }}</div>
-        </td>
-        <td>
-          <form method="post"
-                action="{{ url_for('workspace.decide_legend_item_route',
-                                   project_id=project_id, legend_item_id=row.legend_item_id) }}">
-            {{ csrf_field() if csrf_field is defined }}
-            <input type="hidden" name="source_id" value="{{ row.source_id }}">
-            <label class="visually-hidden" for="meaning-{{ row.legend_item_id }}">
-              Correct meaning
-            </label>
-            <input type="text" id="meaning-{{ row.legend_item_id }}" name="meaning"
-                   placeholder="what it actually is (for Correct)">
-            <label class="visually-hidden" for="scope-{{ row.legend_item_id }}">
-              How widely this applies
-            </label>
-            <select id="scope-{{ row.legend_item_id }}" name="scope_kind">
-              <option value="instance">this mark only</option>
-              <option value="page">this page</option>
-              <option value="source">this sheet</option>
-              <option value="discipline">this discipline</option>
-              <option value="project">this project</option>
-            </select>
-            <div class="decision-actions">
-              <button type="submit" name="action" value="confirmed">Confirm</button>
-              <button type="submit" name="action" value="overridden">Correct</button>
-              <button type="submit" name="action" value="unknown">Unknown</button>
-              <button type="submit" name="action" value="informative">Not important</button>
-              <button type="submit" name="action" value="deferred">Later</button>
-            </div>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
   {% endif %}
 </section>
 {% endblock %}

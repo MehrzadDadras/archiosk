@@ -387,6 +387,23 @@ def review_rows(store, workspace, *, source_id: Optional[str] = None,
             "family_id": item.get("family_id"),
             "family_role": item.get("family_role"),
             "history_length": resolved["history_length"],
+            # CLAUDE-ASREAD-MATRIX-02: why this came back, surfaced for
+            # PRESENTATION only. Already stored on the review decision by
+            # flag_legend_item_review; nothing new is recorded and no meaning
+            # is derived from it. It exists so a review surface can group 25
+            # identical "direction was never recorded" rows into one line
+            # instead of asking the same question 25 times - and so a genuine
+            # contradiction is never displayed under the same word as a
+            # missing measurement.
+            "review_reason": next(
+                (d.get("note") for d in reversed(item.get("decisions") or [])
+                 if d.get("action") == LEGEND_STATUS_REVIEW_NEEDED and d.get("note")),
+                None),
+            # Also presentation-only: what distinguishes one held member of a
+            # family from another. Without it a review surface can only repeat
+            # the family's own reading once per row, which is the paragraph
+            # repetition that made the old surface unreadable.
+            "nearby_label": item.get("nearby_label"),
             "region": item.get("region"),
             "source_id": item.get("source_id"),
             "page_structural_unit_id": item.get("page_structural_unit_id"),

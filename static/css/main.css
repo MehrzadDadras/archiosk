@@ -9931,3 +9931,162 @@ body {
 }
 .pane-help:hover { color: var(--machine-blue); border-color: var(--machine-blue); }
 .pane-help:focus-visible { outline: 2px solid var(--machine-blue); outline-offset: 2px; }
+
+/* ==========================================================================
+   CLAUDE-ASREAD-MATRIX-02 - the As-Read decision matrix.
+
+   Evidence in rows, decisions in columns, one click per row. Replaces a
+   surface that was functionally right and interactively unusable: E1 rendered
+   two family rows and then TWENTY-FIVE individual rows asking the same
+   question, each fronted by a free-text box and a scope dropdown that made a
+   one-click answer look like a form. The routes always accepted a bare click;
+   only the layout said otherwise.
+
+   Colour never carries a decision on its own - every state also has a word or
+   a mark (the settled row shows a tick and the text "Confirmed by a person"),
+   because a reviewer who cannot distinguish the accents must still be able to
+   read the state.
+   ========================================================================== */
+.asread-summary {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.1rem;
+    margin: 0.4rem 0 1rem;
+    padding: 0;
+    font-size: var(--text-sm);
+}
+.asread-summary strong { font-size: var(--text-md); }
+/* Held-for-review is ATTENTION, not failure. These marks are waiting on a
+   measurement nobody took; calling them contradictions in red said something
+   about the drawing that was not true. */
+[data-ui-ref="drawing-understanding.summary-directional"] strong { color: var(--attention-amber); }
+/* A genuine disagreement does get the failure accent - it is the one state
+   here that actually means something is wrong. */
+[data-ui-ref="drawing-understanding.summary-contradiction"] strong { color: var(--failure-red); }
+
+.asread-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0 1.2rem;
+}
+.asread-matrix th {
+    text-align: left;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-metadata);
+    border-bottom: 1px solid var(--border);
+    padding: 0.35rem 0.6rem;
+}
+.asread-matrix td {
+    vertical-align: top;
+    padding: 0.7rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+}
+.asread-row-settled { background: var(--surface-secondary); }
+
+.asread-evidence { width: 34%; }
+.asread-crop-link { display: inline-block; margin: 0 0.3rem 0.3rem 0; }
+.asread-crop {
+    display: block;
+    max-width: 108px;
+    max-height: 84px;
+    border: 1px solid var(--border);
+    background: var(--surface-primary);
+}
+.asread-crop-link:hover .asread-crop,
+.asread-crop-link:focus-visible .asread-crop { border-color: var(--go-accent); }
+
+.asread-reading strong { font-weight: 600; }
+.asread-settled-flag {
+    font-size: var(--text-xs);
+    color: var(--accepted-green);
+    margin-top: 0.25rem;
+}
+.asread-contested-flag {
+    font-size: var(--text-xs);
+    color: var(--failure-red);
+    margin-top: 0.25rem;
+}
+.asread-exception-count {
+    font-size: var(--text-xs);
+    color: var(--attention-amber);
+}
+.asread-why {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    max-width: 22rem;
+}
+
+/* The columns. Deliberately large targets: this is the CAPTCHA-shaped part of
+   the interaction - look, recognise, click - and a cramped button is what made
+   the old surface feel like data entry. */
+.asread-decision-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+    gap: 0.3rem;
+}
+.asread-decision {
+    padding: 0.5rem 0.4rem;
+    font-size: var(--text-sm);
+    font-family: var(--font-body);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    min-height: 2.4rem;
+}
+.asread-decision:hover { background: var(--surface-hover); }
+.asread-decision:focus-visible {
+    outline: 2px solid var(--go-accent);
+    outline-offset: 2px;
+}
+/* GO intelligence/action = bold + --go-accent (CLAUDE-ASREAD-NAV-01A). Confirm
+   is the GO-directed action, so it carries the identity; the others stay
+   neutral rather than competing for it. */
+.asread-decision-confirm {
+    font-weight: 600;
+    color: var(--go-accent);
+    border-color: var(--go-accent);
+}
+.asread-decision-confirm:hover { background: var(--go-accent-tint); }
+
+.asread-correction { margin-top: 0.45rem; font-size: var(--text-xs); }
+.asread-correction summary { cursor: pointer; color: var(--text-metadata); }
+.asread-correction label { display: block; margin: 0.35rem 0 0.15rem; }
+.asread-correction input[type="text"],
+.asread-correction select { width: 100%; }
+
+.asread-exceptions { margin: 0.6rem 0 1rem; }
+.asread-exceptions > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--attention-amber);
+    padding: 0.4rem 0;
+}
+.asread-exceptions > summary:focus-visible {
+    outline: 2px solid var(--go-accent);
+    outline-offset: 2px;
+}
+
+/* Narrow width keeps every control. The matrix becomes stacked cards rather
+   than losing columns - a decision capability removed at a breakpoint is a
+   decision a person cannot make on the device they have. */
+@media (max-width: 860px) {
+    .asread-matrix thead { display: none; }
+    .asread-matrix, .asread-matrix tbody, .asread-matrix tr, .asread-matrix td {
+        display: block;
+        width: auto;
+    }
+    .asread-matrix tr {
+        border: 1px solid var(--border);
+        margin-bottom: 0.8rem;
+        padding: 0.2rem 0.4rem;
+    }
+    .asread-matrix td { border-bottom: 0; padding: 0.4rem 0.2rem; }
+    .asread-evidence { width: auto; }
+    .asread-decision-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
