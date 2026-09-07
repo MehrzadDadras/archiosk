@@ -1943,6 +1943,10 @@ def show_workspace(project_id):
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
+        as_read_card_state=_as_read_card_state(
+            store, workspace,
+            (active_case or {}).get("conversation"),
+            workspace.project_conversation),
         resolution_outcomes=KNOWN_RESOLUTION_OUTCOMES,
         project_home_summary=project_home_summary,
         since_last_visit=since_last_visit,
@@ -5312,6 +5316,38 @@ def _propose_capture_names(workspace, message_text, image_b64, media_type):
     if not isinstance(raw, list):
         return []
     return [str(n).strip() for n in raw if str(n).strip()][:3]
+
+
+def _as_read_card_state(store, workspace, *conversations):
+    """Read every decision card's disposition OFF THE GOVERNED RECORD.
+
+    CLAUDE-VISUAL-COMPOSER-01. Composer stores no answer: it stores the
+    question and a target id, and the answer is looked up here on every render.
+    That is what makes a Composer card and the As-Read workbench structurally
+    incapable of disagreeing - there is one copy of the decision, and neither
+    surface owns it.
+
+    Also resolves snapshot availability per reference, so a removed crop
+    degrades to an honest line rather than a broken image.
+    """
+    from services.composer_decision_card import current_disposition, snapshot_is_available
+
+    state = {}
+    for conversation in conversations:
+        for message in (conversation or []):
+            card = message.get("decision_card")
+            if not card:
+                continue
+            available = {}
+            for reference in (message.get("visual_references") or []):
+                item_id = reference.get("legend_item_id")
+                if item_id:
+                    available[item_id] = snapshot_is_available(store, workspace, reference)
+            state[message["id"]] = {
+                "disposition": current_disposition(store, workspace, card),
+                "available": available,
+            }
+    return state
 
 
 def _composer_photo_turn(project_id, store, workspace, case_id, message_text, image_data_url):

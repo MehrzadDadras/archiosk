@@ -820,6 +820,33 @@ KNOWN_CONTENT_CLASSES = (
     CONTENT_CLASS_TEMPLATE_CONTENT,
 )
 
+# -- CLAUDE-VISUAL-COMPOSER-01: governed visual authority --------------------
+# WHERE a picture came from, and therefore what it may be trusted to assert.
+# Four different claims that must never collapse into "image":
+#   a project Source is canonical evidence the project owns;
+#   an As-Read derived snapshot is a governed crop OF one, with region-level
+#     provenance, and is immutable;
+#   a user-pasted Composer image is untrusted input that has entered GO's
+#     reasoning and holds NO authority to mutate anything;
+#   a GO-generated view is a machine artifact and is never evidence of itself.
+# Only the second is admitted in this increment. The other three are named
+# here because the vocabulary has to be closed BEFORE a second kind arrives -
+# an open string field would let the distinction erode one caller at a time.
+VISUAL_AUTHORITY_PROJECT_SOURCE = "project_source"
+VISUAL_AUTHORITY_AS_READ_SNAPSHOT = "as_read_derived_snapshot"
+VISUAL_AUTHORITY_USER_PROVIDED = "user_provided_composer_image"
+VISUAL_AUTHORITY_GO_GENERATED = "go_generated_view"
+KNOWN_VISUAL_AUTHORITIES = (
+    VISUAL_AUTHORITY_PROJECT_SOURCE,
+    VISUAL_AUTHORITY_AS_READ_SNAPSHOT,
+    VISUAL_AUTHORITY_USER_PROVIDED,
+    VISUAL_AUTHORITY_GO_GENERATED,
+)
+# What a message may currently POINT AT. Deliberately narrower than the
+# vocabulary above: naming a future authority is not admitting it.
+ADMITTED_VISUAL_AUTHORITIES = (VISUAL_AUTHORITY_AS_READ_SNAPSHOT,)
+
+
 # -- Temporal Obligation vocabulary (Prompt 8 #5/#9/#10) ---------------------
 # Lifecycle STATE (stored, changed only by governed action) - kept separate
 # from temporal CONDITION (derived, see evaluate_temporal_condition), per
@@ -1808,6 +1835,38 @@ class ConversationMessage:
     # Developer Mode only: the active CCN/context envelope carried with a
     # conversational turn. Optional so legacy project records round-trip.
     developer_context: Optional[dict] = None
+    # CLAUDE-VISUAL-COMPOSER-01: governed visual evidence a message POINTS AT.
+    #
+    # References, never bytes. Each entry names an existing governed record and
+    # carries its provenance; the retrieval URL is DERIVED at render time from
+    # the ids, so no filesystem path is ever stored in a message or exposed to
+    # a template. Nothing here duplicates a PNG - the snapshot stays owned by
+    # As-Read, which is what keeps Composer a communication hub rather than a
+    # second evidence warehouse.
+    #
+    # `authority` is a CLOSED vocabulary (VISUAL_AUTHORITIES). A project
+    # Source, an As-Read derived snapshot, a user-pasted image and a
+    # GO-generated view are four different claims about where a picture came
+    # from and what it may be trusted to assert; collapsing them into "image"
+    # is the mistake this field exists to prevent. This increment admits only
+    # AS_READ_DERIVED_SNAPSHOT.
+    #
+    # Optional/defaulted so old saved ConversationMessage JSON deserializes
+    # unchanged.
+    visual_references: list[dict] = field(default_factory=list)
+    # CLAUDE-VISUAL-COMPOSER-01: an application-owned decision card.
+    #
+    # The same "structured action envelopes, not arbitrary model prose"
+    # principle `next_steps` already records, applied to a MUTATION. A model
+    # may supply wording - the question, the reading, an exception summary -
+    # and nothing else. The target record, its kind, the scope and the allowed
+    # verbs are written by the application from a governed record and validated
+    # on the way in; prose can never select what gets mutated.
+    #
+    # The card carries no decision state of its own. Disposition is read back
+    # from the governed As-Read record at render time, so there is exactly one
+    # copy of the answer and Composer cannot drift from the workbench.
+    decision_card: Optional[dict] = None
 
 
 @dataclass
@@ -2355,6 +2414,22 @@ LEGEND_STATUS_INFORMATIVE = "informative"
 LEGEND_STATUS_DEFERRED = "deferred"
 #: A group assumption contradicted by this page. Never silently resolved.
 LEGEND_STATUS_REVIEW_NEEDED = "review_needed"
+
+# -- CLAUDE-VISUAL-COMPOSER-01: decision-card verbs --------------------------
+# The verbs a card may offer, owned by the application and validated on write.
+# These are the EXISTING As-Read decision actions, not a parallel vocabulary -
+# a card that offered a verb As-Read cannot perform would be a second decision
+# model wearing the first one's name.
+DECISION_CARD_VERBS = (
+    LEGEND_STATUS_CONFIRMED, LEGEND_STATUS_OVERRIDDEN,
+    LEGEND_STATUS_UNKNOWN, LEGEND_STATUS_DEFERRED,
+)
+DECISION_CARD_TARGET_FAMILY = "legend_family"
+DECISION_CARD_TARGET_ITEM = "legend_item"
+KNOWN_DECISION_CARD_TARGETS = (DECISION_CARD_TARGET_FAMILY, DECISION_CARD_TARGET_ITEM)
+# Only these keys may carry model-authored text. Anything else on a card is
+# written by the application from a governed record.
+DECISION_CARD_MODEL_TEXT_KEYS = ("question", "interpretation", "exception_summary")
 
 KNOWN_LEGEND_STATUSES = (
     LEGEND_STATUS_PROPOSED, LEGEND_STATUS_CONFIRMED, LEGEND_STATUS_OVERRIDDEN,
@@ -10335,6 +10410,112 @@ class CaseWorkspaceStore:
             case["source_ids"].append(source_id)
         self.save(workspace)
 
+
+    @staticmethod
+    def _validated_visual_references(references) -> list[dict]:
+        """A message may POINT AT governed evidence. It may not carry bytes,
+        a filesystem path, or an authority nobody granted.
+
+        Rejects rather than sanitises. A reference whose authority is not
+        admitted is a caller error, and silently dropping it would leave a
+        message claiming evidence it does not have.
+        """
+        if not references:
+            return []
+        cleaned = []
+        for reference in references:
+            if not isinstance(reference, dict):
+                raise CaseWorkspaceError("A visual reference must be an object.")
+            authority = (reference.get("authority") or "").strip()
+            if authority not in KNOWN_VISUAL_AUTHORITIES:
+                raise CaseWorkspaceError(
+                    "Unknown visual authority %r. Known: %s"
+                    % (authority, ", ".join(KNOWN_VISUAL_AUTHORITIES)))
+            if authority not in ADMITTED_VISUAL_AUTHORITIES:
+                raise CaseWorkspaceError(
+                    "Visual authority %r is named but not admitted yet. "
+                    "Admitted: %s" % (authority, ", ".join(ADMITTED_VISUAL_AUTHORITIES)))
+            if not (reference.get("legend_item_id") or "").strip():
+                raise CaseWorkspaceError(
+                    "An as_read_derived_snapshot reference needs its legend_item_id "
+                    "- the retrieval URL is derived from it, never stored.")
+            # No path, ever. The route resolves the file from the governed
+            # record; a path in a message would outlive the record, leak the
+            # registry layout into a template, and survive a move that the
+            # record itself would have followed.
+            for forbidden in ("snapshot_path", "path", "file_path", "url", "src",
+                              "image_base64", "data_url"):
+                if reference.get(forbidden):
+                    raise CaseWorkspaceError(
+                        "A visual reference must not carry %r - it names a "
+                        "governed record, and the URL is derived at render time."
+                        % forbidden)
+            cleaned.append({
+                "authority": authority,
+                "legend_item_id": str(reference.get("legend_item_id")).strip(),
+                "source_id": reference.get("source_id"),
+                "page_structural_unit_id": reference.get("page_structural_unit_id"),
+                "family_id": reference.get("family_id"),
+                "region": reference.get("region"),
+                "observed_text": reference.get("observed_text"),
+            })
+        return cleaned
+
+    @staticmethod
+    def _validated_decision_card(card) -> Optional[dict]:
+        """The application owns the mutation; the model owns only wording.
+
+        Every field that decides WHAT changes - target kind, target id, scope,
+        the verbs offered - is validated here against a closed vocabulary. The
+        three text keys may say anything, because saying is all they can do.
+        """
+        if card is None:
+            return None
+        if not isinstance(card, dict):
+            raise CaseWorkspaceError("A decision card must be an object.")
+
+        target_kind = (card.get("target_kind") or "").strip()
+        if target_kind not in KNOWN_DECISION_CARD_TARGETS:
+            raise CaseWorkspaceError(
+                "Unknown decision-card target_kind %r. Known: %s"
+                % (target_kind, ", ".join(KNOWN_DECISION_CARD_TARGETS)))
+        target_id = (card.get("target_id") or "").strip()
+        if not target_id:
+            raise CaseWorkspaceError("A decision card needs a target_id.")
+        source_id = (card.get("source_id") or "").strip()
+        if not source_id:
+            raise CaseWorkspaceError(
+                "A decision card needs its source_id - the decision routes "
+                "return the reviewer to that Source.")
+
+        verbs = list(card.get("verbs") or DECISION_CARD_VERBS)
+        unknown = [v for v in verbs if v not in DECISION_CARD_VERBS]
+        if unknown:
+            raise CaseWorkspaceError(
+                "A decision card may not invent a mutation verb: %s. Allowed: %s"
+                % (", ".join(map(str, unknown)), ", ".join(DECISION_CARD_VERBS)))
+
+        scope_kind = (card.get("scope_kind") or "").strip() or None
+        if scope_kind is not None and scope_kind not in KNOWN_LEGEND_SCOPES:
+            raise CaseWorkspaceError(
+                "Unknown decision-card scope_kind %r." % scope_kind)
+
+        settled = {
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "source_id": source_id,
+            "scope_kind": scope_kind,
+            "verbs": verbs,
+        }
+        # Model-authored wording, carried verbatim and trusted for NOTHING but
+        # display. Any other key a caller invented is dropped rather than
+        # stored: an unrecognised field on a governed card is how a second,
+        # undocumented contract starts.
+        for key in DECISION_CARD_MODEL_TEXT_KEYS:
+            value = card.get(key)
+            settled[key] = str(value).strip() if value else None
+        return settled
+
     def add_message(
         self, workspace: ProjectWorkspace, case_id: Optional[str], role: str, text: str,
         action_taken: Optional[str] = None, anchor: Optional[dict] = None,
@@ -10344,6 +10525,8 @@ class CaseWorkspaceStore:
         river_actions: Optional[list[dict]] = None, content_class: Optional[str] = None,
         candidate_referents: Optional[list[dict]] = None,
         developer_context: Optional[dict] = None,
+        visual_references: Optional[list[dict]] = None,
+        decision_card: Optional[dict] = None,
     ) -> dict:
         """
         case_id=None posts into ProjectWorkspace.project_conversation
@@ -10381,6 +10564,11 @@ class CaseWorkspaceStore:
         # choke point rather than per-caller, the same reasoning
         # visible_cases_for records for privacy: a rule every future caller
         # must remember is not a rule.
+        # CLAUDE-VISUAL-COMPOSER-01: validated HERE, at the one write choke
+        # point, for the same reason attribution is - "a rule every future
+        # caller must remember is not a rule."
+        visual_references = self._validated_visual_references(visual_references)
+        decision_card = self._validated_decision_card(decision_card)
         if role == "human" and not (actor or "").strip():
             raise CaseWorkspaceError(
                 "A human conversation message must record its actor - an "
@@ -10395,6 +10583,7 @@ class CaseWorkspaceStore:
                 operational_actions=operational_actions or [], river_actions=river_actions or [],
                 content_class=content_class, candidate_referents=candidate_referents or [],
                 developer_context=developer_context,
+                visual_references=visual_references, decision_card=decision_card,
             )
             workspace.project_conversation.append(asdict(message))
             self.save(workspace)
@@ -10419,6 +10608,7 @@ class CaseWorkspaceStore:
             operational_actions=operational_actions or [], river_actions=river_actions or [],
             content_class=content_class, candidate_referents=candidate_referents or [],
             developer_context=developer_context,
+            visual_references=visual_references, decision_card=decision_card,
         )
         case["conversation"].append(asdict(message))
         self.save(workspace)

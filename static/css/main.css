@@ -10090,3 +10090,51 @@ body {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* ==========================================================================
+   CLAUDE-VISUAL-COMPOSER-01 - the As-Read decision card inside Composer.
+
+   Reuses the As-Read matrix's own decision columns (.asread-decision*,
+   .asread-crop*, .asread-correction) rather than restyling them here: the
+   Composer card and the As-Read workbench are two views of ONE decision, and
+   a second set of button styles would make them look like two products with
+   two answers. Only the card's own frame is new.
+   ========================================================================== */
+.asread-card {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--go-accent);
+    background: var(--surface-secondary);
+    padding: 0.6rem 0.7rem;
+    margin: 0.5rem 0;
+}
+.asread-card-lead {
+    font-weight: 600;
+    color: var(--go-accent);
+    font-size: var(--text-sm);
+    margin: 0 0 0.4rem;
+}
+.asread-card-evidence {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-bottom: 0.45rem;
+}
+.asread-card-reading,
+.asread-card-question { margin: 0.3rem 0; font-size: var(--text-sm); }
+.asread-card-question { font-weight: 600; }
+.asread-card-scope { margin: 0.2rem 0; font-size: var(--text-xs); color: var(--text-metadata); }
+/* Settled reads as SETTLED - accepted-green and a tick, never the attention
+   accent. A card that has been answered must not keep asking. */
+.asread-card-settled {
+    margin: 0.4rem 0 0;
+    font-size: var(--text-sm);
+    color: var(--accepted-green);
+}
+/* Evidence that is gone is a fact about the record, not an error state. */
+.asread-card-missing {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+    font-style: italic;
+}
+.asread-card-link { margin: 0.45rem 0 0; font-size: var(--text-xs); }
+.asread-card-form { margin-top: 0.4rem; }

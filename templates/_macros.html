@@ -774,3 +774,136 @@
 <p class="gateway-orientation-reply" id="{{ prefix }}-reply"
    data-ui-ref="{{ ui_prefix }}.reply" aria-live="polite" hidden></p>
 {% endmacro %}
+
+{% macro as_read_decision_card(project_id, message, disposition, available) %}
+{#
+  CLAUDE-VISUAL-COMPOSER-01: one governed As-Read question, answered in one click.
+
+  The same "structured action envelope, not model prose" shape river_action_stack
+  and next_step_offers already use, applied to a mutation. Everything that
+  decides WHAT changes - target, scope, verbs - was validated on write by
+  CaseWorkspaceStore._validated_decision_card. The three text fields are the
+  only model-authored content, and they are displayed and nothing else.
+
+  The form posts to the EXISTING As-Read decision routes. There is deliberately
+  no Composer decision route and no Composer-side decision state: Composer asks
+  the question, As-Read owns the answer, and `disposition` is read back off the
+  governed record on every render so the two surfaces cannot disagree.
+
+  GENERIC BY CONSTRUCTION. Nothing here names a sheet, a project, or a symbol
+  kind - the card carries a target_kind and a target_id, and any future As-Read
+  review item that can name those renders through this same macro.
+#}
+{% set card = message.decision_card %}
+{% if card %}
+<div class="asread-card" data-ui-ref="chat.as-read-card"
+     data-target-kind="{{ card.target_kind }}" data-target-id="{{ card.target_id }}">
+  <p class="asread-card-lead" data-ui-ref="chat.as-read-card.lead">
+    GO needs one As-Read decision
+  </p>
+
+  {% if message.visual_references %}
+  <div class="asread-card-evidence" data-ui-ref="chat.as-read-card.evidence">
+    {% for reference in message.visual_references %}
+      {% if available.get(reference.legend_item_id) %}
+      <a class="asread-crop-link"
+         href="{{ url_for('workspace.legend_item_snapshot', project_id=project_id, legend_item_id=reference.legend_item_id) }}"
+         target="_blank" rel="noopener" data-ui-ref="chat.as-read-card.crop">
+        <img class="legend-snapshot asread-crop"
+             src="{{ url_for('workspace.legend_item_snapshot', project_id=project_id, legend_item_id=reference.legend_item_id) }}"
+             alt="Governed As-Read crop of the mark being reviewed. Open for a larger view.">
+      </a>
+      {% else %}
+      {# Honest degradation: the message and its provenance survive a snapshot
+         that no longer exists. A broken image would tell the reader nothing. #}
+      <span class="asread-card-missing" data-ui-ref="chat.as-read-card.missing">
+        evidence no longer available
+      </span>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if card.interpretation %}
+  <p class="asread-card-reading" data-ui-ref="chat.as-read-card.reading">
+    <strong>GO reads:</strong> {{ card.interpretation }}
+  </p>
+  {% endif %}
+  <p class="asread-card-scope" data-ui-ref="chat.as-read-card.scope">
+    Scope: {{ card.scope_kind or "instance" }}
+    {%- if card.exception_summary %} &middot; {{ card.exception_summary }}{% endif %}
+  </p>
+  {% if card.question %}
+  <p class="asread-card-question" data-ui-ref="chat.as-read-card.question">{{ card.question }}</p>
+  {% endif %}
+
+  {% if disposition.missing %}
+  <p class="asread-card-missing" data-ui-ref="chat.as-read-card.record-missing">
+    The governed record this question referred to is no longer present. Nothing
+    was changed, and this message is kept as the record of what was asked.
+  </p>
+  {% elif disposition.settled %}
+  <p class="asread-card-settled" data-ui-ref="chat.as-read-card.settled">
+    &#10003; Settled &mdash; recorded as <strong>{{ disposition.state }}</strong> in As-Read.
+  </p>
+  {% else %}
+  {% set action_url = url_for('workspace.decide_legend_family_route', project_id=project_id, family_id=card.target_id)
+       if card.target_kind == 'legend_family'
+       else url_for('workspace.decide_legend_item_route', project_id=project_id, legend_item_id=card.target_id) %}
+  <form method="post" action="{{ action_url }}" class="asread-card-form">
+    {{ csrf_field() if csrf_field is defined }}
+    <input type="hidden" name="source_id" value="{{ card.source_id }}">
+    <div class="asread-decision-columns" role="group" aria-label="Your decision for this As-Read question">
+      {# Unrolled deliberately. The registry scanner reads literal ref
+         attributes, so a ref assembled in a loop variable is invisible to it -
+         documented and unenforced, which is precisely the gap
+         tests/test_p40vw7a_ui_reference_map.py exists to close. Four
+         near-identical buttons is the cheaper half of that trade.
+
+         (Writing the attribute name in full inside this comment ALSO registers
+         a ref - the scanner cannot tell prose from markup - which is how this
+         comment first failed the very test it describes.) #}
+      {% if 'confirmed' in card.verbs %}
+      <button type="submit" name="action" value="confirmed"
+              class="asread-decision asread-decision-confirm"
+              data-ui-ref="chat.as-read-card.decision.confirmed">Confirm</button>
+      {% endif %}
+      {% if 'overridden' in card.verbs %}
+      <button type="submit" name="action" value="overridden" class="asread-decision"
+              data-ui-ref="chat.as-read-card.decision.overridden">Correct</button>
+      {% endif %}
+      {% if 'unknown' in card.verbs %}
+      <button type="submit" name="action" value="unknown" class="asread-decision"
+              data-ui-ref="chat.as-read-card.decision.unknown">Unknown</button>
+      {% endif %}
+      {% if 'deferred' in card.verbs %}
+      <button type="submit" name="action" value="deferred" class="asread-decision"
+              data-ui-ref="chat.as-read-card.decision.deferred">Later</button>
+      {% endif %}
+    </div>
+    {# Correction controls stay closed until wanted - the same progressive
+       disclosure the As-Read workbench uses, so the two surfaces feel like one
+       product and neither fronts a decision with a form. #}
+    <details class="asread-correction" data-ui-ref="chat.as-read-card.correction">
+      <summary>Correcting or narrowing this?</summary>
+      <label for="card-meaning-{{ message.id }}">What it actually is</label>
+      <input type="text" id="card-meaning-{{ message.id }}" name="meaning"
+             placeholder="only needed for Correct">
+      <label for="card-scope-{{ message.id }}">How widely this applies</label>
+      <select id="card-scope-{{ message.id }}" name="scope_kind">
+        <option value="{{ card.scope_kind or 'instance' }}" selected>keep this scope</option>
+        <option value="instance">this mark only</option>
+        <option value="source">this sheet</option>
+        <option value="discipline">this discipline</option>
+        <option value="project">this project</option>
+      </select>
+    </details>
+  </form>
+  {% endif %}
+
+  <p class="asread-card-link" data-ui-ref="chat.as-read-card.workbench-link">
+    <a href="{{ url_for('workspace.drawing_understanding_review', project_id=project_id, source_id=card.source_id) }}">Open As-Read for the full evidence</a>
+  </p>
+</div>
+{% endif %}
+{% endmacro %}

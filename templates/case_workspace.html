@@ -3921,6 +3921,10 @@
                 </form>
                 {% endif %}
                 {% if loop.last and message.role == "system" %}{{ macros.operational_action_offers(project_id, message, "case", active_case.id) }}{% endif %}
+                {% if message.decision_card %}{{ macros.as_read_decision_card(
+                    project_id, message,
+                    (as_read_card_state.get(message.id) or {}).get("disposition") or {},
+                    (as_read_card_state.get(message.id) or {}).get("available") or {}) }}{% endif %}
             </div>
             {% else %}
             {# CLAUDE-P40-B (3.7): this example previously always
@@ -4070,6 +4074,10 @@
                 </form>
                 {% endif %}
                 {% if loop.last and message.role == "system" %}{{ macros.operational_action_offers(project_id, message, "project", None) }}{% endif %}
+                {% if message.decision_card %}{{ macros.as_read_decision_card(
+                    project_id, message,
+                    (as_read_card_state.get(message.id) or {}).get("disposition") or {},
+                    (as_read_card_state.get(message.id) or {}).get("available") or {}) }}{% endif %}
             </div>
             {% else %}
             <p class="conversation-empty">No Project Conversation yet.</p>
