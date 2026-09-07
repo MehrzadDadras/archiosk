@@ -864,6 +864,55 @@ html.launcher-hidden .launcher-panel { display: none; }
 .workspace-menubar-item-danger {
     color: var(--failure-red);
 }
+/* CLAUDE-ASREAD-NAV-01: GO intelligence/action = BOLD + AMBER. The first
+   application of that standing rule, and deliberately only the first - this
+   is one entry point, not a visual-system pass.
+
+   --attention-amber, not a new eighth semantic colour: tokens.css's own
+   grammar reads it as "needs evidence / pending attention", and a sheet with
+   25 marks awaiting a human decision is exactly that. Red is reserved for
+   real conflict/error (--failure-red, one rule above on Remove), and this is
+   neither - so it must not borrow that weight.
+
+   Text-weight amber rather than the filled badge used by
+   .workspace-verification-session-badge: this sits in a row of ghost buttons
+   beside Download/Replace/Remove, and a filled swatch there would read as the
+   primary action of the page rather than as one route among several.
+
+   Contrast COMPUTED, not eyeballed, across all eight pairings this introduces
+   (both themes, both text tiers, resting and hover-tint backgrounds). Ratios,
+   by token pair - no hex here, because tokens.css is the one place raw values
+   belong and a hex copied into a comment goes stale in silence the moment the
+   token moves:
+
+     --attention-amber      on --surface-primary        7.08:1  (dark 10.92:1)
+     --attention-amber      on --attention-amber-tint   5.85:1  (dark  7.01:1)
+     --text-metadata        on --surface-primary       11.85:1  (dark 10.23:1)
+     --text-metadata        on --attention-amber-tint   9.79:1  (dark  6.57:1)
+
+   Worst pairing 5.85:1, clear of the 4.5:1 normal-text floor. The hover tint
+   is the binding case and is the reason this was measured rather than assumed
+   - the resting state alone would have looked comfortably safe.
+
+   Nothing here touches source-drawing colours. */
+.document-asread-action {
+    color: var(--attention-amber);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+.document-asread-action:hover,
+.document-asread-action:focus-visible {
+    color: var(--attention-amber);
+    background: var(--attention-amber-tint);
+}
+.document-asread-counts {
+    font-weight: 400;
+    font-size: 0.7rem;
+    color: var(--text-metadata);
+    white-space: nowrap;
+}
 .workspace-menubar-item-danger {
     width: 100%;
     text-align: left;

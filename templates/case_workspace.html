@@ -1151,6 +1151,41 @@
             {% else %}
             <span class="btn btn-ghost workspace-menubar-item-disabled" aria-disabled="true" title="Project owner or admin required">&#8856; Remove</span>
             {% endif %}
+            {# CLAUDE-ASREAD-NAV-01: the only clickable path to the As-Read /
+               Drawing Understanding route. That route has existed and worked
+               since the Drawing Intelligence tranche, but NOTHING linked to it
+               - the endpoint's only other references were its own two POST
+               redirects back to itself, so it was reachable solely by typing
+               the URL. A feature nobody can navigate to is not shipped.
+
+               Deliberately OUTSIDE the `display.document.admin-qac` block
+               below: that panel is the unrelated Document Context feature, and
+               this route is @login_required, not @admin_required. Gating this
+               behind is_admin would have reproduced the confusion it exists to
+               end - two different features both called "understanding", one of
+               them wrongly admin-only.
+
+               Rendered only when this Source actually HAS As-Read state, so
+               the entry never opens an empty page. Counts are derived here
+               rather than in the route because `workspace` is already in
+               context - no route change, and the arithmetic matches
+               legend_of_understanding.understanding_report: every item is
+               "proposed", and "awaiting" is anything not in SETTLED_STATUSES
+               (confirmed/overridden/unknown/informative). #}
+            {% set _asread = namespace(total=0, awaiting=0) %}
+            {% for _item in workspace.legend_items if _item.source_id == selected_source.id %}
+                {% set _asread.total = _asread.total + 1 %}
+                {% if _item.status not in ['confirmed', 'overridden', 'unknown', 'informative'] %}
+                {% set _asread.awaiting = _asread.awaiting + 1 %}
+                {% endif %}
+            {% endfor %}
+            {% if _asread.total %}
+            <a class="btn btn-ghost document-asread-action" data-ui-ref="display.document.as-read"
+               href="{{ url_for('workspace.drawing_understanding_review', project_id=project_id, source_id=selected_source.id) }}">
+                As-Read
+                <span class="document-asread-counts" data-ui-ref="display.document.as-read-counts">{{ _asread.total }} proposed &middot; {{ _asread.awaiting }} awaiting review</span>
+            </a>
+            {% endif %}
         </div>
         {# CLAUDE-POSTCAMEL-PROJECT-CONTEXT-01: Document Context - human-
            supplied orientation on THIS Source only (what it is, why it's
