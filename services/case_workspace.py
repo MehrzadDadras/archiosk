@@ -323,6 +323,7 @@ OBJECT_KIND_EXPECTED_INFORMATION_PROFILE = "expected_information_profile"  # Pro
 OBJECT_KIND_MATURITY_RECORD = "maturity_record"  # Prompt 12
 OBJECT_KIND_SNAPSHOT = "snapshot"  # Batch G - a frozen reference to Project state itself
 OBJECT_KIND_TABLE = "table"  # Batch J - structured tabular evidence
+OBJECT_KIND_LEGEND_ITEM = "legend_item"  # CLAUDE-ASREAD-PROPOSITION-01 - a governed As-Read mark, relatable like any other project record
 OBJECT_KIND_TABLE_ROW = "table_row"  # Batch J
 OBJECT_KIND_TABLE_CELL = "table_cell"  # Batch J
 OBJECT_KIND_SOURCE_REFERENCE = "source_reference"  # Batch J
@@ -2415,6 +2416,28 @@ LEGEND_STATUS_DEFERRED = "deferred"
 #: A group assumption contradicted by this page. Never silently resolved.
 LEGEND_STATUS_REVIEW_NEEDED = "review_needed"
 
+# -- CLAUDE-ASREAD-PROPOSITION-01: independently decidable propositions ------
+# A mark carries more than one conclusion, and they are not the same question:
+#   IDENTITY - what does this mark SIGNIFY?
+#   TARGET   - what does it REFER TO?
+# Two marks can share an identity and refer to different things, which is
+# exactly why confirming one must never silently confirm the other.
+#
+# DELIBERATELY ASYMMETRIC STORAGE, and worth knowing before extending it:
+# IDENTITY is not a new record. It IS the LegendItem's existing
+# proposed_meaning/status/decisions - the axis this module has always decided,
+# now named. Only TARGET needed new structure. A symmetrical rewrite would have
+# migrated every existing decision to prove a point about tidiness, and
+# `legend_proposition()` gives callers the uniform view without that cost.
+PROPOSITION_IDENTITY = "identity"
+PROPOSITION_TARGET = "target"
+KNOWN_PROPOSITIONS = (PROPOSITION_IDENTITY, PROPOSITION_TARGET)
+# What a proposition may be marked when an inherited meaning is withdrawn
+# beneath it. Distinct from REVIEW_NEEDED (which means "this instance never
+# matched"): here the instance matched something that later turned out to be
+# a different thing.
+LEGEND_STATUS_REVIEW_AGAIN = "review_again"
+
 # -- CLAUDE-VISUAL-COMPOSER-01: decision-card verbs --------------------------
 # The verbs a card may offer, owned by the application and validated on write.
 # These are the EXISTING As-Read decision actions, not a parallel vocabulary -
@@ -2517,6 +2540,23 @@ class LegendItem:
     #: a family assumption.
     group_id: Optional[str] = None
     inherited_from_item_id: Optional[str] = None
+    # CLAUDE-ASREAD-PROPOSITION-01: what this mark REFERS TO, decided
+    # separately from what it signifies. Shape mirrors the identity axis
+    # (proposed value, status, scope, append-only decisions) so
+    # legend_proposition() can present one uniform view over both.
+    # None means TARGET was never proposed for this mark - which is not the
+    # same as proposed-and-unanswered, and must not render as a question.
+    target_proposition: Optional[dict] = None
+    # Per-proposition SAME-AS lineage: {proposition: {from_legend_item_id,
+    # evidence, confidence, originating_decision_at, established_by}}.
+    #
+    # AUTHORITATIVE HERE, not on the Relationship edge. A governed
+    # same_subject_as Relationship is also recorded so the lineage is visible
+    # to the ordinary graph, but the downstream question - "which marks
+    # inherited THIS proposition from THIS mark?" - is answered from these
+    # records. One source of truth, queried directly, rather than two that can
+    # drift.
+    proposition_inheritance: dict = field(default_factory=dict)
 
     # -- SYMBOL FAMILY (CLAUDE-SECTION-CUT-FAMILY-01) ----------------------
     #
@@ -14357,6 +14397,14 @@ class CaseWorkspaceStore:
         # does not add a new kind of endpoint or a new store.
         OBJECT_KIND_REQUIREMENT: "requirements",
         OBJECT_KIND_TEMPORAL_OBLIGATION: "temporal_obligations",
+        # CLAUDE-ASREAD-PROPOSITION-01: a LegendItem resolves as an endpoint
+        # for exactly the reason A2 gave for Requirement above - it is already
+        # a flat, top-level, project-scoped list carrying its own project_id,
+        # so it satisfies the same contract every kind here does. This adds it
+        # to the map; it adds no new kind of endpoint and no new store. Without
+        # it a "signifies the same thing as" edge could not be a governed
+        # Relationship at all, and the lineage would have to live in prose.
+        OBJECT_KIND_LEGEND_ITEM: "legend_items",
     }
 
     def _resolve_mm6_endpoint(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> Optional[dict]:

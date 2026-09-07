@@ -69,8 +69,14 @@ from services.case_workspace import (
     LEGEND_STATUS_INFORMATIVE,
     LEGEND_STATUS_OVERRIDDEN,
     LEGEND_STATUS_PROPOSED,
+    LEGEND_STATUS_REVIEW_AGAIN,
     LEGEND_STATUS_REVIEW_NEEDED,
     LEGEND_STATUS_UNKNOWN,
+    KNOWN_PROPOSITIONS,
+    OBJECT_KIND_LEGEND_ITEM,
+    PROPOSITION_IDENTITY,
+    PROPOSITION_TARGET,
+    RELATIONSHIP_TYPE_SAME_SUBJECT_AS,
 )
 
 logger = logging.getLogger(__name__)
@@ -1180,3 +1186,389 @@ def legend_first_readiness(store, workspace, source_id: str) -> dict:
         "reason": ("Nothing in this project explains its drawing language yet. "
                    "Ingestion continues; interpretation stays provisional."),
     }
+
+
+# ============================================================================
+# CLAUDE-ASREAD-PROPOSITION-01: IDENTITY and TARGET as separate conclusions.
+#
+# The family mechanism above groups marks on a VISUAL signature - kind, label
+# grammar, proportion - and then carries a confirmed meaning to the members.
+# That is sound as a PROPOSAL and unsound as a semantic authority, and the
+# distinction had never been named: on the real E1 sheet a person saw six crops
+# and a meaning was proposed for thirty-one marks on the strength of proportion
+# buckets.
+#
+# So the roles are separated here rather than the clustering being replaced:
+#
+#   visual cluster   -> proposes equivalence, organises evidence
+#   proposition      -> what a human actually settled, per conclusion
+#   SAME AS          -> "signifies the same thing as", at a stated proposition
+#
+# "Same as" is never established by similarity alone. It is established when a
+# human has confirmed the source proposition and the evidence supports the
+# later mark meaning the same thing - and what that evidence was is recorded,
+# because a carry-forward nobody can audit is a guess with better manners.
+# ============================================================================
+
+def _identity_view(item: dict) -> dict:
+    """IDENTITY read off the fields this module has always decided."""
+    resolved = effective_meaning(item)
+    return {
+        "proposition": PROPOSITION_IDENTITY,
+        "proposed_value": item.get("proposed_meaning"),
+        "value": resolved["meaning"],
+        "status": item.get("status"),
+        "authority": resolved["authority"],
+        "confidence": item.get("confidence"),
+        "scope_kind": item.get("scope_kind"),
+        "scope_id": item.get("scope_id"),
+        "decisions": list(item.get("decisions") or []),
+        "proposed": True,
+    }
+
+
+def _target_view(item: dict) -> dict:
+    """TARGET read off its own record - or reported as never proposed.
+
+    `proposed: False` is a different state from "proposed and unanswered", and
+    a surface must not render the first as a question. A mark with no target
+    proposal is not a mark whose target is unknown; it is a mark nobody has
+    claimed refers to anything.
+    """
+    record = item.get("target_proposition")
+    if not record:
+        return {
+            "proposition": PROPOSITION_TARGET, "proposed_value": None, "value": None,
+            "status": None, "authority": None, "confidence": None,
+            "scope_kind": None, "scope_id": None, "decisions": [], "proposed": False,
+        }
+    decisions = list(record.get("decisions") or [])
+    settled = [d for d in decisions if d.get("action") in SETTLED_STATUSES]
+    return {
+        "proposition": PROPOSITION_TARGET,
+        "proposed_value": record.get("proposed_value"),
+        "value": (settled[-1].get("value") or record.get("proposed_value")
+                  if settled else record.get("proposed_value")),
+        "status": record.get("status", LEGEND_STATUS_PROPOSED),
+        "authority": ("human_override" if settled and settled[-1].get("value")
+                      else ("human_confirmation" if settled else "go_proposal")),
+        "confidence": record.get("confidence"),
+        "scope_kind": record.get("scope_kind"),
+        "scope_id": record.get("scope_id"),
+        "decisions": decisions,
+        "proposed": True,
+    }
+
+
+def legend_proposition(item: dict, proposition: str) -> dict:
+    """One uniform view over two deliberately different storages."""
+    if proposition == PROPOSITION_IDENTITY:
+        view = _identity_view(item)
+    elif proposition == PROPOSITION_TARGET:
+        view = _target_view(item)
+    else:
+        raise LegendError("Unknown proposition %r. Known: %s"
+                          % (proposition, ", ".join(KNOWN_PROPOSITIONS)))
+    view["inherited_from"] = (item.get("proposition_inheritance") or {}).get(proposition)
+    view["settled"] = view["status"] in SETTLED_STATUSES
+    return view
+
+
+def legend_propositions(item: dict) -> list:
+    """Both conclusions, in the order a reviewer meets them."""
+    return [legend_proposition(item, p) for p in KNOWN_PROPOSITIONS]
+
+
+def _now_iso() -> str:
+    from services.case_workspace import _now
+    return _now()
+
+
+def propose_target(store, workspace, legend_item_id: str, *, proposed_value: str,
+                   confidence: Optional[float] = None,
+                   scope_kind: str = LEGEND_SCOPE_INSTANCE,
+                   actor: str = "GO") -> dict:
+    """GO proposes what a mark REFERS TO. Always proposed, never decided."""
+    item = next((i for i in workspace.legend_items if i["id"] == legend_item_id), None)
+    if item is None:
+        raise LegendError("Legend item %s was not found." % legend_item_id)
+    if not (proposed_value or "").strip():
+        raise LegendError("A target proposal needs a value.")
+    item["target_proposition"] = {
+        "proposed_value": proposed_value.strip(),
+        "status": LEGEND_STATUS_PROPOSED,
+        "confidence": confidence,
+        "scope_kind": scope_kind,
+        "scope_id": None,
+        "proposed_by": actor,
+        "decisions": [],
+    }
+    store.save(workspace)
+    return dict(item["target_proposition"])
+
+
+def decide_proposition(store, workspace, legend_item_id: str, proposition: str,
+                       action: str, actor: str, *, value: Optional[str] = None,
+                       scope_kind: Optional[str] = None, note: Optional[str] = None,
+                       governance_log=None) -> dict:
+    """Settle ONE proposition. Confirming identity never confirms target.
+
+    IDENTITY delegates to the existing append-only `decide_legend_item`, so the
+    axis this module has always decided keeps exactly its current semantics and
+    history. TARGET appends to its own record in the same shape. Neither path
+    can reach the other, which is the whole contract: two conclusions, two
+    answers, two histories.
+    """
+    if proposition not in KNOWN_PROPOSITIONS:
+        raise LegendError("Unknown proposition %r." % proposition)
+    item = next((i for i in workspace.legend_items if i["id"] == legend_item_id), None)
+    if item is None:
+        raise LegendError("Legend item %s was not found." % legend_item_id)
+
+    if proposition == PROPOSITION_IDENTITY:
+        store.decide_legend_item(
+            workspace, legend_item_id, action=action, actor=actor, meaning=value,
+            scope_kind=scope_kind or item.get("scope_kind") or LEGEND_SCOPE_INSTANCE,
+            note=note, governance_log=governance_log)
+        refreshed = next(i for i in workspace.legend_items if i["id"] == legend_item_id)
+        return legend_proposition(refreshed, PROPOSITION_IDENTITY)
+
+    record = item.get("target_proposition")
+    if not record:
+        raise LegendError(
+            "No target has been proposed for %s. A mark whose target nobody "
+            "claimed is not a mark whose target is unsettled." % legend_item_id)
+    record.setdefault("decisions", []).append({
+        "action": action, "value": (value or "").strip() or None,
+        "scope_kind": scope_kind or record.get("scope_kind"),
+        "scope_id": record.get("scope_id"), "actor": actor,
+        "at": _now_iso(), "note": note,
+    })
+    record["status"] = action
+    if scope_kind:
+        record["scope_kind"] = scope_kind
+    store.save(workspace)
+    if governance_log is not None:
+        governance_log.append(
+            project_id=workspace.project_id,
+            event_type="legend_proposition_decided",
+            actor=actor, role="human",
+            payload={"legend_item_id": legend_item_id,
+                     "proposition": proposition, "action": action},
+            correlation_id=legend_item_id)
+    return legend_proposition(item, PROPOSITION_TARGET)
+
+
+def inherit_proposition(store, workspace, legend_item_id: str, proposition: str,
+                        *, from_legend_item_id: str, evidence: str,
+                        confidence: Optional[float] = None,
+                        actor: str = "GO", governance_log=None) -> dict:
+    """Carry a HUMAN-CONFIRMED proposition forward: signifies the same thing.
+
+    Refuses unless the source proposition was actually settled by a person.
+    That refusal is the entire difference between this and visual clustering:
+    similarity may propose equivalence, but nothing is carried forward from a
+    conclusion nobody reached.
+
+    Records BOTH the item-local lineage (authoritative, and what downstream
+    reassessment queries) and a governed same_subject_as Relationship, so the
+    equivalence is visible to the ordinary graph. The evidence GO relied on is
+    stored, because a carry-forward nobody can audit is a guess with better
+    manners.
+    """
+    if proposition not in KNOWN_PROPOSITIONS:
+        raise LegendError("Unknown proposition %r." % proposition)
+    if not (evidence or "").strip():
+        raise LegendError(
+            "Inheriting a proposition requires the evidence it rests on. "
+            "Visual similarity alone is a proposal, not a reason.")
+
+    source = next((i for i in workspace.legend_items
+                   if i["id"] == from_legend_item_id), None)
+    target = next((i for i in workspace.legend_items
+                   if i["id"] == legend_item_id), None)
+    if source is None or target is None:
+        raise LegendError("Both marks must exist in this project.")
+    if source["id"] == target["id"]:
+        raise LegendError("A mark cannot signify the same thing as itself.")
+
+    source_view = legend_proposition(source, proposition)
+    if not source_view["settled"]:
+        raise LegendError(
+            "%s's %s proposition is %s - only a human-settled proposition may "
+            "be carried forward." % (from_legend_item_id, proposition,
+                                     source_view["status"] or "unproposed"))
+    if source_view.get("inherited_from"):
+        raise LegendError(
+            "%s inherited its own %s proposition. Chaining inheritance would "
+            "hide which human decision a mark actually rests on."
+            % (from_legend_item_id, proposition))
+
+    settled = [d for d in source_view["decisions"]
+               if d.get("action") in SETTLED_STATUSES]
+    lineage = {
+        "from_legend_item_id": from_legend_item_id,
+        "proposition": proposition,
+        "evidence": evidence.strip(),
+        "confidence": confidence,
+        "established_by": actor,
+        "established_at": _now_iso(),
+        "originating_decision_at": settled[-1].get("at") if settled else None,
+        "originating_decided_by": settled[-1].get("actor") if settled else None,
+        "inherited_value": source_view["value"],
+    }
+    target.setdefault("proposition_inheritance", {})[proposition] = lineage
+    note = "Signifies the same thing as %s. %s" % (from_legend_item_id,
+                                                   evidence.strip())
+
+    if proposition == PROPOSITION_IDENTITY:
+        target["status"] = source_view["status"]
+        target.setdefault("decisions", []).append({
+            "action": source_view["status"], "meaning": source_view["value"],
+            "scope_kind": target.get("scope_kind"),
+            "scope_id": target.get("scope_id"),
+            "actor": actor, "at": _now_iso(), "note": note,
+        })
+    else:
+        record = target.setdefault("target_proposition", {
+            "proposed_value": source_view["value"], "confidence": confidence,
+            "scope_kind": target.get("scope_kind"), "scope_id": None,
+            "proposed_by": actor, "decisions": [],
+        })
+        record["status"] = source_view["status"]
+        record.setdefault("decisions", []).append({
+            "action": source_view["status"], "value": source_view["value"],
+            "scope_kind": record.get("scope_kind"), "scope_id": None,
+            "actor": actor, "at": _now_iso(), "note": note,
+        })
+    store.save(workspace)
+
+    store.record_evidence_relationship(
+        workspace,
+        from_type=OBJECT_KIND_LEGEND_ITEM, from_id=legend_item_id,
+        to_type=OBJECT_KIND_LEGEND_ITEM, to_id=from_legend_item_id,
+        relationship_type=RELATIONSHIP_TYPE_SAME_SUBJECT_AS,
+        reason="Signifies the same thing at proposition %s. %s"
+               % (proposition, evidence.strip()),
+        created_by=actor, provisional=False, confidence=confidence,
+        governance_log=governance_log)
+    return legend_proposition(target, proposition)
+
+
+def dependents_of_proposition(store, workspace, legend_item_id: str,
+                              proposition: str) -> list:
+    """Which marks inherited THIS proposition from THIS mark?
+
+    The one question downstream reassessment needs, answered from the
+    authoritative item-local lineage rather than by walking edges - so it
+    cannot disagree with what the items actually record. Deliberately NOT
+    transitive: chained inheritance is refused at write time.
+    """
+    return [
+        item for item in workspace.legend_items
+        if ((item.get("proposition_inheritance") or {}).get(proposition) or {})
+        .get("from_legend_item_id") == legend_item_id
+    ]
+
+
+def break_inheritance(store, workspace, legend_item_id: str, proposition: str,
+                      *, actor: str, reason: str,
+                      broader_distinction: bool = False,
+                      governance_log=None) -> dict:
+    """A reviewer disagrees with a carried-forward meaning.
+
+    Two outcomes, and the caller states which - because only a person can know
+    whether they have found a local exception or a wrong rule:
+
+    LOCAL     the correction applies here; unrelated dependents stay settled.
+    BROADER   the grouping itself was wrong, so every OTHER mark that inherited
+              the same proposition from the same source is marked REVIEW_AGAIN.
+
+    Nothing prior is rewritten in either case. The original confirmation, the
+    inheritance and its evidence all remain on the record; what changes is what
+    is CURRENT - the same append-only discipline the identity axis already uses.
+    """
+    item = next((i for i in workspace.legend_items
+                 if i["id"] == legend_item_id), None)
+    if item is None:
+        raise LegendError("Legend item %s was not found." % legend_item_id)
+    lineage = (item.get("proposition_inheritance") or {}).get(proposition)
+    if not lineage:
+        raise LegendError("%s did not inherit its %s proposition."
+                          % (legend_item_id, proposition))
+
+    source_id = lineage["from_legend_item_id"]
+    # Kept, never deleted: the record must still say what was believed and why.
+    lineage["broken_at"] = _now_iso()
+    lineage["broken_by"] = actor
+    lineage["broken_reason"] = reason
+    lineage["broken_as"] = ("broader_distinction" if broader_distinction
+                            else "local_exception")
+
+    reopened = []
+    if broader_distinction:
+        note = "REVIEW AGAIN - NEW DISTINCTION FOUND: %s" % reason
+        for dependent in dependents_of_proposition(store, workspace,
+                                                   source_id, proposition):
+            if dependent["id"] == legend_item_id:
+                continue
+            if proposition == PROPOSITION_IDENTITY:
+                dependent["status"] = LEGEND_STATUS_REVIEW_AGAIN
+                dependent.setdefault("decisions", []).append({
+                    "action": LEGEND_STATUS_REVIEW_AGAIN, "meaning": None,
+                    "scope_kind": dependent.get("scope_kind"),
+                    "scope_id": dependent.get("scope_id"),
+                    "actor": actor, "at": _now_iso(), "note": note,
+                })
+            else:
+                record = dependent.get("target_proposition") or {}
+                record["status"] = LEGEND_STATUS_REVIEW_AGAIN
+                record.setdefault("decisions", []).append({
+                    "action": LEGEND_STATUS_REVIEW_AGAIN, "value": None,
+                    "scope_kind": record.get("scope_kind"), "scope_id": None,
+                    "actor": actor, "at": _now_iso(), "note": note,
+                })
+            reopened.append(dependent["id"])
+    store.save(workspace)
+    return {
+        "legend_item_id": legend_item_id, "proposition": proposition,
+        "source_legend_item_id": source_id,
+        "broken_as": lineage["broken_as"],
+        "reopened": reopened,
+    }
+
+
+def numbered_cases(store, workspace, *, source_id: Optional[str] = None) -> list:
+    """Session-local display ordinals: #01, #02, ...
+
+    DERIVED, NEVER STORED. A stored number becomes an identity, drifts when a
+    case is added or removed, and invites "SAME AS #12" to survive as a string
+    after #12 has renumbered. The durable pointer is the legend item id the
+    lineage already holds; the number is only what a human says out loud.
+
+    `same_as_display` resolves a lineage's real item id to whatever number that
+    item carries in THIS listing, so the rendering is always consistent with
+    the ordering the reviewer is actually looking at.
+    """
+    items = store.legend_items_for(workspace, source_id=source_id)
+    ordinals = {item["id"]: index + 1 for index, item in enumerate(items)}
+    cases = []
+    for item in items:
+        propositions = []
+        for view in legend_propositions(item):
+            lineage = view.get("inherited_from") or {}
+            origin = lineage.get("from_legend_item_id")
+            view = dict(view)
+            view["same_as_display"] = ("#%02d" % ordinals[origin]
+                                       if origin in ordinals else None)
+            view["same_as_legend_item_id"] = origin
+            propositions.append(view)
+        cases.append({
+            "number": "#%02d" % ordinals[item["id"]],
+            "legend_item_id": item["id"],
+            "has_snapshot": bool(item.get("snapshot_path")),
+            "observed_text": item.get("observed_text"),
+            "family_id": item.get("family_id"),
+            "propositions": propositions,
+        })
+    return cases
