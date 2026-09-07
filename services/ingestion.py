@@ -22,6 +22,7 @@ from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
 from services.case_workspace import (
+    EVIDENCE_CLASS_EXTRACTED,
     FOLDER_ROOT_DATA_ROOM,
     SOURCE_KIND_PROJECT_DOCUMENT,
     KNOWN_SOURCE_DOMAINS,
@@ -656,6 +657,9 @@ def _register_pdf_with_raster_fallback(
         extractor_version="%s+%s %s" % (
             parser.__class__.__name__, result["engine"], result["engine_version"]),
         actor=actor, governance_log=governance_log,
+        # Only the pages actually READ by OCR are derived evidence; a native
+        # page in the same document stays direct source evidence.
+        evidence_class_by_page={i: EVIDENCE_CLASS_EXTRACTED for i in result["pages"]},
     )
     return "added", raster_extraction.user_message(
         result["status"], len(result["pages"]), len(missing))

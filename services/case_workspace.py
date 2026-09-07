@@ -375,6 +375,7 @@ OBJECT_KIND_WORK_PRODUCT = "work_product"
 OBJECT_KIND_REQUIREMENT_PHASE_ASSESSMENT = "requirement_phase_assessment"
 OBJECT_KIND_DOCUMENT_CONTEXT_CLAIM = "document_context_claim"
 OBJECT_KIND_CHANGE_ARRIVAL_ASSESSMENT = "change_arrival_assessment"  # CLAUDE-B1-CHANGE-ARRIVAL-01
+OBJECT_KIND_DERIVED_VIEW = "derived_view"  # CLAUDE-DERIVED-VIEW-01
 
 KNOWN_OBJECT_KINDS = (
     OBJECT_KIND_SOURCE,
@@ -2255,6 +2256,166 @@ KNOWN_CHANGE_ARRIVAL_STATES = (
     CHANGE_ARRIVAL_STATE_ACCEPTED,
     CHANGE_ARRIVAL_STATE_REJECTED,
 )
+
+
+# -- CLAUDE-DERIVED-VIEW-01: scaled/oriented views within one drawing page ---
+#
+# A drawing sheet is not one view. It routinely carries an overall plan at
+# 1:100, an enlarged plan at 1:50, a section at 1:20 and an NTS diagram, each
+# with its own coordinate regime and sometimes its own North. Treating the page
+# as one scale is the error this vocabulary exists to make impossible.
+#
+# WHY THIS IS A REAL RECORD AND NOT `modality_metadata`
+#
+# StructuralUnit.modality_metadata is documented as "a free dict for
+# modality-specific facts ... not a schema-avoidance escape hatch for facts that
+# DO need real fields". Scale, orientation, two independent North references,
+# corroboration across documents, inherited title-block identity and human
+# overrides are exactly facts that need real fields and real invariants. The
+# page HIERARCHY still uses StructuralUnit.parent_structural_unit_id, which
+# already anticipated "a drawing detail viewport nested under its sheet".
+
+SCALE_STATE_KNOWN = "known"
+SCALE_STATE_REVIEW_NEEDED = "review_needed"
+SCALE_STATE_UNKNOWN = "unknown"
+SCALE_STATE_NTS = "nts"
+
+KNOWN_SCALE_STATES = (
+    SCALE_STATE_KNOWN, SCALE_STATE_REVIEW_NEEDED, SCALE_STATE_UNKNOWN, SCALE_STATE_NTS,
+)
+
+#: How a scale was established. Open-world, because a project may evidence a
+#: scale in a way nobody has enumerated yet - but never blank when a scale is
+#: claimed, because "1:50 from somewhere" is not evidence.
+SCALE_METHOD_PRINTED_NOTATION = "printed_notation"
+SCALE_METHOD_TITLE_LABEL = "title_label"
+SCALE_METHOD_GRAPHIC_SCALE_BAR = "graphic_scale_bar"
+SCALE_METHOD_KNOWN_DIMENSION = "known_dimension"
+SCALE_METHOD_VECTOR_METADATA = "vector_metadata"
+SCALE_METHOD_MANUAL_CONFIRMATION = "manual_confirmation"
+
+KNOWN_SCALE_METHODS = (
+    SCALE_METHOD_PRINTED_NOTATION, SCALE_METHOD_TITLE_LABEL,
+    SCALE_METHOD_GRAPHIC_SCALE_BAR, SCALE_METHOD_KNOWN_DIMENSION,
+    SCALE_METHOD_VECTOR_METADATA, SCALE_METHOD_MANUAL_CONFIRMATION,
+)
+
+ORIENTATION_STATE_NORTH_KNOWN = "north_known"
+ORIENTATION_STATE_KNOWN_NO_NORTH = "orientation_known_no_north"
+ORIENTATION_STATE_REVIEW_NEEDED = "review_needed"
+ORIENTATION_STATE_UNKNOWN = "unknown"
+#: A section, elevation or detail where North has no meaningful role. Distinct
+#: from UNKNOWN, which means "should have one and we do not know it".
+ORIENTATION_STATE_NOT_APPLICABLE = "not_applicable"
+
+KNOWN_ORIENTATION_STATES = (
+    ORIENTATION_STATE_NORTH_KNOWN, ORIENTATION_STATE_KNOWN_NO_NORTH,
+    ORIENTATION_STATE_REVIEW_NEEDED, ORIENTATION_STATE_UNKNOWN,
+    ORIENTATION_STATE_NOT_APPLICABLE,
+)
+
+#: Which north a direction refers to. TRUE and PROJECT north legitimately
+#: coexist on one sheet and must never be collapsed - a quantitative comparison
+#: that mixes them is wrong by exactly the angle between them.
+NORTH_KIND_TRUE = "true_north"
+NORTH_KIND_PROJECT = "project_north"
+NORTH_KIND_VIEW_ORIENTATION = "view_orientation"
+NORTH_KIND_UNKNOWN = "unknown"
+NORTH_KIND_CONFLICTED = "conflicted"
+NORTH_KIND_REVIEW_NEEDED = "review_needed"
+
+KNOWN_NORTH_KINDS = (
+    NORTH_KIND_TRUE, NORTH_KIND_PROJECT, NORTH_KIND_VIEW_ORIENTATION,
+    NORTH_KIND_UNKNOWN, NORTH_KIND_CONFLICTED, NORTH_KIND_REVIEW_NEEDED,
+)
+
+NORTH_CORROBORATION_CORROBORATED = "corroborated"
+NORTH_CORROBORATION_INCONSISTENT = "inconsistent"
+NORTH_CORROBORATION_UNRESOLVED = "unresolved"
+
+KNOWN_NORTH_CORROBORATION_STATES = (
+    NORTH_CORROBORATION_CORROBORATED, NORTH_CORROBORATION_INCONSISTENT,
+    NORTH_CORROBORATION_UNRESOLVED,
+)
+
+
+@dataclass
+class DerivedView:
+    """One scaled, oriented view derived FROM a page. Never a replacement for it.
+
+    The authoritative PDF page is never split, rotated or re-saved. A DerivedView
+    is a governed working representation that records WHERE on the page it sits
+    (in source-page coordinates), what scale regime applies there, and how it is
+    oriented - so a future vector primitive can always be traced back to the
+    exact page, region, scale and orientation frame it was derived under.
+
+    TWO COORDINATE SYSTEMS, BOTH RECONSTRUCTABLE
+
+    `region` is always in SOURCE PAGE coordinates and never changes.
+    `source_rotation_degrees` records how the view sits on the page;
+    `normalized_rotation_degrees` records the rotation applied for analysis.
+    Storing both is what keeps source-page and normalized-view coordinates
+    convertible in either direction - rotating the page itself would destroy
+    that, which is why it is forbidden.
+
+    TITLE BLOCK IS INHERITED, OVERRIDES SIT BESIDE IT
+
+    `inherited_title_block` is a frozen copy of the sheet's own identity taken at
+    derivation time. ARCHIOSK splitting a view does not create a new issued
+    drawing, so the sheet's number, title, discipline and revision continue to
+    govern. A human may later override any of it - `title_block_overrides` holds
+    those, SEPARATELY, so the inherited record is never overwritten and the
+    difference between what the sheet said and what a person corrected stays
+    visible forever.
+
+    NORTH IS NOT ONE VALUE
+
+    True north and project north are recorded independently, each with its own
+    method and confidence, because a sheet may legitimately show both.
+    `north_state` may be CONFLICTED, which is a real answer: when another
+    drawing disagrees, the conflict is recorded and both evidence chains are
+    preserved rather than one being silently chosen.
+    """
+
+    id: str
+    project_id: str
+    source_id: str
+    page_structural_unit_id: str
+    #: Bounding box or polygon in SOURCE PAGE coordinates. Never rewritten.
+    region: dict
+    derivation_reason: str
+    created_at: str
+    created_by: str
+
+    # -- scale ------------------------------------------------------------
+    scale_state: str = SCALE_STATE_UNKNOWN
+    scale_value: Optional[float] = None        # 100.0 means 1:100
+    scale_notation: Optional[str] = None       # e.g. 1:100, quarter-inch, NTS
+    scale_method: Optional[str] = None         # KNOWN_SCALE_METHODS, open-world
+    scale_confidence: Optional[float] = None
+    unit_system: Optional[str] = None          # metric | imperial
+
+    # -- orientation ------------------------------------------------------
+    orientation_state: str = ORIENTATION_STATE_UNKNOWN
+    source_rotation_degrees: Optional[float] = None
+    normalized_rotation_degrees: Optional[float] = None
+
+    # -- north, kept as two independent references ------------------------
+    north_state: str = NORTH_KIND_UNKNOWN
+    true_north_degrees: Optional[float] = None
+    true_north_method: Optional[str] = None
+    true_north_confidence: Optional[float] = None
+    project_north_degrees: Optional[float] = None
+    project_north_method: Optional[str] = None
+    project_north_confidence: Optional[float] = None
+    #: [{source_id, agrees, method, note, recorded_at}] - every check, kept.
+    north_corroboration: list = field(default_factory=list)
+
+    # -- inherited identity, and human corrections beside it --------------
+    inherited_title_block: dict = field(default_factory=dict)
+    title_block_overrides: dict = field(default_factory=dict)
+    overridden_by: Optional[str] = None
+    overridden_at: Optional[str] = None
 
 
 @dataclass
@@ -4440,6 +4601,7 @@ class ProjectWorkspace:
     requirement_phase_assessments: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
     document_context_claims: list[dict] = field(default_factory=list)  # bounded GO QA/QC pass
     change_arrival_assessments: list[dict] = field(default_factory=list)  # CLAUDE-B1-CHANGE-ARRIVAL-01 - see ChangeArrivalAssessment
+    derived_views: list[dict] = field(default_factory=list)  # CLAUDE-DERIVED-VIEW-01 - see DerivedView
     carried_forward_adoptions: list[dict] = field(default_factory=list)
     investigation_steps: list[dict] = field(default_factory=list)  # CLAUDE-P08 - see InvestigationStep
     case_outcomes: list[dict] = field(default_factory=list)  # CLAUDE-P11 - see CaseOutcome
@@ -6501,6 +6663,207 @@ class CaseWorkspaceStore:
             rows = [r for r in rows if r.get("state") == state]
         return rows
 
+
+
+    # -- CLAUDE-DERIVED-VIEW-01 --------------------------------------------
+
+    def create_derived_view(
+        self,
+        workspace: ProjectWorkspace,
+        source_id: str,
+        page_structural_unit_id: str,
+        region: dict,
+        derivation_reason: str,
+        actor: str,
+        scale_state: str = SCALE_STATE_UNKNOWN,
+        scale_value: Optional[float] = None,
+        scale_notation: Optional[str] = None,
+        scale_method: Optional[str] = None,
+        scale_confidence: Optional[float] = None,
+        unit_system: Optional[str] = None,
+        orientation_state: str = ORIENTATION_STATE_UNKNOWN,
+        source_rotation_degrees: Optional[float] = None,
+        normalized_rotation_degrees: Optional[float] = None,
+        north_state: str = NORTH_KIND_UNKNOWN,
+        true_north_degrees: Optional[float] = None,
+        true_north_method: Optional[str] = None,
+        true_north_confidence: Optional[float] = None,
+        project_north_degrees: Optional[float] = None,
+        project_north_method: Optional[str] = None,
+        project_north_confidence: Optional[float] = None,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """Derive one governed view from a page. The page is not touched.
+
+        The title block is INHERITED here, at derivation time, from the page
+        unit and its Source - splitting a view does not mint a new issued
+        drawing, so the sheet's identity continues to govern until a human says
+        otherwise.
+
+        A claimed scale must say how it was established: SCALE_STATE_KNOWN
+        without a `scale_method` is refused, because "1:50 from somewhere" is a
+        number without evidence and is exactly the guess this model exists to
+        prevent.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+        page = self._find(workspace.structural_units, page_structural_unit_id)
+        if page is None or page["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(
+                f"Structural unit {page_structural_unit_id} was not found.")
+        if page["source_id"] != source_id:
+            raise CaseWorkspaceError(
+                "That page belongs to a different Source; a derived view cannot "
+                "span two documents.")
+        if scale_state == SCALE_STATE_KNOWN and not scale_method:
+            raise CaseWorkspaceError(
+                "A KNOWN scale must record how it was established "
+                "(scale_method). Recording a scale without its evidence is a "
+                "guess wearing a number.")
+
+        inherited = {
+            "sheet_label": page.get("label"),
+            "sheet_unit_id": page["id"],
+            "source_id": source_id,
+            "source_name": source.get("name"),
+            "document_id": source.get("document_id"),
+            "revision": source.get("revision"),
+            "issue_date": source.get("issue_date"),
+            "issuer": source.get("issuer"),
+            "document_status": source.get("document_status"),
+            "document_authority": source.get("document_authority"),
+            "sheet_fields": dict((page.get("modality_metadata") or {}).get("fields") or {}),
+        }
+
+        view = DerivedView(
+            id=_new_id(),
+            project_id=workspace.project_id,
+            source_id=source_id,
+            page_structural_unit_id=page_structural_unit_id,
+            region=dict(region or {}),
+            derivation_reason=derivation_reason,
+            created_at=_now(),
+            created_by=actor,
+            scale_state=normalize_open_world_value(scale_state, KNOWN_SCALE_STATES),
+            scale_value=scale_value,
+            scale_notation=scale_notation,
+            scale_method=(normalize_open_world_value(scale_method, KNOWN_SCALE_METHODS)
+                          if scale_method else None),
+            scale_confidence=scale_confidence,
+            unit_system=unit_system,
+            orientation_state=normalize_open_world_value(
+                orientation_state, KNOWN_ORIENTATION_STATES),
+            source_rotation_degrees=source_rotation_degrees,
+            normalized_rotation_degrees=normalized_rotation_degrees,
+            north_state=normalize_open_world_value(north_state, KNOWN_NORTH_KINDS),
+            true_north_degrees=true_north_degrees,
+            true_north_method=true_north_method,
+            true_north_confidence=true_north_confidence,
+            project_north_degrees=project_north_degrees,
+            project_north_method=project_north_method,
+            project_north_confidence=project_north_confidence,
+            inherited_title_block=inherited,
+        )
+        workspace.derived_views.append(asdict(view))
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="derived_view_created",
+                actor=actor, role="system",
+                reason="Derived a view from page %s of source %s (%s)."
+                       % (page_structural_unit_id, source_id, derivation_reason),
+                payload={"derived_view_id": view.id, "source_id": source_id,
+                         "page_structural_unit_id": page_structural_unit_id,
+                         "scale_state": view.scale_state,
+                         "north_state": view.north_state},
+            )
+        return asdict(view)
+
+    def record_north_corroboration(
+        self,
+        workspace: ProjectWorkspace,
+        derived_view_id: str,
+        against_source_id: str,
+        agrees: bool,
+        method: str,
+        actor: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        """Record ONE cross-document North check. Never replaces the local one.
+
+        Both evidence chains are kept: a disagreement sets the view CONFLICTED
+        rather than choosing a winner, because which drawing is right about
+        North is a question about the project, not about recency or ordering.
+        """
+        view = self._find(workspace.derived_views, derived_view_id)
+        if view is None:
+            raise CaseWorkspaceError(f"Derived view {derived_view_id} was not found.")
+        other = self._find(workspace.sources, against_source_id)
+        if other is None or other["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {against_source_id} was not found.")
+
+        view.setdefault("north_corroboration", []).append({
+            "source_id": against_source_id,
+            "agrees": bool(agrees),
+            "method": method,
+            "note": note,
+            "recorded_by": actor,
+            "recorded_at": _now(),
+        })
+        if not agrees:
+            # A conflict is a finding, not a tie to break.
+            view["north_state"] = NORTH_KIND_CONFLICTED
+        self.save(workspace)
+        return view
+
+    def override_derived_view(
+        self,
+        workspace: ProjectWorkspace,
+        derived_view_id: str,
+        actor: str,
+        overrides: dict,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """A human corrects derived-view metadata.
+
+        Overrides are stored BESIDE the inherited title block, never over it, so
+        "what the sheet said" and "what a person corrected" both remain
+        readable. `effective_title_block` in services/derived_view.py composes
+        them at read time.
+        """
+        view = self._find(workspace.derived_views, derived_view_id)
+        if view is None:
+            raise CaseWorkspaceError(f"Derived view {derived_view_id} was not found.")
+        if not overrides:
+            raise CaseWorkspaceError("An override must actually change something.")
+        merged = dict(view.get("title_block_overrides") or {})
+        merged.update(overrides)
+        view["title_block_overrides"] = merged
+        view["overridden_by"] = actor
+        view["overridden_at"] = _now()
+        self.save(workspace)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="derived_view_overridden",
+                actor=actor, role="reviewer",
+                reason="Human override on derived view %s." % derived_view_id,
+                payload={"derived_view_id": derived_view_id,
+                         "fields": sorted(overrides.keys())},
+            )
+        return view
+
+    def derived_views_for(
+        self, workspace: ProjectWorkspace, *,
+        source_id: Optional[str] = None,
+        page_structural_unit_id: Optional[str] = None,
+    ) -> list[dict]:
+        rows = list(workspace.derived_views)
+        if source_id is not None:
+            rows = [r for r in rows if r["source_id"] == source_id]
+        if page_structural_unit_id is not None:
+            rows = [r for r in rows if r["page_structural_unit_id"] == page_structural_unit_id]
+        return rows
 
     def mark_change_arrival_applied(
         self,
@@ -15039,6 +15402,7 @@ class CaseWorkspaceStore:
         self, workspace: ProjectWorkspace, source_id: str, pages: list[str],
         extractor_version: Optional[str] = None, actor: str = "system",
         governance_log: Optional[GovernanceLog] = None,
+        evidence_class_by_page: Optional[dict] = None,
     ) -> dict:
         """
         One StructuralUnit per PDF page (`unit_type="page"`, stable page
@@ -15092,7 +15456,14 @@ class CaseWorkspaceStore:
 
                 evidence = EvidenceItem(
                     id=_new_id(), project_id=workspace.project_id, source_id=source_id,
-                    evidence_class=EVIDENCE_CLASS_DIRECT_SOURCE, content=paragraph_text,
+                    # CLAUDE-RASTER-OCR-01: native page text IS direct source
+                    # evidence - the document says it. OCR-RECOVERED text is not:
+                    # it is a reading of an image, and marking it direct would
+                    # launder derived content into something the document stated.
+                    # Per page, so a mixed PDF marks only the pages that were read.
+                    evidence_class=(evidence_class_by_page or {}).get(
+                        page_index, EVIDENCE_CLASS_DIRECT_SOURCE),
+                    content=paragraph_text,
                     content_type="text", created_at=_now(), created_by=actor,
                     region_id=region.id, extractor_version=extractor_version,
                 )
