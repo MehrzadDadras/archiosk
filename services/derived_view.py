@@ -17,9 +17,11 @@ the caller has to have the evidence.
 
 THE FOUR REFUSALS
 
-  * `may_measure` refuses NTS, UNKNOWN and REVIEW_NEEDED scale. An NTS diagram
-    is not a low-confidence scale; it is a drawing that carries no scale at all,
-    and measuring it is meaningless rather than approximate.
+  * `may_measure` permits only QUANTITATIVE. INFORMATIVE is refused for
+    MEASUREMENT and permitted for everything else through
+    `may_use_semantically` - an NTS detail or a schematic is doing its job
+    perfectly while carrying no scale, and refusing to read it would discard
+    most of what a drawing set actually says.
   * `may_compare_spatially` refuses views whose scale, north or rotation frames
     are not both known AND compatible - including the case where both are known
     but disagree, which is the one a naive check passes.
@@ -52,8 +54,8 @@ from services.case_workspace import (
     NORTH_KIND_UNKNOWN,
     NORTH_KIND_VIEW_ORIENTATION,
     ORIENTATION_STATE_NOT_APPLICABLE,
-    SCALE_STATE_KNOWN,
-    SCALE_STATE_NTS,
+    SCALE_STATE_INFORMATIVE,
+    SCALE_STATE_QUANTITATIVE,
 )
 
 #: Angular slack when comparing two recorded North directions. Deliberately
@@ -87,27 +89,47 @@ def title_block_provenance(view: dict) -> dict:
 
 
 def may_measure(view: dict) -> tuple:
-    """(allowed, reason). Quantitative use of this view.
+    """(allowed, reason). MEASUREMENT and quantitative reasoning only.
 
-    NTS is refused as its own case rather than folded into "unknown", because
-    the honest explanation differs: an NTS view has no scale to find, and no
-    amount of further reading will produce one. Only a separate calibration
-    against a known dimension can.
+    INFORMATIVE is refused here and that is not a defect in the view - an NTS
+    detail or a schematic is doing its job perfectly while carrying no scale to
+    measure against. The honest explanation differs from UNKNOWN, so the
+    messages differ: INFORMATIVE says "this drawing is not for measuring",
+    UNKNOWN says "we cannot tell yet".
     """
     state = view.get("scale_state")
-    if state == SCALE_STATE_NTS:
-        return False, ("This view is NOT TO SCALE. It carries no scale to measure "
-                       "against and must be calibrated separately before any "
-                       "quantitative use.")
-    if state != SCALE_STATE_KNOWN:
-        return False, ("This view's scale is %s. Measuring would turn an unverified "
-                       "reading into a number." % state)
+    if state == SCALE_STATE_INFORMATIVE:
+        return False, ("This view is INFORMATIVE. It is fully usable for notes, "
+                       "labels, relationships and coordination, but it carries no "
+                       "reliable scale and must be calibrated separately before "
+                       "any measurement.")
+    if state != SCALE_STATE_QUANTITATIVE:
+        return False, ("This view's scale state is %s. Measuring would turn an "
+                       "unverified reading into a number." % state)
     if not view.get("scale_value"):
-        return False, "The scale state is KNOWN but no scale value was recorded."
+        return False, "The view is QUANTITATIVE but no scale value was recorded."
     if not view.get("scale_method"):
         return False, ("The scale has no recorded method, so it cannot be shown to "
                        "rest on evidence.")
-    return True, "Scale is known, valued and evidenced."
+    return True, "Scale is quantitative, valued and evidenced."
+
+
+def may_use_semantically(view: dict) -> tuple:
+    """(allowed, reason). Non-quantitative use - the common case.
+
+    Separate from `may_measure` on purpose. An INFORMATIVE view supports OCR,
+    tags, labels, relationship analysis, coordination context and even vector
+    linework for visual/semantic purposes; refusing all of that because it
+    cannot be measured would discard most of what a drawing set actually says.
+
+    The rule is a boundary, not a gate: read it, reason about it, relate it -
+    just never measure it.
+    """
+    state = view.get("scale_state")
+    if state in (SCALE_STATE_QUANTITATIVE, SCALE_STATE_INFORMATIVE):
+        return True, "Semantic and coordination use is permitted."
+    return False, ("This view's scale state is %s, so even its intent is not "
+                   "established." % state)
 
 
 def north_reference(view: dict) -> dict:

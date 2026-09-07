@@ -2275,13 +2275,27 @@ KNOWN_CHANGE_ARRIVAL_STATES = (
 # page HIERARCHY still uses StructuralUnit.parent_structural_unit_id, which
 # already anticipated "a drawing detail viewport nested under its sheet".
 
-SCALE_STATE_KNOWN = "known"
+# Scale state is about FITNESS FOR PURPOSE, not about whether a scale string was
+# found. Product Owner direction, 2026-09-06: the question a view has to answer
+# is "may this be measured", not "did we read a number off it".
+#
+#: A reliable scale or calibration exists; measurement and quantitative vector
+#: reasoning are permitted.
+SCALE_STATE_QUANTITATIVE = "quantitative"
+#: Useful and fully usable for understanding - OCR, notes, labels, tags,
+#: relationships, coordination, design intent, and vector linework for visual or
+#: semantic purposes - but NOT measurable. An NTS detail is the clearest case,
+#: and it is a legitimate resting state rather than a failure to find something.
+SCALE_STATE_INFORMATIVE = "informative"
+#: Genuinely unclear whether the view is meant to be quantitative. Reserved for
+#: real ambiguity - not a default for "we have not looked yet".
 SCALE_STATE_REVIEW_NEEDED = "review_needed"
+#: Not enough information even to classify the view.
 SCALE_STATE_UNKNOWN = "unknown"
-SCALE_STATE_NTS = "nts"
 
 KNOWN_SCALE_STATES = (
-    SCALE_STATE_KNOWN, SCALE_STATE_REVIEW_NEEDED, SCALE_STATE_UNKNOWN, SCALE_STATE_NTS,
+    SCALE_STATE_QUANTITATIVE, SCALE_STATE_INFORMATIVE,
+    SCALE_STATE_REVIEW_NEEDED, SCALE_STATE_UNKNOWN,
 )
 
 #: How a scale was established. Open-world, because a project may evidence a
@@ -6700,10 +6714,10 @@ class CaseWorkspaceStore:
         drawing, so the sheet's identity continues to govern until a human says
         otherwise.
 
-        A claimed scale must say how it was established: SCALE_STATE_KNOWN
-        without a `scale_method` is refused, because "1:50 from somewhere" is a
-        number without evidence and is exactly the guess this model exists to
-        prevent.
+        A view may only be QUANTITATIVE if it records how its scale was
+        established: SCALE_STATE_QUANTITATIVE without a `scale_method` is
+        refused, because "1:50 from somewhere" is a number without evidence
+        and is exactly the guess this model exists to prevent.
         """
         source = self._find(workspace.sources, source_id)
         if source is None or source["project_id"] != workspace.project_id:
@@ -6716,11 +6730,11 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(
                 "That page belongs to a different Source; a derived view cannot "
                 "span two documents.")
-        if scale_state == SCALE_STATE_KNOWN and not scale_method:
+        if scale_state == SCALE_STATE_QUANTITATIVE and not scale_method:
             raise CaseWorkspaceError(
-                "A KNOWN scale must record how it was established "
-                "(scale_method). Recording a scale without its evidence is a "
-                "guess wearing a number.")
+                "A QUANTITATIVE view must record how its scale was established "
+                "(scale_method). Permitting measurement on a scale with no "
+                "evidence is a guess wearing a number.")
 
         inherited = {
             "sheet_label": page.get("label"),

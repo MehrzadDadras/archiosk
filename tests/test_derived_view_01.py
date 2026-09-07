@@ -35,8 +35,8 @@ from services.case_workspace import (
     ORIENTATION_STATE_NOT_APPLICABLE,
     SCALE_METHOD_GRAPHIC_SCALE_BAR,
     SCALE_METHOD_PRINTED_NOTATION,
-    SCALE_STATE_KNOWN,
-    SCALE_STATE_NTS,
+    SCALE_STATE_INFORMATIVE,
+    SCALE_STATE_QUANTITATIVE,
     SCALE_STATE_REVIEW_NEEDED,
     SCALE_STATE_UNKNOWN,
 )
@@ -86,13 +86,13 @@ class MultiScalePageTests(_ViewBase):
 
     def test_one_page_carries_several_views_at_different_scales(self):
         overall = self._view(derivation_reason="overall plan",
-                             scale_state=SCALE_STATE_KNOWN, scale_value=100.0,
+                             scale_state=SCALE_STATE_QUANTITATIVE, scale_value=100.0,
                              scale_notation="1:100",
                              scale_method=SCALE_METHOD_PRINTED_NOTATION,
                              unit_system="metric")
         detail = self._view(derivation_reason="enlarged detail",
                             region={"x": 40.0, "y": 0.0, "width": 20.0, "height": 15.0},
-                            scale_state=SCALE_STATE_KNOWN, scale_value=10.0,
+                            scale_state=SCALE_STATE_QUANTITATIVE, scale_value=10.0,
                             scale_notation="1:10",
                             scale_method=SCALE_METHOD_PRINTED_NOTATION,
                             unit_system="metric")
@@ -103,27 +103,27 @@ class MultiScalePageTests(_ViewBase):
 
     def test_no_page_wide_scale_is_implied(self):
         """The page unit itself must gain no scale - that is the whole point."""
-        self._view(scale_state=SCALE_STATE_KNOWN, scale_value=50.0,
+        self._view(scale_state=SCALE_STATE_QUANTITATIVE, scale_value=50.0,
                    scale_notation="1:50", scale_method=SCALE_METHOD_PRINTED_NOTATION)
         refreshed = self.store.get(self.workspace.project_id)
         page = next(u for u in refreshed.structural_units if u["id"] == self.page_unit_id)
         blob = repr(page).lower()
         self.assertNotIn("scale_value", blob)
 
-    def test_a_known_scale_must_say_how_it_was_established(self):
+    def test_a_quantitative_view_must_say_how_its_scale_was_established(self):
         """A number without evidence is a guess wearing a number."""
         with self.assertRaises(CaseWorkspaceError):
-            self._view(scale_state=SCALE_STATE_KNOWN, scale_value=50.0,
+            self._view(scale_state=SCALE_STATE_QUANTITATIVE, scale_value=50.0,
                        scale_notation="1:50")
 
     def test_every_scale_state_is_representable(self):
-        for state in (SCALE_STATE_UNKNOWN, SCALE_STATE_REVIEW_NEEDED, SCALE_STATE_NTS):
+        for state in (SCALE_STATE_UNKNOWN, SCALE_STATE_REVIEW_NEEDED, SCALE_STATE_INFORMATIVE):
             with self.subTest(state=state):
                 view = self._view(scale_state=state)
                 self.assertEqual(view["scale_state"], state)
 
     def test_scale_evidence_methods_are_recorded_distinctly(self):
-        bar = self._view(scale_state=SCALE_STATE_KNOWN, scale_value=200.0,
+        bar = self._view(scale_state=SCALE_STATE_QUANTITATIVE, scale_value=200.0,
                          scale_notation="1:200",
                          scale_method=SCALE_METHOD_GRAPHIC_SCALE_BAR)
         self.assertEqual(bar["scale_method"], SCALE_METHOD_GRAPHIC_SCALE_BAR)
@@ -132,11 +132,20 @@ class MultiScalePageTests(_ViewBase):
 class MeasurementGuardTests(_ViewBase):
     """6B. NTS must never be measured; unknown must never be guessed."""
 
-    def test_an_nts_view_refuses_measurement_with_its_own_reason(self):
-        view = self._view(scale_state=SCALE_STATE_NTS, scale_notation="NTS")
+    def test_an_informative_view_refuses_measurement_with_its_own_reason(self):
+        view = self._view(scale_state=SCALE_STATE_INFORMATIVE, scale_notation="NTS")
         allowed, reason = dv.may_measure(view)
         self.assertFalse(allowed)
-        self.assertIn("NOT TO SCALE", reason)
+        self.assertIn("INFORMATIVE", reason)
+
+    def test_an_informative_view_IS_usable_semantically(self):
+        """The point of the state: not measurable, still fully readable."""
+        view = self._view(scale_state=SCALE_STATE_INFORMATIVE, scale_notation="NTS")
+        allowed, _reason = dv.may_use_semantically(view)
+        self.assertTrue(allowed)
+
+    def test_an_unknown_view_is_not_even_semantically_established(self):
+        self.assertFalse(dv.may_use_semantically(self._view())[0])
 
     def test_an_unknown_scale_refuses_measurement(self):
         self.assertFalse(dv.may_measure(self._view())[0])
@@ -145,7 +154,7 @@ class MeasurementGuardTests(_ViewBase):
         self.assertFalse(dv.may_measure(self._view(scale_state=SCALE_STATE_REVIEW_NEEDED))[0])
 
     def test_a_fully_evidenced_scale_is_measurable(self):
-        view = self._view(scale_state=SCALE_STATE_KNOWN, scale_value=50.0,
+        view = self._view(scale_state=SCALE_STATE_QUANTITATIVE, scale_value=50.0,
                           scale_notation="1:50",
                           scale_method=SCALE_METHOD_PRINTED_NOTATION)
         self.assertTrue(dv.may_measure(view)[0])
@@ -327,7 +336,7 @@ class SpatialComparisonGuardTests(_ViewBase):
     """6K. Compatibility must be proven before any quantitative alignment."""
 
     def _plan(self, scale=100.0, north=0.0, **kw):
-        params = dict(scale_state=SCALE_STATE_KNOWN, scale_value=scale,
+        params = dict(scale_state=SCALE_STATE_QUANTITATIVE, scale_value=scale,
                       scale_notation="1:%d" % scale,
                       scale_method=SCALE_METHOD_PRINTED_NOTATION, unit_system="metric",
                       north_state=NORTH_KIND_TRUE, true_north_degrees=north,
@@ -359,7 +368,7 @@ class SpatialComparisonGuardTests(_ViewBase):
         self.assertIn("different North", reason)
 
     def test_an_nts_view_can_never_be_compared(self):
-        nts = self._view(scale_state=SCALE_STATE_NTS)
+        nts = self._view(scale_state=SCALE_STATE_INFORMATIVE)
         self.assertFalse(dv.may_compare_spatially(self._plan(), nts)[0])
 
     def test_different_unit_systems_are_refused(self):
@@ -379,7 +388,7 @@ class VectorTraceabilityTests(_ViewBase):
 
     def test_the_full_chain_is_reconstructable_from_the_record(self):
         view = self._view(
-            scale_state=SCALE_STATE_KNOWN, scale_value=50.0, scale_notation="1:50",
+            scale_state=SCALE_STATE_QUANTITATIVE, scale_value=50.0, scale_notation="1:50",
             scale_method=SCALE_METHOD_PRINTED_NOTATION, unit_system="metric",
             orientation_state=ORIENTATION_STATE_NORTH_KNOWN, north_state=NORTH_KIND_TRUE,
             true_north_degrees=12.0, true_north_method="north_arrow",
@@ -395,7 +404,7 @@ class VectorTraceabilityTests(_ViewBase):
         self.assertIsNotNone(chain["region"])
 
     def test_the_chain_reports_when_geometry_would_not_be_usable(self):
-        chain = dv.traceability(self._view(scale_state=SCALE_STATE_NTS))
+        chain = dv.traceability(self._view(scale_state=SCALE_STATE_INFORMATIVE))
         self.assertFalse(chain["scale"]["measurable"])
         self.assertFalse(chain["north"]["usable"])
 
