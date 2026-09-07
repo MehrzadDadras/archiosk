@@ -1,5 +1,156 @@
 # Continuation checkpoint
 
+## 2026-09-07 (application + live promotion) — `41ca29a`..`783b7a7`: As-Read, from unreachable to two clicks
+
+Appended above the entries below, none of which is altered. Three commits, all
+pushed. **Production is `783b7a7` at `STATIC_VERSION=163`** — this tranche is
+DEPLOYED, unlike the Drawing Intelligence entry immediately below it.
+
+It also contains something no commit carries: **31 governed As-Read records were
+written into a real production project.** That is described under "What was
+written to production" and is the part a future reader is most likely to need
+and least likely to find in git.
+
+### The three commits
+
+| SHA | What it fixed | Gate |
+|---|---|---|
+| `41ca29a` | the As-Read route was reachable only by typing its URL | 6,943 / 2,855 subtests / 7:24 |
+| `639c776` | discoverability depended on state; GO identity was the attention colour | 6,947 / 2,855 / 7:20 |
+| `783b7a7` | the review surface could not be finished | 6,969 / 2,855 / 7:30 |
+
+All parallel (`-n 8 --dist loadfile`), `PYTEST_EXIT=0`, on frozen trees.
+
+### Three defects of the same shape
+
+Each commit fixed something that was **built, tested, green, and unusable**. The
+pattern is worth naming because the test suite could not see any of them:
+
+1. **`41ca29a` — reachable only by URL.** The Drawing Understanding route
+   shipped with the whole Drawing Intelligence tranche. Nothing linked to it;
+   its only references outside its own definition were its two POST redirects
+   back to itself. Real promoted As-Read state sat invisible to the person who
+   owned it. The guard is now `test_no_orphan_route`, which asserts a
+   **template** points at the endpoint — the assertion that would have failed
+   for the entire tranche.
+2. **`639c776` — discoverable only after processing.** The entry rendered only
+   where As-Read state already existed, so a newly uploaded drawing — the case
+   that most needs `Source → As-Read → Spin` visible — was the one case that
+   could not see it. Now three states: *Not started* / *N proposed · N awaiting
+   review* / *Reviewed*. The empty destination was verified (HTTP 200,
+   "Proposed 0") **before** being linked to.
+3. **`783b7a7` — correct and unfinishable.** E1 opened with 2 family rows AND
+   25 individual held rows asking the same question: **27 rows, 133 buttons, 27
+   text inputs, 27 scope selects** on screen. The routes had always accepted a
+   bare `action` with correct default scope — governing all 31 marks was
+   *already* two clicks. Nothing but presentation stood in the way. Now **2
+   rows, 8 buttons, 0 inputs, 0 selects**, measured on the deployed page.
+
+**A green suite says nothing about whether a person can use the thing.** All
+three passed every test that existed while being, in order, unreachable,
+undiscoverable, and unusable.
+
+### `--go-accent`: GO identity is not an alarm
+
+`tokens.css` gained `--go-accent` / `--go-accent-tint`, declared as
+`var(--attention-amber)`. Identical appearance, separate meaning. The first
+version spent the attention token directly on GO's identity, welding two
+different claims: "GO is here" and "you owe this a decision". That stopped being
+theoretical the moment the entry began rendering on Sources with nothing
+outstanding, where an attention colour asserts a task that does not exist.
+
+Custom properties substitute lazily, so all four theme remaps carry through with
+no per-theme variant. If GO's identity is ever meant to diverge, one line
+changes and nothing about attention semantics moves with it.
+
+Related: the summary no longer calls a held mark a **contradiction**. 25 marks
+waiting on a measurement nobody took are not 25 things being wrong.
+`--failure-red` is now reserved for a real disagreement, which is the only state
+on that surface that means something is actually broken.
+
+### What was written to production — and what refused to be
+
+`ASREAD-ALSTEP-E1E2-SECTION-CALLOUT-01` was promoted into the live project
+**222109 1860 Alstep Dr** using only deployed primitives (`register_family` /
+`confirm_family` / `apply_family_decision`). No parallel schema, no hand-written
+registry records, no parser change.
+
+- **31 legend items**, project version 84 → 147, statuses `{confirmed: 6,
+  review_needed: 25}`.
+- Two families, not one: the governed clustering split by **proportion bucket**
+  (28 + 3), not by orientation. A prediction that the 3 would be the
+  left-pointing marks was **wrong** — they are a mixed set.
+- Letters preserved per instance: A×15, B×5, E×3, G×3, F×2, H, J, K.
+- Idempotent: the second run created nothing.
+- **0 targets resolved**, and the reason matters. See below.
+
+### The finding that is not in any commit
+
+Investigating the 25 held marks established, by measurement against the deployed
+resolver, that **target identity and direction are independent**:
+
+- a reference with **no direction** still resolves its target sheet
+  (`resolved_exact`, `target_view_state=target_view_unresolved`);
+- across `None/0/90/180/270` degrees there is **one distinct outcome** — direction
+  changes nothing about which target resolves;
+- every letter on E1 maps to exactly **one** E2 section. Zero ambiguity;
+- `E` appears both up- and left-pointing and still targets `E`.
+
+Direction gates exactly one thing in the whole system:
+`instance_differs_materially` refusing **family-meaning inheritance**. It gates
+neither target-sheet nor target-view resolution. And
+`view_reference.py:99` already defines `TARGET_VIEW_UNRESOLVED` — the
+sheet-resolved / view-unresolved split exists and works.
+
+**The 0 resolutions were never caused by the direction gate.** No view
+references were ever registered, because the generic parser returns no hit for a
+bare circled `(E2)` — `Sheet E2` and `3/E2` both parse fine. Two independent
+blockers, and the direction gate is the smaller one. An earlier report of mine
+attributed it wholly to direction; that was half right, and the wrong half.
+
+Recommended model, **not implemented and not authorized**: condition the
+direction clause on the absence of an identifying label, so a bare arrow is
+still refused while a letter-labelled callout resolves. ~4 lines, plus a
+legend-side counterpart to `TARGET_VIEW_UNRESOLVED`. The parser stays untouched.
+
+### Evidence that lives outside this repository
+
+`C:\Archiosk\FlightTests\evaluator\DRAWING-E1-E2-RECOVERY-01\` — README,
+`AS-READ-CONVENTION.json`, run-01..03, crops, contact sheet, and every script.
+Deliberately outside git; the real project PDFs are **not** stored there, only
+their production paths and hashes. Nothing about the confirmed convention is
+recoverable from this repository alone.
+
+The rule that episode produced, and the reason the directory exists: **a proof
+that prints to a terminal has not been performed, as far as the record is
+concerned.** An earlier OCR run's findings were lost with its scratchpad.
+
+### The state that matters for whoever picks this up
+
+- **25 marks remain `review_needed` on live E1.** Untouched deliberately.
+  Resolving them needs either measured direction per instance or the product
+  change above. Neither is authorized.
+- **`J` has no target on E2**, and `C`/`D` are E2 sections with no E1 callout
+  found *in this pass* — recall was never established, so that is not an absence
+  claim.
+- The convention is scoped to **E1/E2 of this project only**.
+  `applies_beyond_this_source_set=false`, `generic_parser_widened=false`.
+- **`ConcurrentModificationError` fires on this project under rapid upload** —
+  pre-existing, unfixed, and it will be met again by anything that writes in a
+  burst.
+- A duplicate `A-01.pdf` exists in the live project (two source ids). Untouched.
+- **17 rollback directories** on the host against DEPLOYMENT.md's "keep 3".
+  Most hold real `.env` copies, so this is secrets-exposure surface, not disk.
+  Pruning is explicitly a separate deliberate decision and was not taken.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`783b7a7`**, working tree clean.
+- Production: **`783b7a7`** at **`STATIC_VERSION=163`**, `/health` 200, 0 errors,
+  rollback point `/var/www/archiosk-backup-639c776` verified viable.
+- Vectorisation **not built**. B3-A **paused**. Full-set As-Read across the
+  other 15 sources **not run**. All deliberate.
+
 ## 2026-09-07 (application) — `e590d87`..`ade441d`: Drawing Intelligence, from raster fallback to what a drawing means at its edges
 
 Appended above the entries below, none of which is altered. Eight commits,
