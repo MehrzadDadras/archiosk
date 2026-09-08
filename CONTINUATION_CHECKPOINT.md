@@ -1,5 +1,83 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `f114d9a`: the Black Box gets a door
+
+Appended above the entries below, none of which is altered. One commit, pushed,
+**NOT deployed**.
+
+**This supersedes one statement in the entry below it.** That entry says "There
+is no standalone Black Box or public intake route... The capability is
+kernel-complete and route-inert." The first half is no longer true and the
+route-inert condition is closed. It remains true that there is no PUBLIC
+intake: this door is authenticated and admin-gated.
+
+### What now exists
+
+- **Route: `/document-shop`** (`portal.document_shop_intake`), GET renders the
+  intake page, POST creates the container. Rate-limited 20/hour on POST.
+- **Current entitlement: `@admin_required`** — deliberately identical to
+  `portal.upload`, not looser. Widening who may create durable governed storage
+  is a separate decision and has not been made.
+- **Creates a governed Black Box with no engagement facts.** The form asks for
+  no operating environment, entry choice, retained-by, project code, project
+  name or source domain. `operating_environment=None` is never used as a
+  shortcut — the container state is explicit.
+- **Direct hand-off to the existing Document Shop / As-Read bench** for the
+  source just uploaded. No interstitial, no workspace detour.
+- Entrances: `menu.file.document-shop` (every authenticated page) and
+  `projects-directory.document-shop`, both inside the same admin gate as their
+  New Project neighbours.
+- Existing project flows, project-level Document Shop, P29, Spin and AFT are
+  all unchanged.
+
+### Deferred seams, registered not fixed
+
+- **Image founding-upload gap.** `.jpg/.jpeg/.png/.tif/.tiff` are not accepted.
+  Enforced by `ALLOWED_UPLOAD_EXTENSIONS` (`config.py:102`) at
+  `services/ingestion.py:336`. A separate future security/ingestion tranche.
+- **Project-language refusal leak.** A `.xlsx` founding upload is refused with
+  "cannot be a project's founding document" — project vocabulary reaching
+  standalone Black Box intake. The sentence lives in `ingest_upload` and is
+  shared verbatim with the project upload path.
+  `test_the_founding_refusal_still_speaks_in_project_terms` pins it and says in
+  its own docstring to delete itself when the wording is corrected.
+- **No public storefront, entitlement widening, payment, reconstruction, or
+  routing/promotion.** No promotion route exists and a test asserts none was
+  added.
+
+### PROGRAM COUNTDOWN — what the term means
+
+**Product Owner correction, 2026-09-08.** PROGRAM COUNTDOWN is the standing
+overall ARCHIOSK programme schedule report. It does NOT mean "what remains
+before a given feature becomes a business line", which is how it was read once
+and is the reinterpretation this note exists to prevent.
+
+A report asked for it must carry the established programme view: overall
+maturity; current milestone; remaining critical-path activities; next-milestone
+critical-path VED and elapsed forecast; R1 critical-path VED; R1
+resource-loaded VED; estimated actual days/weeks; observed development
+velocity; logic schedule movement; elapsed forecast movement; current blocker;
+parallel lanes; confidence. Where the logic schedule has not moved, state **NO
+LOGIC SCHEDULE MOVEMENT** rather than manufacturing an estimate the
+authoritative baseline does not support.
+
+### Gate duration — WATCH ITEM only
+
+The full gate for this tranche ran **4:04:40** against ~9–10 minutes for
+comparable recent gates. No failures, no orphan chain observed, no evidence
+establishing a cause. Accepted as a watch item, **not a blocker and not an
+authorized investigation**. Measure elapsed time again at the next naturally
+required full gate; surface it only if comparable abnormal duration repeats.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`f114d9a`** plus this checkpoint commit,
+  working tree clean.
+- Gate on the frozen tree, parallel (`-n 8 --dist loadfile`):
+  **7,113 passed, 3 skipped, 2,941 subtests, 0 failed.**
+- Production: **`2bd38ce`** at **`STATIC_VERSION=164`**, unchanged by this
+  tranche and not touched. Neither `bdda7ce` nor `f114d9a` is deployed.
+
 ## 2026-09-07 (application) — `bdda7ce`: a governed container may exist with no operating programme
 
 Appended above the entries below, none of which is altered. One commit, pushed,
