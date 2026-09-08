@@ -1,5 +1,53 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `d8150ce`: vocabulary follows the operating context
+
+Appended above the entries below, none of which is altered. Completes the
+five-commit Black Box bundle.
+
+### What changed
+
+A Black Box no longer invites its owner to declare an engagement it has
+deliberately refused to hold. Withheld for `container_state == black_box`:
+Access & Operating Environment, Participants & Perspective, Go / No-Go, Project
+Instructions, Project Management & Settings, Project Briefing. Contextual:
+Project State heading and explainer, the rename control's label and
+placeholder, and `base.html`'s topbar label. Identity reads **Document Shop**;
+"Black Box" is internal vocabulary and is not surfaced.
+
+Three shared `UploadError` messages are now context-neutral and each raised
+once: "That name is already in use.", "cannot be used as a founding document",
+"An authenticated owner is required."
+
+**Conventional Project presentation is unchanged, character for character** — a
+test asserts all nine engagement strings survive on a real project. As-Read is
+unchanged. Help is untouched apart from one stale quotation of the old
+duplicate-name message in `templates/help/new_project.html`. Internal names
+(`ProjectWorkspace`, `CaseWorkspaceStore`, `project_id`, `/projects/`) are
+unrenamed. The Help predicate remains **`is_help_workspace`**.
+
+**Presentation keys on `container_state` only** — never `Source.kind`,
+`source_domain`, `operating_environment`, `project_id` or a file extension; a
+test reads the route's own expression and fails if any of those appear.
+
+### Gate
+
+**7,165 passed, 3 skipped, 2,991 subtests, 0 failed, 9:29** (parallel,
+`-n 8 --dist loadfile`).
+
+### Bundle
+
+Ready for one deployment: `bdda7ce`, `f114d9a`, `07a16de`, `d840fad`,
+`d8150ce`. **`STATIC_VERSION` stays 164** — zero files under `static/` changed
+across the bundle, verified rather than assumed.
+
+### Still open
+
+**Deployment-wide display-name uniqueness remains an unresolved Product Owner
+decision** (`services/ingestion.py:_reject_if_name_taken`). D2 changed the
+message wording; the rule did not move, and a retargeted test now guards the
+rule rather than its text.
+
 ## 2026-09-08 (application) — `d840fad`: a shared kernel is not a shared identity
 
 Appended above the entries below, none of which is altered. One commit, pushed,
