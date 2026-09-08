@@ -1,5 +1,42 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `1b022e3`: a scan may enter, and may not leave
+
+Appended above the entries below, none of which is altered. **Deployment
+authorized.**
+
+### Accepted
+
+- **PNG / JPG / JPEG may found a Black Box.** TIFF, HEIC, WEBP, BMP and SVG
+  remain refused; TIFF is deferred to its own tranche for multi-frame reasons.
+- **Byte-content validation, never extension trust** — byte ceiling, magic
+  signature, Pillow `verify()`, then declared geometry, all before any full
+  decode. 40 MB / 50M pixels / 30k per dimension, with Pillow's own
+  decompression guard untouched. Malformed, truncated and extension/content
+  mismatches are refused.
+- **Local-only OCR** through a bounded `filetype` adapter on the existing
+  raster path. Recovered text is derived evidence attributed to the OCR engine,
+  never the parser.
+- **`Source.kind` remains `unclassified`**; `source_domain` independent; the
+  stored original is the authoritative uploaded bytes and is never re-encoded.
+- **EXIF:** the original is preserved intact, metadata included; EXIF/GPS is
+  **not propagated into derived artifacts**. No stripping on ingest.
+  PRESERVING SOURCE METADATA IS NOT THE SAME AS PROPAGATING SOURCE METADATA.
+- **Zero external-provider egress**, pinned by tests that detonate every
+  provider entry point.
+- **Project path unchanged** — a conventional Project still refuses standalone
+  images; `ALLOWED_UPLOAD_EXTENSIONS` was not widened.
+
+### Not done
+
+**Image preview is the next tranche** (`BLACK BOX IMAGE PREVIEW 01`): the
+authoritative image cannot yet be viewed on the Document Shop surface.
+
+### Gate
+
+**7,212 passed, 3 skipped, 3,083 subtests, 0 failed, 8:56** (parallel,
+`-n 8 --dist loadfile`).
+
 ## 2026-09-08 (application) — `276e6eb`: display names are owner-scoped
 
 Appended above the entries below, none of which is altered. **Deployment
