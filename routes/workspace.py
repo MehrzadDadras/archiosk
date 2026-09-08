@@ -63,6 +63,7 @@ from services.case_workspace import (
     CASE_OUTCOME_STATES,
     CASE_ORIGIN_AUTONOMOUS,
     CASE_STATUS_ARCHIVED,
+    CONTAINER_STATE_BLACK_BOX,
     CONTENT_CLASS_AI_PROPOSED,
     CONTENT_CLASS_DETERMINISTIC_CALCULATION,
     CONTENT_CLASS_HUMAN_AUTHORED,
@@ -1953,6 +1954,17 @@ def show_workspace(project_id):
         recent_focus_view=recent_focus_view,
         threads_view=threads_view,
         known_usernames=known_usernames,
+        # CLAUDE-BLACK-BOX-D2-01: which OPERATING LINE this container belongs
+        # to, so the shared template can drop the engagement sections rather
+        # than inviting someone to declare an engagement their container has
+        # deliberately refused. Keyed on container_state ONLY - never on
+        # Source.kind, source_domain, operating_environment, project_id or the
+        # URL, each of which D1 and the listing boundary established as an
+        # independent axis. getattr, because a workspace persisted before the
+        # field existed has none and must read as an ordinary Project.
+        document_shop_container=(
+            getattr(workspace, "container_state", None)
+            == CONTAINER_STATE_BLACK_BOX),
         tool_exposure=_tool_exposure(workspace, selected_source),
         as_read_card_state=_as_read_card_state(
             store, workspace,
@@ -2973,6 +2985,14 @@ def drawing_understanding_review(project_id, source_id):
         "drawing_understanding.html",
         project_id=project_id,
         source=source,
+        # CLAUDE-BLACK-BOX-D2-01: this bench does NOT currently render
+        # base.html's Project Context topbar - measured, not assumed, and it is
+        # why this surface already carried no project vocabulary. The flag is
+        # passed anyway so the two container surfaces cannot disagree if that
+        # control is ever shown here; it changes nothing today.
+        document_shop_container=(
+            getattr(workspace, "container_state", None)
+            == CONTAINER_STATE_BLACK_BOX),
         tool_exposure=_tool_exposure(workspace, source,
                                      workflow=WORKFLOW_DOCUMENT_SHOP),
         rows=review_rows(store, workspace, source_id=source_id),

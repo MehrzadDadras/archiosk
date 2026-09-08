@@ -210,28 +210,6 @@ class BlackBoxDoorTests(unittest.TestCase):
         response = self._post(filename="schedule.xlsx")
         self.assertEqual(response.status_code, 400)
 
-    def test_the_founding_refusal_still_speaks_in_project_terms(self):
-        """A KNOWN LANGUAGE LEAK, asserted so it is not forgotten.
-
-        The refusal reads "cannot be a project's founding document" - project
-        vocabulary reaching a person who never asked for a project, which is
-        exactly what this door's language rule forbids. It is NOT corrected
-        here: the sentence lives in ingest_upload and is shared verbatim with
-        the project upload path, so rewording it is a change to that path too
-        and belongs in its own tranche with its own tests.
-
-        This test documents the current truth. When the message is fixed, this
-        test SHOULD fail - that is its purpose, and the fix is to delete it and
-        strengthen test_a_refusal_is_explained_and_names_no_procurement_context
-        to cover every refusal rather than only the extension one.
-        """
-        body = self._post(filename="schedule.xlsx").get_data(as_text=True)
-        marker = 'data-ui-ref="document-shop.error">'
-        message = body.split(marker, 1)[1].split("</p>", 1)[0]
-        self.assertIn("project", message,
-                      "if this no longer holds, the leak was fixed - see the "
-                      "docstring, then delete this test")
-
     def test_image_formats_remain_refused_at_the_door(self):
         """The gap is REAL and stays closed in this tranche.
 
@@ -257,6 +235,10 @@ class BlackBoxDoorTests(unittest.TestCase):
         # the menu bar rather than about the refusal.
         message = body.split(marker, 1)[1].split("</p>", 1)[0]
         self.assertTrue(message.strip(), "a refusal must say something")
+        # CLAUDE-BLACK-BOX-D2-01: this now covers every refusal reachable
+        # here, which is what test_the_founding_refusal_still_speaks_in_project_terms
+        # said to do once the leak was fixed. That test is deleted per its own
+        # instruction rather than left asserting a defect that no longer exists.
         for absent in ("Owner", "Proponent", "procurement", "RFP", "project"):
             with self.subTest(word=absent):
                 self.assertNotIn(absent, message,

@@ -101,7 +101,13 @@ def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
         # unique" states the rule; the person at New Project needs the fact.
         # The rename path below keeps its own wording - it is a different
         # surface, reached with a different question in mind.
-        raise UploadError("Project name already exists.")
+        # CLAUDE-BLACK-BOX-D2-01: context-neutral. This message is raised
+        # by ONE function serving both the New Project form and standalone
+        # Document Shop intake, so it must be true on both. The page a person
+        # is reading already supplies the noun - "Project name" on a page
+        # headed New Project was never carrying the information, and it was
+        # actively wrong for someone who never asked for a project.
+        raise UploadError("That name is already in use.")
 
 
 def reject_if_display_name_taken(app: Flask, entry_name: str, exclude_project_id: str) -> None:
@@ -334,7 +340,7 @@ def ingest_upload(
         )
 
     if not owner or not owner.strip():
-        raise UploadError("A project owner (the authenticated uploader) is required.")
+        raise UploadError("An authenticated owner is required.")
 
     if file_storage is None or not file_storage.filename:
         raise UploadError("No file was provided.")
@@ -358,9 +364,9 @@ def ingest_upload(
     # BHiveParser's own extraction.
     if ext == ".xlsx":
         raise UploadError(
-            "A spreadsheet (.xlsx) cannot be a project's founding document - its structure isn't "
-            "prose suitable for case classification. Upload a PDF/DOCX/TXT/MD as the founding "
-            "document, then add this workbook via folder upload or Data Room Reconcile."
+            "A spreadsheet (.xlsx) cannot be used as a founding document - its structure "
+            "isn't prose suitable for classification. Upload a PDF/DOCX/TXT/MD first, then "
+            "add this workbook via folder upload or Data Room Reconcile."
         )
 
     project_name = (project_name or "").strip() or None

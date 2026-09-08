@@ -163,6 +163,11 @@
            Context (1.2) already used - no new heading text is added,
            since both sections below already describe themselves
            correctly on their own. #}
+        {# CLAUDE-BLACK-BOX-D2-01: P29 classification and the
+           Owner/Proponent access grammar. A Black Box has no
+           operating environment and must not be invited to declare
+           one - the invitation is the harm, not the label. #}
+        {% if not document_shop_container %}
         <div data-root-branch="1.3" data-root-label="Access &amp; Operating Environment">
         {# CLAUDE-P29: Project Operating Environment -- locked, never an
            edit control once set. Deliberately no form/button anywhere in
@@ -275,6 +280,7 @@
         </details>
         {% endif %}
         </div>
+        {% endif %}
         </div>
 
         {# CLAUDE-P38-C: Lifecycle and Display Layers previously rendered
@@ -285,6 +291,8 @@
            one collapsed "Project Management & Settings" group,
            reusing the existing subdisclosure control rather than a new
            layer of UI. #}
+        {# CLAUDE-BLACK-BOX-D2-01: engagement settings: a container with no engagement has none to manage #}
+        {% if not document_shop_container %}
         {% call macros.subdisclosure('Project Management & Settings', html_id='project-management-settings') %}
         {# CLAUDE-P38 (OBS-14): this strip was fully static - "current"
            was hardcoded to RFP regardless of any real project state (no
@@ -323,6 +331,7 @@
         </p>
         {% endif %}
         {% endcall %}
+        {% endif %}
     {% endif %}
 
     {# CLAUDE-POSTCAMEL-META-T01 (Territory Before Ontology): "Where am I? /
@@ -490,6 +499,8 @@
            is set here does is select WHOSE risk/opportunity position a new machine
            investigation reasons from, and whose mark renders on each Requirement's
            own Perspective disclosure below. #}
+        {# CLAUDE-BLACK-BOX-D2-01: there are no parties to represent without an engagement #}
+        {% if not document_shop_container %}
         {% call macros.accordion('Participants & Perspective (' ~ participants_view|length ~ ')', group='left', id='participants', html_id='participants') %}
             <p class="pane-note">
                 The governed project record is the same for everyone. Setting who you represent
@@ -544,12 +555,15 @@
                 </form>
             {% endcall %}
         {% endcall %}
+        {% endif %}
 
         {# CLAUDE-P30: a shared decision-record shape (GoNoGoAssessment), but the
            decision-stage vocabulary offered below is this project's own locked
            environment's own -- Client/Owner sees procurement-decision stages,
            Design-Builder/Proponent sees pursuit-decision stages. Never the same
            checklist reused for both sides. #}
+        {# CLAUDE-BLACK-BOX-D2-01: a procurement decision family, meaningless without a programme #}
+        {% if not document_shop_container %}
         {% call macros.accordion('Go / No-Go (' ~ go_no_go_assessments|length ~ ')', group='left', id='go-no-go', html_id='go-no-go') %}
             {% if go_no_go_assessments %}
             <ul class="source-list">
@@ -606,6 +620,7 @@
             </p>
             {% endif %}
         {% endcall %}
+        {% endif %}
 
         {# CLAUDE-P38 (OBS-02): a permanent, verbose governance paragraph
            used to fill this panel even at zero count. Now a compact,
@@ -661,6 +676,8 @@
            real content (what a reviewer is actually here to read) is
            primary. The issuer's role is now captured and shown
            alongside their name, not just a bare username. #}
+        {# CLAUDE-BLACK-BOX-D2-01: project-scoped standing instructions #}
+        {% if not document_shop_container %}
         {% call macros.accordion('Project Instructions', status='+', group='left', id='instructions', html_id='instructions') %}
             {% call macros.subdisclosure('What are Project Instructions?') %}
                 <p class="pane-note">
@@ -686,6 +703,7 @@
                 </form>
             {% endcall %}
         {% endcall %}
+        {% endif %}
     {% endif %}
 
     {# CLAUDE-P40-E3A: the Documents and Chats directories (Sources listing,
@@ -1621,11 +1639,11 @@
                    only the label changed, so this is also the "visible
                    way to rename after ingestion" 3.1 asks for. #}
                 <details class="project-home-overflow">
-                    <summary class="project-home-icon-btn" title="Edit project name and description" aria-label="Edit project name and description">Edit</summary>
+                    <summary class="project-home-icon-btn" title="{% if document_shop_container %}Edit name and description{% else %}Edit project name and description{% endif %}" aria-label="{% if document_shop_container %}Edit name and description{% else %}Edit project name and description{% endif %}">Edit</summary>
                     <div class="project-home-overflow-panel">
-                        <p class="workspace-pane-label">Edit Project Details</p>
+                        <p class="workspace-pane-label">{% if document_shop_container %}Edit Details{% else %}Edit Project Details{% endif %}</p>
                         <form class="workspace-form" method="post" action="{{ url_for('workspace.edit_project_details', project_id=project_id) }}">
-                            <input type="text" name="display_title" placeholder="Project title" value="{{ workspace.display_title or '' }}">
+                            <input type="text" name="display_title" placeholder="{% if document_shop_container %}Name{% else %}Project title{% endif %}" value="{{ workspace.display_title or '' }}">
                             <textarea name="display_description" placeholder="Short description">{{ workspace.display_description or '' }}</textarea>
                             <button type="submit">Save</button>
                         </form>
@@ -1652,6 +1670,8 @@
            now a capped 5-item preview with a real "N of M" count and
            an explicit open-full-list action, not the full candidate
            list rendered inline. #}
+        {# CLAUDE-BLACK-BOX-D2-01: a briefing about a project. #}
+        {% if not document_shop_container %}
         <div class="workspace-pane" id="project-briefing">
             <h2>Project Briefing</h2>
             <p class="pane-note">
@@ -1883,6 +1903,7 @@
                Investigation shortcuts) stay reachable below, not folded
                into the composer itself. #}
         </div>
+        {% endif %}
 
         <div class="project-home-composer">
             <p class="workspace-pane-label" style="margin-bottom:0.2rem;">Tools</p>
@@ -1929,6 +1950,22 @@
            requirement - the governance itself is unchanged, only its
            permanent on-screen restatement here. #}
         <div class="workspace-pane">
+            {# CLAUDE-BLACK-BOX-D2-01: the heading and its explainer, not the
+               pane. This pane carries the container's actual working content
+               (Active Work below), so gating the whole thing would orphan real
+               material to remove a noun. Only the two parts whose MEANING
+               differs by operating line are conditioned; the Project wording
+               below is unchanged, character for character. #}
+            {% if document_shop_container %}
+            <h2>Document Shop</h2>
+            {% call macros.subdisclosure('What is this?') %}
+                <p class="pane-note">
+                    You are working inside a governed record of this material. New work
+                    inherits its documents, provenance, decisions and constraints. Nothing
+                    here has to become anything else.
+                </p>
+            {% endcall %}
+            {% else %}
             <h2>Project State</h2>
             {% call macros.subdisclosure('What is Project State?') %}
                 <p class="pane-note">
@@ -1937,6 +1974,7 @@
                     left &mdash; the same governed state whether you're here or inside an Investigation.
                 </p>
             {% endcall %}
+            {% endif %}
 
             {% call macros.accordion('Active Work', group='project-home', id='active-work', open=True) %}
                 <p style="font-size:0.85rem;margin:-0.6rem 0 0.8rem;">

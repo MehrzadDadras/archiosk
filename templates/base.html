@@ -213,7 +213,13 @@
                    Compact control that opens for review/editing - never a
                    permanently-expanded editor. #}
                 <details class="workspace-project-context-menu" id="workspace-project-context-menu" data-ui-ref="menu.project-context" data-root-branch="1.2" data-root-label="Project Context">
-                    <summary class="workspace-topbar-btn"><span aria-hidden="true">&#9784;</span> Project Context</summary>
+                    {# CLAUDE-BLACK-BOX-D2-01: the LABEL only. The control
+                       itself is a governed note about the container and is
+                       valid on both operating lines; only the noun differs.
+                       An undefined document_shop_container (any page that
+                       does not pass it) is falsy and keeps the Project
+                       wording, which is the safe default. #}
+                    <summary class="workspace-topbar-btn"><span aria-hidden="true">&#9784;</span> {% if document_shop_container %}Document Context{% else %}Project Context{% endif %}</summary>
                     <div class="workspace-project-context-options" role="group" aria-label="Project Context">
                         {% if current_project_context %}
                         <p class="workspace-project-context-text" data-ui-ref="menu.project-context.current-text">{{ current_project_context.text }}</p>

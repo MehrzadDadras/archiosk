@@ -126,7 +126,7 @@ def test_help_carries_the_explanations_the_working_screen_dropped():
     help_body = _help_page()
     # Each of these was removed from, or never stated on, the working screen.
     for topic in ("Choosing more than one file", "first file in the list establishes the project",
-                  "Project name already exists.", "How the page is arranged",
+                  "That name is already in use.", "How the page is arranged",
                   "Your identity", "Project identity",
                   "Why there is no attachment control here"):
         assert topic in help_body, topic

@@ -282,9 +282,19 @@ class ListingBoundaryTests(unittest.TestCase):
                         "the jobs listing holds the same authority as the door")
 
     def test_name_uniqueness_scope_was_not_changed(self):
+        """Asserted on the RULE, not on its wording.
+
+        This originally keyed on the literal message, which CLAUDE-BLACK-BOX-
+        D2-01 then reworded - a false failure, because the rule it meant to
+        guard never moved. It now checks what actually matters: the uniqueness
+        scan is still deployment-wide rather than per owner, which remains an
+        open Product Owner decision.
+        """
         source = (_REPO_ROOT / "services" / "ingestion.py").read_text(encoding="utf-8")
-        self.assertIn("Project name already exists.", source,
-                      "global uniqueness is a separate Product Owner decision")
+        window = source[source.index("def _reject_if_name_taken"):]
+        window = window[:window.index("def reject_if_display_name_taken")]
+        self.assertIn("registry.list_ids()", window)
+        self.assertNotIn("owner", window)
 
     def test_d1_classification_behaviour_is_unchanged(self):
         workspace = self.store.get(self.black_box.project_id)

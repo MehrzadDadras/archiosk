@@ -152,7 +152,7 @@ class DuplicateProjectNameMessageTests(_BaseTestCase):
 
         self.assertEqual(second.status_code, 400)
         body = second.get_data(as_text=True)
-        self.assertIn("Project name already exists.", body)
+        self.assertIn("That name is already in use.", body)
         # Uniqueness itself is unchanged - the second project was refused.
         self.assertEqual(len(self._registry_ids()), 1)
 

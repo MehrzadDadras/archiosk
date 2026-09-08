@@ -233,12 +233,16 @@ class FoundingSourceKindTests(unittest.TestCase):
         self.assertEqual(set(allowed),
                          {".pdf", ".docx", ".txt", ".csv", ".md", ".xlsx"})
 
-    def test_no_user_facing_wording_was_changed_in_this_tranche(self):
-        """D2 owns the wording leak. This test proves D1 did not touch it."""
+    def test_the_wording_leak_was_left_to_d2_and_d2_fixed_it(self):
+        """Originally asserted the leak SURVIVED D1 - proof the tranches were
+        not mixed. CLAUDE-BLACK-BOX-D2-01 has since corrected the wording, so
+        the assertion is inverted rather than deleted: the handoff is the fact
+        worth keeping, and this now guards the project vocabulary from
+        returning.
+        """
         source = (_REPO_ROOT / "services" / "ingestion.py").read_text(encoding="utf-8")
-        self.assertIn("cannot be a project's founding document", source,
-                      "the leak is D2's to fix; if this fails, the tranches "
-                      "were mixed")
+        self.assertNotIn("cannot be a project's founding document", source)
+        self.assertIn("cannot be used as a founding document", source)
 
     def test_no_second_decision_model_for_classification(self):
         """The progressive-classification SEAM only - nothing implemented.
