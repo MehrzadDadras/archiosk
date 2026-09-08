@@ -82,21 +82,70 @@ def _display_name_of(document: ParsedDocument, store: CaseWorkspaceStore) -> str
     return (workspace.display_title if workspace else None) or document.filename
 
 
-def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
+def _names_owned_by(app: Flask, owner: str, exclude_project_id: str | None = None) -> set:
+    """Every effective display name belonging to ONE owner.
+
+    CLAUDE-BLACK-BOX-OWNER-NAMES-01. DISPLAY NAME UNIQUENESS IS OWNER-SCOPED,
+    NOT DEPLOYMENT-SCOPED. A display name is a human-facing label, not an
+    identifier - `project_id` is the identifier and stays globally unique and
+    untouched.
+
+    The scope was deployment-wide, which did two wrong things at once. It
+    stopped two unrelated customers using the same ordinary words ("Warehouse
+    Conversion"), and the refusal itself disclosed that SOMEBODY ELSE held that
+    name - a cross-customer existence oracle inside a validation message, in an
+    application that returns a generic 404 everywhere else precisely so
+    existence is never confirmed.
+
+    An owner of None or "" matches NOTHING, deliberately. A container with no
+    established owner (a legacy record predating CLAUDE-P32, before
+    ensure_owner_backfilled has run on it) belongs to nobody, and folding those
+    into an asking owner's namespace would reintroduce the disclosure this
+    function exists to remove - a caller would learn that some unattributed
+    container carries their name. See the return for the consequence.
     """
-    Project Entry Rule: entry names must be unique. Checked against every
-    existing project's current effective display name (not just raw
-    filenames) so a name collision is caught even if the earlier project
-    was later given a custom display_title matching the new upload.
-    """
+    if not owner:
+        return set()
     registry = get_registry(app)
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
-    existing_names = {
-        _display_name_of(document, store)
-        for pid in registry.list_ids()
-        if (document := registry.get(pid)) is not None
-    }
-    if entry_name in existing_names:
+    names = set()
+    for pid in registry.list_ids():
+        if exclude_project_id and pid == exclude_project_id:
+            continue
+        document = registry.get(pid)
+        if document is None:
+            continue
+        try:
+            workspace = store.get(pid)
+        except TypeError:
+            workspace = None
+        # Compared against the workspace's OWN owner, never the session - the
+        # namespace belongs to whoever holds the container, not to whoever is
+        # looking at it.
+        if workspace is None or workspace.owner != owner:
+            continue
+        names.add(_display_name_of(document, store))
+    return names
+
+
+def _reject_if_name_taken(app: Flask, entry_name: str, owner: str) -> None:
+    """
+    Project Entry Rule: entry names must be unique WITHIN ONE OWNER. Checked
+    against that owner's existing containers' current effective display names
+    (not just raw filenames) so a collision is caught even if the earlier
+    container was later given a custom display_title matching the new upload.
+
+    CLAUDE-BLACK-BOX-OWNER-NAMES-01: `owner` is required, with no default. A
+    default would silently restore deployment-wide behaviour at any call site
+    that forgot to pass it, which is the failure this scoping exists to remove.
+
+    ONE OWNER, ONE NAMESPACE across all their governed containers - a Project
+    and a Document Shop job may not share a name for the same person, because
+    two identically-named things in one person's own list is confusing whatever
+    operating line each belongs to. That is the pre-existing behaviour narrowed
+    by owner, not a new namespace rule.
+    """
+    if entry_name in _names_owned_by(app, owner):
         # Says what happened in the reader's own words. "Entry names must be
         # unique" states the rule; the person at New Project needs the fact.
         # The rename path below keeps its own wording - it is a different
@@ -110,7 +159,8 @@ def _reject_if_name_taken(app: Flask, entry_name: str) -> None:
         raise UploadError("That name is already in use.")
 
 
-def reject_if_display_name_taken(app: Flask, entry_name: str, exclude_project_id: str) -> None:
+def reject_if_display_name_taken(app: Flask, entry_name: str, exclude_project_id: str,
+                                 owner: str) -> None:
     """
     CLAUDE-P40-B (3.1): the same uniqueness rule _reject_if_name_taken
     enforces at upload time, reused for post-ingestion renaming
@@ -122,15 +172,16 @@ def reject_if_display_name_taken(app: Flask, entry_name: str, exclude_project_id
     leaving it unchanged, is never a collision). Public (no leading
     underscore) since it's now called from routes/workspace.py, unlike
     _reject_if_name_taken above which stays ingestion-internal.
+
+    CLAUDE-BLACK-BOX-OWNER-NAMES-01: owner-scoped, for the same reason and by
+    the same helper as the upload path. The rename surface is an oracle of
+    exactly the same shape - type a guess, read whether it was refused - so
+    correcting only the upload path would have left the disclosure reachable
+    through a different door. `owner` is the owner OF THE CONTAINER BEING
+    RENAMED, so a container never escapes its own namespace by being renamed
+    by an admin acting on someone else's behalf.
     """
-    registry = get_registry(app)
-    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
-    existing_names = {
-        _display_name_of(document, store)
-        for pid in registry.list_ids()
-        if pid != exclude_project_id and (document := registry.get(pid)) is not None
-    }
-    if entry_name in existing_names:
+    if entry_name in _names_owned_by(app, owner, exclude_project_id=exclude_project_id):
         raise UploadError("Entry names must be unique.")
 
 
@@ -200,9 +251,14 @@ def _validated_source_domain(value: str | None) -> str:
 def existing_project_codes(app: Flask, exclude_project_id: str | None = None) -> set:
     """Every acronym currently in use, for uniqueness checking.
 
-    Scope is deployment-wide, matching how project NAMES are already scoped by
-    _reject_if_name_taken - one rule for project identity rather than two
-    different ones for its two halves.
+    Scope is deployment-wide. That USED to be justified as matching how project
+    NAMES were scoped, and CLAUDE-BLACK-BOX-OWNER-NAMES-01 ended the symmetry:
+    display names are now owner-scoped because they are human-facing labels,
+    while a project CODE is a short global reference people quote in meetings
+    and email ("SRPC-T-014"), which only works if it resolves to one container
+    across the whole deployment. The two halves of project identity are now
+    deliberately scoped differently, and this comment says so rather than
+    leaving a reader to infer a symmetry that no longer exists.
     """
     registry = get_registry(app)
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
@@ -370,7 +426,7 @@ def ingest_upload(
         )
 
     project_name = (project_name or "").strip() or None
-    _reject_if_name_taken(app, project_name or filename)
+    _reject_if_name_taken(app, project_name or filename, owner)
 
     # CLAUDE-PROJECT-CODE-01: every new project gets a governed acronym, and
     # nobody is made to invent one. A supplied value is validated; an absent one

@@ -281,20 +281,20 @@ class ListingBoundaryTests(unittest.TestCase):
         self.assertTrue(header.rstrip().endswith("@admin_required"),
                         "the jobs listing holds the same authority as the door")
 
-    def test_name_uniqueness_scope_was_not_changed(self):
-        """Asserted on the RULE, not on its wording.
+    def test_name_uniqueness_is_now_owner_scoped(self):
+        """Superseded by CLAUDE-BLACK-BOX-OWNER-NAMES-01, not weakened.
 
-        This originally keyed on the literal message, which CLAUDE-BLACK-BOX-
-        D2-01 then reworded - a false failure, because the rule it meant to
-        guard never moved. It now checks what actually matters: the uniqueness
-        scan is still deployment-wide rather than per owner, which remains an
-        open Product Owner decision.
+        This asserted deployment-wide uniqueness, which was correct while that
+        was the rule and while this tranche's job was to prove it had NOT
+        changed it. The Product Owner has since scoped names per owner, so the
+        assertion follows the decision rather than defending the behaviour it
+        superseded.
         """
         source = (_REPO_ROOT / "services" / "ingestion.py").read_text(encoding="utf-8")
-        window = source[source.index("def _reject_if_name_taken"):]
-        window = window[:window.index("def reject_if_display_name_taken")]
-        self.assertIn("registry.list_ids()", window)
-        self.assertNotIn("owner", window)
+        window = source[source.index("def _names_owned_by"):]
+        window = window[:window.index("def _reject_if_name_taken")]
+        self.assertIn("workspace.owner != owner", window,
+                      "the scan must compare against the container's own owner")
 
     def test_d1_classification_behaviour_is_unchanged(self):
         workspace = self.store.get(self.black_box.project_id)

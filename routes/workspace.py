@@ -2713,7 +2713,13 @@ def edit_project_details(project_id):
     effective_name = new_display_title or document.filename
 
     try:
-        reject_if_display_name_taken(current_app, effective_name, exclude_project_id=project_id)
+        # CLAUDE-BLACK-BOX-OWNER-NAMES-01: the CONTAINER's owner, not the
+        # session's. An admin renaming someone else's container must be
+        # checked against that person's namespace, or the container would
+        # change namespace by who happened to rename it.
+        reject_if_display_name_taken(current_app, effective_name,
+                                     exclude_project_id=project_id,
+                                     owner=workspace.owner)
     except UploadError as exc:
         flash(str(exc), "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))

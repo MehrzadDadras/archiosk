@@ -222,14 +222,19 @@ class PresentationTests(unittest.TestCase):
 
     # -- what D2 deliberately did NOT do -------------------------------------
 
-    def test_name_uniqueness_is_still_deployment_wide(self):
-        """Wording changed; the RULE did not. Still a Product Owner decision."""
-        source = (_REPO_ROOT / "services" / "ingestion.py").read_text(encoding="utf-8")
-        window = source[source.index("def _reject_if_name_taken"):]
-        window = window[:window.index("def reject_if_display_name_taken")]
-        self.assertIn("registry.list_ids()", window)
-        self.assertNotIn("owner", window,
-                         "scoping names per owner is a separate decision")
+    def test_name_uniqueness_is_now_owner_scoped(self):
+        """Superseded by CLAUDE-BLACK-BOX-OWNER-NAMES-01.
+
+        D2 changed the message wording and deliberately left the RULE alone,
+        which is what this asserted. The Product Owner has since decided the
+        rule, so this now guards the decision instead of the state D2 was
+        careful not to disturb.
+        """
+        import inspect
+        from services.ingestion import _reject_if_name_taken
+
+        self.assertIn("owner",
+                      inspect.signature(_reject_if_name_taken).parameters)
 
     def test_internal_names_were_not_renamed(self):
         kernel = (_REPO_ROOT / "services" / "case_workspace.py").read_text(encoding="utf-8")
