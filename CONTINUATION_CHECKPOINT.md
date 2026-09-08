@@ -1,5 +1,63 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `d840fad`: a shared kernel is not a shared identity
+
+Appended above the entries below, none of which is altered. One commit, pushed,
+**NOT deployed** — intended to ship as one Black Box bundle with D2.
+
+### What changed
+
+Project-facing listings now default to **Project scope**. A Black Box is
+excluded from the Projects directory, project counts, the chooser, gateway
+cards, operating-environment derivation, removed-Projects, global Project
+search, and the recent-projects nav rail.
+
+`routes/portal.py:_accessible_documents` gained a `scope` defaulting to
+`LISTING_SCOPE_PROJECTS`, so existing listing call sites became correct without
+being touched. `app.py:_nav_recent_projects` needed the filter applied
+separately because it builds its own list — that rail renders on every
+authenticated page.
+
+**Listing identity is keyed on `container_state`, never on `Source.kind`.** A
+conventional Project may legitimately hold unclassified sources.
+
+Black Box work stays discoverable at **`/document-shop/jobs`**
+(`@admin_required`, same authority as the intake door), reached through the
+SAME access-filtered helper — no second access mechanism and no entitlement
+widening.
+
+**Surface classification, deliberate:** Project-facing = directory, chooser,
+gateway cards, environment derivation, removed Projects, global search, nav
+rail. Document Shop = `/document-shop/jobs`. **Diagnostic / whole-store, left
+unfiltered on purpose** = API `/documents`, security department, developer
+tools, store inventory. Do not over-filter the diagnostic surfaces.
+
+### Help
+
+Unchanged and not converged. The predicate is **`is_help_workspace()`** — an
+earlier audit entry named it `is_help_shaped`, which was wrong. The substantive
+finding stands: its docstring claims a listing-filter role that **no production
+listing code calls**. Recorded only.
+
+### Still open
+
+**Deployment-wide display-name uniqueness remains an unresolved Product Owner
+decision** (`services/ingestion.py:_reject_if_name_taken`): two customers cannot
+share a name, and the refusal confirms another account holds it. Untouched here.
+
+### Gate
+
+**7,148 passed, 3 skipped, 2,956 subtests, 0 failed, 10:38** (parallel,
+`-n 8 --dist loadfile`). The earlier 4:04:40 anomaly has now not recurred across
+two consecutive gates.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`d840fad`** plus this checkpoint commit.
+- Production remains **`da2b945`** at **`STATIC_VERSION=164`**.
+- Unshipped and awaiting a bundled deploy: `bdda7ce`, `f114d9a`, `07a16de`,
+  `d840fad`, plus D2 when it lands.
+
 ## 2026-09-08 (application) — `07a16de`: a Source may exist before its type is known
 
 Appended above the entries below, none of which is altered. One commit, pushed,
