@@ -21,6 +21,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
+from services import image_intake
 from services.case_workspace import (
     EVIDENCE_CLASS_EXTRACTED,
     FOLDER_ROOT_DATA_ROOM,
@@ -404,9 +405,23 @@ def ingest_upload(
     filename = file_storage.filename
     ext = Path(filename).suffix.lower()
     allowed = app.config["ALLOWED_UPLOAD_EXTENSIONS"]
-    if ext not in allowed:
+
+    # CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: images found a BLACK BOX and nothing
+    # else. ALLOWED_UPLOAD_EXTENSIONS is deliberately NOT widened - it governs
+    # conventional Project uploads too, and a scan is not a founding project
+    # document. Keeping the two policies separate is the point: a Document Shop
+    # customer arrives with difficult material, a project is founded on a
+    # readable issued document, and one config list cannot honestly say both.
+    # The extension only decides which GATE applies; the bytes decide whether
+    # the file is really an image (verified below, after they are read).
+    image_founding = (container_state == CONTAINER_STATE_BLACK_BOX
+                      and image_intake.is_supported_image(filename))
+    if ext not in allowed and not image_founding:
+        offered = sorted(set(allowed) | (
+            set(image_intake.IMAGE_EXTENSIONS)
+            if container_state == CONTAINER_STATE_BLACK_BOX else set()))
         raise UploadError(
-            f"Unsupported file type '{ext}'. Allowed types: {', '.join(sorted(allowed))}."
+            f"Unsupported file type '{ext}'. Allowed types: {', '.join(offered)}."
         )
     # CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: .xlsx is a genuinely
     # eligible Source (see ALLOWED_UPLOAD_EXTENSIONS above), but never as
@@ -436,6 +451,16 @@ def ingest_upload(
     resolved_project_code = _resolve_project_code(app, project_name or filename, project_code)
 
     raw_bytes = file_storage.read()
+
+    # CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: the NAME is the least trustworthy thing
+    # about an upload, so the bytes are checked before anything decodes them in
+    # full or persists them - signature, structure, and DECLARED geometry, in
+    # that order. Nothing here reaches a network; local decode only.
+    if image_founding:
+        verdict = image_intake.verify_image_bytes(raw_bytes, filename)
+        if verdict["status"] != image_intake.VERIFIED:
+            raise UploadError(verdict["reason"])
+
     parser = BHiveParser(
         anthropic_api_key=app.config.get("ANTHROPIC_API_KEY"),
         model=app.config.get("ANTHROPIC_MODEL"),
@@ -597,6 +622,26 @@ def ingest_upload(
                 store, workspace, founding_source["id"], founding_text,
                 actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
             )
+        # CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: an image has no native text, so
+        # anything readable in it must be RECOVERED - locally, by Tesseract,
+        # through the same governed adapter scanned PDFs already use. It is
+        # registered as EVIDENCE_CLASS_EXTRACTED and attributed to the OCR
+        # engine, never to the parser: a recovered string is a reading of an
+        # image, not something the document says. An absent engine, an
+        # unreadable image and a blank page are all honest outcomes here -
+        # nothing is fabricated, and the Source itself is already durably
+        # registered whatever this returns.
+        if image_founding:
+            recovered = image_intake.extract_image_text(raw_bytes, filename)
+            if (recovered.get("text") or "").strip():
+                store.register_pdf_page_structure(
+                    workspace, source_id=founding_source["id"],
+                    pages=[recovered["text"]],
+                    extractor_version="%s %s" % (recovered.get("engine"),
+                                                 recovered.get("engine_version")),
+                    actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+                    evidence_class_by_page={0: EVIDENCE_CLASS_EXTRACTED},
+                )
     # CLAUDE-BLACK-BOX-01: a Black Box locks its CONTAINER STATE here instead
     # of an engagement environment - the same "locked at the moment of
     # creation" treatment, applied to the axis it actually has. It gets no

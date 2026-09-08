@@ -204,12 +204,21 @@ def ocr_availability() -> dict:
 
 
 def extract_raster_pages(raw_bytes: bytes, page_indices: list, *,
-                         dpi: int = RENDER_DPI, engine=None) -> dict:
+                         dpi: int = RENDER_DPI, engine=None,
+                         filetype: str = "pdf") -> dict:
     """Render the named pages and read them. Never raises.
 
     `engine` is injectable so tests drive this at the seam rather than
     depending on a binary being installed on whichever machine runs them - the
     same discipline every other external boundary in this repository uses.
+
+    CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: `filetype` lets a STANDALONE IMAGE reach
+    this same path as a one-frame document. It is the smallest possible
+    adapter - PyMuPDF already opens a PNG or JPEG stream as a document, so an
+    image reuses engine resolution, tessdata discovery, the per-page loop, the
+    derived-evidence contract and the honest "no engine installed" outcome
+    rather than acquiring a second OCR pipeline that would drift from this one.
+    Everything below is unchanged; only what is opened differs.
     """
     try:
         engine_name, engine_version, pymupdf = engine or _ocr_engine()
@@ -220,12 +229,12 @@ def extract_raster_pages(raw_bytes: bytes, page_indices: list, *,
     tessdata = tessdata_path(pymupdf) if hasattr(pymupdf, "get_tessdata") else None
     recovered, failures = {}, []
     try:
-        document = pymupdf.open(stream=raw_bytes, filetype="pdf")
-    except Exception as exc:  # noqa: BLE001 - an unreadable PDF is a result, not a crash
-        logger.warning("Raster fallback could not open the PDF: %s", exc)
+        document = pymupdf.open(stream=raw_bytes, filetype=filetype)
+    except Exception as exc:  # noqa: BLE001 - an unreadable source is a result, not a crash
+        logger.warning("Raster fallback could not open the %s: %s", filetype, exc)
         return {"ran": False, "status": RASTER_STATUS_UNREADABLE, "pages": {},
                 "engine": engine_name, "engine_version": engine_version,
-                "reason": "The PDF could not be opened for rendering."}
+                "reason": "The file could not be opened for rendering."}
 
     try:
         for index in page_indices:

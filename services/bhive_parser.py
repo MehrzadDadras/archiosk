@@ -387,6 +387,13 @@ def _is_separator_row(cells: list[str]) -> bool:
     return bool(cells) and all(_TABLE_SEPARATOR_CELL_RE.match(cell) for cell in cells)
 
 
+#: CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: kept here rather than imported from
+#: services/image_intake.py so this parser keeps depending on nothing but the
+#: standard library and its own extractors. The authoritative intake list is
+#: image_intake.IMAGE_EXTENSIONS, and a test pins the two together.
+_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg"})
+
+
 def extract_markdown_tables(text: str) -> list[dict]:
     """
     A minimal GFM pipe-table parser. Requires each table/data row to both
@@ -488,7 +495,7 @@ class BHiveParser:
         # this stage's own addendum: "Do not report the entire upload
         # as failed").
         if not text.strip():
-            if ext == ".pdf":
+            if ext == ".pdf" or ext in _IMAGE_EXTENSIONS:
                 return ParsedDocument(
                     project_id=str(uuid.uuid4()),
                     filename=filename,
@@ -545,6 +552,16 @@ class BHiveParser:
 
         if ext == ".pdf":
             return self._extract_pdf(raw_bytes)
+
+        # CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: an image carries no native text
+        # layer, ever. That is not a parse failure, it is the honest answer -
+        # exactly what an image-only PDF already reports below. Returning ""
+        # here lets parse() take the same no_native_text branch rather than
+        # inventing a second empty-document shape, and any text recovered
+        # afterwards is DERIVED evidence attributed to the OCR engine, never
+        # to this parser.
+        if ext in _IMAGE_EXTENSIONS:
+            return ""
 
         raise ParserError(f"Unsupported extension for extraction: {ext}")
 
