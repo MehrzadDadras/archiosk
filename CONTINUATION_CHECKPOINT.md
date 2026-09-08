@@ -1,5 +1,90 @@
 # Continuation checkpoint
 
+## 2026-09-08 (deploy) — `da2b945` live at `v=164`: the Black Box door reaches production
+
+Appended above the entries below, none of which is altered. **This supersedes
+the "NOT deployed" state in the two entries below it** — both `bdda7ce` (the
+Black Box kernel) and `f114d9a` (the intake door) are now live.
+
+### Deployment record
+
+- **Production: `da2b945`**, systemd Description marker updated to match.
+- **`STATIC_VERSION=164`, deliberately NOT bumped** — no file under `static/`
+  changed in either tranche, so there was nothing to invalidate. `v=164` is
+  confirmed as what the live pages actually serve.
+- `/health` **200**, `{"status":"ok"}`, both registry checks ok. **0 errors** in
+  the service log after restart.
+- No dependency, schema or nginx/gunicorn/systemd-unit change: the range
+  touched no `requirements.txt`, no `migrations/`, no `static/`. Runbook steps 7,
+  8 and 10 did not apply.
+- Dry-run before any write proposed **0 deletions** and exactly **17 changed
+  files** (14 modified + 3 new), matching `git diff 2bd38ce..da2b945` exactly.
+
+### Rollback
+
+- Point: **`/var/www/archiosk-backup-2bd38ce`**, pre-deploy production SHA
+  `2bd38ce`, verified to contain `app.py`.
+- Its `.env` is captured **inside the rollback tree**, `archiosk:archiosk`,
+  mode **600** — never beside the live `.env`, per the rule that record already
+  carries.
+- Rollback viable.
+
+### End-to-end verification on production
+
+Authenticated admin intake was proven live, not inferred: intake page renders;
+no engagement field is asked for; no destination is predicted; a browser-
+equivalent POST creates a `black_box` container with `operating_environment`
+None and `lifecycle_stage` None; it lands on
+`workspace.drawing_understanding_review` (200, titled Document Shop). Spin is
+withheld in the Black Box and still present in the 1860 project. 1860's As-Read
+is unchanged at 31 legend items with `container_state` None.
+
+**The one "failure" seen during verification was mine, not the product's.** A
+first probe POSTed with no `csrf_token` and was redirected to `/login` by
+`app.py`'s `CSRFError` handler. Production runs `WTF_CSRF_ENABLED=True` while
+`config.py` sets it False under testing, so the suite cannot see this; a browser
+sends the token and the flow is correct. **No product redirect defect exists.**
+Recorded because the same harness gap will otherwise be rediscovered as a false
+defect by the next person verifying a POST route live.
+
+### Deferred seams — registered, unfixed
+
+- **Unknown-source classification mismatch (new).** A standalone `.txt`
+  uploaded through the Black Box door was classified `kind =
+  rfq_rfp_document`. That contradicts the Black Box principle — UNKNOWN SOURCE
+  → OBSERVE / CLASSIFY → THEN determine type — by assigning a procurement type
+  before anything was read. **Impact is bounded**: tool exposure follows
+  `container_state`, not source kind, so nothing procurement-flavoured is
+  offered. Parser/defaulting behaviour deliberately unchanged.
+- **Image founding-upload gap.** `.jpg/.jpeg/.png/.tif/.tiff` not accepted
+  (`config.py:102`, enforced `services/ingestion.py:336`).
+- **Project-language refusal leak.** A `.xlsx` founding upload is refused with
+  "cannot be a project's founding document"; the sentence is shared verbatim
+  with the project upload path and is pinned by
+  `test_the_founding_refusal_still_speaks_in_project_terms`.
+- **Entitlement and public storefront remain future.** The door stays
+  `@admin_required`; no anonymous access, no payment, no promotion/routing.
+- **AFT unchanged. Media Studio unchanged** (feasibility verdict B recorded,
+  no implementation).
+
+### Verification container
+
+One disposable container was created and **removed through the normal
+recoverable Remove Project mechanism** — never by touching files. Project
+`503507cd-6a3d-4608-afbc-d4c7944c1c1d`, source
+`199ffa59-b0f6-4c3e-b38d-318946380494`, "ZZ DISPOSABLE VERIFICATION - Black Box
+door da2b945". Confirmed: `removed_at` set, `removed_by` recorded with a stated
+reason, absent from `/projects`, listed under `/removed-projects`, its page now
+a restore-able tombstone with Spin absent.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`da2b945`** plus this checkpoint commit.
+- Production **`da2b945`** at **`STATIC_VERSION=164`**, `/health` 200, 0 errors.
+- Gate for this code (unchanged since): 7,113 passed, 3 skipped, 2,941
+  subtests, 0 failed. The 4:04:40 duration on that run remains a **WATCH ITEM
+  only** — re-measure at the next naturally required full gate.
+
 ## 2026-09-08 (application) — `f114d9a`: the Black Box gets a door
 
 Appended above the entries below, none of which is altered. One commit, pushed,
