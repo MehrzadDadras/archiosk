@@ -5363,7 +5363,11 @@ def _tool_exposure(workspace, selected_source=None, workflow=None):
         source_kinds={s.get("kind") for s in (workspace.sources or [])
                       if not s.get("removed_at")},
         selected_source_kind=(selected_source or {}).get("kind"),
-        workflow=workflow)
+        workflow=workflow,
+        # CLAUDE-BLACK-BOX-01: getattr, not attribute access - a workspace
+        # persisted before this field existed has no container_state at all,
+        # and absence must read as "programmed", never as an error.
+        container_state=getattr(workspace, "container_state", None))
 
 
 def _as_read_card_state(store, workspace, *conversations):

@@ -38,6 +38,7 @@ from services.case_workspace import (
 from services.environment_capabilities import (
     CLIENT_OWNER, DESIGN_BUILDER_PROPONENT, KNOWN_TOOL_GROUPS,
     TOOL_GROUP_BINDINGS, TOOL_GROUP_DESIGN_CONSTRUCTION,
+    TOOL_GROUP_PROJECT_INTELLIGENCE,
     TOOL_GROUP_DOCUMENT_AS_READ, TOOL_GROUP_GENERAL, TOOL_GROUP_RFP_PROCUREMENT,
     WORKFLOW_DOCUMENT_SHOP, capability_availability, resolve_tool_exposure,
     tool_available, tool_group_available,
@@ -140,12 +141,26 @@ class ToolExposureTests(unittest.TestCase):
         self.assertTrue(tool_available("tasks", exposure))
         self.assertFalse(tool_available("drawing-understanding", exposure))
 
-    def test_spin_is_general_and_never_gated_by_source_type(self):
-        """Spin is the project-wide question every context legitimately asks."""
-        self.assertEqual(TOOL_GROUP_BINDINGS["spin"], TOOL_GROUP_GENERAL)
+    def test_spin_is_never_gated_by_source_type(self):
+        """Spin follows PROJECT CONTEXT, never source type.
+
+        This test previously also asserted Spin sat in TOOL_GROUP_GENERAL,
+        with the reason "Spin is the project-wide question every context
+        legitimately asks". That was true when every governed container WAS a
+        project. CLAUDE-BLACK-BOX-01 introduced a container with no project
+        programme attached, where there is no project for Spin to reason
+        across - so Spin moved to TOOL_GROUP_PROJECT_INTELLIGENCE.
+
+        The half of the intent that was always the point survives intact and is
+        what is asserted here: source type must never decide whether Spin is
+        offered. A real project still gets Spin regardless of what it holds.
+        """
+        self.assertEqual(TOOL_GROUP_BINDINGS["spin"],
+                         TOOL_GROUP_PROJECT_INTELLIGENCE)
         for kinds in ({RFP}, {DRAWING}, set()):
             exposure = resolve_tool_exposure(None, source_kinds=kinds)
-            self.assertTrue(tool_available("spin", exposure))
+            self.assertTrue(tool_available("spin", exposure),
+                            "source type must not gate Spin")
 
     # -- nothing was duplicated ----------------------------------------------
 

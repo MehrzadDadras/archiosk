@@ -3496,6 +3496,16 @@
            delta_classification prominently, not buried. Deliberately minimal
            chrome (reuses macros.subdisclosure and existing badge classes) - the
            larger ARCHIOSK visual-language programme is out of scope here. #}
+        {# CLAUDE-BLACK-BOX-01: Spin needs a PROJECT to spin. This is the
+           conditional that makes the TOOL_GROUP_PROJECT_INTELLIGENCE
+           classification real - without it the group was a decision the
+           application computed and then ignored, which is the exact gap
+           CLAUDE-DOCUMENT-SHOP-01 was created to close (66 registered
+           toolbox refs, none of them gated). Ordinary projects are
+           unaffected: every non-Black-Box branch of resolve_tool_exposure
+           returns project_intelligence True, including the Document Shop
+           workflow. #}
+        {% if tool_exposure.project_intelligence %}
         <div data-ui-ref="toolbox.spin">
             <h3>Spin</h3>
             {# CLAUDE-HELP-CENTER-01: the three-sentence definition moved to
@@ -3568,6 +3578,7 @@
             <p class="pane-note" data-ui-ref="toolbox.spin.empty">No Spin runs yet.</p>
             {% endif %}
         </div>
+        {% endif %}
 
         {% if composer_findings_view %}
         {# ---------------- Composer Findings (CLAUDE-GO-RIGHT-PANEL-01) --------------

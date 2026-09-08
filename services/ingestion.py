@@ -248,13 +248,14 @@ def backfill_project_code(app: Flask, store, workspace) -> str | None:
 def ingest_upload(
     file_storage: Optional[FileStorage],
     app: Flask,
-    operating_environment: str,
+    operating_environment: str | None,
     owner: str,
     actor: str | None = None,
     role: str | None = None,
     project_name: str | None = None,
     project_code: str | None = None,
     source_domain: str = SOURCE_DOMAIN_UNKNOWN,
+    container_state: str | None = None,
 ) -> ParsedDocument:
     """
     Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError
@@ -292,11 +293,33 @@ def ingest_upload(
     creation, the same "locked onto the project at the moment of
     creation" treatment `operating_environment` already gets.
     """
-    from services.environment_capabilities import is_valid_operating_environment
+    from services.environment_capabilities import (
+        CONTAINER_STATE_BLACK_BOX, is_valid_operating_environment)
 
     source_domain = _validated_source_domain(source_domain)
 
-    if not is_valid_operating_environment(operating_environment):
+    # CLAUDE-BLACK-BOX-01: container creation is separated from engagement
+    # declaration - and ONLY here. A conventional PROJECT still cannot exist
+    # without an engagement context; that rule is unchanged and is what the
+    # else-branch below still enforces, word for word.
+    #
+    # A Black Box is the other thing: a governed evidence container with no
+    # engagement programme attached. It must be asked for EXPLICITLY, and it
+    # must NOT carry an engagement environment - because "unprogrammed" and
+    # "Client / Owner" are different claims and a container may not quietly
+    # assert both.
+    #
+    # Intake deliberately asks for nothing it cannot yet know: no project type,
+    # no RFP status, no Owner/Proponent, no discipline or drawing certainty, no
+    # destination. The first question at the door is what the customer gave us.
+    if container_state == CONTAINER_STATE_BLACK_BOX:
+        if operating_environment is not None:
+            raise UploadError(
+                "A Black Box container has no engagement programme attached, so "
+                "it cannot also declare an operating environment. Attaching one "
+                "is a separate, governed transition.",
+            )
+    elif not is_valid_operating_environment(operating_environment):
         raise UploadError(
             "A valid project operating environment (Client / Owner or "
             "Design-Builder / Proponent) must be selected before a project can be created.",
@@ -491,9 +514,22 @@ def ingest_upload(
                 store, workspace, founding_source["id"], founding_text,
                 actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
             )
-    store.set_operating_environment(
-        workspace, operating_environment, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
-    )
+    # CLAUDE-BLACK-BOX-01: a Black Box locks its CONTAINER STATE here instead
+    # of an engagement environment - the same "locked at the moment of
+    # creation" treatment, applied to the axis it actually has. It gets no
+    # operating_environment and no procurement lifecycle, because it has no
+    # programme; both remain available to a future governed transition that
+    # attaches one.
+    if container_state == CONTAINER_STATE_BLACK_BOX:
+        store.set_container_state(
+            workspace, CONTAINER_STATE_BLACK_BOX,
+            actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+        )
+    else:
+        store.set_operating_environment(
+            workspace, operating_environment, actor=actor or _DEFAULT_ACTOR,
+            governance_log=governance_log,
+        )
     # CLAUDE-RFP-BOUNDARY-01: lifecycle_stage's own initial-establishment
     # call, at the same project-creation call site operating_environment
     # is locked immediately above -- see ProjectWorkspace.lifecycle_stage's
@@ -501,9 +537,10 @@ def ingest_upload(
     # than folded into set_operating_environment itself. This one call
     # site covers ingest_folder_upload too, since that function's own
     # founding file always goes through this same ingest_upload.
-    store.set_initial_lifecycle_stage(
-        workspace, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
-    )
+    if container_state != CONTAINER_STATE_BLACK_BOX:
+        store.set_initial_lifecycle_stage(
+            workspace, actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
+        )
     # CLAUDE-P32: locked onto the project at the moment of creation, the
     # same treatment operating_environment gets immediately above --
     # every new project has a real, deterministic owner from the moment

@@ -44,6 +44,37 @@ dependent output differs, per Part VII's own instruction.
 """
 from __future__ import annotations
 
+# -- CLAUDE-BLACK-BOX-01: the governed container with no operating programme --
+#
+# A governed evidence container may exist without any engagement/authority
+# programme attached to it. GOVERNED BUT UNPROGRAMMED - never ungated.
+#
+# It is NOT a pre-project, and nothing here should read as though a project is
+# expected to arrive later (Product Owner, operating-model clarification 02).
+# Intake asks WHAT DID THE CUSTOMER GIVE US, not WHICH PROJECT IS THIS. The
+# material may end as a standalone job, a governed reference, a project, a
+# procurement matter, or nothing at all: BLACK BOX PRECEDES CLASSIFICATION, IT
+# DOES NOT PREDICT DESTINATION.
+#
+# This is a CONTAINER CONDITION and is deliberately NOT a third
+# operating_environment. That axis classifies the ENGAGEMENT (Client/Owner vs
+# Design-Builder/Proponent) and remains locked under P29; putting "black box"
+# or "document shop" into it would encode a container state, and then a
+# workflow, into an authority vocabulary - conflating the two axes that were
+# already conflated, which is the whole thing this separates.
+#
+# It is also NOT `operating_environment=None`. None already means
+# "legacy/unclassified, therefore UNGATED" - documented twice in
+# environment_capabilities as deliberate backward compatibility for pre-P29
+# projects. Black Box means the opposite: no programme attached, therefore no
+# procurement authority. Because those two conclusions are contradictory, the
+# state must be EXPLICIT and is never inferred from an absent environment.
+#
+#   NO PROGRAM DOES NOT MEAN NO GOVERNANCE.
+CONTAINER_STATE_PROGRAMMED = "programmed"
+CONTAINER_STATE_BLACK_BOX = "black_box"
+KNOWN_CONTAINER_STATES = (CONTAINER_STATE_PROGRAMMED, CONTAINER_STATE_BLACK_BOX)
+
 CLIENT_OWNER = "client_owner"
 DESIGN_BUILDER_PROPONENT = "design_builder_proponent"
 
@@ -319,7 +350,8 @@ CAPABILITY_REGISTRY: dict[str, "CapabilityDefinition"] = {
 }
 
 
-def capability_availability(capability_id: str, operating_environment: str | None) -> bool:
+def capability_availability(capability_id: str, operating_environment: str | None,
+                            container_state: str | None = None) -> bool:
     """
     True if `capability_id` is usable in `operating_environment`.
 
@@ -328,10 +360,40 @@ def capability_availability(capability_id: str, operating_environment: str | Non
     -- the same "None means no gating" precedent already established by
     allowed_participant_roles, applied consistently here rather than
     invented separately per capability.
+
+    CLAUDE-BLACK-BOX-01: `container_state` is additive and defaults to None,
+    so every existing call site keeps its exact behaviour. The ONE value that
+    changes anything is CONTAINER_STATE_BLACK_BOX, and it closes rather than
+    opens - but only over the ENGAGEMENT programme, never over the kernel.
+
+    SHARED CORPORATE INFRASTRUCTURE DOES NOT MEAN SHARED OPERATING PROGRAM,
+    and the registry already draws that line: CAPABILITY_NEUTRAL is defined
+    above as "the shared neutral foundation (immutable source preservation,
+    neutral extraction, provenance, project isolation, audit history)",
+    available identically in every environment INCLUDING an unclassified one.
+    That foundation is the corporate kernel every operating line stands on -
+    it is not something an engagement grants. Every other classification
+    (counterpart, parallel, client_only, proponent_only, comparative_bounded)
+    is defined BY the Owner/Proponent relationship, and a container with no
+    engagement has no such relationship to exercise them from.
+
+    A first pass here refused the whole registry, which is what a blanket
+    "no programme, no capability" rule produces if you never read what is IN
+    the registry. It switched off governance_audit_trail and
+    source_preservation in the one container whose entire purpose is governed
+    intake of unknown material - the exact inversion of NO PROGRAM DOES NOT
+    MEAN NO GOVERNANCE.
+
+    The Black Box branch is still checked BEFORE the `operating_environment is
+    None` branch on purpose. A Black Box has no environment, and falling
+    through to the legacy "None means ungated" rule would hand it the
+    engagement capabilities too. Absence of a programme is not permission.
     """
     definition = CAPABILITY_REGISTRY[capability_id]
     if definition.classification == CAPABILITY_FUTURE_NOT_AUTHORIZED:
         return False
+    if container_state == CONTAINER_STATE_BLACK_BOX:
+        return definition.classification == CAPABILITY_NEUTRAL
     if operating_environment is None:
         return True
     if operating_environment == CLIENT_OWNER:
@@ -352,19 +414,37 @@ def capability_variant_label(capability_id: str, operating_environment: str | No
     return definition.description if operating_environment is None else None
 
 
-def capability_denial_reason(capability_id: str, operating_environment: str | None) -> str | None:
+def capability_denial_reason(capability_id: str, operating_environment: str | None,
+                             container_state: str | None = None) -> str | None:
     """
     None if the capability is available; otherwise a single stable,
     non-implementation-leaking sentence explaining why, reused by every
     route/template that needs to explain a denial rather than each
     writing its own ad hoc message (Part IX).
     """
-    if capability_availability(capability_id, operating_environment):
-        return None
-
+    # CLAUDE-BLACK-BOX-01: resolve the capability BEFORE considering container
+    # state, in the same order capability_availability itself uses. Two reasons,
+    # both found by reading this function against that one:
+    #   - an unknown capability_id must still raise here, exactly as it does
+    #     there. A typo that returns a confident, plausible denial sentence is
+    #     worse than a traceback.
+    #   - a NOT-AUTHORIZED capability must say so. Telling someone the container
+    #     "has no engagement programme attached yet" implies attaching one would
+    #     enable it, which is false for a capability nobody has authorized.
     definition = CAPABILITY_REGISTRY[capability_id]
     if definition.classification == CAPABILITY_FUTURE_NOT_AUTHORIZED:
         return f"{definition.description} is not yet authorized for use."
+
+    if container_state == CONTAINER_STATE_BLACK_BOX:
+        if definition.classification == CAPABILITY_NEUTRAL:
+            return None
+        return ("This container holds governed evidence and has no engagement "
+                "programme attached, so Owner / Proponent actions do not apply "
+                "to it. Whether one is ever attached is a separate, governed "
+                "decision.")
+
+    if capability_availability(capability_id, operating_environment):
+        return None
 
     env_label = OPERATING_ENVIRONMENT_LABELS.get(operating_environment, "this project's")
     counterpart = (
@@ -545,6 +625,16 @@ TOOL_GROUP_DOCUMENT_AS_READ = "document_as_read"
 TOOL_GROUP_RFP_PROCUREMENT = "rfp_procurement"
 TOOL_GROUP_DESIGN_CONSTRUCTION = "design_construction"
 TOOL_GROUP_HELP_SUPPORT = "help_support"
+# CLAUDE-BLACK-BOX-01: project-wide reasoning, split out of GENERAL.
+#
+# CLAUDE-DOCUMENT-SHOP-01 put Spin in GENERAL with the reason "Spin is the
+# project-wide question every context legitimately asks". That was true when
+# every governed container WAS a project. A Black Box is a container with no
+# project programme attached, so there is no project for Spin to reason across
+# - and offering it would promise cross-project consequence analysis over a
+# single unprogrammed job. The group is gated by whether a PROJECT CONTEXT
+# exists, never by source type; that half of the original reasoning stands.
+TOOL_GROUP_PROJECT_INTELLIGENCE = "project_intelligence"
 
 KNOWN_TOOL_GROUPS = (
     TOOL_GROUP_GENERAL,
@@ -552,6 +642,7 @@ KNOWN_TOOL_GROUPS = (
     TOOL_GROUP_RFP_PROCUREMENT,
     TOOL_GROUP_DESIGN_CONSTRUCTION,
     TOOL_GROUP_HELP_SUPPORT,
+    TOOL_GROUP_PROJECT_INTELLIGENCE,
 )
 
 #: Existing `toolbox.*` / surface groups, mapped to the bounded groups above.
@@ -572,10 +663,8 @@ TOOL_GROUP_BINDINGS = {
     "q-materials": TOOL_GROUP_GENERAL,
     "heading": TOOL_GROUP_GENERAL,
     "panel": TOOL_GROUP_GENERAL,
-    # Spin is the project-wide question, asked from every context. Gating it
-    # by source type would be the over-restriction the brief warns against.
-    "spin": TOOL_GROUP_GENERAL,
-    "spin-launcher": TOOL_GROUP_GENERAL,
+    "spin": TOOL_GROUP_PROJECT_INTELLIGENCE,
+    "spin-launcher": TOOL_GROUP_PROJECT_INTELLIGENCE,
     # -- document preparation: the Document Shop ----------------------------
     "document": TOOL_GROUP_DOCUMENT_AS_READ,
     "eye-thumbnails": TOOL_GROUP_DOCUMENT_AS_READ,
@@ -603,7 +692,8 @@ def _as_frozenset(values) -> frozenset:
 def resolve_tool_exposure(operating_environment: str | None, *,
                           source_kinds=None,
                           selected_source_kind: str | None = None,
-                          workflow: str | None = None) -> dict:
+                          workflow: str | None = None,
+                          container_state: str | None = None) -> dict:
     """Which tool groups may be SHOWN in this context? One answer, computed once.
 
     Inputs are all signals the application already has - no new classifier, and
@@ -619,6 +709,24 @@ def resolve_tool_exposure(operating_environment: str | None, *,
     project_has_drawings = bool(kinds & _DRAWING_KINDS)
     project_has_procurement = bool(kinds & _PROCUREMENT_KINDS)
 
+    # CLAUDE-BLACK-BOX-01: an unprogrammed container. Governed, and deliberately
+    # narrow - document work is the whole point of it; no engagement programme
+    # was ever attached; and there is no project for project intelligence to
+    # span. Withholding those two is a CONSEQUENCE of what is absent, never the
+    # definition of what a Black Box is.
+    # Checked FIRST so no later branch can widen it back open.
+    if container_state == CONTAINER_STATE_BLACK_BOX:
+        return {
+            TOOL_GROUP_GENERAL: True,
+            TOOL_GROUP_DOCUMENT_AS_READ: True,
+            TOOL_GROUP_DESIGN_CONSTRUCTION: (
+                selected_source_kind in _DRAWING_KINDS
+                or (selected_source_kind is None and project_has_drawings)),
+            TOOL_GROUP_RFP_PROCUREMENT: False,
+            TOOL_GROUP_PROJECT_INTELLIGENCE: False,
+            TOOL_GROUP_HELP_SUPPORT: True,
+        }
+
     if workflow == WORKFLOW_DOCUMENT_SHOP:
         # Inside the workshop the question is what this SOURCE says, so
         # project-wide procurement tooling is out of scope here - not denied
@@ -630,6 +738,7 @@ def resolve_tool_exposure(operating_environment: str | None, *,
                 selected_source_kind in _DRAWING_KINDS
                 or (selected_source_kind is None and project_has_drawings)),
             TOOL_GROUP_RFP_PROCUREMENT: False,
+            TOOL_GROUP_PROJECT_INTELLIGENCE: True,
             TOOL_GROUP_HELP_SUPPORT: True,
         }
 
@@ -653,6 +762,7 @@ def resolve_tool_exposure(operating_environment: str | None, *,
         # still doing procurement work.
         TOOL_GROUP_RFP_PROCUREMENT: bool(
             project_has_procurement or operating_environment is not None),
+        TOOL_GROUP_PROJECT_INTELLIGENCE: True,
         TOOL_GROUP_HELP_SUPPORT: True,
     }
 

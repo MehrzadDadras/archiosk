@@ -821,6 +821,16 @@ KNOWN_CONTENT_CLASSES = (
     CONTENT_CLASS_TEMPLATE_CONTENT,
 )
 
+
+
+# CLAUDE-BLACK-BOX-01: the container-state vocabulary lives in
+# environment_capabilities (which owns the engagement axis and imports nothing
+# from this module), and is re-exported here so kernel callers have one import
+# site. Defining it in both places would be two constants free to drift.
+from services.environment_capabilities import (  # noqa: E402
+    CONTAINER_STATE_BLACK_BOX, CONTAINER_STATE_PROGRAMMED, KNOWN_CONTAINER_STATES,
+)
+
 # -- CLAUDE-VISUAL-COMPOSER-01: governed visual authority --------------------
 # WHERE a picture came from, and therefore what it may be trusted to assert.
 # Four different claims that must never collapse into "image":
@@ -5640,6 +5650,15 @@ class ProjectWorkspace:
     # set_operating_environment), and nothing here shares mutation
     # logic with that mechanism.
     operating_environment: Optional[str] = None
+    # CLAUDE-BLACK-BOX-01: is an engagement programme attached to this
+    # container at all? None (absent) is the pre-existing shape and keeps every
+    # existing project and every legacy project behaving exactly as before -
+    # this field is additive and nothing reads it unless it is set.
+    # CONTAINER_STATE_BLACK_BOX is the only value that changes behaviour, and
+    # it CLOSES capability rather than opening it.
+    container_state: Optional[str] = None
+    container_state_set_by: Optional[str] = None
+    container_state_set_at: Optional[str] = None
     operating_environment_set_by: Optional[str] = None
     operating_environment_set_at: Optional[str] = None
     # CLAUDE-PERSPECTIVE-GATE-04: the project's declared WORKING POSITION in
@@ -8564,6 +8583,63 @@ class CaseWorkspaceStore:
                     "operating_environment": operating_environment,
                     "reason": reason.strip(),
                 },
+            )
+        return workspace
+
+    def set_container_state(
+        self,
+        workspace: ProjectWorkspace,
+        container_state: str,
+        actor: str,
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> ProjectWorkspace:
+        """
+        CLAUDE-BLACK-BOX-01: the single, centralized gate for
+        ProjectWorkspace.container_state -- the same treatment
+        set_operating_environment gives the engagement axis, applied to the
+        axis that says whether an engagement exists at all.
+
+        NO PROGRAM DOES NOT MEAN NO GOVERNANCE, and that has to be true of the
+        act of creating the unprogrammed container itself, not merely of what
+        happens inside it afterwards. A bare attribute write with a save()
+        would have left the one transition that MAKES a container a Black Box
+        as the only creation-time state change in this module with no
+        governance event and no lock -- while the comment beside it claimed
+        the "locked at creation" treatment. This method is what makes that
+        claim true rather than aspirational.
+
+        Locked exactly as operating_environment is: one successful call per
+        container, ever, with no exception for re-setting the same value.
+
+        Whether an engagement programme is EVER attached is a separate,
+        governed decision, deliberately NOT built here - and deliberately not
+        assumed. A Black Box is not a pre-project waiting to be promoted; it
+        may remain a standalone job, become governed reference material, be
+        archived, or be routed onward. Nothing in this method should be read
+        as predicting which.
+        """
+        from services.environment_capabilities import KNOWN_CONTAINER_STATES
+
+        if container_state not in KNOWN_CONTAINER_STATES:
+            raise ValueError(
+                f"{container_state!r} is not a recognized container state.",
+            )
+        if workspace.container_state is not None:
+            raise CaseWorkspaceError(
+                f"Project {workspace.project_id!r} already has its container state "
+                f"locked to {workspace.container_state!r} -- it cannot be changed.",
+            )
+
+        workspace.container_state = container_state
+        workspace.container_state_set_by = actor
+        workspace.container_state_set_at = _now()
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id, event_type="container_state_established",
+                actor=actor, role="system",
+                payload={"container_state": container_state},
             )
         return workspace
 
