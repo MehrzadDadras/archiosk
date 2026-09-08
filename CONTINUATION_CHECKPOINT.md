@@ -1,5 +1,34 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `276e6eb`: display names are owner-scoped
+
+Appended above the entries below, none of which is altered. **Deployment
+authorized.**
+
+### Accepted semantics
+
+- **Display-name uniqueness is scoped per owner/account**, not deployment-wide.
+- **One owner, one namespace** across their governed containers — a Project and
+  a Document Shop job may not share a name for the same person.
+- **Different owners may hold identical display names.**
+- **The cross-customer existence oracle is closed**: a duplicate refusal can be
+  caused only by the requesting owner's own container. Another owner's name,
+  existence, id, count, removal state and operating line are all unreachable
+  through the check.
+- **Ownerless legacy containers match nobody's namespace.**
+- **Removed / recoverable containers keep their names reserved** (Product Owner
+  decision): RECOVERABLE REMOVAL DOES NOT RELEASE HUMAN-FACING IDENTITY.
+  Permanent purge is not built and not authorized.
+- **Project codes remain deployment-wide** — a code is a short global reference
+  people quote in meetings, so the two halves of project identity are now
+  deliberately scoped differently.
+- Internal identifiers, URLs, storage paths and governance ids unchanged.
+
+### Gate
+
+**7,183 passed, 3 skipped, 2,991 subtests, 0 failed, 8:42** (parallel,
+`-n 8 --dist loadfile`).
+
 ## 2026-09-08 (application) — `d8150ce`: vocabulary follows the operating context
 
 Appended above the entries below, none of which is altered. Completes the
