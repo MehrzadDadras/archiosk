@@ -38,6 +38,12 @@
        stays a pre-selection: /upload's own radio and confirmation checkbox are
        still the real commissioning step, never bypassed. #}
     <a class="btn btn-primary" href="{{ url_for('portal.upload', environment=(accessible_environments[0] if accessible_environments | length == 1 else None)) }}" data-ui-ref="projects-directory.new-project">+ New Project</a>
+    {# CLAUDE-BLACK-BOX-DOOR-01: the other way in. A person who has a
+       document but not yet a project has, until now, had no door at all -
+       every entrance on this page asks them to declare an engagement
+       first. Deliberately secondary styling: this is a second real
+       entrance, not a competing call to action. #}
+    <a class="btn" href="{{ url_for('portal.document_shop_intake') }}" data-ui-ref="projects-directory.document-shop">Document Shop</a>
     {% endif %}
     <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
 {% endcall %}

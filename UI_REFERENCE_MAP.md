@@ -1095,6 +1095,8 @@ render an honest "no active project" state instead of guessing.
 | `pdm.archive-documents.restore` | `<button>` in a `<form>` (pattern) | "Restore" | POST to `restore_document_route` | Same as above | active |
 | `pdm.recovery-advanced` (`html_id="pdm-recovery-advanced"`) | `<details>` (via `macros.subdisclosure`) | "Recovery / Advanced Administration" | Collapsed by default - contains the complete, unmodified deployment-wide reset (inventory + typed-confirmation-phrase form) and the "View Reset Snapshots" link. Every safeguard (atomic lock, pre-reset snapshot, snapshot restoration) is unchanged; only where it renders moved | **Admin only** — whole page is `admin_required` | active |
 
+| `menu.file.document-shop` (new, CLAUDE-BLACK-BOX-DOOR-01) | `<a>` | "Document Shop…" | Navigates to `portal.document_shop_intake`, the same route `projects-directory.document-shop` uses — never a second implementation, the rule `menu.file.new-project` beside it already follows. Placed with `menu.file.new-project` because both answer "begin something new", and reachable from every authenticated page, which is what makes the door usable without first selecting a project. Admin only (the route is `@admin_required`) | Only rendered when `is_admin` | active |
+
 ## Projects Directory (`templates/projects.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
 
 The full administrative Project-management page (`portal.projects_list`) — distinct from `gateway.chooser` (the focused picker) and from `lists.projects`/`lists.projects.leaf` (the Lists-tree root); reachable directly by URL and via `removed-projects.back-link`. A different top-level prefix (`projects-directory`, not `projects`) deliberately avoids reading as a sub-family of `lists.projects`, which it isn't.
@@ -1110,6 +1112,8 @@ The full administrative Project-management page (`portal.projects_list`) — dis
 | `projects-directory.leaf` | `<a>` (pattern) | a Project card | Navigates to `workspace.show_workspace` for that Project | Same as above | active |
 | `projects-directory.leaf.delete` | `<button>` in a `<form>` (pattern) | "Delete" | POST to `portal.delete_project` | **Admin only** — `is_admin` | active |
 | `projects-directory.empty` | `<div>` | "No projects yet." / "No projects match…" | Empty/no-results state; admin-only "Create New Project" link when genuinely empty | Every authenticated page | active |
+
+| `projects-directory.document-shop` (new, CLAUDE-BLACK-BOX-DOOR-01) | `<a class="btn">` | "Document Shop" | Navigates to `portal.document_shop_intake`. Sits inside the SAME `{% if is_admin %}` block as `projects-directory.new-project` beside it, so the two entrances are gated identically and neither renders as a dead affordance. Deliberately `btn` rather than `btn-primary`: a second real entrance, not a competing call to action. Closes the gap this directory had for anyone holding a document but not an engagement — every other control on the page asks them to declare one first | Admin only | active |
 
 ## Removed Projects (`templates/removed_projects.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
 
@@ -1171,6 +1175,27 @@ Reached via `menu.account.removed-projects` (relocated from `lists.removed-proje
 | `drawing-understanding.cases-settled` (CLAUDE-ASREAD-SURFACE-01, new) | `<details>` | "N settled case(s)" | Settled work recedes but remains inspectable; evidence never disappears without explanation | Same as above | active |
 | `drawing-understanding.summary-awaiting` (CLAUDE-ASREAD-SURFACE-01, new) | `<li>` | "N mark(s) awaiting you — N open proposition(s)" | Counts are **per mark**; the proposition-level figure is separate and labelled. Identity-confirmed with target open is NOT reviewed | Same as above | active |
 | `drawing-understanding.empty` | `<p>` | "Nothing has been proposed for this drawing yet." | Empty state, shown only when there are neither rows nor families | Same as above | active |
+
+## Document Shop (`templates/document_shop_intake.html` — CLAUDE-BLACK-BOX-DOOR-01, new surface)
+
+The authenticated door into a governed container that has no engagement
+programme. Every other creation entrance in this application asks a person to
+declare an engagement first (Client/Owner vs Design-Builder/Proponent, entry
+choice, retained-by, project identity); this one asks for a document. The
+vocabulary here deliberately describes the ACTIVITY — upload, examine,
+document, work — and never the architecture: no "project", no "environment",
+no "pre-project", no "not yet assigned", and not the words "Black Box".
+
+| Reference | Kind | Label / content | What it does, and why it is here | Condition | Status |
+|---|---|---|---|---|---|
+| `document-shop.page-title` | `<h1>` | "Document Shop" | The surface's own name. Product language, chosen over "Black Box Intake" because the container's internal state is not a thing a customer with a difficult drawing set needs to learn | Always | active |
+| `document-shop.intro` | `<p>` | "Upload a document and GO will examine it…" | States what happens and, in its last clause, that the destination need not be decided now — the one thing a person arriving without a project most needs to hear. **BLACK BOX PRECEDES CLASSIFICATION; IT DOES NOT PREDICT DESTINATION** rendered as a sentence rather than as jargon | Always | active |
+| `document-shop.error` | `<p class="mono form-error">` | Server-side failure text | Refusals reach the person here — unsupported extension, oversized file, missing document. The message is `UploadError`'s own words, so intake refusals read identically however they were reached | Only when the POST failed | active |
+| `document-shop.intake` | `<fieldset>` | — | The single group. One group, because there is exactly one required decision on this page | Always | active |
+| `document-shop.file` | `<input type="file">` | — | The document itself. Single file: multi-file establishment is a project act (`ingest_folder_upload` needs a founding document it never infers), and this door has no project to found | Always | active |
+| `document-shop.accepted-formats` | `<p class="mono field-note">` | Extension list, size cap, and the image-format limit | Names the accepted extensions from `ALLOWED_UPLOAD_EXTENSIONS` rather than a hand-kept copy, and states plainly that **scanned images are not accepted yet**. Scans are precisely the material this door exists to receive, so the gap is disclosed before the upload rather than discovered by a rejection. Widening it is a separate, security-reviewed decision | Always | active |
+| `document-shop.name` | `<input type="text">` | "Name for this work (optional)" | Optional, and named for the WORK rather than for a project. Blank is a first-class answer — a person who does not yet know what the material is should not have to name it | Always | active |
+| `document-shop.submit` | `<button type="submit">` | "Examine this document" | The verb is the activity. Not "Create", which would name the container rather than the act, and not "Start Project", which would predict a destination | Always | active |
 
 ## Deliberately NOT instrumented this stage
 

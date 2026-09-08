@@ -24,6 +24,7 @@ from services.auth import (
 )
 from services.rate_limit import limiter
 from services.case_workspace import (
+    CONTAINER_STATE_BLACK_BOX,
     KNOWN_SOURCE_DOMAINS, SOURCE_DOMAIN_CLIENT_ISSUED, SOURCE_DOMAIN_UNKNOWN,
     CaseWorkspaceError, CaseWorkspaceStore,
 )
@@ -2991,6 +2992,99 @@ def _establish_perspective(project_id: str, entry_choice: str | None, retained_b
 
 def _pending_upload_store() -> PendingUploadStore:
     return PendingUploadStore(current_app.config["REGISTRY_STORE_PATH"])
+
+
+@portal_bp.route('/document-shop', methods=['GET', 'POST'])
+@admin_required
+@limiter.limit("20 per hour", methods=["POST"])
+def document_shop_intake():
+    """CLAUDE-BLACK-BOX-DOOR-01: the first user-operable door into a governed
+    container that has no engagement programme.
+
+    "I have a document. I want GO to examine it." Nothing more is asked,
+    because nothing more is known: no operating environment, no entry choice,
+    no retained-by party, no procurement context, no destination. The Black
+    Box kernel (CLAUDE-BLACK-BOX-01) has existed since `bdda7ce` and was
+    reachable from no route at all - this is the door, and only the door.
+
+    DELIBERATELY NOT A BRANCH INSIDE `upload()`. That route's whole subject is
+    declaring an engagement, and it carries the drawing-candidate interstitial,
+    perspective establishment and the Project Briefing hand-off with it. Adding
+    a mode flag would have put a "if this is not really a project" test through
+    a function whose every other line assumes one, and the two would have drifted
+    at the first change to either. They share the one thing that must be shared -
+    `ingest_upload`, still the only place a governed container is ever created.
+
+    Authority is `@admin_required`, matching `upload()` exactly. This creates
+    durable governed storage, and who may do that is a standing decision this
+    door does not get to widen quietly. A genuinely customer-facing Document
+    Shop will need its own entitlement decision; that is the public storefront,
+    which is not authorized and is not this.
+
+    Lands the person in the existing source-scoped Document Shop / As-Read
+    bench. No interstitial, no workspace detour, no hunting for the file they
+    just uploaded.
+    """
+    max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
+    # What this door can actually accept as the FIRST document, which is not
+    # the same set as ALLOWED_UPLOAD_EXTENSIONS. ingest_upload refuses .xlsx as
+    # a founding document (a workbook is not prose suitable for
+    # classification), a rule that predates this door and is unchanged by it.
+    # Listing the raw config set would advertise a format the next click
+    # rejects, so the page states what is true rather than what is configured.
+    allowed_extensions = sorted(
+        ext for ext in current_app.config['ALLOWED_UPLOAD_EXTENSIONS']
+        if ext != '.xlsx')
+
+    def _page(error=None, status=200):
+        return render_template(
+            'document_shop_intake.html', max_upload_mb=max_upload_mb,
+            allowed_extensions=allowed_extensions, error=error), status
+
+    if request.method == 'GET':
+        body, _status = _page()
+        return body
+
+    posted_files = [f for f in request.files.getlist('file') if f and f.filename]
+    if not posted_files:
+        return _page("No document was provided.", 400)
+    if len(posted_files) > 1:
+        # One document at a time here. Multi-file establishment is a project
+        # act (ingest_folder_upload needs a founding document it never infers
+        # itself), and this door has no project to found.
+        return _page("Upload one document at a time.", 400)
+
+    try:
+        document = ingest_upload(
+            posted_files[0],
+            current_app,
+            # The two facts that make this a Black Box rather than a project,
+            # stated explicitly. ingest_upload REFUSES the combination of a
+            # black-box container and an operating environment, so this cannot
+            # silently become a half-declared engagement.
+            operating_environment=None,
+            container_state=CONTAINER_STATE_BLACK_BOX,
+            # CLAUDE-P32: the real authenticated session identity, never a
+            # form field - same rule as upload().
+            owner=session.get('username', ''),
+            project_name=(request.form.get('name') or '').strip() or None,
+            # Left at the default: what kind of source this is, is exactly what
+            # the person came here to find out.
+            source_domain=SOURCE_DOMAIN_UNKNOWN,
+        )
+    except (UploadError, GovernanceError, CaseWorkspaceError) as exc:
+        return _page(str(exc), 400)
+
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    workspace = store.get(document.project_id)
+    founding = next((s for s in workspace.sources if not s.get('removed_at')), None)
+    if founding is None:
+        # Defensive only - ingest_upload does not return without a Source.
+        return redirect(url_for('workspace.show_workspace',
+                                project_id=document.project_id))
+    return redirect(url_for('workspace.drawing_understanding_review',
+                            project_id=document.project_id,
+                            source_id=founding['id']))
 
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])

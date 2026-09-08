@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Document Shop &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{# CLAUDE-BLACK-BOX-DOOR-01: the authenticated door into a governed container
+   that has no engagement programme.
+
+   Deliberately NOT upload.html with fields hidden. That page asks a person to
+   declare an engagement (Client/Owner vs Design-Builder/Proponent), an entry
+   choice, a retained-by party and a project identity - every one of which is a
+   fact this door exists precisely because the customer does not have yet. A
+   variant of that form with six fieldsets suppressed would still be a project
+   creation page wearing a different hat, and the first person to add a field
+   would put it back in both.
+
+   The language here describes the ACTIVITY, never the architecture. No
+   "project", no "environment", no "pre-project", no "not assigned yet", no
+   "black box" - a person arriving with a difficult document is not helped by
+   learning what the container is called internally. #}
+<h1 class="np-page-title" data-ui-ref="document-shop.page-title">Document Shop</h1>
+
+<p class="mono" data-ui-ref="document-shop.intro">
+    Upload a document and GO will examine it &mdash; what it is, how it is
+    structured, what its marks and references mean, and what remains uncertain.
+    Nothing about where the work goes afterwards needs to be decided now.
+</p>
+
+{% if error %}
+<p class="mono form-error" data-ui-ref="document-shop.error">{{ error }}</p>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="upload-form"
+      action="{{ url_for('portal.document_shop_intake') }}">
+    {# No csrf_token field here on purpose: base.html adds one to every form on
+       the page (see its own comment). Adding a second would be the duplicate
+       that page already guards against. #}
+    <fieldset class="np-group" data-ui-ref="document-shop.intake">
+        <label class="field-label" for="document-shop-file">Document</label>
+        <input type="file" name="file" id="document-shop-file" required
+               class="text-input" data-ui-ref="document-shop.file">
+        <p class="mono field-note" data-ui-ref="document-shop.accepted-formats">
+            Accepted: {{ allowed_extensions | join(', ') }}.
+            Up to {{ max_upload_mb }} MB.
+            {# The image-format gap is stated plainly rather than discovered by
+               a rejection. Scans are exactly the material this door is for, and
+               they are not accepted yet - saying so here is honest; widening
+               the policy is a separate, security-reviewed decision. #}
+            Scanned images (JPEG, TIFF, PNG) are not accepted yet, and a
+            spreadsheet cannot be the first document.
+        </p>
+
+        <label class="field-label" for="document-shop-name">Name for this work (optional)</label>
+        <input type="text" name="name" id="document-shop-name" class="text-input"
+               data-ui-ref="document-shop.name"
+               placeholder="e.g. Warehouse conversion &mdash; drawing set">
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary" data-ui-ref="document-shop.submit">
+        Examine this document
+    </button>
+</form>
+{% endblock %}

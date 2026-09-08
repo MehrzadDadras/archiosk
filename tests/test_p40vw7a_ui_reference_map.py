@@ -108,6 +108,13 @@ _DRAWING_UNDERSTANDING_HTML_PATH = _REPO_ROOT / "templates" / "drawing_understan
 # never inlined into case_workspace.html's own source text for the
 # _DATA_REF_RE scan above to find without this separate path.
 _SPIN_PROTOTYPE_HTML_PATH = _REPO_ROOT / "templates" / "_spin_prototype.html"
+# CLAUDE-BLACK-BOX-DOOR-01: the authenticated Document Shop intake page - the
+# first route that creates a governed container with no engagement programme.
+# Added to the scanned list in the same commit that instruments it, which is
+# the discipline _OPERATIONS_HTML_PATH and _DRAWING_UNDERSTANDING_HTML_PATH
+# above both record: a surface registered but never scanned produces rows
+# nothing checks.
+_DOCUMENT_SHOP_INTAKE_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_intake.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
@@ -279,7 +286,7 @@ def _all_template_refs() -> set[str]:
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
-        _DRAWING_UNDERSTANDING_HTML_PATH,
+        _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -379,6 +386,12 @@ class RegistryConsistencyTests(unittest.TestCase):
         # repeated symbol is confirmed once as a family rather than per
         # occurrence (see UI_REFERENCE_MAP.md's own "Drawing understanding"
         # section).
+        # CLAUDE-BLACK-BOX-DOOR-01 added "document-shop" - the authenticated
+        # intake page for a governed container that has no engagement
+        # programme. A sibling of "upload" rather than a family under it, and
+        # deliberately so: "upload.*" is the New Project form, whose whole
+        # subject is declaring an engagement, and this surface exists because
+        # that declaration cannot be made yet.
         for ref in _all_template_refs():
             self.assertRegex(
                 ref,
@@ -386,7 +399,7 @@ class RegistryConsistencyTests(unittest.TestCase):
                 r"security|operations|projects-directory|removed-projects|developer|"
                 r"developer-tools|"
                 r"landing|explore|start-trial|spin|pdm|index|tank|help|"
-                r"drawing-understanding)\.[a-z0-9._\-]+$",
+                r"drawing-understanding|document-shop)\.[a-z0-9._\-]+$",
                 ref,
             )
 
