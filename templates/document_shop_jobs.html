@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Document Shop Jobs &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{# CLAUDE-BLACK-BOX-LISTING-01: where a person finds their own Document Shop
+   work WITHOUT entering Projects.
+
+   Deliberately not a second Projects directory. It shows what a job actually
+   has - a name, when it arrived, how many documents - and nothing that belongs
+   to an engagement: no operating environment, no Owner/Proponent, no
+   procurement lifecycle, no project code. A Black Box has none of those, and a
+   column that would always be empty is a column that teaches the wrong model.
+
+   The full container-presentation work is D2's, not this tranche's. This page
+   exists so the boundary above does not orphan the containers it excludes. #}
+<h1 class="np-page-title" data-ui-ref="document-shop.jobs.page-title">Document Shop</h1>
+
+<p class="mono" data-ui-ref="document-shop.jobs.intro">
+    Documents you have brought in for examination. Each one is governed and
+    private to you, and nothing here has to become anything else.
+</p>
+
+{% if jobs %}
+<ul class="plain-list" data-ui-ref="document-shop.jobs.list">
+    {% for job in jobs %}
+    <li class="plain-list-item" data-ui-ref="document-shop.jobs.item">
+        {% if job.first_source_id %}
+        <a href="{{ url_for('workspace.drawing_understanding_review', project_id=job.project_id, source_id=job.first_source_id) }}"
+           data-ui-ref="document-shop.jobs.open">{{ job.name }}</a>
+        {% else %}
+        <span data-ui-ref="document-shop.jobs.open">{{ job.name }}</span>
+        {% endif %}
+        <span class="mono" data-ui-ref="document-shop.jobs.meta">
+            {{ job.source_count }} document{{ '' if job.source_count == 1 else 's' }}
+            &middot; <time datetime="{{ job.added_at }}">{{ job.added_at[:10] }}</time>
+        </span>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="mono" data-ui-ref="document-shop.jobs.empty">
+    Nothing here yet.
+</p>
+{% endif %}
+
+<p>
+    <a class="btn btn-primary" href="{{ url_for('portal.document_shop_intake') }}"
+       data-ui-ref="document-shop.jobs.new">Examine a document</a>
+</p>
+{% endblock %}

@@ -327,6 +327,10 @@
                             {# CLAUDE-BLACK-BOX-DOOR-01: reachable without
                                first selecting or creating a project. #}
                             <a class="workspace-menubar-item" data-ui-ref="menu.file.document-shop" href="{{ url_for('portal.document_shop_intake') }}">Document Shop&hellip;</a>
+                            {# CLAUDE-BLACK-BOX-LISTING-01: Black Boxes no
+                               longer appear in Project listings, so this is
+                               how a person reaches their own. #}
+                            <a class="workspace-menubar-item" data-ui-ref="menu.file.document-shop-jobs" href="{{ url_for('portal.document_shop_jobs') }}">Document Shop Jobs</a>
                             {% else %}
                             <span class="workspace-menubar-item workspace-menubar-item-disabled" data-ui-ref="menu.file.new-project.none" aria-disabled="true" title="Admin only">New Project (Admin only)</span>
                             {% endif %}

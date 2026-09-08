@@ -1096,6 +1096,7 @@ render an honest "no active project" state instead of guessing.
 | `pdm.recovery-advanced` (`html_id="pdm-recovery-advanced"`) | `<details>` (via `macros.subdisclosure`) | "Recovery / Advanced Administration" | Collapsed by default - contains the complete, unmodified deployment-wide reset (inventory + typed-confirmation-phrase form) and the "View Reset Snapshots" link. Every safeguard (atomic lock, pre-reset snapshot, snapshot restoration) is unchanged; only where it renders moved | **Admin only** — whole page is `admin_required` | active |
 
 | `menu.file.document-shop` (new, CLAUDE-BLACK-BOX-DOOR-01) | `<a>` | "Document Shop…" | Navigates to `portal.document_shop_intake`, the same route `projects-directory.document-shop` uses — never a second implementation, the rule `menu.file.new-project` beside it already follows. Placed with `menu.file.new-project` because both answer "begin something new", and reachable from every authenticated page, which is what makes the door usable without first selecting a project. Admin only (the route is `@admin_required`) | Only rendered when `is_admin` | active |
+| `menu.file.document-shop-jobs` (new, CLAUDE-BLACK-BOX-LISTING-01) | `<a>` | "Document Shop Jobs" | Navigates to `portal.document_shop_jobs`. Sits beside `menu.file.document-shop` under the same admin gate. Its whole reason to exist is that the same tranche removed Black Boxes from every Project listing — excluding a container from all listings without giving it one of its own is orphaning, not a boundary | Only rendered when `is_admin` | active |
 
 ## Projects Directory (`templates/projects.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
 
@@ -1196,6 +1197,32 @@ no "pre-project", no "not yet assigned", and not the words "Black Box".
 | `document-shop.accepted-formats` | `<p class="mono field-note">` | Extension list, size cap, and the image-format limit | Names the accepted extensions from `ALLOWED_UPLOAD_EXTENSIONS` rather than a hand-kept copy, and states plainly that **scanned images are not accepted yet**. Scans are precisely the material this door exists to receive, so the gap is disclosed before the upload rather than discovered by a rejection. Widening it is a separate, security-reviewed decision | Always | active |
 | `document-shop.name` | `<input type="text">` | "Name for this work (optional)" | Optional, and named for the WORK rather than for a project. Blank is a first-class answer — a person who does not yet know what the material is should not have to name it | Always | active |
 | `document-shop.submit` | `<button type="submit">` | "Examine this document" | The verb is the activity. Not "Create", which would name the container rather than the act, and not "Start Project", which would predict a destination | Always | active |
+| `document-shop.jobs-link` (new, CLAUDE-BLACK-BOX-LISTING-01) | `<a>` | "See documents you have already brought in" | Navigates to `portal.document_shop_jobs`. Placed on the intake page because that is where a returning person arrives first, and without it the only way back to earlier work would be the menu | Always | active |
+
+## Document Shop Jobs (`templates/document_shop_jobs.html` — CLAUDE-BLACK-BOX-LISTING-01, new surface)
+
+Where a person finds their own Document Shop work without entering Projects.
+It exists because the listing boundary in the same tranche stops a Black Box
+appearing in Project listings, and a container excluded from every listing with
+nowhere of its own is orphaned — the condition `tests/test_asread_nav_01.py`
+already recorded once.
+
+Deliberately NOT a second Projects directory: it shows a name, an arrival date
+and a document count, and nothing belonging to an engagement. No operating
+environment, no Owner/Proponent, no procurement lifecycle, no project code — a
+Black Box has none of those, and a permanently-empty column teaches the wrong
+model.
+
+| Reference | Kind | Label / content | What it does, and why it is here | Condition | Status |
+|---|---|---|---|---|---|
+| `document-shop.jobs.page-title` | `<h1>` | "Document Shop" | Names the operating line, not the container mechanism | Always | active |
+| `document-shop.jobs.intro` | `<p>` | "Documents you have brought in for examination…" | States privacy and, in its last clause, that nothing here has to become anything else — BLACK BOX PRECEDES CLASSIFICATION expressed as a sentence rather than as jargon | Always | active |
+| `document-shop.jobs.list` | `<ul>` | — | The listing itself | Only when at least one job is accessible | active |
+| `document-shop.jobs.item` | `<li>` | — | One job | Per accessible job | active |
+| `document-shop.jobs.open` | `<a>` / `<span>` | The job's name | Opens straight onto the As-Read bench for its first document — the same place intake lands, so a returning person resumes where they left off rather than in a workspace they must search. Renders as a plain `<span>` when a job somehow holds no live Source, rather than a link that would 404 | Per job | active |
+| `document-shop.jobs.meta` | `<span class="mono">` | "N documents · date" | The two facts that are true of a Document Shop job. Deliberately not a status, because a job has no lifecycle to report | Per job | active |
+| `document-shop.jobs.empty` | `<p>` | "Nothing here yet." | Honest zero state | When no accessible job exists | active |
+| `document-shop.jobs.new` | `<a class="btn btn-primary">` | "Examine a document" | Back to intake, closing the loop between the two surfaces | Always | active |
 
 ## Deliberately NOT instrumented this stage
 

@@ -87,7 +87,44 @@ def _safe_workspace(store: CaseWorkspaceStore, project_id: str):
         return None
 
 
-def _accessible_documents(registry, store, include_removed: bool = False):
+# CLAUDE-BLACK-BOX-LISTING-01: which OPERATING LINE a listing is about.
+#
+# SHARED KERNEL DOES NOT MEAN SHARED USER-FACING IDENTITY. A Black Box reuses
+# the same governed store as a Project and is not one; every listing here
+# enumerated the store and therefore called everything in it a Project.
+#
+# The default is PROJECTS, deliberately. Six existing listing call sites become
+# correct without being touched, and a future listing that forgets to think
+# about this gets the conservative answer rather than the leaky one.
+LISTING_SCOPE_PROJECTS = "projects"
+LISTING_SCOPE_DOCUMENT_SHOP = "document_shop"
+LISTING_SCOPE_ALL = "all"
+
+
+def _matches_listing_scope(workspace, scope: str) -> bool:
+    """Does this container belong in a listing of `scope`?
+
+    Keyed on CONTAINER STATE, never on Source.kind. CLAUDE-BLACK-BOX-D1-01
+    introduced SOURCE_KIND_UNCLASSIFIED and it is NOT a proxy for this: a
+    conventional Project may legitimately hold unclassified sources, and
+    inferring the container's operating line from the type of a document
+    inside it would be exactly the class of assumption that produced this
+    defect in the first place.
+
+    `getattr` because a workspace persisted before container_state existed has
+    none, and absence must read as an ordinary Project.
+    """
+    if scope == LISTING_SCOPE_ALL:
+        return True
+    is_black_box = (
+        getattr(workspace, "container_state", None) == CONTAINER_STATE_BLACK_BOX)
+    if scope == LISTING_SCOPE_DOCUMENT_SHOP:
+        return is_black_box
+    return not is_black_box
+
+
+def _accessible_documents(registry, store, include_removed: bool = False,
+                          scope: str = LISTING_SCOPE_PROJECTS):
     """
     CLAUDE-P32: every project-LISTING route in this file (index's
     recent-projects, projects_list, global_search) must filter to only
@@ -98,6 +135,11 @@ def _accessible_documents(registry, store, include_removed: bool = False):
     routes/workspace.py's _load_workspace_or_404 does, so a project
     doesn't sit permanently admin-only just because no one has opened
     its workspace page yet to trigger that backfill.
+
+    CLAUDE-BLACK-BOX-LISTING-01: also filters by OPERATING LINE, defaulting
+    to conventional Projects only. A Black Box is a governed container and not
+    a Project, so it must not appear, count or search as one merely because
+    both reuse this store. It is not hidden globally - it has its own listing.
 
     CLAUDE-P40-E2: excludes a removed Project (workspace.removed_at)
     from every ordinary listing by default - "Remove Project" (Section
@@ -127,10 +169,12 @@ def _accessible_documents(registry, store, include_removed: bool = False):
             ensure_owner_backfilled(store, workspace, governance_log, usernames)
             allowed = can_access_project(workspace, username, admin)
             removed = bool(workspace.removed_at)
+            in_scope = _matches_listing_scope(workspace, scope)
         except TypeError:
             allowed = False
             removed = False
-        if allowed and (removed == include_removed):
+            in_scope = False
+        if allowed and (removed == include_removed) and in_scope:
             accessible.append(document)
     return accessible
 
@@ -2992,6 +3036,43 @@ def _establish_perspective(project_id: str, entry_choice: str | None, retained_b
 
 def _pending_upload_store() -> PendingUploadStore:
     return PendingUploadStore(current_app.config["REGISTRY_STORE_PATH"])
+
+
+@portal_bp.route('/document-shop/jobs')
+@admin_required
+def document_shop_jobs():
+    """The person's own Document Shop work, findable without entering Projects.
+
+    CLAUDE-BLACK-BOX-LISTING-01. The counterpart to the boundary above: a Black
+    Box stops appearing in Project listings, so it needs somewhere of its own
+    or it becomes unreachable except by URL - the exact orphaning
+    tests/test_asread_nav_01.py already recorded once.
+
+    Access control is the SAME `can_access_project` every Project listing uses,
+    reached through the same `_accessible_documents` helper with a different
+    scope. No second access mechanism, and no widening: this route is
+    `@admin_required`, matching the intake door beside it.
+    """
+    from services.ingestion import _display_name_of as _document_display_name
+
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    documents = _accessible_documents(
+        registry, store, scope=LISTING_SCOPE_DOCUMENT_SHOP)
+    jobs = []
+    for document in sorted(documents, key=lambda d: d.ingested_at, reverse=True):
+        workspace = _safe_workspace(store, document.project_id)
+        if workspace is None:
+            continue
+        sources = [s for s in (workspace.sources or []) if not s.get('removed_at')]
+        jobs.append({
+            'project_id': document.project_id,
+            'name': _document_display_name(document, store),
+            'added_at': document.ingested_at,
+            'source_count': len(sources),
+            'first_source_id': sources[0]['id'] if sources else None,
+        })
+    return render_template('document_shop_jobs.html', jobs=jobs)
 
 
 @portal_bp.route('/document-shop', methods=['GET', 'POST'])

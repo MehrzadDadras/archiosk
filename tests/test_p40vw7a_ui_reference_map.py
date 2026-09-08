@@ -115,6 +115,7 @@ _SPIN_PROTOTYPE_HTML_PATH = _REPO_ROOT / "templates" / "_spin_prototype.html"
 # above both record: a surface registered but never scanned produces rows
 # nothing checks.
 _DOCUMENT_SHOP_INTAKE_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_intake.html"
+_DOCUMENT_SHOP_JOBS_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_jobs.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
@@ -287,6 +288,7 @@ def _all_template_refs() -> set[str]:
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
         _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
+        _DOCUMENT_SHOP_JOBS_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))

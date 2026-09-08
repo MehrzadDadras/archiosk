@@ -1200,6 +1200,12 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
         documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None]
     except OSError:
         return []
+    # CLAUDE-BLACK-BOX-LISTING-01: this rail enumerates the store itself rather
+    # than going through routes/portal.py's _accessible_documents, so the
+    # operating-line boundary added there does NOT reach it. Applied here
+    # explicitly - a Black Box in the "recent projects" rail would be the same
+    # mislabelling on the surface that renders on every authenticated page.
+    from services.case_workspace import CONTAINER_STATE_BLACK_BOX
     documents.sort(key=lambda d: d.ingested_at, reverse=True)
 
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
@@ -1230,7 +1236,10 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
         try:
             workspace = store.get_or_create(d.project_id)
             ensure_owner_backfilled(store, workspace, governance_log, usernames)
-            allowed = can_access_project(workspace, username, admin) and not workspace.removed_at
+            allowed = (can_access_project(workspace, username, admin)
+                       and not workspace.removed_at
+                       and getattr(workspace, "container_state", None)
+                           != CONTAINER_STATE_BLACK_BOX)
         except TypeError:
             allowed = False
         if allowed:
