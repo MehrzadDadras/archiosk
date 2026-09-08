@@ -1,5 +1,118 @@
 # Continuation checkpoint
 
+## 2026-09-07 (application) — `bdda7ce`: a governed container may exist with no operating programme
+
+Appended above the entries below, none of which is altered. One commit, pushed,
+**NOT deployed** — deliberately, for the reason under "Why this is not deployed".
+
+### The principle
+
+**A governed evidence container may exist before any engagement or authority
+context is declared.** ARCHIOSK is one corporation with multiple operating
+lines — Projects, Document Shop / Black Box, RFP / Procurement — sharing one
+governed backbone.
+
+> **SHARED CORPORATE INFRASTRUCTURE DOES NOT MEAN SHARED OPERATING PROGRAM.**
+
+Black Box is the governed intake/intelligence space for unknown incoming
+material. It is **not** a pre-project, **not** a third P29 operating
+environment, **not** an RFP context, and **not** an inevitable future project.
+Intake asks *what did the customer give us*, never *which project is this*.
+
+> **BLACK BOX PRECEDES CLASSIFICATION; IT DOES NOT PREDICT DESTINATION.**
+
+Material may remain a standalone Document Shop job, produce a one-time
+deliverable and close, become governed reference material, be archived, enter a
+project, or enter procurement. **Project is one possible downstream consumer,
+never the default.** Document Shop may operate as an independent business line;
+that makes Project a *consumer* of document intelligence, not its architectural
+parent.
+
+### The separation that makes it work
+
+`ProjectWorkspace.container_state` is a THIRD axis beside
+`operating_environment` (which side of an engagement) and `lifecycle_stage`
+(which stage of it): whether an engagement has been declared **at all**.
+
+It is deliberately NOT a third `operating_environment` value and NOT a reuse of
+`operating_environment=None`. "Never classified" (a pre-P29 project, still
+classifiable exactly once) and "deliberately unprogrammed" are contradictory
+conclusions drawn from the same absent field; collapsing them would make the
+admin classify route silently reachable on a container with no engagement to
+classify. The vocabulary lives in `services/environment_capabilities.py`
+(which imports nothing from the kernel) and is re-exported by
+`services/case_workspace.py`.
+
+`services/ingestion.py` splits container CREATION from engagement DECLARATION.
+The two had been fused since P29 — deliberately and correctly *for projects* —
+which is why a container with no engagement could not previously be created at
+all. A conventional project still cannot exist without an engagement context;
+that rule is untouched.
+
+### What a Black Box has and does not have
+
+**NO PROGRAM DOES NOT MEAN NO GOVERNANCE.** It gets a real workspace, real
+owner, real provenance, real append-only governance, and the full As-Read /
+Document Shop bench. `CaseWorkspaceStore.set_container_state` is the only
+writer: closed-set validation, structural single-write lock, `set_by`/`set_at`,
+and its own `container_state_established` governance event.
+
+**The neutral foundation stays available.** `capability_availability()` returns
+every `CAPABILITY_NEUTRAL` capability — source preservation, neutral
+extraction, case investigation, the governance audit trail — unchanged in a
+Black Box. Those are the corporate kernel every operating line stands on; they
+are not something an engagement grants.
+
+**Engagement-defined capabilities are unavailable without an engagement
+context** — `counterpart`, `parallel`, `client_only`, `proponent_only`,
+`comparative_bounded`, each defined *by* the Owner/Proponent relationship a
+Black Box does not have. Checked before the legacy `operating_environment is
+None` branch, so "no programme" can never fall through to "unclassified,
+therefore permitted".
+
+### Spin
+
+Spin is project intelligence and moved to `TOOL_GROUP_PROJECT_INTELLIGENCE`.
+Its absence in a container with no project is a **downstream consequence, never
+the definition of Black Box**. Existing projects are unchanged in every
+context: both operating environments, every source type, legacy `None`, and
+Document Shop inside a project all still expose Spin.
+
+### The state that matters for whoever picks this up
+
+- **Existing Project behaviour is unchanged.** P29, Owner/Proponent semantics,
+  `operating_environment=None` semantics, As-Read proposition behaviour and
+  AFT are all untouched. AFT-1860 remains valid against the existing
+  project/source-scoped As-Read runtime.
+- **There is no standalone Black Box or public intake route.** No route passes
+  `container_state` to `ingest_upload`, so no Black Box can be created through
+  the application. The capability is kernel-complete and route-inert.
+- **The public Document Shop gate remains future work**, along with payment,
+  reconstruction, and any Continue-as-Project promotion path.
+- **Intake image-format gap:** `ALLOWED_UPLOAD_EXTENSIONS` is
+  `{.pdf, .docx, .txt, .csv, .md, .xlsx}`. **JPEG/TIFF and other image formats
+  are not accepted**, which matters for scanned "difficult material" — the
+  exact class of source Black Box exists to receive. Not addressed; it is a
+  separate, security-adjacent decision.
+
+### Why this is not deployed
+
+Deployment is intentionally held. No current route creates a Black Box, so
+shipping this changes exactly one observable thing in production: the Spin
+block gains a conditional that is always true for every existing project. Near
+zero risk, and near zero user-visible value on its own — it belongs bundled
+with the tranche that gives it a door.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`bdda7ce`**, working tree clean.
+- Gate on the frozen tree, parallel (`-n 8 --dist loadfile`):
+  **7,088 passed, 3 skipped, 2,906 subtests, 0 failed, 9:37.**
+- Production: **`2bd38ce`** at **`STATIC_VERSION=164`** as verified earlier in
+  the session that produced this entry, and **not re-verified since**. This
+  tranche is NOT on production. Note that the `783b7a7` entry immediately below
+  predates that deploy, which has no entry of its own in this file.
+
 ## 2026-09-07 (application + live promotion) — `41ca29a`..`783b7a7`: As-Read, from unreachable to two clicks
 
 Appended above the entries below, none of which is altered. Three commits, all
