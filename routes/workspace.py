@@ -2948,7 +2948,8 @@ def drawing_understanding_review(project_id, source_id):
     than a detached label.
     """
     from services.legend_of_understanding import (
-        family_review_rows, review_rows, understanding_report)
+        family_review_rows, numbered_cases, proposition_summary,
+        review_rows, understanding_report)
 
     _document, store, workspace = _load_workspace_or_404(project_id)
     source = next((s for s in workspace.sources if s["id"] == source_id), None)
@@ -2967,6 +2968,8 @@ def drawing_understanding_review(project_id, source_id):
         rows=review_rows(store, workspace, source_id=source_id),
         families=family_review_rows(store, workspace, source_id=source_id),
         report=understanding_report(store, workspace, source_id),
+        cases=numbered_cases(store, workspace, source_id=source_id),
+        proposition_counts=proposition_summary(store, workspace, source_id=source_id),
     )
 
 
@@ -2983,18 +2986,36 @@ def decide_legend_item_route(project_id, legend_item_id):
     _document, store, workspace = _load_workspace_or_404(project_id)
     source_id = (request.form.get("source_id") or "").strip()
     try:
-        store.decide_legend_item(
-            workspace, legend_item_id,
+        # CLAUDE-ASREAD-SURFACE-01: proposition-aware, and defaulting to
+        # IDENTITY so every existing caller and test posts exactly what it
+        # always did. One route, two conclusions - a second decision route
+        # would be a second decision model.
+        from services.case_workspace import KNOWN_PROPOSITIONS, PROPOSITION_IDENTITY
+        from services.legend_of_understanding import LegendError, decide_proposition
+
+        proposition = (request.form.get("proposition") or PROPOSITION_IDENTITY).strip()
+        if proposition not in KNOWN_PROPOSITIONS:
+            abort(400)
+        decide_proposition(
+            store, workspace, legend_item_id, proposition,
             action=(request.form.get("action") or "").strip(),
             actor=_reviewer(),
-            meaning=(request.form.get("meaning") or "").strip() or None,
-            scope_kind=(request.form.get("scope_kind") or "instance").strip(),
-            scope_id=(request.form.get("scope_id") or "").strip() or None,
+            value=(request.form.get("meaning") or "").strip() or None,
+            scope_kind=(request.form.get("scope_kind") or "").strip() or None,
             note=(request.form.get("note") or "").strip() or None,
             governance_log=_log(),
         )
         flash("Recorded.", "success")
-    except CaseWorkspaceError as exc:
+    except (CaseWorkspaceError, LegendError) as exc:
+        # LegendError joins the caught set with the proposition axis: an id
+        # belonging to a DIFFERENT project reaches decide_proposition and
+        # raises from there, and a 500 is the wrong shape for a refusal that is
+        # working exactly as intended.
+        #
+        # (Worded without the obvious compound term on purpose -
+        # ScopeBoundaryTests scans this file for it to prove no such ROUTE was
+        # added, and a scanner cannot tell prose from a route name. Third time
+        # this class of self-match has bitten in this tranche.)
         flash(str(exc), "error")
     if source_id:
         return redirect(url_for("workspace.drawing_understanding_review",

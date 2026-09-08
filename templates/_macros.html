@@ -907,3 +907,119 @@
 </div>
 {% endif %}
 {% endmacro %}
+
+{% macro proposition_row(project_id, case, view) %}
+{#
+  CLAUDE-ASREAD-SURFACE-01: one row per independent consequential proposition.
+
+  ACTIVE QUESTION -> action controls. SETTLED DECISION -> state. That rule is
+  the whole visual grammar here: a settled proposition must never leave a
+  Confirm button looking live, and an unsettled one must never be mistaken for
+  finished because its neighbour was answered.
+
+  The row is proposition-scoped end to end - the form posts `proposition`, the
+  correction control is labelled for THAT conclusion, and confirming one can
+  never settle the other.
+#}
+<div class="proposition-row proposition-{{ view.proposition }}{% if view.settled %} proposition-settled{% endif %}"
+     data-ui-ref="drawing-understanding.proposition"
+     data-proposition="{{ view.proposition }}">
+  <span class="proposition-label" data-ui-ref="drawing-understanding.proposition.label">
+    {{ view.proposition|upper }}
+  </span>
+
+  {% if view.inherited_from and view.same_as_display %}
+  {# Semantic lineage, rendered ONLY from governed proposition inheritance -
+     never from a visual family, a proportion bucket or a cluster id. #}
+  <span class="proposition-same-as" data-ui-ref="drawing-understanding.proposition.same-as">
+    SAME AS {{ view.same_as_display }}
+  </span>
+  <span class="proposition-applied" data-ui-ref="drawing-understanding.proposition.applied">&#10003; Applied</span>
+  <div class="proposition-reading">{{ view.value }}</div>
+  {% else %}
+  <div class="proposition-reading" data-ui-ref="drawing-understanding.proposition.reading">
+    <span class="muted">GO reads:</span> {{ view.value or view.proposed_value }}
+  </div>
+  {% endif %}
+
+  {% if view.status == "review_again" %}
+  <p class="proposition-review-again" data-ui-ref="drawing-understanding.proposition.review-again">
+    REVIEW AGAIN &mdash; NEW DISTINCTION FOUND
+  </p>
+  {% endif %}
+
+  {% if view.settled and view.status != "review_again" %}
+  <span class="proposition-state" data-ui-ref="drawing-understanding.proposition.settled">
+    {%- if view.status == "overridden" -%}Corrected &#10003;
+    {%- elif view.status == "unknown" -%}Recorded as unknown &#10003;
+    {%- elif view.status == "informative" -%}Noted &#10003;
+    {%- else -%}Confirmed &#10003;{%- endif -%}
+  </span>
+  {% else %}
+  <form method="post" class="proposition-form"
+        action="{{ url_for('workspace.decide_legend_item_route', project_id=project_id, legend_item_id=case.legend_item_id) }}">
+    {{ csrf_field() if csrf_field is defined }}
+    <input type="hidden" name="source_id" value="{{ case.source_id }}">
+    <input type="hidden" name="proposition" value="{{ view.proposition }}">
+    <div class="proposition-actions" role="group"
+         aria-label="Your decision for the {{ view.proposition }} of case {{ case.number }}">
+      <button type="submit" name="action" value="confirmed"
+              class="proposition-decision proposition-decision-confirm"
+              data-ui-ref="drawing-understanding.proposition.confirm">Confirm</button>
+      <button type="submit" name="action" value="overridden"
+              class="proposition-decision"
+              data-ui-ref="drawing-understanding.proposition.correct">Correct me</button>
+    </div>
+    {# Secondary dispositions are kept - the governed states still exist and
+       removing them for tidiness would lose real answers - but they are not
+       equal-weight with the two decisions a reviewer actually makes. #}
+    <details class="proposition-correction" data-ui-ref="drawing-understanding.proposition.correction">
+      <summary>Correct me, or answer differently</summary>
+      <label for="prop-{{ case.legend_item_id }}-{{ view.proposition }}">
+        {% if view.proposition == "identity" %}What this mark actually signifies
+        {% else %}What it actually refers to{% endif %}
+      </label>
+      <input type="text" name="meaning"
+             id="prop-{{ case.legend_item_id }}-{{ view.proposition }}"
+             placeholder="{% if view.proposition == 'identity' %}e.g. elevation marker{% else %}e.g. Section F on sheet E2{% endif %}">
+      <div class="proposition-secondary">
+        <button type="submit" name="action" value="unknown"
+                class="proposition-decision proposition-decision-secondary"
+                data-ui-ref="drawing-understanding.proposition.unknown">Unknown</button>
+        <button type="submit" name="action" value="deferred"
+                class="proposition-decision proposition-decision-secondary"
+                data-ui-ref="drawing-understanding.proposition.later">Later</button>
+      </div>
+    </details>
+  </form>
+  {% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro proposition_case(project_id, case) %}
+{# One reviewable occurrence, numbered for human reference only. The number is
+   a render ordinal; every durable pointer in the lineage is an item id. #}
+<article class="proposition-case{% if case.settled %} proposition-case-settled{% endif %}"
+         data-ui-ref="drawing-understanding.case"
+         data-legend-item-id="{{ case.legend_item_id }}">
+  <header class="proposition-case-header">
+    <span class="proposition-case-number" data-ui-ref="drawing-understanding.case.number">{{ case.number }}</span>
+    {% if case.nearby_label %}<span class="proposition-case-mark">&ldquo;{{ case.nearby_label }}&rdquo;</span>{% endif %}
+    {% if case.settled %}
+    <span class="proposition-case-state" data-ui-ref="drawing-understanding.case.settled">settled</span>
+    {% endif %}
+  </header>
+  {% if case.has_snapshot %}
+  <a class="asread-crop-link" target="_blank" rel="noopener"
+     href="{{ url_for('workspace.legend_item_snapshot', project_id=project_id, legend_item_id=case.legend_item_id) }}">
+    <img class="legend-snapshot asread-crop"
+         src="{{ url_for('workspace.legend_item_snapshot', project_id=project_id, legend_item_id=case.legend_item_id) }}"
+         alt="The mark under review in case {{ case.number }}">
+  </a>
+  {% endif %}
+  {% for view in case.propositions %}
+    {{ proposition_row(project_id, case, view) }}
+  {% endfor %}
+</article>
+{% endmacro %}

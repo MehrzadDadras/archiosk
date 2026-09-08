@@ -174,16 +174,43 @@ class AsReadMatrixTests(_AsReadFixture, unittest.TestCase):
         self.assertIsNone(exceptions_open, "held marks must be collapsed on load")
 
     def test_one_family_row_replaces_repeated_instance_prose(self):
+        """The reading is stated per QUESTION, never per occurrence.
+
+        With the case layer the reading appears once for the family row and
+        once for each DISTINCT open question - here two, because the three
+        proposed representatives and the nine held instances ask different
+        things. Twelve marks still do not produce twelve readings, which is the
+        economy this test has always defended.
+        """
         body = self._body()
-        family_rows = body.count('data-ui-ref="drawing-understanding.family-row"')
-        self.assertEqual(family_rows, 1)
-        # The full meaning is stated once for the family, not once per mark.
-        self.assertLessEqual(body.count("Letter identifies the section"), 2)
+        self.assertEqual(
+            body.count('data-ui-ref="drawing-understanding.family-row"'), 1)
+        # Measured against what is ON SCREEN, using this file's own established
+        # `visible()` helper - collapsed peers stay in the DOM on purpose, so
+        # every case remains reachable with its own crop and controls. Decision
+        # economy is about what a reviewer must read, not about withholding
+        # evidence from the page.
+        readings = self.visible(body).count("Letter identifies the section")
+        self.assertLessEqual(readings, 4, "one per distinct question, not per mark")
+        self.assertLess(readings, 12)
+        self.assertGreaterEqual(
+            body.count("Letter identifies the section"), readings,
+            "collapsed cases must still be present and expandable")
 
     def test_representative_crops_are_capped(self):
+        """Crops follow REPRESENTATIVES, not occurrences.
+
+        CLAUDE-ASREAD-SURFACE-01 added a case layer above the family bench, so
+        the page now carries the same three representative crops twice - once
+        per surface - for twelve marks. The assertion is rewritten to the
+        intent it always had (a crop per representative, never per occurrence)
+        rather than to the single number the previous layout happened to
+        produce. Nine crop-less held instances still generate no crops.
+        """
         body = self._body()
-        self.assertEqual(body.count('class="legend-snapshot asread-crop"'), 3)
-        self.assertLessEqual(body.count('class="legend-snapshot asread-crop"'), 6)
+        crops = body.count('class="legend-snapshot asread-crop"')
+        self.assertEqual(crops, 6, "3 representatives, rendered on both surfaces")
+        self.assertLess(crops, 12, "never one crop per occurrence")
 
     def test_decision_columns_exist_for_the_family(self):
         body = self._body()
@@ -238,9 +265,19 @@ class AsReadMatrixTests(_AsReadFixture, unittest.TestCase):
         self.assertNotIn("Contradictions", body)
 
     def test_counts_remain_accurate(self):
+        """Counts are per MARK, and the family count says what it counts.
+
+        "repeated-mark family(ies)" became "visual family(ies) - evidence
+        grouping, not meaning" under CLAUDE-ASREAD-SURFACE-01: a visual family
+        is an evidence-organising mechanism, and letting it read as a semantic
+        one is the conflation this tranche has been separating.
+        """
         body = self._body()
         self.assertIn("<strong>12</strong> mark(s) recognised", body)
-        self.assertIn("<strong>1</strong> repeated-mark family(ies)", body)
+        self.assertIn("<strong>1</strong> visual family(ies)", body)
+        self.assertIn("evidence grouping, not meaning", body)
+        # Two propositions on one mark must never double the mark count.
+        self.assertNotIn("<strong>24</strong>", body)
 
     def test_confirmed_family_reads_as_settled(self):
         client = self._client()

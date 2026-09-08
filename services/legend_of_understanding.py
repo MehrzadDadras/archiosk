@@ -1538,6 +1538,88 @@ def break_inheritance(store, workspace, legend_item_id: str, proposition: str,
     }
 
 
+def applicable_propositions(item: dict) -> list:
+    """The propositions this mark actually HAS. Not every type that exists.
+
+    IDENTITY is always applicable - every legend item carries a proposed
+    meaning by construction. TARGET is applicable only when something proposed
+    one. A mark nobody claimed refers to anything is not a mark whose target is
+    pending, and rendering it as a question would invent review work.
+    """
+    views = [legend_proposition(item, PROPOSITION_IDENTITY)]
+    target = legend_proposition(item, PROPOSITION_TARGET)
+    if target["proposed"]:
+        views.append(target)
+    return views
+
+
+def case_review_state(item: dict) -> dict:
+    """Is this MARK still asking a person for something?
+
+    The count this replaces was identity-only, so a mark whose identity was
+    confirmed read as finished while its target sat unanswered. And it must not
+    swing the other way either: two propositions on one mark are still ONE
+    mark, so nothing here multiplies a count by the number of questions asked.
+
+    `unknown` is a settled answer, not an unresolved one - a reviewer who says
+    "I cannot tell" has reviewed the mark. Treating recorded uncertainty as
+    outstanding work would ask them again forever.
+    """
+    views = applicable_propositions(item)
+    open_views = [v for v in views if not v["settled"]]
+    review_again = [v for v in views
+                    if v["status"] == LEGEND_STATUS_REVIEW_AGAIN]
+    needs_review = [v for v in views
+                    if v["status"] in (LEGEND_STATUS_REVIEW_NEEDED,
+                                       LEGEND_STATUS_REVIEW_AGAIN)]
+    return {
+        "legend_item_id": item["id"],
+        "propositions": views,
+        "applicable": [v["proposition"] for v in views],
+        "open": [v["proposition"] for v in open_views],
+        "settled": not open_views,
+        "review_again": [v["proposition"] for v in review_again],
+        "needs_review": [v["proposition"] for v in needs_review],
+        # Which proposition is asking - "review needed" with no subject is the
+        # thing this whole axis exists to stop.
+        "awaiting": bool(open_views),
+    }
+
+
+def proposition_summary(store, workspace, source_id: Optional[str] = None) -> dict:
+    """Counts that mean what they say, for one source.
+
+    Every figure here is per MARK except `open_propositions`, which is the one
+    place a proposition-level number is honest and is labelled as such.
+    """
+    items = store.legend_items_for(workspace, source_id=source_id)
+    states = [case_review_state(item) for item in items]
+    families = {item.get("family_id") for item in items if item.get("family_id")}
+    open_propositions = sum(len(s["open"]) for s in states)
+    return {
+        "marks": len(items),
+        "marks_settled": len([s for s in states if s["settled"]]),
+        "marks_awaiting": len([s for s in states if s["awaiting"]]),
+        "marks_needing_review": len([s for s in states if s["needs_review"]]),
+        "marks_review_again": len([s for s in states if s["review_again"]]),
+        # Visual families stay a VISUAL count. They are an evidence-organising
+        # mechanism, not a semantic one, and conflating the two is what this
+        # tranche has been separating.
+        "visual_families": len(families),
+        "open_propositions": open_propositions,
+        "identity_settled": len([
+            s for s in states
+            if any(v["proposition"] == PROPOSITION_IDENTITY and v["settled"]
+                   for v in s["propositions"])]),
+        "target_proposed": len([
+            s for s in states if PROPOSITION_TARGET in s["applicable"]]),
+        "target_settled": len([
+            s for s in states
+            if any(v["proposition"] == PROPOSITION_TARGET and v["settled"]
+                   for v in s["propositions"])]),
+    }
+
+
 def numbered_cases(store, workspace, *, source_id: Optional[str] = None) -> list:
     """Session-local display ordinals: #01, #02, ...
 
@@ -1555,7 +1637,9 @@ def numbered_cases(store, workspace, *, source_id: Optional[str] = None) -> list
     cases = []
     for item in items:
         propositions = []
-        for view in legend_propositions(item):
+        # Only what this mark actually HAS. A target nobody proposed is not a
+        # question, and rendering it as one would invent review work.
+        for view in applicable_propositions(item):
             lineage = view.get("inherited_from") or {}
             origin = lineage.get("from_legend_item_id")
             view = dict(view)
@@ -1563,12 +1647,40 @@ def numbered_cases(store, workspace, *, source_id: Optional[str] = None) -> list
                                        if origin in ordinals else None)
             view["same_as_legend_item_id"] = origin
             propositions.append(view)
+        state = case_review_state(item)
+        # CLAUDE-ASREAD-SURFACE-01: what QUESTION is this case asking?
+        #
+        # Two marks in the same visual family, with the same open propositions
+        # and the same proposed reading, are asking a person the identical
+        # question. Rendering both in full is the repetition the review surface
+        # exists to remove - and it is not decision economy bought by hiding
+        # evidence, because every collapsed case stays expandable with its own
+        # crop and its own controls.
+        #
+        # Deliberately keyed on the PROPOSED READING as well as the family: two
+        # marks that look alike but were read differently are two questions,
+        # and collapsing them would hide the difference that matters.
+        open_key = None
+        if not state["settled"]:
+            open_key = (
+                item.get("family_id"),
+                tuple(sorted(state["open"])),
+                tuple(sorted(
+                    (v["proposition"], v["value"] or v["proposed_value"] or "")
+                    for v in state["propositions"] if not v["settled"])),
+            )
         cases.append({
+            "open_question_key": open_key,
             "number": "#%02d" % ordinals[item["id"]],
             "legend_item_id": item["id"],
             "has_snapshot": bool(item.get("snapshot_path")),
             "observed_text": item.get("observed_text"),
+            "nearby_label": item.get("nearby_label"),
             "family_id": item.get("family_id"),
+            "source_id": item.get("source_id"),
             "propositions": propositions,
+            "settled": state["settled"],
+            "awaiting": state["awaiting"],
+            "needs_review": state["needs_review"],
         })
     return cases

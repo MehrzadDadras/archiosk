@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 {#
   CLAUDE-LEGEND-OF-UNDERSTANDING-01 - the confirmation surface.
   CLAUDE-ASREAD-MATRIX-02 - recompressed into a decision MATRIX.
@@ -90,11 +91,26 @@
     {% endif %}
   {% endfor %}
   <ul class="asread-summary" data-ui-ref="drawing-understanding.summary">
-    <li><strong>{{ report.proposed_items }}</strong> mark(s) recognised</li>
-    {% if families %}
-    <li><strong>{{ families | length }}</strong> repeated-mark family(ies)</li>
+    {# CLAUDE-ASREAD-SURFACE-01: counts are PER MARK. A mark carrying two
+       propositions is still one mark, and a mark whose identity is settled
+       while its target is open is NOT reviewed - the previous figure was
+       identity-only and said otherwise. `open_propositions` is the one
+       proposition-level number here and is labelled as such. #}
+    <li><strong>{{ proposition_counts.marks }}</strong> mark(s) recognised</li>
+    {% if proposition_counts.visual_families %}
+    <li><strong>{{ proposition_counts.visual_families }}</strong> visual family(ies)
+        <span class="muted">&mdash; evidence grouping, not meaning</span></li>
     {% endif %}
-    <li><strong>{{ report.proposed_items - report.awaiting_confirmation }}</strong> settled</li>
+    <li><strong>{{ proposition_counts.marks_settled }}</strong> mark(s) fully settled</li>
+    {% if proposition_counts.marks_awaiting %}
+    <li data-ui-ref="drawing-understanding.summary-awaiting">
+      <strong>{{ proposition_counts.marks_awaiting }}</strong> mark(s) awaiting you
+      <span class="muted">&mdash; {{ proposition_counts.open_propositions }} open proposition(s)</span></li>
+    {% endif %}
+    {% if proposition_counts.target_proposed %}
+    <li><strong>{{ proposition_counts.target_settled }}</strong>/{{ proposition_counts.target_proposed }}
+        target(s) settled</li>
+    {% endif %}
     {% if _counts.directional %}
     <li data-ui-ref="drawing-understanding.summary-directional">
       <strong>{{ _counts.directional }}</strong> need directional review</li>
@@ -124,6 +140,51 @@
      reviewer who had them. Exposure control belongs on the ENTRY that
      offers a tool speculatively, not on content that exists only when
      it is already relevant. #}
+  {% if cases %}
+  <h3 class="panel-subtitle" data-ui-ref="drawing-understanding.cases-title">
+    Cases &mdash; what GO concluded, and what it still needs from you
+  </h3>
+  {% set _open_cases = cases | rejectattr("settled") | list %}
+  {% set _settled_cases = cases | selectattr("settled") | list %}
+  {# Cases asking the IDENTICAL question collapse behind their first one. Two
+     marks in the same visual family, with the same open propositions and the
+     same proposed reading, are one question - and answering it twelve times is
+     the repetition this surface exists to remove. Every collapsed case stays
+     reachable with its own crop and its own controls: decision economy, never
+     evidence scarcity. #}
+  {% set _seen = namespace(keys=[]) %}
+  <div class="proposition-cases" data-ui-ref="drawing-understanding.cases">
+    {% for case in _open_cases %}
+      {% if case.open_question_key is none or case.open_question_key not in _seen.keys %}
+        {% if case.open_question_key is not none %}
+          {% set _seen.keys = _seen.keys + [case.open_question_key] %}
+        {% endif %}
+        {% set _same = _open_cases | selectattr("open_question_key", "equalto", case.open_question_key) | list %}
+        {{ macros.proposition_case(project_id, case) }}
+        {% if case.open_question_key is not none and _same | length > 1 %}
+        <details class="proposition-same-question"
+                 data-ui-ref="drawing-understanding.cases-same-question">
+          <summary>{{ _same | length - 1 }} more mark(s) asking exactly this &mdash; answer them individually</summary>
+          {% for peer in _same[1:] %}
+            {{ macros.proposition_case(project_id, peer) }}
+          {% endfor %}
+        </details>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% if _settled_cases %}
+  {# Settled work collapses but stays inspectable - evidence never disappears
+     without an explanation of where it went. #}
+  <details class="proposition-settled-group" data-ui-ref="drawing-understanding.cases-settled">
+    <summary>{{ _settled_cases | length }} settled case(s)</summary>
+    {% for case in _settled_cases %}
+      {{ macros.proposition_case(project_id, case) }}
+    {% endfor %}
+  </details>
+  {% endif %}
+  {% endif %}
+
   {% if families %}
   <h3 class="panel-subtitle" data-ui-ref="drawing-understanding.families-title">
     Repeated marks &mdash; answer once
