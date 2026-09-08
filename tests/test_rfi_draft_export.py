@@ -57,10 +57,19 @@ class RFIDraftExportTests(unittest.TestCase):
         # comment. register_document_source is required (unlike that
         # file) because _rfq_source_id below relies on the
         # auto-registered rfq_rfp_document Source.
+        from services.case_workspace import SOURCE_KIND_RFQ_RFP_DOCUMENT
         from services.ingestion import document_source_payload
 
         store = self._store()
-        workspace = store.get_or_create(self.project_id, register_document_source=document_source_payload(document))
+        # CLAUDE-BLACK-BOX-D1-01: the kind is stated because this fixture is
+        # a conventional RFQ/RFP PROJECT - its own helpers look the founding
+        # Source up BY kind. It emulates routes/workspace.py's first-open
+        # backfill, which now says the same thing explicitly, rather than
+        # inheriting the constant that used to label every founding Source.
+        workspace = store.get_or_create(
+            self.project_id,
+            register_document_source=document_source_payload(
+                document, kind=SOURCE_KIND_RFQ_RFP_DOCUMENT))
         store.set_project_owner(workspace, owner="owner1", actor="owner1")
         store.grant_project_access(workspace, username="other-user", actor="owner1", actor_role="read_only")
 

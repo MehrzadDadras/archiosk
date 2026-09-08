@@ -36,6 +36,7 @@ from services.case_workspace import (
     CaseWorkspaceStore,
     REQUIREMENT_STATUS_SUPERSEDED,
     REQUIREMENT_STATUS_WITHDRAWN,
+    SOURCE_KIND_UNCLASSIFIED, SOURCE_KIND_RFQ_RFP_DOCUMENT,
 )
 from services.governance import GovernanceLog
 from services.requirements_registry import RequirementsRegistry
@@ -157,6 +158,7 @@ def _find_duplicate_content(app: Flask, file_hash: str) -> Optional[str]:
 
 def document_source_payload(
     document: ParsedDocument, source_domain: str = SOURCE_DOMAIN_UNKNOWN,
+    kind: str = SOURCE_KIND_UNCLASSIFIED,
 ) -> dict:
     """
     The register_document_source payload CaseWorkspaceStore.get_or_create
@@ -164,6 +166,11 @@ def document_source_payload(
     time) and routes/workspace.py's _load_workspace_or_404 (opening a
     Case Workspace for the first time) build the identical dict from one
     place, not two independently-drifting copies.
+
+    CLAUDE-BLACK-BOX-D1-01: `kind` is explicit and defaults to UNCLASSIFIED.
+    Both callers state what they actually know rather than inheriting a
+    constant - see SOURCE_KIND_UNCLASSIFIED's own comment for why the previous
+    unconditional rfq_rfp_document was true when written and false now.
     """
     return {
         "filename": document.filename,
@@ -173,6 +180,7 @@ def document_source_payload(
         "file_path": document.original_file_path,
         "file_hash": document.original_file_hash,
         "source_domain": source_domain,
+        "kind": kind,
     }
 
 
@@ -492,7 +500,20 @@ def ingest_upload(
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
     workspace = store.get_or_create(
         document.project_id,
-        register_document_source=document_source_payload(document, source_domain=source_domain),
+        register_document_source=document_source_payload(
+            document, source_domain=source_domain,
+            # CLAUDE-BLACK-BOX-D1-01: the ONE place that knows which kind of
+            # container is being founded, so the ONE place entitled to say what
+            # its founding Source is. A conventional project is founded by its
+            # RFQ/RFP document - unchanged. A Black Box is founded by material
+            # whose type nobody has established, and labelling it would be the
+            # historical assumption this tranche exists to remove. The file
+            # extension is deliberately not consulted: .txt, .pdf, .docx, .csv
+            # and .md all enter a Black Box unclassified.
+            kind=(SOURCE_KIND_UNCLASSIFIED
+                  if container_state == CONTAINER_STATE_BLACK_BOX
+                  else SOURCE_KIND_RFQ_RFP_DOCUMENT),
+        ),
     )
     workspace.project_code = resolved_project_code
     store.save(workspace)

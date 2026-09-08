@@ -45,9 +45,13 @@ from typing import Optional
 
 from services.governance import GovernanceLog
 
-# Every ingested RFQ/RFP document is registered as this Project's first
-# Source automatically (see get_or_create) — the RFQ/RFP pipeline is the
-# beginning of the same persistent Project, not a separate product.
+# An ingested RFQ/RFP document is registered as its Project's first Source
+# automatically (see get_or_create) — the RFQ/RFP pipeline is the beginning of
+# the same persistent Project, not a separate product.
+#
+# CLAUDE-BLACK-BOX-D1-01: this is no longer what EVERY founding Source becomes.
+# It is what a conventional project's founding document becomes, stated by the
+# caller that knows it. See SOURCE_KIND_UNCLASSIFIED below.
 SOURCE_KIND_RFQ_RFP_DOCUMENT = "rfq_rfp_document"
 SOURCE_KIND_DRAWING = "drawing"
 # Prompt 3 (Project Home): a non-drawing document added directly as a
@@ -58,6 +62,24 @@ SOURCE_KIND_DRAWING = "drawing"
 # list, exactly like SOURCE_KIND_DRAWING already is.
 SOURCE_KIND_PROJECT_DOCUMENT = "project_document"
 SOURCE_KIND_TEXT_RECORD = "text_record"
+# CLAUDE-BLACK-BOX-D1-01: the Source exists; its document TYPE has not been
+# established yet.
+#
+# UNKNOWN SOURCE -> OBSERVE -> CLASSIFY -> THEN determine type. Until this
+# tranche, every founding Source was labelled rfq_rfp_document by a constant
+# (see get_or_create) - correct while the RFQ/RFP pipeline WAS the only way a
+# container came into being, and false the moment a Black Box could receive
+# material whose type nobody yet knows.
+#
+# This is a different axis from source_domain. SOURCE_DOMAIN_UNKNOWN answers
+# "where did this come from" and already exists; this answers "what IS it".
+# Neither substitutes for the other, and neither is operating_environment.
+#
+# It is deliberately PROVISIONAL METADATA, never authority: nothing may treat
+# an unclassified Source as evidence of anything, and nothing may treat a
+# classified one as a governed decision. Kinds remain open-world - no closed
+# registry is introduced here.
+SOURCE_KIND_UNCLASSIFIED = "unclassified"
 
 # CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture):
 # a Folder's `root` names which of the two GOVERNED SIBLING ROOTS it
@@ -6938,10 +6960,24 @@ class CaseWorkspaceStore:
     ) -> ProjectWorkspace:
         """
         `register_document_source`, if given (filename + counts), is used
-        once to auto-register the Project's already-ingested RFQ/RFP
-        document as Source #1 — so a Project's lifecycle always starts
+        once to auto-register the container's already-ingested founding
+        document as Source #1 — so a container's lifecycle always starts
         from the same evidence that already exists, rather than asking
         the reviewer to re-upload something already in the registry.
+
+        CLAUDE-BLACK-BOX-D1-01: the founding Source's `kind` comes from the
+        payload and DEFAULTS TO UNCLASSIFIED. It was previously the constant
+        `SOURCE_KIND_RFQ_RFP_DOCUMENT`, which was true of every container that
+        could exist when it was written and became false when a Black Box could
+        receive material of unknown type. A default of "unclassified" is the
+        honest one: this method cannot know what the document is, and saying so
+        is better than a confident label nothing verified.
+
+        Callers that genuinely DO know say so explicitly — `services/
+        ingestion.py` passes rfq_rfp_document for a conventional project, and
+        `routes/workspace.py`'s first-open backfill passes it for the legacy
+        RFQ/RFP projects that path exists to serve. No caller guesses, and
+        nothing infers a type from a file extension.
         """
         workspace = self.get(project_id)
         if workspace is not None:
@@ -6953,7 +6989,8 @@ class CaseWorkspaceStore:
             source = Source(
                 id=_new_id(),
                 project_id=project_id,
-                kind=SOURCE_KIND_RFQ_RFP_DOCUMENT,
+                kind=register_document_source.get(
+                    "kind", SOURCE_KIND_UNCLASSIFIED),
                 name=register_document_source["filename"],
                 added_at=register_document_source.get("ingested_at") or _now(),
                 note=(

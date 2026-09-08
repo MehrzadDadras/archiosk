@@ -96,6 +96,7 @@ from services.case_workspace import (
     REQUIREMENT_STATUS_SUPERSEDED,
     SOURCE_KIND_DRAWING,
     SOURCE_KIND_PROJECT_DOCUMENT,
+    SOURCE_KIND_RFQ_RFP_DOCUMENT,
     SOURCE_KIND_TEXT_RECORD,
     SOURCE_ORIGIN_TYPE_UPLOAD,
     SPIN_KIND_DELTA,
@@ -383,7 +384,16 @@ def _load_workspace_or_404(project_id: str, allow_removed: bool = False):
     # already-diagnosed defect class.
     try:
         workspace = store.get_or_create(
-            project_id, register_document_source=document_source_payload(document),
+            project_id,
+            # CLAUDE-BLACK-BOX-D1-01: explicit, and deliberately still
+            # rfq_rfp_document. This path exists to lazily materialize a
+            # workspace for a project whose RFQ/RFP document was ingested
+            # before workspaces were created eagerly - every container it can
+            # reach IS a conventional RFQ/RFP project, so defaulting it to
+            # unclassified would relabel real historical evidence rather than
+            # correct an assumption.
+            register_document_source=document_source_payload(
+                document, kind=SOURCE_KIND_RFQ_RFP_DOCUMENT),
         )
     except TypeError:
         abort(404)
