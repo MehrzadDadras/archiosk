@@ -1,5 +1,72 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `07a16de`: a Source may exist before its type is known
+
+Appended above the entries below, none of which is altered. One commit, pushed,
+**NOT deployed** — intended to bundle with the later user-visible Black Box
+corrections rather than ship alone.
+
+### What changed
+
+`SOURCE_KIND_UNCLASSIFIED` now exists: the Source exists, its document TYPE has
+not been established. A different axis from `source_domain` (which answers
+*where from*, and already had `SOURCE_DOMAIN_UNKNOWN`) and from
+`operating_environment`.
+
+`CaseWorkspaceStore.get_or_create` no longer assumes RFP. It reads the founding
+kind from the payload and defaults to unclassified, because that method cannot
+know what the document is. The callers that genuinely know say so:
+
+- **Black Box founding source → `unclassified`.** No extension is consulted;
+  `.txt`, `.pdf`, `.docx`, `.csv` and `.md` all enter unclassified.
+- **Conventional RFP project → `rfq_rfp_document`, explicitly**
+  (`services/ingestion.py`).
+- **Historical first-open backfill → `rfq_rfp_document`, explicitly**
+  (`routes/workspace.py`), because every container that path can reach is a
+  legacy RFQ/RFP project.
+
+**No existing source history was reinterpreted.** Nothing was relabelled;
+containers created before this keep the kind they were given.
+
+`Source.kind` remains open-world — no closed registry. `unclassified` is in
+neither `_PROCUREMENT_KINDS` nor `_DRAWING_KINDS`, so it activates no
+procurement and no drawing tooling. Provisional metadata, never authority.
+
+### Deliberately not done
+
+Progressive classification (unclassified → evidence-backed proposal → human
+confirmation) remains **future**, preserved as compatibility only; when built it
+must reuse the As-Read proposition machinery, and a test asserts no parallel
+classification service appeared. No image formats, no `.xlsx` change, no
+wording changes (D2 owns the project-language leak, and a test asserts this
+tranche did not touch it).
+
+### Next two seams, from the hidden-assumption audit
+
+- **A Black Box currently lists, counts and searches as a conventional
+  Project.** `routes/portal.py:_accessible_documents` filters on access and
+  removal only — there is no container-state check. This is live in the
+  deployed architecture and is the next tranche (**BLACK BOX LISTING BOUNDARY
+  01**), ahead of D2. Not a Product Owner authority decision.
+- **Container display names are unique across the whole deployment, not per
+  owner** (`services/ingestion.py:_reject_if_name_taken`). Two customers cannot
+  share a name, and the refusal confirms another account holds it. **A Product
+  Owner decision is required before multi-customer use** — it changes a stated
+  product rule.
+
+### Gate
+
+**7,129 passed, 3 skipped, 2,950 subtests, 0 failed, 12:05** (parallel,
+`-n 8 --dist loadfile`). The **4:04:40 anomaly recorded against `f114d9a` did
+not repeat** — treated as a one-off environmental event, no investigation open,
+watch only if it recurs.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`07a16de`** plus this checkpoint commit.
+- Production remains **`da2b945`** at **`STATIC_VERSION=164`** — unchanged and
+  not touched by this tranche.
+
 ## 2026-09-08 (deploy) — `da2b945` live at `v=164`: the Black Box door reaches production
 
 Appended above the entries below, none of which is altered. **This supersedes
