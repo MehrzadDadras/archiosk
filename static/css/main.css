@@ -2747,6 +2747,31 @@ main:has(.document-viewer-canvas-container) {
     .gateway-footer { flex-direction: column; gap: 0.3rem; }
     .flag-pair { grid-template-columns: 1fr; }
 }
+/* CLAUDE-DOCUMENT-SHOP-MOBILE-01 - the customer bar is a customer's ENTIRE
+   navigation (base.html suppresses the application menubar for them), so it
+   cannot be allowed to clip. space-between across a brand plus two links has
+   no room at phone widths; this stacks it and lets it wrap.
+
+   Scoped to .customer-topbar only. The Project/admin shell is a different
+   element and is deliberately untouched. */
+@media (max-width: 560px) {
+    .customer-topbar {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 0.35rem 1rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .customer-topbar-brand {
+        flex: 1 0 100%;
+    }
+
+    .customer-topbar-links {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+}
+
 
 .error-page { padding: 3rem 0; text-align: center; }
 .error-page h1 { font-family: var(--font-display); font-size: 2.2rem; font-weight: 300; }
@@ -10267,4 +10292,26 @@ body {
 .customer-topbar-links a:focus-visible {
     opacity: 1;
     text-decoration: underline;
+}
+
+/* CLAUDE-DOCUMENT-SHOP-MOBILE-01 - the recovered-text block.
+
+   templates/document_shop_result.html renders OCR output in a <pre>, and this
+   class was referenced there while existing in no stylesheet at all - there is
+   no global `pre` rule either, so it fell back to the browser default
+   `white-space: pre`. A recovered line longer than the viewport then pushed
+   the whole page sideways, which on a phone makes the result unusable.
+
+   pre-wrap keeps the source-like presentation (line breaks the engine actually
+   produced are preserved) while letting long lines wrap. `overflow-wrap:
+   anywhere` handles the pathological case a wrap point cannot: an unbroken
+   run of characters wider than the screen, which OCR of a drawing genuinely
+   produces. overflow-x is the last resort for content those two cannot tame,
+   and it scrolls THE BLOCK rather than the page. */
+.asread-recovered-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: auto;
+    max-width: 100%;
+    margin: 0.5rem 0 1rem;
 }
