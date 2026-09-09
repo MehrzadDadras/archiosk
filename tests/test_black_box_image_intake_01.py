@@ -367,6 +367,25 @@ class ExifPolicyTests(unittest.TestCase):
 
     def test_ocr_returns_text_only_never_metadata(self):
         result = image_intake.extract_image_text(_png(), "a.png")
+        # CLAUDE-GO-PERCEPTION-ORIENTATION-01 added "orientation": the account
+        # of WHICH FRAME the text was read from. The policy this test exists
+        # for is unchanged and is now asserted directly rather than by a key
+        # count - EXIF may stay in the authoritative original, and must not be
+        # propagated into a derived artifact.
         self.assertEqual(
             set(result),
-            {"ran", "status", "engine", "engine_version", "reason", "text"})
+            {"ran", "status", "engine", "engine_version", "reason", "text",
+             "orientation"})
+        orientation = result["orientation"]
+        # The ONE EXIF field that may cross is the geometric orientation tag,
+        # because the transformation cannot be reconstructed without it.
+        self.assertEqual(
+            set(orientation),
+            {"authority", "exif_orientation", "osd", "applied_rotation_degrees",
+             "applied_mirror", "native_size", "normalised_size", "changed",
+             "conflict", "reason"})
+        flattened = repr(orientation).lower()
+        for sensitive in ("gps", "latitude", "longitude", "make", "model",
+                          "datetime", "serial", "software", "artist", "owner"):
+            self.assertNotIn(sensitive, flattened,
+                             "sensitive EXIF reached a derived artifact")

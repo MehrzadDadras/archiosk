@@ -649,6 +649,41 @@ def ingest_upload(
         # registered whatever this returns.
         if image_founding:
             recovered = image_intake.extract_image_text(raw_bytes, filename)
+            # CLAUDE-GO-PERCEPTION-ORIENTATION-01: the account of WHICH FRAME
+            # was read. Recorded as a governance event rather than a new field
+            # or a new store, because the append-only log is already the
+            # place this system reconstructs "what happened to this source"
+            # from - and an orientation decision is exactly that.
+            #
+            # Emitted whatever the outcome, including "stored pixels used
+            # as-is" and "unresolved": a silent absence cannot be told apart
+            # from a step that never ran, which is the distinction a later
+            # investigation would need most.
+            orientation = recovered.get("orientation") or {}
+            if governance_log is not None:
+                governance_log.append(
+                    project_id=workspace.project_id,
+                    event_type="image_orientation_observed",
+                    actor=actor or _DEFAULT_ACTOR,
+                    role=role or _DEFAULT_ROLE,
+                    payload={
+                        "source_id": founding_source["id"],
+                        "authority": orientation.get("authority"),
+                        "exif_orientation": orientation.get("exif_orientation"),
+                        "applied_rotation_degrees": orientation.get("applied_rotation_degrees"),
+                        "applied_mirror": orientation.get("applied_mirror"),
+                        "native_size": orientation.get("native_size"),
+                        "normalised_size": orientation.get("normalised_size"),
+                        "changed": orientation.get("changed"),
+                        "conflict": orientation.get("conflict"),
+                        "osd": orientation.get("osd"),
+                        "reason": orientation.get("reason"),
+                        # The source itself is untouched by any of this; the
+                        # hash below is the ORIGINAL, and it is what the
+                        # transformation is provenance FOR.
+                        "source_file_hash": document.original_file_hash,
+                    },
+                )
             if (recovered.get("text") or "").strip():
                 store.register_pdf_page_structure(
                     workspace, source_id=founding_source["id"],

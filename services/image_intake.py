@@ -161,7 +161,239 @@ def verify_image_bytes(raw_bytes: bytes, filename: str) -> dict:
             "width": width, "height": height}
 
 
-def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None) -> dict:
+# CLAUDE-GO-PERCEPTION-ORIENTATION-01 - the first perceptual invariant.
+#
+#     GO'S MACHINE VIEW OF THE SOURCE MUST HAVE THE SAME INTENDED ORIENTATION
+#     AS THE HUMAN VIEW.
+#
+# A phone photograph is routinely stored rotated, with an EXIF tag declaring
+# how it is meant to be seen. Browsers honour that tag, so the person sees the
+# picture upright. PyMuPDF does not, so the OCR path read the stored pixels
+# sideways - proven on a real customer JPEG carrying Orientation 6, where the
+# as-stored and EXIF-corrected reads returned different text.
+#
+# THE AUTHORITY RULE, in strict precedence, declared once here:
+#
+#   1. EXIF orientation (1-8), when present and valid. It is the capturing
+#      device's own statement of intended display, and it is what the customer
+#      is already looking at in their browser. Matching it is the whole point.
+#   2. Tesseract OSD, ONLY when EXIF is absent or unusable. OSD is PERCEPTION
+#      EVIDENCE - a reading of the pixels - never authority over a declaration
+#      that already exists.
+#   3. Stored pixel orientation, used as-is.
+#   4. Page-rotation metadata belongs to the PDF path and has no meaning for a
+#      standalone raster; it is named here so the precedence is complete, and
+#      that path is deliberately untouched by this work.
+#
+# Because 1 outranks 2, a conflict cannot decide anything - but it can still be
+# OBSERVED, and observing it is how a wrong EXIF tag would ever be noticed. A
+# caller may ask for OSD alongside EXIF; production does not, because a second
+# Tesseract pass costs seconds and would buy evidence nobody acts on.
+# A rotation is only applied on OSD's word when OSD is actually confident.
+#
+# MEASURED, not chosen. Tesseract's orientation confidence on this host:
+#
+#   real prose, upright / 90 / 180 / 270   -> 10.13 - 10.99, direction CORRECT
+#   sparse drawing text                    ->  0.12 - 0.15, direction UNRELIABLE
+#
+# At 0.15 it reported "rotate 180, script Greek" for an upright English
+# drawing, and an earlier build obeyed it and destroyed a clean read. Nearly
+# two orders of magnitude separate the two populations, so a floor between
+# them is evidence rather than taste. 2.0 sits far above observed noise and far
+# below observed signal.
+#
+# Note the contrast with the recovered-text legibility score this codebase
+# deliberately does NOT compute: there, measurement showed noise and signal
+# OVERLAPPED (0.434 vs 0.195), so a threshold would have been invented
+# certainty. Here they separate cleanly. Same discipline, opposite answer.
+OSD_MINIMUM_CONFIDENCE = 2.0
+
+ORIENTATION_AUTHORITY_EXIF = "exif"
+ORIENTATION_AUTHORITY_OSD = "osd"
+ORIENTATION_AUTHORITY_STORED = "stored_pixels"
+ORIENTATION_AUTHORITY_UNRESOLVED = "unresolved"
+
+# The eight EXIF orientation values as the transform each one means. Pillow's
+# exif_transpose applies all eight including the mirrored ones; this table is
+# for REPORTING what was applied, never for doing it by hand.
+_EXIF_ORIENTATION_MEANING = {
+    1: (0, False), 2: (0, True), 3: (180, False), 4: (180, True),
+    5: (90, True), 6: (270, False), 7: (270, True), 8: (90, False),
+}
+
+
+def _osd_observation(raw_bytes, reader=None):
+    """Ask Tesseract which way up it thinks the page is. Never raises.
+
+    `--psm 0` is orientation and script detection only - no recognition - and
+    the `osd` traineddata it needs is already installed on this host. Returned
+    as evidence with its engine named, exactly like any other extractor output.
+    """
+    observation = {"ran": False, "rotate": None, "confidence": None,
+                   "script": None, "engine": None, "reason": None}
+    try:
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+
+        if reader is not None:
+            raw_output = reader(raw_bytes)
+            observation["engine"] = "injected reader"
+        else:
+            binary = shutil.which("tesseract")
+            if not binary:
+                observation["reason"] = "no tesseract binary"
+                return observation
+            with tempfile.TemporaryDirectory(prefix="archiosk-osd-") as directory:
+                image_path = os.path.join(directory, "frame.png")
+                with open(image_path, "wb") as handle:
+                    handle.write(raw_bytes)
+                completed = subprocess.run(
+                    [binary, image_path, "stdout", "--psm", "0"],
+                    capture_output=True, text=True, timeout=60)
+                raw_output = completed.stdout or ""
+                observation["engine"] = "tesseract osd"
+        for line in (raw_output or "").splitlines():
+            key, _, value = line.partition(":")
+            key, value = key.strip().lower(), value.strip()
+            if key == "rotate":
+                observation["rotate"] = int(value)
+            elif key == "orientation confidence":
+                observation["confidence"] = float(value)
+            elif key == "script":
+                observation["script"] = value
+        observation["ran"] = observation["rotate"] is not None
+        if not observation["ran"] and not observation["reason"]:
+            observation["reason"] = "no orientation reported"
+    except Exception as exc:  # never raises: an unreadable page is an outcome
+        observation["reason"] = "%s: %s" % (type(exc).__name__, exc)
+    return observation
+
+
+def normalise_orientation(raw_bytes, filename, *, osd_reader=None,
+                          observe_osd=False):
+    """The frame GO should look at, and a full account of how it was chosen.
+
+    NEVER MUTATES THE SOURCE. The original bytes are returned untouched
+    whenever no transform is required, and where one is applied the returned
+    bytes are a DERIVED PROCESSING REPRESENTATION - the stored file, its EXIF
+    and its checksum are not rewritten by anything here.
+    """
+    observation = {
+        "authority": ORIENTATION_AUTHORITY_STORED,
+        "exif_orientation": None,
+        "osd": None,
+        "applied_rotation_degrees": 0,
+        "applied_mirror": False,
+        "native_size": None,
+        "normalised_size": None,
+        "changed": False,
+        "conflict": False,
+        "reason": None,
+    }
+    try:
+        from PIL import Image, ImageOps
+    except Exception as exc:
+        observation["authority"] = ORIENTATION_AUTHORITY_UNRESOLVED
+        observation["reason"] = "imaging library unavailable: %s" % exc
+        return {"bytes": raw_bytes, "observation": observation}
+
+    try:
+        image = Image.open(io.BytesIO(raw_bytes))
+        image.load()
+    except Exception as exc:
+        # verify_image_bytes is the gate that refuses undecodable uploads; if
+        # one reaches here anyway, orientation is unresolved and the original
+        # bytes continue untouched rather than anything being invented.
+        observation["authority"] = ORIENTATION_AUTHORITY_UNRESOLVED
+        observation["reason"] = "not decodable: %s: %s" % (type(exc).__name__, exc)
+        return {"bytes": raw_bytes, "observation": observation}
+
+    observation["native_size"] = list(image.size)
+    observation["normalised_size"] = list(image.size)
+
+    exif_value = None
+    try:
+        exif = image.getexif()
+        raw_value = exif.get(274) if exif else None
+        if isinstance(raw_value, int) and raw_value in _EXIF_ORIENTATION_MEANING:
+            exif_value = raw_value
+        elif raw_value is not None:
+            observation["reason"] = "unusable EXIF orientation %r" % (raw_value,)
+    except Exception as exc:
+        observation["reason"] = "EXIF unreadable: %s" % exc
+    observation["exif_orientation"] = exif_value
+
+    # OSD runs only where it can decide something, or when a caller explicitly
+    # asks for it as evidence beside EXIF. Production does neither when EXIF
+    # already resolves the frame - a second Tesseract pass costs seconds.
+    if exif_value is None or observe_osd or osd_reader is not None:
+        observation["osd"] = _osd_observation(raw_bytes, reader=osd_reader)
+
+    osd = observation["osd"] or {}
+
+    if exif_value is not None:
+        rotation, mirror = _EXIF_ORIENTATION_MEANING[exif_value]
+        observation["authority"] = ORIENTATION_AUTHORITY_EXIF
+        # EXIF outranks OSD, so this decides nothing - it records that the two
+        # signals disagreed, which is the only way a wrong tag becomes visible.
+        if osd.get("ran") and (osd.get("rotate") or 0) % 360 != rotation % 360:
+            observation["conflict"] = True
+        if rotation or mirror:
+            try:
+                upright = ImageOps.exif_transpose(image)
+                observation["applied_rotation_degrees"] = rotation
+                observation["applied_mirror"] = mirror
+                observation["normalised_size"] = list(upright.size)
+                observation["changed"] = True
+                return {"bytes": _encode_frame(upright), "observation": observation}
+            except Exception as exc:
+                observation["authority"] = ORIENTATION_AUTHORITY_UNRESOLVED
+                observation["reason"] = "transform failed: %s" % exc
+        return {"bytes": raw_bytes, "observation": observation}
+
+    if osd.get("ran") and (osd.get("rotate") or 0) % 360:
+        confidence = osd.get("confidence")
+        if confidence is None or confidence < OSD_MINIMUM_CONFIDENCE:
+            # Below the floor this is a guess, and a guess that rotates the
+            # customer's drawing is worse than leaving it alone. Recorded so
+            # the refusal is visible rather than looking like OSD never ran.
+            observation["reason"] = (
+                "OSD confidence %s below %.1f - rotation not applied"
+                % (confidence, OSD_MINIMUM_CONFIDENCE))
+            return {"bytes": raw_bytes, "observation": observation}
+        rotation = osd["rotate"] % 360
+        try:
+            # OSD reports how far the page must be turned to come upright.
+            upright = image.rotate(-rotation, expand=True)
+            observation["authority"] = ORIENTATION_AUTHORITY_OSD
+            observation["applied_rotation_degrees"] = rotation
+            observation["normalised_size"] = list(upright.size)
+            observation["changed"] = True
+            return {"bytes": _encode_frame(upright), "observation": observation}
+        except Exception as exc:
+            observation["authority"] = ORIENTATION_AUTHORITY_UNRESOLVED
+            observation["reason"] = "transform failed: %s" % exc
+
+    return {"bytes": raw_bytes, "observation": observation}
+
+
+def _encode_frame(image):
+    """The derived processing frame.
+
+    PNG, so the perception layer never reads a re-compressed copy of the
+    customer's picture: a JPEG round trip would add artefacts to the very
+    pixels the next stage is trying to read. compress_level=1 because this
+    frame is consumed immediately and never stored.
+    """
+    buffer = io.BytesIO()
+    image.convert("RGB").save(buffer, "PNG", compress_level=1)
+    return buffer.getvalue()
+
+
+def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None,
+                       osd_reader=None) -> dict:
     """Local OCR over a standalone image. Never raises, never egresses.
 
     A bounded ADAPTER, not a second pipeline: it hands the bytes to
@@ -176,9 +408,16 @@ def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None) -> dict:
     from services import raster_extraction
 
     ext = Path(filename or "").suffix.lower()
-    filetype = "png" if ext == ".png" else "jpeg"
+
+    # CLAUDE-GO-PERCEPTION-ORIENTATION-01: read the frame the PERSON sees. The
+    # stored source is untouched; this is a derived processing frame only.
+    normalised = normalise_orientation(raw_bytes, filename, osd_reader=osd_reader)
+    frame = normalised["bytes"]
+    orientation = normalised["observation"]
+    filetype = "png" if (ext == ".png" or orientation["changed"]) else "jpeg"
+
     result = raster_extraction.extract_raster_pages(
-        raw_bytes, [0], filetype=filetype, engine=engine)
+        frame, [0], filetype=filetype, engine=engine)
     pages = result.get("pages") or {}
     return {
         "ran": result.get("ran", False),
@@ -186,6 +425,9 @@ def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None) -> dict:
         "engine": result.get("engine"),
         "engine_version": result.get("engine_version"),
         "reason": result.get("reason"),
+        # How the frame this text was read from was arrived at, so a reader can
+        # reconstruct original -> observation -> transform -> extractor.
+        "orientation": orientation,
         # Empty string, never a fabricated placeholder - an image that yielded
         # nothing yielded nothing, and As-Read must be able to say so.
         "text": pages.get(0, ""),
