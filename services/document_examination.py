@@ -1,0 +1,260 @@
+"""CLAUDE-DOCUMENT-SHOP-RESULT-01 - what the customer is actually handed.
+
+A PRESENTATION layer over governed state that already exists. It runs no
+analysis, calls no provider, writes nothing, and introduces no second
+As-Read: `ingest_upload` already parses every accepted document and already
+runs local OCR over an accepted image, and every fact below is read back from
+what those two paths recorded. The defect this closes was never missing
+processing - it was that the processing had no customer-facing surface, so a
+person who uploaded a document was sent to the analyst bench instead and told
+"As-Read has not started on this source".
+
+    SIMPLE OUTSIDE. GOVERNED INSIDE.
+
+Three things this deliberately does NOT do:
+
+- **It does not invent a status transition.** Examination is synchronous
+  inside the upload request, so by the time any record exists it has already
+  finished. There is therefore no honest PENDING/PROCESSING state to show, and
+  inventing one would be a status unsupported by any record. `state_of` returns
+  only outcomes that a stored record can actually establish.
+- **It does not fabricate an interpretation.** Where the pipeline established
+  nothing, this says so by name rather than rendering an empty section that
+  reads like a finished answer.
+- **It does not translate governed vocabulary into the record.** As-Read,
+  Spin, marks, vectorisation and sheet grammar stay exactly where they are;
+  they are simply not what a Document Shop customer is shown.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Optional
+
+# What a person is told about their job, and the only three outcomes a stored
+# record can support. Ordered worst-last so a listing can sort by concern.
+STATE_RESULT_READY = "result_ready"
+STATE_NEEDS_ATTENTION = "needs_attention"
+STATE_COULD_NOT_COMPLETE = "could_not_complete"
+
+STATE_LABELS = {
+    STATE_RESULT_READY: "Result ready",
+    STATE_NEEDS_ATTENTION: "Needs attention",
+    STATE_COULD_NOT_COMPLETE: "Could not complete",
+}
+
+# Plain-language equivalents. The key is the file's own extension, so nothing
+# here claims to know what the document IS - only what kind of file arrived.
+_MATERIAL_BY_EXT = {
+    ".pdf": "a PDF document",
+    ".docx": "a Word document",
+    ".txt": "a plain text file",
+    ".md": "a text document",
+    ".csv": "a comma-separated data file",
+    ".png": "an image (PNG)",
+    ".jpg": "an image (JPEG)",
+    ".jpeg": "an image (JPEG)",
+}
+
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+
+
+def _ext(filename: str) -> str:
+    return Path(filename or "").suffix.lower()
+
+
+def _live_sources(workspace) -> list[dict]:
+    return [s for s in (getattr(workspace, "sources", None) or [])
+            if not s.get("removed_at")]
+
+
+def _page_units(workspace, source_id: str) -> list[dict]:
+    return [u for u in (getattr(workspace, "structural_units", None) or [])
+            if u.get("source_id") == source_id and u.get("unit_type") == "page"]
+
+
+def _regions_for(workspace, unit_ids: set) -> list[dict]:
+    return [r for r in (getattr(workspace, "addressable_regions", None) or [])
+            if r.get("structural_unit_id") in unit_ids
+            and r.get("content_type") == "text"]
+
+
+def _recovered(workspace, source_id: str) -> dict:
+    """Text held against this Source, and HOW it got there.
+
+    `evidence_class` is the distinction that matters to a reader and is
+    already recorded per region by register_pdf_page_structure: text a
+    document itself carries is direct source evidence; text an OCR engine
+    read off an image is a reading OF the image. Both are shown; they are
+    never merged into one undifferentiated "content" number.
+    """
+    units = _page_units(workspace, source_id)
+    regions = _regions_for(workspace, {u["id"] for u in units})
+    passages = [r.get("content", "") for r in regions if (r.get("content") or "").strip()]
+    classes = {r.get("evidence_class") for r in regions if r.get("evidence_class")}
+    extractors = {u.get("extractor_version") for u in units if u.get("extractor_version")}
+    return {
+        "page_count": len(units),
+        "passage_count": len(passages),
+        "character_count": sum(len(p) for p in passages),
+        "preview": "\n\n".join(passages[:3])[:1200],
+        "evidence_classes": sorted(c for c in classes if c),
+        "read_by": sorted(e for e in extractors if e),
+    }
+
+
+def state_of(document, workspace) -> str:
+    """The job's outcome, derived only from what is actually recorded."""
+    sources = _live_sources(workspace)
+    if document is None or not sources:
+        return STATE_COULD_NOT_COMPLETE
+    recovered = _recovered(workspace, sources[0]["id"])
+    if recovered["passage_count"]:
+        return STATE_RESULT_READY
+    if getattr(document, "requirements", None):
+        return STATE_RESULT_READY
+    # Nothing was read out of it. That is a real outcome and the customer is
+    # owed it plainly - it is not a failure of the upload, and it is not a
+    # result either.
+    return STATE_NEEDS_ATTENTION
+
+
+def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
+    """Everything the Document Examination Result page renders.
+
+    Returns plain data, so the template makes no decisions and nothing here
+    depends on Flask. The three-way split the record keeps - established from
+    the source, GO's reading of it, and what was not established - is built
+    here rather than in markup, because it is a claim about evidence.
+    """
+    sources = _live_sources(workspace)
+    source = sources[0] if sources else None
+    filename = (source or {}).get("name") or getattr(document, "filename", "") or ""
+    ext = _ext(filename)
+    recovered = _recovered(workspace, source["id"]) if source else {
+        "page_count": 0, "passage_count": 0, "character_count": 0,
+        "preview": "", "evidence_classes": [], "read_by": [],
+    }
+
+    established: list[dict[str, str]] = []
+    interpretation: list[dict[str, str]] = []
+    not_established: list[dict[str, str]] = []
+
+    established.append({
+        "label": "File received",
+        "value": "%s, received %s" % (filename, (getattr(document, "ingested_at", "") or "")[:10]),
+    })
+    established.append({
+        "label": "Kind of file",
+        "value": _MATERIAL_BY_EXT.get(ext, "a file of type %s" % (ext or "unknown")),
+    })
+    if getattr(document, "original_file_hash", None):
+        established.append({
+            "label": "Stored unchanged",
+            "value": "The original you uploaded is kept exactly as it arrived "
+                     "(checksum %s…)." % document.original_file_hash[:12],
+        })
+
+    if recovered["passage_count"]:
+        ocr = "ocr" in " ".join(recovered["evidence_classes"]).lower() or bool(recovered["read_by"])
+        established.append({
+            "label": "Text recovered",
+            "value": "%d passage%s across %d page%s (%d characters)%s." % (
+                recovered["passage_count"], "" if recovered["passage_count"] == 1 else "s",
+                max(recovered["page_count"], 1), "" if recovered["page_count"] == 1 else "s",
+                recovered["character_count"],
+                (" — read from the image by %s" % ", ".join(recovered["read_by"]))
+                if (ocr and recovered["read_by"]) else "",
+            ),
+        })
+
+    requirements = list(getattr(document, "requirements", None) or [])
+    tables = list(getattr(document, "tables", None) or [])
+    if requirements:
+        interpretation.append({
+            "label": "Statements identified",
+            "value": "GO picked out %d passage%s that read as obligations or "
+                     "requirements. These are GO's reading of the text, not a "
+                     "quotation of it." % (len(requirements),
+                                           "" if len(requirements) == 1 else "s"),
+        })
+    if tables:
+        interpretation.append({
+            "label": "Tables found",
+            "value": "%d table%s recognised in the layout." % (
+                len(tables), "" if len(tables) == 1 else "s"),
+        })
+
+    flags = list(getattr(document, "consistency_flags", None) or [])
+    if getattr(document, "consistency_checked", False):
+        interpretation.append({
+            "label": "Internal consistency",
+            "value": ("%d point%s worth a second look." % (
+                len(flags), "" if len(flags) == 1 else "s")) if flags
+            else "Nothing inconsistent stood out.",
+        })
+    else:
+        not_established.append({
+            "label": "Internal consistency was not checked",
+            "value": getattr(document, "consistency_note", None)
+            or "This document was not compared against itself for contradictions.",
+        })
+
+    if ext in _IMAGE_EXTS and not recovered["passage_count"]:
+        not_established.append({
+            "label": "No text could be read from this image",
+            "value": "An image carries no text of its own, and the text-recognition "
+                     "step did not recover any. The picture itself is kept and can "
+                     "be viewed below.",
+        })
+    elif getattr(document, "text_extraction_status", "") == "no_native_text":
+        not_established.append({
+            "label": "This file has no text layer",
+            "value": "It appears to be a scan or picture rather than a document with "
+                     "selectable text, so there was nothing to read directly.",
+        })
+    elif not recovered["passage_count"] and not requirements:
+        not_established.append({
+            "label": "Nothing was recovered from this file",
+            "value": "The file was received and stored, but no readable content came "
+                     "out of it.",
+        })
+
+    if not interpretation:
+        not_established.append({
+            "label": "No interpretation was reached",
+            "value": "There was not enough recovered content for GO to say what this "
+                     "document requires or describes.",
+        })
+
+    state = state_of(document, workspace)
+    return {
+        "name": display_name,
+        "state": state,
+        "state_label": STATE_LABELS[state],
+        "filename": filename,
+        "received_at": getattr(document, "ingested_at", "") or "",
+        "source_id": (source or {}).get("id"),
+        "is_image": ext in _IMAGE_EXTS,
+        "established": established,
+        "interpretation": interpretation,
+        "not_established": not_established,
+        "preview_text": recovered["preview"],
+    }
+
+
+def summarise_job(document, workspace, *, display_name: str,
+                  project_id: str) -> dict[str, Any]:
+    """One row in My Documents. Same state function as the result page uses,
+    so a listing can never disagree with the page it links to."""
+    sources = _live_sources(workspace)
+    state = state_of(document, workspace)
+    first: Optional[dict] = sources[0] if sources else None
+    return {
+        "project_id": project_id,
+        "name": display_name,
+        "added_at": getattr(document, "ingested_at", "") or "",
+        "source_count": len(sources),
+        "first_source_id": (first or {}).get("id"),
+        "state": state,
+        "state_label": STATE_LABELS[state],
+    }

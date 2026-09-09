@@ -85,6 +85,24 @@
 <body>
     <div class="blueprint-grid"></div>
 
+    {# CLAUDE-DOCUMENT-SHOP-DOOR-01: a Document Shop customer is not operating
+       a Project, so the Projects/CAD shell is not their environment. The live
+       pre-flight signed in as a real customer and counted 64 affordances -
+       File > New Project (Admin only), Add Document (open a Project first),
+       Zoom, Annotation, Split View, Help topics on field access passes and
+       Spin - of which essentially none was usable by them, wrapped around an
+       empty "No projects yet".
+
+       SHARED INFRASTRUCTURE DOES NOT MEAN SHARED OPERATING PROGRAM. The shell
+       itself is untouched for every other role and every other page; a
+       customer is simply not surrounded by controls belonging to an operating
+       line they are not in. Keyed on ROLE, not on path, because a customer is
+       never in the Project line on ANY page - keying on the URL would leave
+       the leak live the moment they reached a different route.
+
+       `customer_mode` is injected by app.py's context processor from
+       services.auth.user_is_document_shop_customer, so the role is decided in
+       exactly one place and no template holds a role literal. #}
     <div class="app-shell">
         {# ---------------- Application-wide top bar (CLAUDE-P40-E3A) ---------------
            Spans the complete application width above LISTS | DISPLAY | TOOLBOX
@@ -93,7 +111,24 @@
            7): the panel-dividing lines themselves are the collapse controls
            now (see .panel-divider below) - removing the redundant buttons
            this replaces. #}
-        {% if authenticated %}
+        {% if customer_mode %}
+        {# The whole of a customer's navigation. Two destinations, because two
+           is all they have - their documents, and the way out. Deliberately
+           not a reduced copy of the application menu: a trimmed menubar is
+           still a menubar, and the next person to add an item would put the
+           Project controls back. #}
+        <div class="workspace-topbar customer-topbar" data-ui-ref="shell.customer-topbar">
+            <a class="customer-topbar-brand" href="{{ url_for('portal.document_shop_jobs') }}"
+               data-ui-ref="shell.customer.home">Archiosk Document Shop</a>
+            <span class="customer-topbar-links">
+                <a href="{{ url_for('portal.document_shop_jobs') }}"
+                   data-ui-ref="shell.customer.documents">My documents</a>
+                <a href="{{ url_for('portal.logout') }}"
+                   data-ui-ref="shell.customer.signout">Sign out</a>
+            </span>
+        </div>
+        {% endif %}
+        {% if authenticated and not customer_mode %}
         <div class="workspace-topbar">
             {% include "_app_menu.html" %}
             {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
@@ -463,7 +498,7 @@
         {% endif %}
 
         <div class="app-shell-body">
-        {% if authenticated %}
+        {% if authenticated and not customer_mode %}
         {# ---------------- The one left Lists panel (CLAUDE-P40-E3A) ---------------
            Product-owner resolution (Section 2 of this stage's own prompt):
            this IS a recursive hierarchy now, superseding P40-E2B1A's pure-

@@ -177,6 +177,24 @@ def log_out() -> None:
         logger.info("User %r logged out.", username)
 
 
+def user_is_document_shop_customer() -> bool:
+    """Is this session operating the Document Shop line and nothing else?
+
+    CLAUDE-DOCUMENT-SHOP-DOOR-01. Lives here, beside the other two authority
+    questions, because routes and templates must not re-derive a role - the
+    customer-role tranche established that rule and a test enforces it against
+    routes/portal.py and routes/workspace.py by name.
+
+    It answers a PRESENTATION question, not a permission one: where this
+    session's home is, and whether the Projects/CAD shell is its environment.
+    Nothing is granted or refused on this answer, so it is deliberately not
+    consulted by any of the gates above.
+    """
+    from models import ROLE_CUSTOMER
+
+    return session.get("role") == ROLE_CUSTOMER
+
+
 def wants_json_response() -> bool:
     """Whether this caller is a script that will call `.json()` on the reply.
 

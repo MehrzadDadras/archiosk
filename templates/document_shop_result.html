@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ result.name }} &mdash; Document Shop{% endblock %}
+
+{% block content %}
+{# CLAUDE-DOCUMENT-SHOP-RESULT-01: what a customer is handed after an upload.
+
+   It replaces the As-Read bench as the NORMAL destination. As-Read is not
+   weakened, removed or duplicated - it remains the governed evidence and
+   interpretation layer, and an analyst still reaches it. It is simply not the
+   surface a person who uploaded one document is dropped into, which is what
+   made the pre-flight journey dead-end: "0 mark(s) recognised", "Sheet not
+   established", "Vectorisation is not attempted", and no way back.
+
+   Every sentence here describes the WORK, never the architecture. No As-Read,
+   no Spin, no marks, no sheet grammar, no container state. #}
+<p class="mono" data-ui-ref="document-shop.result.breadcrumb">
+    <a href="{{ url_for('portal.document_shop_jobs') }}"
+       data-ui-ref="document-shop.result.back-top">&larr; My documents</a>
+</p>
+
+<h1 class="np-page-title" data-ui-ref="document-shop.result.page-title">{{ result.name }}</h1>
+
+<p class="mono" data-ui-ref="document-shop.result.state">
+    <strong data-ui-ref="document-shop.result.state-label">{{ result.state_label }}</strong>
+    &middot; examined when it was uploaded
+</p>
+
+{# ESTABLISHED FROM THE SOURCE. Facts the file itself supports. #}
+{% if result.established %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.established-title">What we can say from the file itself</h2>
+<dl class="plain-list" data-ui-ref="document-shop.result.established">
+    {% for item in result.established %}
+    <dt class="mono"><strong>{{ item.label }}</strong></dt>
+    <dd class="mono">{{ item.value }}</dd>
+    {% endfor %}
+</dl>
+{% endif %}
+
+{# GO INTERPRETATION. Labelled as a reading, never as what the document states. #}
+{% if result.interpretation %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.interpretation-title">What GO made of it</h2>
+<dl class="plain-list" data-ui-ref="document-shop.result.interpretation">
+    {% for item in result.interpretation %}
+    <dt class="mono"><strong>{{ item.label }}</strong></dt>
+    <dd class="mono">{{ item.value }}</dd>
+    {% endfor %}
+</dl>
+{% endif %}
+
+{# NOT ESTABLISHED. Section 7: never present an empty result as a finished one. #}
+{% if result.not_established %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.not-established-title">What we could not establish</h2>
+<dl class="plain-list" data-ui-ref="document-shop.result.not-established">
+    {% for item in result.not_established %}
+    <dt class="mono"><strong>{{ item.label }}</strong></dt>
+    <dd class="mono">{{ item.value }}</dd>
+    {% endfor %}
+</dl>
+{% endif %}
+
+{% if result.preview_text %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.recovered-title">Some of what was read</h2>
+<pre class="mono asread-recovered-text" data-ui-ref="document-shop.result.recovered">{{ result.preview_text }}</pre>
+{% endif %}
+
+<h2 class="np-section-title" data-ui-ref="document-shop.result.source-title">Your document</h2>
+{% if result.is_image and result.source_id %}
+<figure data-ui-ref="document-shop.result.image-figure">
+    <img src="{{ url_for('workspace.source_image', project_id=project_id, source_id=result.source_id) }}"
+         alt="The image you uploaded, {{ result.filename }}"
+         class="asread-source-image" data-ui-ref="document-shop.result.image">
+    <figcaption class="mono">{{ result.filename }} &mdash; exactly as you uploaded it.</figcaption>
+</figure>
+{% endif %}
+{% if result.source_id %}
+<p class="mono">
+    <a href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.source_id, download=1) }}"
+       data-ui-ref="document-shop.result.download">Download the original file</a>
+</p>
+{% endif %}
+
+{# Section 7: there is always a way onward. #}
+<p data-ui-ref="document-shop.result.next">
+    <a class="btn btn-primary" href="{{ url_for('portal.document_shop_jobs') }}"
+       data-ui-ref="document-shop.result.back">Back to my documents</a>
+    {% if can_create %}
+    <a class="btn" href="{{ url_for('portal.document_shop_intake') }}"
+       data-ui-ref="document-shop.result.another">Examine another document</a>
+    {% endif %}
+</p>
+{% endblock %}

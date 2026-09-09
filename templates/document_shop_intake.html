@@ -32,22 +32,31 @@
 
 <form method="post" enctype="multipart/form-data" class="upload-form"
       action="{{ url_for('portal.document_shop_intake') }}">
-    {# No csrf_token field here on purpose: base.html adds one to every form on
-       the page (see its own comment). Adding a second would be the duplicate
-       that page already guards against. #}
+    {# CLAUDE-DOCUMENT-SHOP-DOOR-01: rendered SERVER-SIDE, deliberately.
+       base.html's injector still adds one to every other form, and it skips
+       any form that already has this field, so there is no duplicate - see its
+       own guard. The reason to render it here is that this form's failure mode
+       was actively misleading: with the token supplied only by client-side
+       JavaScript, anything that stopped that script (a CSP problem, a blocked
+       or failed script load) made a perfectly valid upload come back as "Your
+       session expired. Please sign in again." - which sends the customer to
+       re-authenticate over a problem that has nothing to do with their
+       session. This is the app's most consequential unauthenticated-shaped
+       action by a customer, and login/reset already render their tokens the
+       same way. CSRF protection is unchanged and not weakened. #}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset class="np-group" data-ui-ref="document-shop.intake">
         <label class="field-label" for="document-shop-file">Document</label>
         <input type="file" name="file" id="document-shop-file" required
                class="text-input" data-ui-ref="document-shop.file">
         <p class="mono field-note" data-ui-ref="document-shop.accepted-formats">
+            {# The list now comes from the same rules the upload enforces.
+               It previously said scans were not accepted, which stopped being
+               true when PNG/JPEG intake shipped - a customer was being talked
+               out of the one format this door most exists for. #}
             Accepted: {{ allowed_extensions | join(', ') }}.
             Up to {{ max_upload_mb }} MB.
-            {# The image-format gap is stated plainly rather than discovered by
-               a rejection. Scans are exactly the material this door is for, and
-               they are not accepted yet - saying so here is honest; widening
-               the policy is a separate, security-reviewed decision. #}
-            Scanned images (JPEG, TIFF, PNG) are not accepted yet, and a
-            spreadsheet cannot be the first document.
+            A spreadsheet cannot be the first document.
         </p>
 
         <label class="field-label" for="document-shop-name">Name for this work (optional)</label>

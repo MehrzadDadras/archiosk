@@ -49,6 +49,20 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 DOOR = "/document-shop"
 
 
+def _project_id_from(location: str) -> str:
+    """The container id, from either landing shape.
+
+    CLAUDE-DOCUMENT-SHOP-DOOR-01 moved the door's destination from
+    /projects/<id>/workspace/sources/<sid>/understanding to
+    /document-shop/jobs/<id>. Both name the same container; this reads it from
+    whichever one arrives, so these tests pin the CONTAINER the door creates
+    rather than the surface that happened to render it.
+    """
+    if "/projects/" in location:
+        return location.split("/projects/")[1].split("/")[0]
+    return location.rstrip("/").split("/")[-1]
+
+
 def _fake_parse(_parser, _raw, filename):
     return ParsedDocument(
         project_id=str(uuid.uuid4()), filename=filename,
@@ -86,7 +100,13 @@ class BlackBoxDoorTests(unittest.TestCase):
                                content_type="multipart/form-data")
 
     def _container_from(self, response):
-        project_id = response.headers["Location"].split("/projects/")[1].split("/")[0]
+        # CLAUDE-DOCUMENT-SHOP-DOOR-01: the door now lands on the Document
+        # Examination Result, not the As-Read bench. Product Owner decision,
+        # after a live pre-flight: "The CUSTOMER MUST NOT be handed the
+        # As-Read analyst workbench as the normal result surface." The
+        # container id is what this test actually needs, so it is read from
+        # whichever shape the redirect takes rather than from one of them.
+        project_id = _project_id_from(response.headers["Location"])
         return self.store.get(project_id)
 
     # -- 1. the route exists, and it is authenticated ------------------------
@@ -248,19 +268,34 @@ class BlackBoxDoorTests(unittest.TestCase):
 
     # -- 10. where the person lands ------------------------------------------
 
-    def test_a_successful_upload_lands_in_the_existing_as_read_bench(self):
+    def test_a_successful_upload_lands_on_what_the_examination_found(self):
+        """RENAMED and RETARGETED, CLAUDE-DOCUMENT-SHOP-DOOR-01.
+
+        It asserted the door lands on the As-Read bench. A live pre-flight
+        walked that journey as a real customer and it dead-ended: "0 mark(s)
+        recognised", "As-Read has not started on this source", no action and
+        no way back. The Product Owner superseded the destination - "the
+        CUSTOMER MUST NOT be handed the As-Read analyst workbench as the
+        normal result surface" - so this pins the NEW landing.
+
+        The invariant underneath is the one that always mattered and is
+        unchanged: the person lands on the thing they just gave us, in one
+        response, with nothing to search for. As-Read itself is untouched and
+        still has its own tests.
+        """
         response = self._post()
         location = response.headers["Location"]
-        self.assertIn("/workspace/sources/", location)
-        self.assertTrue(location.endswith("/understanding"),
-                        "the person must land on the source they just gave us, "
-                        "not in a workspace they then have to search")
+        self.assertIn("/document-shop/jobs/", location)
+        self.assertNotIn("/understanding", location)
 
         workspace = self._container_from(response)
-        body = self._client().get(location).get_data(as_text=True)
-        self.assertEqual(self._client().get(location).status_code, 200)
-        self.assertIn(workspace.sources[0]["id"], location)
+        self.assertIn(workspace.project_id, location)
+        page = self._client().get(location)
+        self.assertEqual(page.status_code, 200)
+        body = page.get_data(as_text=True)
         self.assertIn("Document Shop", body)
+        # It is a result, not a workbench.
+        self.assertIn('data-ui-ref="document-shop.result.state-label"', body)
 
     # -- 11. isolation --------------------------------------------------------
 

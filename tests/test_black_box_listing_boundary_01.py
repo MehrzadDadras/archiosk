@@ -205,10 +205,16 @@ class ListingBoundaryTests(unittest.TestCase):
             with self.subTest(word=absent):
                 self.assertNotIn(absent, listing)
 
-    def test_a_job_opens_onto_the_as_read_bench(self):
+    def test_a_job_opens_onto_its_examination_result(self):
+        """RENAMED, CLAUDE-DOCUMENT-SHOP-DOOR-01 - see the door tranche's own
+        landing test for why the destination moved off the analyst bench.
+
+        What this test exists to protect is unchanged: a Black Box is
+        reachable from its OWN listing, and never as a Project.
+        """
         body = self._client().get("/document-shop/jobs").get_data(as_text=True)
-        self.assertIn("/workspace/sources/", body)
-        self.assertIn("/understanding", body)
+        self.assertIn("/document-shop/jobs/", body)
+        self.assertNotIn("/understanding", body)
 
     # -- access control, unchanged -------------------------------------------
 

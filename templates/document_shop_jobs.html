@@ -14,7 +14,7 @@
 
    The full container-presentation work is D2's, not this tranche's. This page
    exists so the boundary above does not orphan the containers it excludes. #}
-<h1 class="np-page-title" data-ui-ref="document-shop.jobs.page-title">Document Shop</h1>
+<h1 class="np-page-title" data-ui-ref="document-shop.jobs.page-title">My documents</h1>
 
 <p class="mono" data-ui-ref="document-shop.jobs.intro">
     Documents you have brought in for examination. Each one is governed and
@@ -25,12 +25,13 @@
 <ul class="plain-list" data-ui-ref="document-shop.jobs.list">
     {% for job in jobs %}
     <li class="plain-list-item" data-ui-ref="document-shop.jobs.item">
-        {% if job.first_source_id %}
-        <a href="{{ url_for('workspace.drawing_understanding_review', project_id=job.project_id, source_id=job.first_source_id) }}"
+        {# CLAUDE-DOCUMENT-SHOP-DOOR-01: opens the Document Examination
+           Result, not the analyst bench. Every job has one, including a job
+           nothing could be read from - which is exactly the case that used to
+           land on an empty workbench. #}
+        <a href="{{ url_for('portal.document_shop_result', project_id=job.project_id) }}"
            data-ui-ref="document-shop.jobs.open">{{ job.name }}</a>
-        {% else %}
-        <span data-ui-ref="document-shop.jobs.open">{{ job.name }}</span>
-        {% endif %}
+        <span class="mono" data-ui-ref="document-shop.jobs.state">{{ job.state_label }}</span>
         <span class="mono" data-ui-ref="document-shop.jobs.meta">
             {{ job.source_count }} document{{ '' if job.source_count == 1 else 's' }}
             &middot; <time datetime="{{ job.added_at }}">{{ job.added_at[:10] }}</time>

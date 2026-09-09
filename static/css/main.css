@@ -10228,3 +10228,43 @@ body {
     .proposition-actions { flex: 1 1 100%; }
     .proposition-decision { flex: 1 1 0; }
 }
+
+/* ---------------------------------------------------------------------------
+   CLAUDE-DOCUMENT-SHOP-DOOR-01 - the customer top bar.
+
+   A Document Shop customer does not get the application menubar (see
+   base.html's customer_mode), so this is the whole of their navigation. It
+   reuses .workspace-topbar's existing chrome and only lays out the two links
+   inside it - deliberately not a new bar component, because a second bar
+   architecture is how the first one grew.
+   --------------------------------------------------------------------------- */
+.customer-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 0.75rem;
+}
+
+.customer-topbar-brand {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+}
+
+.customer-topbar-links {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.customer-topbar-links a {
+    text-decoration: none;
+    opacity: 0.85;
+}
+
+.customer-topbar-links a:hover,
+.customer-topbar-links a:focus-visible {
+    opacity: 1;
+    text-decoration: underline;
+}

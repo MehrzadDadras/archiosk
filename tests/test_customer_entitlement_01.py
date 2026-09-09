@@ -208,7 +208,7 @@ class CustomerJourneyTests(unittest.TestCase):
         created = self._create_job(client, label="Anna Job")
         self.assertEqual(created.status_code, 302)
         location = created.headers["Location"]
-        project_id = location.split("/projects/")[1].split("/")[0]
+        project_id = location.rstrip("/").split("/")[-1]  # CLAUDE-DOCUMENT-SHOP-DOOR-01
         workspace = self.store.get(project_id)
         source_id = workspace.sources[0]["id"]
 
@@ -247,7 +247,7 @@ class CustomerJourneyTests(unittest.TestCase):
         anna = self._client(username="anna", user_id=11)
         ben = self._client(username="ben", user_id=12)
         created = self._create_job(anna, label="Anna Private")
-        pid = created.headers["Location"].split("/projects/")[1].split("/")[0]
+        pid = created.headers["Location"].rstrip("/").split("/")[-1]
         sid = self.store.get(pid).sources[0]["id"]
 
         for label, path in {
@@ -273,7 +273,7 @@ class CustomerJourneyTests(unittest.TestCase):
     def test_a_customer_job_carries_no_project_semantics(self):
         client = self._client()
         created = self._create_job(client, label="No Project Semantics")
-        pid = created.headers["Location"].split("/projects/")[1].split("/")[0]
+        pid = created.headers["Location"].rstrip("/").split("/")[-1]
         workspace = self.store.get(pid)
         self.assertIsNone(workspace.operating_environment)
         self.assertIsNone(workspace.lifecycle_stage)

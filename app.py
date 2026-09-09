@@ -846,7 +846,7 @@ def _register_context_processors(app: Flask) -> None:
 
         from flask import request, session
 
-        from services.auth import is_admin, is_authenticated
+        from services.auth import is_admin, is_authenticated, user_is_document_shop_customer
         from services.case_workspace import CaseWorkspaceStore
         from services.verification_access import is_verification_session
         from services.template_identity import template_identity_for_endpoint
@@ -929,6 +929,11 @@ def _register_context_processors(app: Flask) -> None:
             # own docstring for the incident this fixes.
             "csp_nonce": get_csp_nonce(),
             "authenticated": authenticated,
+            # CLAUDE-DOCUMENT-SHOP-DOOR-01: a Document Shop customer is not
+            # operating a Project, so base.html does not wrap them in the
+            # Projects/CAD shell. Injected here, from the one helper that
+            # owns the question, so no template carries a role literal.
+            "customer_mode": authenticated and user_is_document_shop_customer(),
             "is_admin": is_admin() and not on_standalone_auth_page,
             # CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one place
             # this flag is ever read into template context - a plain

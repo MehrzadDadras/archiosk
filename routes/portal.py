@@ -22,8 +22,10 @@ from services.auth import (
     admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required,
     user_can_create_document_shop_container,
     user_can_upload_to_storage,
+    user_is_document_shop_customer,
 )
 from services.rate_limit import limiter
+from services import document_examination, image_intake
 from services.case_workspace import (
     CONTAINER_STATE_BLACK_BOX,
     KNOWN_SOURCE_DOMAINS, SOURCE_DOMAIN_CLIENT_ISSUED, SOURCE_DOMAIN_UNKNOWN,
@@ -978,7 +980,17 @@ def _resolve_next_url() -> str:
 
     Only follows same-site relative paths -- ?next=https://evil.example
     would otherwise redirect an authenticated session off-site."""
-    home = url_for('portal.projects_list')
+    # CLAUDE-DOCUMENT-SHOP-DOOR-01: a customer's home is their documents.
+    # A Document Shop customer has no Projects and cannot create one, so landing
+    # them on the Projects directory showed an empty list and no route to the
+    # service they actually signed in for - the pre-flight found Document Shop
+    # unreachable except by typing the URL. Resolved HERE because this function
+    # is already the one place that decides where a session lands; a redirect
+    # bolted onto login() would leave ?next= and the already-signed-in path
+    # disagreeing with it.
+    home = (url_for('portal.document_shop_jobs')
+            if user_is_document_shop_customer()
+            else url_for('portal.projects_list'))
     next_url = request.args.get('next') or home
     if not next_url.startswith('/') or next_url.startswith('//'):
         next_url = home
@@ -3072,19 +3084,60 @@ def document_shop_jobs():
         workspace = _safe_workspace(store, document.project_id)
         if workspace is None:
             continue
-        sources = [s for s in (workspace.sources or []) if not s.get('removed_at')]
-        jobs.append({
-            'project_id': document.project_id,
-            'name': _document_display_name(document, store),
-            'added_at': document.ingested_at,
-            'source_count': len(sources),
-            'first_source_id': sources[0]['id'] if sources else None,
-        })
+        jobs.append(document_examination.summarise_job(
+            document, workspace,
+            display_name=_document_display_name(document, store),
+            project_id=document.project_id))
     # The intake call-to-action renders only for an account that could
     # actually use it - a button that answers 403 is a worse surface than
     # no button.
     return render_template('document_shop_jobs.html', jobs=jobs,
                            can_create=user_can_create_document_shop_container())
+
+
+@portal_bp.route('/document-shop/jobs/<project_id>')
+@login_required
+def document_shop_result(project_id):
+    """CLAUDE-DOCUMENT-SHOP-DOOR-01: the Document Examination Result.
+
+    The customer-facing answer to "I gave you a document - what did you find?"
+    It renders governed state that already exists; it runs no analysis of its
+    own, so there is no second As-Read here and no provider is reached.
+
+    Two gates, both existing ones. `can_access_project` is the same check every
+    Project surface uses, so a customer sees their own container and nothing
+    else. `_matches_listing_scope` then requires this to be a Document Shop
+    container specifically - without it, a customer-shaped page would render
+    over a real Project whose id someone happened to hold, and the two
+    operating lines would share a user-facing surface after a whole tranche
+    spent separating them. Both failures return the SAME generic 404 as an
+    unknown id, so neither confirms that anything exists.
+    """
+    from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
+
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    document = registry.get(project_id)
+    workspace = _safe_workspace(store, project_id)
+    if document is None or workspace is None:
+        abort(404)
+    ensure_owner_backfilled(store, workspace, get_governance_log(current_app),
+                            known_usernames())
+    if not can_access_project(workspace, session.get('username'), is_admin()):
+        abort(404)
+    if not _matches_listing_scope(workspace, LISTING_SCOPE_DOCUMENT_SHOP):
+        abort(404)
+    if workspace.removed_at:
+        abort(404)
+
+    from services.ingestion import _display_name_of as _document_display_name
+
+    result = document_examination.build_result(
+        document, workspace,
+        display_name=_document_display_name(document, store))
+    return render_template(
+        'document_shop_result.html', result=result, project_id=project_id,
+        can_create=user_can_create_document_shop_container())
 
 
 @portal_bp.route('/document-shop', methods=['GET', 'POST'])
@@ -3132,9 +3185,17 @@ def document_shop_intake():
     # classification), a rule that predates this door and is unchanged by it.
     # Listing the raw config set would advertise a format the next click
     # rejects, so the page states what is true rather than what is configured.
+    # CLAUDE-DOCUMENT-SHOP-DOOR-01: images belong in this list. PNG/JPEG have
+    # founded a Black Box since the image-intake tranche and upload succeeds
+    # today, while this page still told the customer scans were "not accepted
+    # yet" - copy that outlived the limitation it described. Derived from the
+    # same two rules ingest_upload enforces (config set, less .xlsx, plus the
+    # image formats a Black Box admits) so the sentence cannot drift from the
+    # behaviour again.
     allowed_extensions = sorted(
-        ext for ext in current_app.config['ALLOWED_UPLOAD_EXTENSIONS']
-        if ext != '.xlsx')
+        set(ext for ext in current_app.config['ALLOWED_UPLOAD_EXTENSIONS']
+            if ext != '.xlsx')
+        | set(image_intake.IMAGE_EXTENSIONS))
 
     def _page(error=None, status=200):
         return render_template(
@@ -3182,9 +3243,14 @@ def document_shop_intake():
         # Defensive only - ingest_upload does not return without a Source.
         return redirect(url_for('workspace.show_workspace',
                                 project_id=document.project_id))
-    return redirect(url_for('workspace.drawing_understanding_review',
-                            project_id=document.project_id,
-                            source_id=founding['id']))
+    # CLAUDE-DOCUMENT-SHOP-DOOR-01: was workspace.drawing_understanding_review.
+    # That bench is the governed analyst surface and stays exactly as it is -
+    # but handing it to a customer as the normal result is what produced "0
+    # mark(s) recognised / As-Read has not started on this source" with no
+    # action and no way back. The examination has already run by this line;
+    # this sends the person to what it found.
+    return redirect(url_for('portal.document_shop_result',
+                            project_id=document.project_id))
 
 
 @portal_bp.route('/upload', methods=['GET', 'POST'])
