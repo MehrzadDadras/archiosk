@@ -8,6 +8,18 @@
 
 ## What BEEHIVE is
 
+**GO Cognitive Gym — accepted foundation, execution not authorized**
+(`GO COGNITIVE GYM — FOUNDATION REGISTRATION 01`, 2026-09-08).
+[Foundation and evaluator specification](cognitive-gym/README.md) and
+[C01–C28 catalog / six families](cognitive-gym/CAPABILITY-CATALOG.md) register
+developmental assessment, independent realms/knowledge/difficulty/validity,
+transfer, the non-construction opening sequence, append-only profiles, and
+evidence-based progress history with visible regression. No exercises, provider
+execution, current competence claims, dashboard implementation, or Take 02 are
+authorized. Historical AFT qualification language and results remain unchanged.
+See also the [forward provenance correction for the Architect Studio STATUS
+block in 0ca35d6](current/architect-studio-status-provenance-correction.md).
+
 **Architect Studio — accepted future product direction, implementation deferred**
 (Product Owner `ARCHIOSK / GO — ARCHITECT STUDIO PRODUCT DIRECTION 01`, recorded
 2026-09-08). A distinct future operating line for architect-led conception,

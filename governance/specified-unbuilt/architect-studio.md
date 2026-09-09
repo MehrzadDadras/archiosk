@@ -96,6 +96,12 @@ Gym catalog was not located in the searched records. The mapping below is a
 conceptual fit assessment against those accepted definitions, not measured GO
 competence and not a replacement catalog.
 
+**Forward reference resolution — FOUNDATION REGISTRATION 01, 2026-09-08:** the
+accepted catalog is now registered at [C01–C28 and six families](../cognitive-gym/CAPABILITY-CATALOG.md),
+with [foundation, development, and profile specifications](../cognitive-gym/README.md).
+The preceding search statement describes the original registration and is
+preserved as history. This link correction changes no Studio direction or mapping.
+
 | Bar | Contribution to architectural creation |
 |---|---|
 | C01 Attention and inhibition | Preserve the active design intent and distinguish consequential constraints from distractions. |
