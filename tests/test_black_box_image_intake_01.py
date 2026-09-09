@@ -300,8 +300,21 @@ class ImageFoundingTests(unittest.TestCase):
             return {"ran": True, "status": "recovered", "pages": {0: "RECOVERED TEXT"},
                     "engine": "tesseract", "engine_version": "9.9.9", "reason": None}
 
+        # CLAUDE-GO-PERCEPTION-WORKER-01: perception is no longer performed
+        # inside ingest_upload - it is ENQUEUED, and a worker does it. What
+        # this test protects is unchanged and still asserted below: recovered
+        # text is DERIVED evidence, attributed to the engine that read it,
+        # never source authority. Only the moment it comes into existence
+        # moved, so the worker runs inside the same patch that stands in for
+        # the OCR engine.
+        from services import perception_jobs, perception_worker
+
         with patch.object(raster_extraction, "extract_raster_pages", fake_extract):
             document = self._black_box("scan.png", _png())
+            perception_worker.run_one(
+                self.app, perception_jobs.PerceptionJobStore(
+                    self.app.config["REGISTRY_STORE_PATH"]), "test-worker")
+
         workspace = self.store.get(document.project_id)
         units = [u for u in (workspace.structural_units or [])
                  if u.get("source_id") == workspace.sources[0]["id"]]

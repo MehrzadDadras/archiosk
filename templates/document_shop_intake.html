@@ -50,8 +50,12 @@
        same way. CSRF protection is unchanged and not weakened. #}
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset class="np-group" data-ui-ref="document-shop.intake">
-        <label class="field-label" for="document-shop-file">Document</label>
-        <input type="file" name="file" id="document-shop-file" required
+        <label class="field-label" for="document-shop-file">Document or documents</label>
+        {# CLAUDE-GO-PERCEPTION-MULTISOURCE-01: `multiple` so a phone's photo
+           picker lets someone select every page of a document in one go. The
+           customer's selection ORDER is preserved server-side; filenames are
+           not identity, so "image.jpg" five times over is safe. #}
+        <input type="file" name="file" id="document-shop-file" required multiple
                class="text-input" data-ui-ref="document-shop.file">
         <p class="mono field-note" data-ui-ref="document-shop.accepted-formats">
             {# The list now comes from the same rules the upload enforces.

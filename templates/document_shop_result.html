@@ -59,7 +59,7 @@
 </dl>
 {% endif %}
 
-{% if result.preview_text %}
+{% if result.preview_text and not result.pending %}
 {# CLAUDE-DOCUMENT-SHOP-FLOW-01: the heading changes with the outcome. Calling
    pages of OCR noise "Some of what was read" framed it as a reading of the
    document, which is exactly how a working examination came to look like
@@ -76,6 +76,27 @@
 </p>
 {% endif %}
 <pre class="mono asread-recovered-text" data-ui-ref="document-shop.result.recovered">{{ result.preview_text }}</pre>
+{% endif %}
+
+{# CLAUDE-GO-PERCEPTION-MULTISOURCE-01: an examination holds one or more
+   sources, each with its own honest state. A source that has not been looked
+   at yet says so - it is never rendered as a finished reading, which would be
+   a statement about work that has not happened. #}
+{% if result.sources and result.sources | length > 1 %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.sources-title">
+    What you sent ({{ result.sources | length }})
+</h2>
+<ol class="plain-list" data-ui-ref="document-shop.result.sources">
+    {% for item in result.sources %}
+    <li class="plain-list-item" data-ui-ref="document-shop.result.source">
+        <span class="mono" data-ui-ref="document-shop.result.source-name">{{ item.name }}</span>
+        <span class="mono" data-ui-ref="document-shop.result.source-state">{{ item.state_label }}</span>
+        {% if item.passage_count %}
+        <span class="mono">{{ item.character_count }} characters read</span>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ol>
 {% endif %}
 
 <h2 class="np-section-title" data-ui-ref="document-shop.result.source-title">Your document</h2>

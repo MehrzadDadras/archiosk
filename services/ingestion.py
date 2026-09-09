@@ -21,7 +21,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
-from services import image_intake
+from services import image_intake, perception_jobs
 from services.case_workspace import (
     EVIDENCE_CLASS_EXTRACTED,
     FOLDER_ROOT_DATA_ROOM,
@@ -648,51 +648,26 @@ def ingest_upload(
         # nothing is fabricated, and the Source itself is already durably
         # registered whatever this returns.
         if image_founding:
-            recovered = image_intake.extract_image_text(raw_bytes, filename)
-            # CLAUDE-GO-PERCEPTION-ORIENTATION-01: the account of WHICH FRAME
-            # was read. Recorded as a governance event rather than a new field
-            # or a new store, because the append-only log is already the
-            # place this system reconstructs "what happened to this source"
-            # from - and an orientation decision is exactly that.
+            # CLAUDE-GO-PERCEPTION-WORKER-01: perception no longer runs here.
             #
-            # Emitted whatever the outcome, including "stored pixels used
-            # as-is" and "unresolved": a silent absence cannot be told apart
-            # from a step that never ran, which is the distinction a later
-            # investigation would need most.
-            orientation = recovered.get("orientation") or {}
-            if governance_log is not None:
-                governance_log.append(
-                    project_id=workspace.project_id,
-                    event_type="image_orientation_observed",
-                    actor=actor or _DEFAULT_ACTOR,
-                    role=role or _DEFAULT_ROLE,
-                    payload={
-                        "source_id": founding_source["id"],
-                        "authority": orientation.get("authority"),
-                        "exif_orientation": orientation.get("exif_orientation"),
-                        "applied_rotation_degrees": orientation.get("applied_rotation_degrees"),
-                        "applied_mirror": orientation.get("applied_mirror"),
-                        "native_size": orientation.get("native_size"),
-                        "normalised_size": orientation.get("normalised_size"),
-                        "changed": orientation.get("changed"),
-                        "conflict": orientation.get("conflict"),
-                        "osd": orientation.get("osd"),
-                        "reason": orientation.get("reason"),
-                        # The source itself is untouched by any of this; the
-                        # hash below is the ORIGINAL, and it is what the
-                        # transformation is provenance FOR.
-                        "source_file_hash": document.original_file_hash,
-                    },
+            # This block used to call extract_image_text inline - orientation
+            # plus OCR, measured at ~8 seconds on a 12MP photograph, inside a
+            # Gunicorn worker on a 13-worker tier with no queue behind it. A
+            # customer double-submitted during one of those waits and took a
+            # worker with them each time. The work is identical; only its
+            # location changed.
+            #
+            # Enqueued rather than performed, so the request returns as soon as
+            # the Source is durably stored and addressable.
+            perception_jobs.PerceptionJobStore(
+                app.config["REGISTRY_STORE_PATH"]).enqueue(
+                    workspace_id=workspace.project_id,
+                    source_id=founding_source["id"],
+                    source_sha256=document.original_file_hash or "",
+                    source_name=filename,
+                    intake_order=0,
                 )
-            if (recovered.get("text") or "").strip():
-                store.register_pdf_page_structure(
-                    workspace, source_id=founding_source["id"],
-                    pages=[recovered["text"]],
-                    extractor_version="%s %s" % (recovered.get("engine"),
-                                                 recovered.get("engine_version")),
-                    actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
-                    evidence_class_by_page={0: EVIDENCE_CLASS_EXTRACTED},
-                )
+
     # CLAUDE-BLACK-BOX-01: a Black Box locks its CONTAINER STATE here instead
     # of an engagement environment - the same "locked at the moment of
     # creation" treatment, applied to the axis it actually has. It gets no
@@ -917,6 +892,129 @@ def _register_declared_source_references(
         actor=actor,
         governance_log=governance_log,
     )
+
+
+def attach_document_shop_sources(app, workspace, files, *, owner: str,
+                                 actor: str | None = None, role: str | None = None,
+                                 starting_order: int = 1) -> list[dict]:
+    """Add further Sources to an EXAMINATION that already exists.
+
+    CLAUDE-GO-PERCEPTION-MULTISOURCE-01. The old model was one examination =
+    one founding Source, so a customer photographing a three-page document got
+    three unrelated jobs with three separate conversations. The user-facing
+    unit is now ONE EXAMINATION holding ONE OR MORE Sources, each independently
+    perceived and independently able to fail.
+
+    PARTIAL BATCHES ARE NORMAL, not an error. One unreadable photo among five
+    must not discard the four already safely stored, so every file gets its own
+    outcome and the caller is told exactly which were accepted and which were
+    not. The per-file result shape - {filename, status, reason} - is the one
+    ingest_folder_upload already established; the SHAPE is reused, the
+    Project-creating function deliberately is not. Shared ingestion plumbing is
+    fine here; shared business-line authority is not.
+
+    Deliberately NOT a founding path: no parse, no classification, no project
+    code, no container-state transition. Those belong to ingest_upload, which
+    has already run for this examination.
+    """
+    from services.case_workspace import SOURCE_KIND_UNCLASSIFIED
+
+    store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
+    jobs = perception_jobs.PerceptionJobStore(app.config["REGISTRY_STORE_PATH"])
+    governance_log = get_governance_log(app)
+    allowed = {e.lower() for e in app.config["ALLOWED_UPLOAD_EXTENSIONS"]}
+    limit = app.config.get("MAX_CONTENT_LENGTH") or 0
+
+    sources_dir = Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / workspace.project_id
+    sources_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[dict] = []
+    order = starting_order
+    for file_storage in files:
+        filename = (getattr(file_storage, "filename", "") or "").strip()
+        if not filename:
+            results.append({"filename": "", "status": "rejected",
+                            "reason": "No filename.", "source_id": None,
+                            "intake_order": None})
+            continue
+
+        ext = Path(filename).suffix.lower()
+        is_image = image_intake.is_supported_image(filename)
+        if ext not in allowed and not is_image:
+            results.append({"filename": filename, "status": "rejected",
+                            "reason": "Unsupported file type '%s'." % ext,
+                            "source_id": None, "intake_order": None})
+            continue
+
+        try:
+            raw_bytes = file_storage.read()
+        except Exception as exc:
+            results.append({"filename": filename, "status": "rejected",
+                            "reason": "Could not be read (%s)." % type(exc).__name__,
+                            "source_id": None, "intake_order": None})
+            continue
+
+        if not raw_bytes:
+            results.append({"filename": filename, "status": "rejected",
+                            "reason": "The file was empty.", "source_id": None,
+                            "intake_order": None})
+            continue
+        if limit and len(raw_bytes) > limit:
+            results.append({"filename": filename, "status": "rejected",
+                            "reason": "Larger than the upload limit.",
+                            "source_id": None, "intake_order": None})
+            continue
+
+        if is_image:
+            verdict = image_intake.verify_image_bytes(raw_bytes, filename)
+            if verdict["status"] != image_intake.VERIFIED:
+                results.append({"filename": filename, "status": "rejected",
+                                "reason": verdict["reason"], "source_id": None,
+                                "intake_order": None})
+                continue
+
+        digest = hashlib.sha256(raw_bytes).hexdigest()
+
+        # SAME BYTES is not SAME SOURCE. A customer who deliberately picks the
+        # same photograph twice gets two ordered Sources - identity comes from
+        # the Source record, never from the filename and never from the bytes,
+        # so "image.jpg" five times over is safe. The relationship is FLAGGED
+        # rather than silently merged, because no product rule yet says a
+        # repeat was a mistake.
+        duplicate_of = next(
+            (existing["id"] for existing in (workspace.sources or [])
+             if not existing.get("removed_at")
+             and existing.get("file_hash") == digest), None)
+
+        try:
+            stored_path = sources_dir / ("%s_%s" % (uuid.uuid4().hex,
+                                                    secure_filename(filename)))
+            stored_path.write_bytes(raw_bytes)
+        except Exception as exc:
+            # One storage failure must not take its siblings with it.
+            results.append({"filename": filename, "status": "rejected",
+                            "reason": "Could not be stored (%s)." % type(exc).__name__,
+                            "source_id": None, "intake_order": None})
+            continue
+
+        source = store.add_source(
+            workspace, name=filename, file_path=str(stored_path),
+            kind=SOURCE_KIND_UNCLASSIFIED, file_hash=digest,
+            intake_order=order, governance_log=governance_log,
+            actor=actor or _DEFAULT_ACTOR)
+        workspace = store.get(workspace.project_id)
+
+        jobs.enqueue(workspace_id=workspace.project_id, source_id=source["id"],
+                     source_sha256=digest, source_name=filename,
+                     intake_order=order)
+
+        results.append({"filename": filename, "status": "accepted",
+                        "reason": None, "source_id": source["id"],
+                        "intake_order": order,
+                        "duplicate_of_source_id": duplicate_of})
+        order += 1
+
+    return results
 
 
 def ingest_folder_upload(

@@ -25,7 +25,9 @@ from services.auth import (
     user_is_document_shop_customer,
 )
 from services.rate_limit import limiter
-from services import document_conversation, document_examination, image_intake
+from services import (
+    document_conversation, document_examination, image_intake, perception_jobs,
+)
 from services.case_workspace import (
     CONTAINER_STATE_BLACK_BOX,
     KNOWN_SOURCE_DOMAINS, SOURCE_DOMAIN_CLIENT_ISSUED, SOURCE_DOMAIN_UNKNOWN,
@@ -3077,6 +3079,8 @@ def document_shop_jobs():
     # may already reach and nothing else.
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    job_store = perception_jobs.PerceptionJobStore(
+        current_app.config['REGISTRY_STORE_PATH'])
     documents = _accessible_documents(
         registry, store, scope=LISTING_SCOPE_DOCUMENT_SHOP)
     jobs = []
@@ -3087,7 +3091,7 @@ def document_shop_jobs():
         jobs.append(document_examination.summarise_job(
             document, workspace,
             display_name=_document_display_name(document, store),
-            project_id=document.project_id))
+            project_id=document.project_id, jobs=job_store))
     # The intake call-to-action renders only for an account that could
     # actually use it - a button that answers 403 is a worse surface than
     # no button.
@@ -3133,9 +3137,11 @@ def document_shop_result(project_id):
 
     from services.ingestion import _display_name_of as _document_display_name
 
+    jobs = perception_jobs.PerceptionJobStore(
+        current_app.config['REGISTRY_STORE_PATH'])
     result = document_examination.build_result(
         document, workspace,
-        display_name=_document_display_name(document, store))
+        display_name=_document_display_name(document, store), jobs=jobs)
 
     # CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: "Ask GO about this document".
     # Posting here rather than to a route of its own, because the question is
@@ -3244,12 +3250,16 @@ def document_shop_intake():
     posted_files = [f for f in request.files.getlist('file') if f and f.filename]
     if not posted_files:
         return _page("No document was provided.", 400)
-    if len(posted_files) > 1:
-        # One document at a time here. Multi-file establishment is a project
-        # act (ingest_folder_upload needs a founding document it never infers
-        # itself), and this door has no project to found.
-        return _page("Upload one document at a time.", 400)
 
+    # CLAUDE-GO-PERCEPTION-MULTISOURCE-01: a batch is now ordinary. The old
+    # rule was "one document at a time", which made a customer photographing a
+    # three-page document create three unrelated examinations with three
+    # separate conversations. The first file founds the examination; the rest
+    # attach to it, in the order the customer chose.
+    #
+    # Deliberately NOT ingest_folder_upload: that is the Project-side act, and
+    # it needs a founding document it never infers. Shared ingestion plumbing
+    # is fine; shared business-line workflow is not.
     try:
         document = ingest_upload(
             posted_files[0],
@@ -3273,6 +3283,26 @@ def document_shop_intake():
 
     store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
     workspace = store.get(document.project_id)
+
+    # Every remaining file becomes its own Source on the SAME examination, each
+    # with its own perception job. A rejection here does not undo the files
+    # already stored - partial batches are normal, and the customer is told
+    # exactly which were taken.
+    attach_results = []
+    if len(posted_files) > 1:
+        from services.ingestion import attach_document_shop_sources
+        attach_results = attach_document_shop_sources(
+            current_app, workspace, posted_files[1:],
+            owner=session.get('username', ''),
+            actor=session.get('username', ''), starting_order=1)
+        workspace = store.get(document.project_id)
+        rejected = [r for r in attach_results if r['status'] != 'accepted']
+        if rejected:
+            flash("%d of %d files could not be added: %s"
+                  % (len(rejected), len(posted_files),
+                     "; ".join("%s - %s" % (r['filename'], r['reason'])
+                               for r in rejected[:4])), 'error')
+
     founding = next((s for s in workspace.sources if not s.get('removed_at')), None)
     if founding is None:
         # Defensive only - ingest_upload does not return without a Source.

@@ -32,6 +32,13 @@
         <a href="{{ url_for('portal.document_shop_result', project_id=job.project_id) }}"
            data-ui-ref="document-shop.jobs.open">{{ job.name }}</a>
         <span class="mono" data-ui-ref="document-shop.jobs.state">{{ job.state_label }}</span>
+        {% if job.pending_count %}
+        {# Real counts from real job records - never a bar animating over
+           nothing. CLAUDE-GO-PERCEPTION-WORKER-01. #}
+        <span class="mono" data-ui-ref="document-shop.jobs.progress">
+            examined {{ job.settled_count }} of {{ job.source_count }}
+        </span>
+        {% endif %}
         <span class="mono" data-ui-ref="document-shop.jobs.meta">
             {{ job.source_count }} document{{ '' if job.source_count == 1 else 's' }}
             &middot; <time datetime="{{ job.added_at }}">{{ job.added_at[:10] }}</time>

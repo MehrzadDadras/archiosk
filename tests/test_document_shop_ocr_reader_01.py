@@ -260,6 +260,14 @@ class RealOcrIngestTests(unittest.TestCase):
             self.skipTest("no OCR engine available: %r" % probe.get("reason"))
 
         document = self._ingest(_ocr_fair_png(), "fire-damper-schedule.png")
+        # CLAUDE-GO-PERCEPTION-WORKER-01: the OCR that used to happen inside
+        # this call now happens in the worker. The property under test - that a
+        # real OCR-read image reports its text to the customer - is unchanged;
+        # the work simply is not done by the time ingest returns.
+        from services import perception_jobs, perception_worker
+        perception_worker.run_one(
+            self.app, perception_jobs.PerceptionJobStore(
+                self.app.config["REGISTRY_STORE_PATH"]), "test-worker")
         store = CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"])
         workspace = store.get(document.project_id)
 

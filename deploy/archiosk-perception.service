@@ -1,0 +1,74 @@
+# CLAUDE-GO-PERCEPTION-WORKER-01 — the perception worker.
+#
+# Install to /etc/systemd/system/archiosk-perception.service, then
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now archiosk-perception.service
+#   systemctl status archiosk-perception.service
+#   journalctl -u archiosk-perception.service -f
+#
+# WHY A SECOND SERVICE AT ALL.
+#
+# Perception used to run inside the Gunicorn request: ~8 seconds of OCR on a
+# 12MP photograph, on a 13-worker tier with no queue behind it. A customer
+# double-submitted during one of those waits and took a worker with them each
+# time. This process is where that work goes instead.
+#
+# DEPLOYMENT ORDER MATTERS: code, then web, then worker. The worker comes LAST
+# so it never runs newer code against a store an older web tier still expects.
+#
+#   sudo systemctl restart archiosk-go.service
+#   sudo systemctl restart archiosk-perception.service
+#
+# STOPPING THIS SERVICE MUST NOT MAKE THE APPLICATION UNHEALTHY. /health knows
+# nothing about it deliberately: uploads still succeed, jobs accumulate as
+# QUEUED, and they drain when the worker returns. A perception outage is a
+# delayed examination, never a broken Document Shop.
+
+[Unit]
+Description=ARCHIOSK GO perception worker (local OCR, zero image egress)
+Documentation=file:///var/www/archiosk/services/perception_worker.py
+After=network.target
+# Deliberately NOT Requires= or BindsTo= the web service. The two are
+# independent on purpose; neither should be able to take the other down.
+Wants=network.target
+
+[Service]
+Type=simple
+User=archiosk
+Group=archiosk
+WorkingDirectory=/var/www/archiosk
+
+# The same interpreter and the same .env the web service loads, so the worker
+# reads exactly the configuration the application does - one source of truth
+# for REGISTRY_STORE_PATH, and no second place for it to drift.
+EnvironmentFile=/var/www/archiosk/.env
+ExecStart=/var/www/archiosk/.venv/bin/python -m services.perception_worker
+
+# All job state lives on disk, so a restart is always safe: a job interrupted
+# mid-flight is reclaimed after its lease expires and retried, bounded.
+Restart=always
+RestartSec=5
+
+# SIGTERM asks the loop to finish the job in hand and exit. The lease would
+# recover an abandoned job anyway; this simply avoids the wasted retry.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# One job at a time. The host is 6 vCPU / 11 GB with no GPU and thirteen
+# Gunicorn workers already resident; the web tier stays the primary workload,
+# and throughput is not what this tranche is buying.
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=archiosk-perception
+
+# Modest hardening. The worker reads customer sources and writes evidence under
+# the registry root and needs nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

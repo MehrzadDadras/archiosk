@@ -37,12 +37,36 @@ STATE_READ_NOT_INTERPRETED = "read_not_interpreted"
 STATE_NEEDS_ATTENTION = "needs_attention"
 STATE_COULD_NOT_COMPLETE = "could_not_complete"
 
+# CLAUDE-GO-PERCEPTION-WORKER-01: two states that only became TRUE when the
+# work actually moved off the request.
+#
+# This module previously refused to render "Processing", and that refusal was
+# right: examination ran inside the upload request, so by the time any record
+# existed it had finished, and a pending state would have been a status no
+# record could support. Asynchronous perception creates the record that makes
+# it true. The rule did not change - the facts did.
+STATE_QUEUED = "queued"
+STATE_PROCESSING = "processing"
+
 STATE_LABELS = {
+    STATE_QUEUED: "Waiting to be examined",
+    STATE_PROCESSING: "Being examined",
     STATE_RESULT_READY: "Result ready",
     STATE_READ_NOT_INTERPRETED: "Read, not interpreted",
     STATE_NEEDS_ATTENTION: "Needs attention",
     STATE_COULD_NOT_COMPLETE: "Could not complete",
 }
+
+# Ordered worst-last: an aggregate takes the LEAST settled state among its
+# sources, so an examination never looks finished while part of it is not.
+_AGGREGATE_PRECEDENCE = (
+    STATE_COULD_NOT_COMPLETE,
+    STATE_QUEUED,
+    STATE_PROCESSING,
+    STATE_NEEDS_ATTENTION,
+    STATE_READ_NOT_INTERPRETED,
+    STATE_RESULT_READY,
+)
 
 # Plain-language equivalents. The key is the file's own extension, so nothing
 # here claims to know what the document IS - only what kind of file arrived.
@@ -161,7 +185,51 @@ def _reached_an_interpretation(document) -> bool:
                 or getattr(document, "consistency_checked", False))
 
 
-def state_of(document, workspace) -> str:
+def _job_state_for(jobs, workspace_id, source_id):
+    """What the PERSISTED job says about this source, or None if there is none.
+
+    Historical containers pre-date the job store entirely; for them there is no
+    job and the answer must come from the evidence, exactly as before. A
+    missing job is not a pending job.
+    """
+    if jobs is None:
+        return None
+    try:
+        record = jobs.latest_for_source(workspace_id, source_id)
+    except Exception:
+        return None
+    if record is None:
+        return None
+    return record.get("state")
+
+
+def source_state(document, workspace, source_id, *, jobs=None) -> str:
+    """One Source's honest state.
+
+    Job facts outrank evidence facts while a job is open: a source that has not
+    been looked at yet must never render as "Read, not interpreted", which
+    would be a statement about a reading that has not happened.
+    """
+    from services import perception_jobs as pj
+
+    job_state = _job_state_for(jobs, getattr(workspace, "project_id", ""), source_id)
+    if job_state == pj.STATE_QUEUED:
+        return STATE_QUEUED
+    if job_state == pj.STATE_RUNNING:
+        return STATE_PROCESSING
+    if job_state == pj.STATE_FAILED:
+        return STATE_NEEDS_ATTENTION
+
+    recovered = _recovered(workspace, source_id)
+    if recovered["passage_count"]:
+        return (STATE_RESULT_READY if _reached_an_interpretation(document)
+                else STATE_READ_NOT_INTERPRETED)
+    if _reached_an_interpretation(document):
+        return STATE_RESULT_READY
+    return STATE_NEEDS_ATTENTION
+
+
+def state_of(document, workspace, *, jobs=None) -> str:
     """The job's outcome, derived only from what is actually recorded.
 
     CLAUDE-DOCUMENT-SHOP-FLOW-01. This used to return "Result ready" the moment
@@ -198,21 +266,21 @@ def state_of(document, workspace) -> str:
     sources = _live_sources(workspace)
     if document is None or not sources:
         return STATE_COULD_NOT_COMPLETE
-    recovered = _recovered(workspace, sources[0]["id"])
-    interpreted = _reached_an_interpretation(document)
-    if interpreted:
-        return STATE_RESULT_READY
-    if recovered["passage_count"]:
-        # Characters came back and nothing was made of them. Saying "ready"
-        # here is what made the result read as gibberish.
-        return STATE_READ_NOT_INTERPRETED
-    # Nothing was read out of it. That is a real outcome and the customer is
-    # owed it plainly - it is not a failure of the upload, and it is not a
-    # result either.
+
+    # CLAUDE-GO-PERCEPTION-MULTISOURCE-01: an examination holds ONE OR MORE
+    # sources, and its state is the LEAST settled among them. Five photographs
+    # with two done and three waiting is not "ready" - and one that failed must
+    # not erase the four that succeeded, which is why failure is not simply
+    # propagated upward either.
+    states = [source_state(document, workspace, s["id"], jobs=jobs)
+              for s in sources]
+    for candidate in _AGGREGATE_PRECEDENCE:
+        if candidate in states:
+            return candidate
     return STATE_NEEDS_ATTENTION
 
 
-def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
+def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[str, Any]:
     """Everything the Document Examination Result page renders.
 
     Returns plain data, so the template makes no decisions and nothing here
@@ -344,7 +412,7 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
                      "document requires or describes.",
         })
 
-    state = state_of(document, workspace)
+    state = state_of(document, workspace, jobs=jobs)
     # CLAUDE-DOCUMENT-SHOP-FLOW-01: a photograph of a drawing yields marks and
     # fragments, not sentences. When nothing was concluded from them, the page
     # must present them AS fragments - the old heading "Some of what was read"
@@ -364,16 +432,54 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
         "interpretation": interpretation,
         "not_established": not_established,
         "preview_text": recovered["preview"],
+        "sources": _source_rows(document, workspace, jobs=jobs),
+        # While anything is still queued or running, the page must not present
+        # the raw-text block or the "nothing was concluded" grammar: both are
+        # statements about a completed reading.
+        "pending": state in (STATE_QUEUED, STATE_PROCESSING),
     }
 
 
+def _source_rows(document, workspace, *, jobs=None) -> list[dict[str, Any]]:
+    """One row per Source, in the order the CUSTOMER chose.
+
+    intake_order when the record states one; list position otherwise, which is
+    what every container created before that field existed has. Never a
+    filename, never a completion time, never a UUID.
+    """
+    rows = []
+    for index, source in enumerate(_live_sources(workspace)):
+        recovered = _recovered(workspace, source["id"])
+        state = source_state(document, workspace, source["id"], jobs=jobs)
+        order = source.get("intake_order")
+        rows.append({
+            "source_id": source["id"],
+            "name": source.get("name") or "",
+            "order": index if order is None else order,
+            "state": state,
+            "state_label": STATE_LABELS[state],
+            "is_image": _ext(source.get("name") or "") in _IMAGE_EXTS,
+            "passage_count": recovered["passage_count"],
+            "character_count": recovered["character_count"],
+            "read_by": recovered["read_by"],
+            "preview": recovered["preview"],
+            "pending": state in (STATE_QUEUED, STATE_PROCESSING),
+        })
+    rows.sort(key=lambda r: r["order"])
+    return rows
+
+
 def summarise_job(document, workspace, *, display_name: str,
-                  project_id: str) -> dict[str, Any]:
+                  project_id: str, jobs=None) -> dict[str, Any]:
     """One row in My Documents. Same state function as the result page uses,
     so a listing can never disagree with the page it links to."""
     sources = _live_sources(workspace)
-    state = state_of(document, workspace)
+    state = state_of(document, workspace, jobs=jobs)
     first: Optional[dict] = sources[0] if sources else None
+    per_source = [source_state(document, workspace, s["id"], jobs=jobs)
+                  for s in sources]
+    settled = len([x for x in per_source
+                   if x not in (STATE_QUEUED, STATE_PROCESSING)])
     return {
         "project_id": project_id,
         "name": display_name,
@@ -382,4 +488,8 @@ def summarise_job(document, workspace, *, display_name: str,
         "first_source_id": (first or {}).get("id"),
         "state": state,
         "state_label": STATE_LABELS[state],
+        # "Processing 2 of 5" - real counts from real job records, never a
+        # progress bar animating over nothing.
+        "settled_count": settled,
+        "pending_count": len(sources) - settled,
     }

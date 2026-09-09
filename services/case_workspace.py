@@ -1412,6 +1412,14 @@ class Source:
     removed_at: Optional[str] = None
     removed_by: Optional[str] = None
     removal_reason: Optional[str] = None
+    # CLAUDE-GO-PERCEPTION-MULTISOURCE-01: the position the CUSTOMER chose,
+    # persisted rather than derived. List position happens to agree today, but
+    # "the second picture" must not depend on insertion order surviving every
+    # future reorder, removal or re-add - and it must never be reconstructed
+    # from a filename, an upload completion time or a UUID, none of which mean
+    # anything to the person who picked the photos. None on every record that
+    # predates this field, which reads correctly as "no stated order".
+    intake_order: Optional[int] = None
     # -- document identity / provenance (Prompt 15) --------------------------
     # Deliberately distinct from `name`/`file_path` (Prompt 15 #3): `name` is
     # the physical file's name, `document_id` is the issuer's own document
@@ -9060,6 +9068,7 @@ class CaseWorkspaceStore:
         origin_reference: Optional[str] = None,
         source_domain: str = SOURCE_DOMAIN_UNKNOWN,
         folder_id: Optional[str] = None,
+        intake_order: Optional[int] = None,
         governance_log: Optional[GovernanceLog] = None,
         actor: str = "system",
     ) -> dict:
@@ -9108,6 +9117,7 @@ class CaseWorkspaceStore:
             origin_reference=origin_reference,
             source_domain=source_domain,
             folder_id=folder_id,
+            intake_order=intake_order,
         )
         workspace.sources.append(asdict(source))
         self.save(workspace)
