@@ -99,6 +99,38 @@ must not enter a blind runner. Improvement requires fresh evidence, not repeated
 exposure or self-reported learning. Changes and new executions require their own
 authorization and any required instrument requalification.
 
+### 5.1 Playful development and orientation
+
+Product Owner direction registered 2026-09-09 under `GO COGNITIVE GYM - C01
+ORIENTATION PLAY GRAMMAR DESIGN 01`; this additive principle does not authorize
+exercises or change frozen assessment instructions.
+
+> DEVELOP WITH PLAY; MEASURE WITH DISCIPLINE.
+> ORIENT BEFORE REASONING. TARGET FIRST. SIGNAL SECOND. NOISE LAST.
+
+Development begins by orienting to the situation, task objective, relevant
+evidence, and uncertainty. C01 attention/inhibition is a developmental front
+door, not a replacement for the accepted opening assessment sequence or a
+hidden multiplier of other capability results. Here target means task objective;
+it does not redefine C09's TARGET proposition axis. Observe appropriate action,
+selection, reorientation, or necessary clarification, not checklist recitation.
+
+Development may adapt, demonstrate, and briefly reinforce clean success using
+fresh material. Record assistance and exposure. Exemplars show richer
+possibilities but are not scored, assessment evidence, or future holdouts.
+Developmental experience is not itself evidence of established competence or
+durable learning. Blind assessment remains isolated and unchanged: no coaching,
+cookies, exemplar answers, or feedback reinjection. Answer-bearing developmental
+material and its derivatives cannot be represented as pristine holdouts.
+
+Target changes must be communicated; obsolete objectives must not silently
+govern later actions. Preserve unaffected evidence and constraints. Distinguish
+a changed world from newly revealed information, and target ambiguity from
+missing evidence or a difficult but clear task. Reinforce selective attention,
+appropriate clarification, restraint, and recovery, not verbosity, confidence,
+blanket hesitation, or agreement. Playful surprise must not secretly change
+rules and attribute the resulting confusion to cognition.
+
 ## 6. Realms and transfer
 
 Realm is independent of capability and of knowledge requirements. Initial realm
