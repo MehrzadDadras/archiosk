@@ -1,5 +1,141 @@
 # Continuation checkpoint
 
+## 2026-09-09 (verification) — production SMTP delivers, and self-service recovery is proven live
+
+Appended above the entries below, none of which is altered. **No application
+change.** No code, config, `.env`, test, template or static file was touched;
+this entry records a live operational verification against the deployed tree.
+Verified against production **`ebad518`** at `STATIC_VERSION=164`.
+
+### Production SMTP
+
+| | |
+|---|---|
+| Provider | Netfirms |
+| Host | `smtp.netfirms.com` |
+| Port | `465` |
+| Mode | implicit SSL (`SMTP_USE_SSL=true`, `SMTP_USE_TLS=false`) |
+| Sender / authenticated mailbox | `no-reply@archiosk.com` |
+
+The server advertises `LOGIN PLAIN` only — no CRAM-MD5. The credential lives
+solely in `/var/www/archiosk/.env` (`archiosk:archiosk 600`) and is recorded
+nowhere in this repository.
+
+### The live proof
+
+Driven over real HTTPS through nginx and gunicorn — not an in-process test
+client — using the disposable **CUSTOMER** account `zz_disposable_cust_a`.
+
+| Property | Result |
+|---|---|
+| Known-account vs unknown-address forgot-password response | **neutral** — HTTP 200 both, byte-identical after removing only per-request security material |
+| SMTP authentication | **`235` AUTH** |
+| Reset email accepted and delivered | journal `delivered: 1, failed: 0` on the HTTPS path; two further in-process sends also delivered |
+| Reset link from the real email body opens | 200, renders the set-password form |
+| Tampered token | rejected generically → `/forgot-password` |
+| Valid token accepted | 302 → sign-in |
+| Old password after reset | **rejected** |
+| New password after reset | **accepted** |
+| Token reuse | **refused**; the second password never took effect and the single legitimate use still stands |
+| Suspended account after a completed reset | **still suspended**, sign-in refused with both old and new passwords |
+| `/health` | **200**, service active |
+
+The token used was the one carried in the real email body, obtained by
+observing the sender under production configuration — the same code path, the
+same generated token, a real send.
+
+### What failed, and what fixed it
+
+Worth preserving because the symptom points away from the cause, and this is
+the second occurrence.
+
+The application logged `SMTPServerDisconnected: Connection unexpectedly closed`
+during AUTH. That reads as a transport fault and is not one:
+`smtplib.SMTP.login()` catches `SMTPAuthenticationError` to try the next
+mechanism but **not** `SMTPServerDisconnected`, so a hang-up after the first
+rejection aborts the whole login and hides the code underneath it. Probing each
+advertised mechanism separately returned a clean **`535` on PLAIN and LOGIN,
+across both 465 and 587** — the credential was being refused.
+
+The Product Owner then re-set the mailbox password in the Netfirms panel **to
+the same value**. With `.env` byte-identical, its mtime unchanged, and the
+service never restarted, AUTH immediately returned `235` and delivery
+succeeded.
+
+> **The stale state was the mailbox's SMTP AUTH at the provider, not the stored
+> value.** "The password is definitely correct" and "webmail works" therefore
+> rule nothing out, and the remedy needs no config edit and no restart. The
+> same fault and the same remedy were recorded on 2026-07-29.
+
+### Test-harness lessons — not product defects
+
+**A. HTTPS CSRF strict mode requires a realistic `Referer`.** Flask-WTF's
+`WTF_CSRF_SSL_STRICT` is on by default; a browser always sends one and a bare
+HTTP client does not. Every POST in the first run was CSRF-rejected and
+redirected to `/login` — **which is also exactly what a successful password
+reset looks like.** Several checks therefore reported PASS while nothing had
+happened. Future live recovery verification must establish a **positive control
+— a successful sign-in — before any downstream result is counted.**
+
+**B. Neutral-response comparison must normalise only per-request security
+material**: the CSRF token in both of its renderings, and the CSP nonce.
+Account-dependent content must never be normalised. Which values legitimately
+vary was established by diffing the two responses with **no** normalisation at
+all before writing the comparison, rather than assuming a difference was
+cosmetic.
+
+> **A STATUS CODE THAT CAN REPRESENT TWO OPPOSITE OUTCOMES IS NOT SUFFICIENT
+> PROOF.**
+
+### Pilot status
+
+**Self-service password recovery is LIVE. It is no longer a pilot gap, and
+operator-assisted recovery is no longer the current state.**
+
+Document Shop external-customer readiness — PROVEN:
+
+- customer entitlement
+- customer end-to-end Document Shop journey
+- cross-customer isolation
+- `source_file` hardening
+- zero-egress local intake/view path
+- self-service password recovery
+
+**Remaining non-blocking pilot constraint:** no per-owner job/byte quotas;
+supervised soft limits only.
+
+### Disposable test state
+
+All three disposable accounts returned to suspended, with no mailbox attached.
+All reset tokens retired. Scratch scripts removed from the host. The
+`Goater`/admin account was untouched throughout — the test mailbox was
+`no-reply@archiosk.com`, a system mailbox, never a person's inbox and never a
+customer identity.
+
+### Open operational risks — recorded SEPARATELY from the successful verification
+
+**A. `.env` durability.** The SMTP configuration previously disappeared: all
+four of `SMTP_HOST/USERNAME/PASSWORD/FROM` were found empty despite having
+worked six weeks earlier. `.env` is git-ignored, excluded from the deploy
+rsync, and authoritative on the host, so nothing in the normal deployment path
+explains it — and it currently has **no established independent
+recovery/backup path**. This is an open operational resilience issue, **not an
+SMTP-functionality failure**.
+
+**B. Netfirms TLS certificate — case `E-567913`.** The hostname/certificate
+concern **remains unresolved**. Strict validation still fails against
+`smtp.netfirms.com`; the application is unaffected only because `smtplib`'s
+default STARTTLS context does not verify. **Successful delivery is not evidence
+that this case is fixed**, and TLS behaviour was deliberately not modified.
+
+### Current baseline
+
+- `origin/main` = local `main` = **`ebad518`** plus this checkpoint commit,
+  working tree otherwise clean.
+- Production: **`ebad518`** at **`STATIC_VERSION=164`**, `/health` 200, service
+  active — unchanged by this verification.
+- No gate run: no application file changed.
+
 ## 2026-09-08 (application) — `cf2bff7`: a person can see what they uploaded
 
 Appended above the entries below, none of which is altered. **Deployment
