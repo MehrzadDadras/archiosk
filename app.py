@@ -553,6 +553,21 @@ def _register_error_handlers(app: Flask) -> None:
             action_url=action_url, action_label=action_label, ui_ref=ui_ref,
         )
 
+    def _home():
+        """The recovery destination for THIS session, not a fixed one.
+
+        CLAUDE-CUSTOMER-CONTAINMENT-01: these handlers are shared by every
+        operating line, so the destination has to be resolved rather than
+        hard-coded - in either direction. A Document Shop customer must not be
+        moved into Projects by an error, and a Project user must not be moved
+        out of Projects by this fix.
+        """
+        from services.auth import is_authenticated, role_home_endpoint, role_home_label
+
+        if not is_authenticated():
+            return url_for("portal.index"), "Back to home"
+        return url_for(role_home_endpoint()), role_home_label()
+
     from services.case_workspace import ConcurrentModificationError
     from services.external_source import (
         ExternalSourceForbidden, ExternalSourceUnavailable,
@@ -564,7 +579,7 @@ def _register_error_handlers(app: Flask) -> None:
             return jsonify(error="not_found", message="Resource not found."), 404
         return _render_error(
             404, "Page not found", "The page or document you're looking for doesn't exist.",
-            url_for("portal.index"), "Back to home",
+            *_home(),
         ), 404
 
     @app.errorhandler(500)
@@ -574,7 +589,7 @@ def _register_error_handlers(app: Flask) -> None:
             return jsonify(error="server_error", message="Something went wrong."), 500
         return _render_error(
             500, "Something went wrong", "The error has been logged. Please try again shortly.",
-            url_for("portal.index"), "Back to home",
+            *_home(),
         ), 500
 
     @app.errorhandler(ConcurrentModificationError)
@@ -613,7 +628,7 @@ def _register_error_handlers(app: Flask) -> None:
             "Another change was saved while you were working, so yours was not "
             "applied - nothing has been overwritten. Reload the page and try "
             "again.",
-            url_for("portal.index"), "Back to home",
+            *_home(),
         ), 409
 
     @app.errorhandler(ExternalSourceUnavailable)
@@ -665,7 +680,7 @@ def _register_error_handlers(app: Flask) -> None:
             "document, its history and everything already analysed from it are "
             "unaffected - only the original file is out of reach. Reconnect the "
             "storage and try again.",
-            url_for("portal.index"), "Back to home",
+            *_home(),
         )
         return app.make_response((page, 503, {"Retry-After": "60"}))
 
@@ -704,7 +719,7 @@ def _register_error_handlers(app: Flask) -> None:
             "everything already analysed from it are unaffected. Someone with "
             "rights to that storage will need to restore access; waiting will "
             "not resolve it on its own.",
-            url_for("portal.index"), "Back to home",
+            *_home(),
         ), 503
 
     @app.errorhandler(403)
@@ -713,7 +728,7 @@ def _register_error_handlers(app: Flask) -> None:
             return jsonify(error="forbidden", message="You do not have permission to access this resource."), 403
         return _render_error(
             403, "Access restricted", "Your account doesn't have permission to view this page.",
-            url_for("portal.projects_list"), "Back to Projects",
+            *_home(),
         ), 403
 
     @app.errorhandler(413)
@@ -731,9 +746,20 @@ def _register_error_handlers(app: Flask) -> None:
         # Werkzeug's raw, unstyled default page for.
         if _wants_json():
             return jsonify(error="file_too_large", message=_upload_too_large_message(app)), 413
+        # CLAUDE-CUSTOMER-CONTAINMENT-01: this pointed unconditionally at
+        # portal.upload - the PROJECT upload form. A Document Shop customer who
+        # picked too large a photo was handed a Project intake page, which is
+        # both the wrong operating line and a form they cannot use. Found by
+        # re-reading the handlers rather than trusting the earlier list of six.
+        from services.auth import user_is_document_shop_customer
+
+        if user_is_document_shop_customer():
+            retry_url = url_for("portal.document_shop_intake")
+        else:
+            retry_url = url_for("portal.upload")
         return _render_error(
             413, "File too large", _upload_too_large_message(app),
-            url_for("portal.upload"), "Choose a different file",
+            retry_url, "Choose a different file",
             ui_ref="errors.upload-too-large",
         ), 413
 

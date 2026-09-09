@@ -28,6 +28,7 @@ is reading order, never layout.
 """
 from __future__ import annotations
 
+import time
 from typing import Any, Optional
 
 # What the customer sees when the provider cannot be reached. One message, no
@@ -223,6 +224,54 @@ def ask(document, workspace, result: dict, question: str, *, app) -> dict[str, A
     return {"ok": True, "answer": answer, "reason": None}
 
 
+# How many times a conversation turn will re-read and re-apply before it gives
+# up. Matches services.perception_worker.CONCURRENT_WRITE_RETRIES deliberately:
+# the two are the same contention, seen from opposite ends.
+CONCURRENT_WRITE_RETRIES = 5
+
+
+def _post_with_retry(store, workspace, role: str, text: str,
+                     actor: Optional[str] = None):
+    """Append one message, tolerating a write that landed underneath us.
+
+    CLAUDE-CUSTOMER-CONTAINMENT-01. `CaseWorkspaceStore.save` is optimistic-
+    concurrency: it refuses to overwrite a record that moved since it was read.
+    That is correct, and it was being paid for by the wrong person.
+
+    The route reads the workspace, asks the provider - seconds, not
+    milliseconds - and only then writes. The perception worker is writing
+    recovered evidence to that SAME workspace throughout, and legitimately so.
+    So the losing write is not a rare double-tap; it is the ordinary case of
+    asking a question while the document is still being read, and the customer
+    was shown "Someone else saved first" for a conflict with a background job
+    that is nobody else and is not an error.
+
+    The worker already re-reads and re-applies from its side
+    (perception_worker._write_evidence_with_retry). This is the same tolerance
+    from the customer's side, and it is per-message rather than around the pair
+    on purpose: retrying both would re-post a question that was already stored.
+
+    Returns the workspace actually written to, so the caller's second message
+    continues from the record this one produced rather than the stale one.
+    """
+    last_error = None
+    for attempt in range(CONCURRENT_WRITE_RETRIES):
+        try:
+            store.add_message(workspace, None, role, text, actor=actor)
+            return workspace
+        except Exception as exc:
+            if type(exc).__name__ not in ("ConcurrentModificationError",
+                                          "WriteCollisionError"):
+                raise
+            last_error = exc
+            fresh = store.get(workspace.project_id)
+            if fresh is None:
+                raise
+            workspace = fresh
+            time.sleep(0.05 * (attempt + 1))
+    raise last_error
+
+
 def record_turn(store, workspace, *, actor: str, question: str,
                 answer: str, governance_log=None) -> None:
     """Persist the exchange onto THIS document's conversation.
@@ -231,6 +280,10 @@ def record_turn(store, workspace, *, actor: str, question: str,
     established route into project_conversation. Nothing else about the
     workspace is touched - the examination result, its evidence and its sources
     are exactly as they were.
+
+    Each message is written through `_post_with_retry`, because the document is
+    frequently still being examined while its owner is asking about it.
     """
-    store.add_message(workspace, None, ROLE_HUMAN, question.strip(), actor=actor)
-    store.add_message(workspace, None, ROLE_SYSTEM, answer.strip())
+    workspace = _post_with_retry(store, workspace, ROLE_HUMAN, question.strip(),
+                                 actor=actor)
+    _post_with_retry(store, workspace, ROLE_SYSTEM, answer.strip())

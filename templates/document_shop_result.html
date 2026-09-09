@@ -151,6 +151,7 @@
               data-ui-ref="document-shop.conversation.input"
               placeholder="e.g. What does this document require?"></textarea>
     <button type="submit" class="btn btn-primary"
+            id="ds-conversation-send"
             data-ui-ref="document-shop.conversation.send">Ask</button>
 </form>
 
@@ -171,4 +172,36 @@
        data-ui-ref="document-shop.result.another">Examine another document</a>
     {% endif %}
 </p>
+{% endblock %}
+
+{% block extra_scripts %}
+<script nonce="{{ csp_nonce }}">
+    // CLAUDE-CUSTOMER-CONTAINMENT-01: one question, one request.
+    //
+    // Asking GO takes seconds - a real provider call - and the page gives no
+    // sign of it, so a second tap is the reasonable thing for a person to do.
+    // Two identical questions were then genuinely asked, genuinely answered
+    // and genuinely charged for, and on a phone the second request could also
+    // lose the write race and end on an error page.
+    //
+    // Same shape as templates/upload.html's own double-submit guard rather
+    // than a new one, and the same acknowledged limit: this closes the second
+    // TAP, not two separate tabs racing the server. The server side of that is
+    // services/document_conversation._post_with_retry, which now tolerates the
+    // collision instead of showing the customer a write-conflict page.
+    (function () {
+        var form = document.querySelector('.ds-composer');
+        var send = document.getElementById('ds-conversation-send');
+        var input = document.getElementById('ds-question');
+        if (!form || !send) { return; }
+        var sent = false;
+        form.addEventListener('submit', function (event) {
+            if (sent) { event.preventDefault(); return; }
+            if (input && !input.value.trim()) { return; }
+            sent = true;
+            send.disabled = true;
+            send.textContent = 'Asking…';
+        });
+    })();
+</script>
 {% endblock %}

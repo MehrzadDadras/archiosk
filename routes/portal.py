@@ -20,6 +20,7 @@ from werkzeug.datastructures import FileStorage
 
 from services.auth import (
     admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required,
+    role_home_endpoint,
     user_can_create_document_shop_container,
     user_can_upload_to_storage,
     user_is_document_shop_customer,
@@ -883,7 +884,12 @@ def favicon_ico():
 def index():
     if not is_authenticated():
         return render_template('landing.html')
-    return redirect(url_for('portal.projects_list'))
+    # CLAUDE-CUSTOMER-CONTAINMENT-01: the root is a home, and home depends on
+    # which operating line the session belongs to. This sent every
+    # authenticated session to the Projects directory, so a customer tapping a
+    # bookmark, a home-screen icon, or any error page's own recovery link left
+    # Document Shop without ever asking to.
+    return redirect(url_for(role_home_endpoint()))
 
 
 @portal_bp.route('/home')
@@ -982,17 +988,13 @@ def _resolve_next_url() -> str:
 
     Only follows same-site relative paths -- ?next=https://evil.example
     would otherwise redirect an authenticated session off-site."""
-    # CLAUDE-DOCUMENT-SHOP-DOOR-01: a customer's home is their documents.
-    # A Document Shop customer has no Projects and cannot create one, so landing
-    # them on the Projects directory showed an empty list and no route to the
-    # service they actually signed in for - the pre-flight found Document Shop
-    # unreachable except by typing the URL. Resolved HERE because this function
-    # is already the one place that decides where a session lands; a redirect
-    # bolted onto login() would leave ?next= and the already-signed-in path
-    # disagreeing with it.
-    home = (url_for('portal.document_shop_jobs')
-            if user_is_document_shop_customer()
-            else url_for('portal.projects_list'))
+    # CLAUDE-CUSTOMER-CONTAINMENT-01: asks the one governed rule rather than
+    # re-deciding it. CLAUDE-DOCUMENT-SHOP-DOOR-01 resolved a customer's home
+    # HERE, because this function is already the one place that decides where a
+    # session lands - but it was the ONLY role-aware destination in the
+    # application, which is exactly why the root and every error handler
+    # disagreed with it. The policy now lives in services.auth; this reads it.
+    home = url_for(role_home_endpoint())
     next_url = request.args.get('next') or home
     if not next_url.startswith('/') or next_url.startswith('//'):
         next_url = home
@@ -1638,6 +1640,26 @@ def start_trial():
     return render_template('start_trial.html', submitted=True)
 
 
+def _elsewhere_if_customer():
+    """A Document Shop customer asking for a Project directory is lost, not banned.
+
+    CLAUDE-CUSTOMER-CONTAINMENT-01, carry-through. Closing the links was not the
+    whole condition: `/projects` and `/projects/choose` are `@login_required`
+    only, so a customer who still had one open in a tab, or who typed it, landed
+    on a Projects directory that is - correctly - empty for them, beside controls
+    they have no authority to use. Nothing leaked; `_accessible_documents` was
+    already filtering. What was wrong was the operating line.
+
+    A redirect rather than a 403, because 403 says "you may not" and this is
+    "there is nothing of yours here" - they were never refused anything. Returns
+    None for everyone else, so a Project user's behaviour on these two routes is
+    byte-for-byte what it was.
+    """
+    if user_is_document_shop_customer():
+        return redirect(url_for('portal.document_shop_jobs'))
+    return None
+
+
 _PROJECT_SORT_KEYS = {
     "last_updated": lambda p: p["last_activity"],
     "name": lambda p: p["display_name"].lower(),
@@ -1660,6 +1682,10 @@ def projects_list():
     timestamps _project_summary already computes for the home page) - no
     new metadata or search index was introduced.
     """
+    contained = _elsewhere_if_customer()
+    if contained is not None:
+        return contained
+
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     governance_log = get_governance_log(current_app)
@@ -1761,6 +1787,10 @@ def choose_project():
     exactly as if the parameter had been omitted (never a 404 - this is
     a soft display hint, not an authorization boundary of its own).
     """
+    contained = _elsewhere_if_customer()
+    if contained is not None:
+        return contained
+
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
 

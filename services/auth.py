@@ -195,6 +195,36 @@ def user_is_document_shop_customer() -> bool:
     return session.get("role") == ROLE_CUSTOMER
 
 
+def role_home_endpoint() -> str:
+    """Where HOME is for this session. The single role-routing rule.
+
+    CLAUDE-CUSTOMER-CONTAINMENT-01. Sign-in already knew a Document Shop
+    customer has no Projects; nothing else did. Every generic error handler
+    offered "Back to home" pointing at the application root, and the root
+    redirected unconditionally to the Projects directory - so a 404, a 500, a
+    write collision, an unavailable external source or a 403 quietly moved a
+    customer into an operating line that is not theirs.
+
+    That is how the Product Owner's own phone session ended: a duplicate
+    conversation submit produced a 409 whose only exit was "Back to home", and
+    home meant All Projects.
+
+    Returns an ENDPOINT NAME rather than a URL so this module stays free of
+    request-time routing, and so there is exactly one place the policy lives -
+    `_resolve_next_url` and every error handler ask here rather than each
+    re-deciding it.
+    """
+    return ("portal.document_shop_jobs" if user_is_document_shop_customer()
+            else "portal.projects_list")
+
+
+def role_home_label() -> str:
+    """What that destination is CALLED to the person going there. "Back to
+    home" is not wrong, but it is vaguer than the product can be."""
+    return ("Back to my documents" if user_is_document_shop_customer()
+            else "Back to home")
+
+
 def wants_json_response() -> bool:
     """Whether this caller is a script that will call `.json()` on the reply.
 
