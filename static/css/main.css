@@ -10334,3 +10334,59 @@ body {
     max-width: 100%;
     height: auto;
 }
+
+/* CLAUDE-DOCUMENT-SHOP-MOBILE-03 - the result's label/value rows.
+
+   The Product Owner's phone finding was that labels and values "compete for
+   narrow columns". The cause is the same one that produced the last two mobile
+   defects: `.plain-list` is referenced by the result template and defined in no
+   stylesheet, so the <dl> fell back to browser defaults - and the UA default
+   for <dd> is `margin-inline-start: 40px`. On a 360px screen that indent eats
+   roughly a ninth of the readable width off EVERY value, and the bold <dt>
+   above an indented <dd> reads as a cramped two-column table rather than a
+   list. I had classified this class "layout-neutral" when I catalogued the
+   undefined names; that judgement was wrong, and this corrects it.
+
+   Mobile-first: stacked, full width, with vertical rhythm doing the work the
+   indent was failing to do.
+
+   Scoped to `dl.plain-list` deliberately. The same class name is also used for
+   the <ul> on My documents, which is a different grammar and is not part of
+   this finding. */
+dl.plain-list {
+    margin: 0 0 1.4rem;
+}
+
+dl.plain-list dt {
+    margin: 1rem 0 0.15rem;
+}
+
+dl.plain-list dt:first-child {
+    margin-top: 0;
+}
+
+/* The whole point: no inherited indent, so a value uses the full width. */
+dl.plain-list dd {
+    margin: 0;
+    margin-inline-start: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Columns return by WIDTH, never by device or orientation - a phone held
+   sideways is simply a wider viewport, and gets whatever that width supports.
+   Below this the rows stay stacked, which is the portrait grammar above. */
+@media (min-width: 900px) {
+    dl.plain-list {
+        display: grid;
+        grid-template-columns: minmax(10rem, 16rem) 1fr;
+        column-gap: 1.5rem;
+        row-gap: 0.5rem;
+        align-items: baseline;
+    }
+
+    dl.plain-list dt,
+    dl.plain-list dt:first-child,
+    dl.plain-list dd {
+        margin: 0;
+    }
+}

@@ -54,6 +54,29 @@ def _media_blocks(max_width):
         idx = j
 
 
+def _min_width_blocks(min_width):
+    """EVERY @media (min-width: N) block body - the file already has more than
+    one at some widths, so taking only the first finds the wrong rules."""
+    out, idx = [], 0
+    needle = "@media (min-width: %dpx)" % min_width
+    while True:
+        i = CSS.find(needle, idx)
+        if i == -1:
+            return out
+        depth, j = 0, CSS.index("{", i)
+        start = j
+        while True:
+            if CSS[j] == "{":
+                depth += 1
+            elif CSS[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        out.append(CSS[start:j])
+        idx = j
+
+
 class RecoveredTextWrappingTests(unittest.TestCase):
     def test_the_template_still_uses_the_class_these_rules_style(self):
         self.assertIn("asread-recovered-text", RESULT_HTML)
@@ -125,6 +148,52 @@ class SourceImageContainmentTests(unittest.TestCase):
             self.assertNotIn(foreign, _rule(".asread-source-image") or "")
 
 
+class ResultRowReflowTests(unittest.TestCase):
+    """CLAUDE-DOCUMENT-SHOP-MOBILE-03 - label/value rows on a narrow screen."""
+
+    def _dl_rule(self, selector):
+        return _rule(selector)
+
+    def test_the_result_uses_definition_lists(self):
+        self.assertIn('<dl class="plain-list"', RESULT_HTML)
+
+    def test_the_definition_list_is_defined_for_the_result(self):
+        self.assertIsNotNone(_rule("dl.plain-list"),
+                             "undefined means the UA default 40px dd indent")
+
+    def test_values_lose_the_inherited_indent(self):
+        rule = _rule("dl.plain-list dd")
+        self.assertIsNotNone(rule)
+        self.assertIn("margin-inline-start", rule)
+        self.assertRegex(rule, r"margin-inline-start\s*:\s*0")
+
+    def test_long_values_can_break(self):
+        self.assertIn("overflow-wrap", _rule("dl.plain-list dd"))
+
+    def test_portrait_is_stacked_not_columned(self):
+        """No grid outside a min-width block: narrow screens stack."""
+        base = _rule("dl.plain-list")
+        self.assertNotIn("grid-template-columns", base)
+
+    def test_columns_return_by_width_not_by_device(self):
+        blocks = [b for b in _min_width_blocks(900) if "dl.plain-list" in b]
+        self.assertTrue(blocks, "no wider-screen rule for the result rows")
+        self.assertIn("grid-template-columns", blocks[0])
+
+    def test_no_orientation_media_query_is_used(self):
+        """Width, never orientation - a phone held sideways is just wider."""
+        self.assertNotIn("orientation:", CSS)
+
+    def test_the_jobs_list_grammar_is_not_restyled(self):
+        """Same class name, different element - and not part of this finding."""
+        self.assertNotIn("ul.plain-list", CSS)
+
+    def test_wording_and_semantics_are_untouched(self):
+        for phrase in ("What we can say from the file itself",
+                       "What GO made of it", "What we could not establish"):
+            self.assertIn(phrase, RESULT_HTML)
+
+
 class CustomerTopBarMobileTests(unittest.TestCase):
     def test_the_bar_has_a_small_screen_rule(self):
         blocks = _media_blocks(560)
@@ -167,6 +236,13 @@ class ReferencedClassesResolveTests(unittest.TestCase):
 
     # Undefined today, and each one is a plain block or inline element whose
     # default rendering already wraps - no layout consequence on a phone.
+    #
+    # CLAUDE-DOCUMENT-SHOP-MOBILE-03: "plain-list" WAS in this set and should
+    # not have been. The UA default for <dd> is margin-inline-start: 40px, which
+    # is a real layout effect on a phone - it is what the Product Owner saw as
+    # labels and values competing for narrow columns. It is now defined for the
+    # <dl> grammar. It remains listed for the <ul> on My documents, which is a
+    # different element and genuinely default-safe.
     LAYOUT_NEUTRAL = {"plain-list", "plain-list-item", "np-section-title",
                       "field-label", "field-note"}
 
