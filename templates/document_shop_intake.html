@@ -20,11 +20,15 @@
    learning what the container is called internally. #}
 <h1 class="np-page-title" data-ui-ref="document-shop.page-title">Document Shop</h1>
 
-<p class="mono" data-ui-ref="document-shop.intro">
-    Upload a document and GO will examine it &mdash; what it is, how it is
-    structured, what its marks and references mean, and what remains uncertain.
-    Nothing about where the work goes afterwards needs to be decided now.
-</p>
+{# CLAUDE-DOCUMENT-SHOP-FLOW-01: the explanatory paragraph that stood here is
+   gone from the main surface. The controls already say it - a field labelled
+   "Document", the accepted formats beneath it, and a button reading "Examine
+   this document". A sentence restating the button is furniture on a phone,
+   where it pushed the actual control below the fold.
+
+   The one part that was NOT redundant - that a person need not decide where
+   the work goes afterwards - is preserved in Help (help/file_types_and_limits),
+   because it answers a real question rather than narrating the screen. #}
 
 {% if error %}
 <p class="mono form-error" data-ui-ref="document-shop.error">{{ error }}</p>

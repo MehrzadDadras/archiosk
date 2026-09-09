@@ -60,7 +60,21 @@
 {% endif %}
 
 {% if result.preview_text %}
-<h2 class="np-section-title" data-ui-ref="document-shop.result.recovered-title">Some of what was read</h2>
+{# CLAUDE-DOCUMENT-SHOP-FLOW-01: the heading changes with the outcome. Calling
+   pages of OCR noise "Some of what was read" framed it as a reading of the
+   document, which is exactly how a working examination came to look like
+   gibberish. When nothing was concluded, it is named as raw text and captioned
+   as such. #}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.recovered-title">
+    {% if result.fragmentary %}Raw text read off the file{% else %}Some of what was read{% endif %}
+</h2>
+{% if result.fragmentary %}
+<p class="mono" data-ui-ref="document-shop.result.recovered-caveat">
+    Shown exactly as the text-recognition engine produced it, so you can judge
+    it yourself. It is not a reading of the document, and stray characters here
+    are usually linework and symbols rather than writing.
+</p>
+{% endif %}
 <pre class="mono asread-recovered-text" data-ui-ref="document-shop.result.recovered">{{ result.preview_text }}</pre>
 {% endif %}
 

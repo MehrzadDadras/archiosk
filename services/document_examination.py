@@ -33,11 +33,13 @@ from typing import Any, Optional
 # What a person is told about their job, and the only three outcomes a stored
 # record can support. Ordered worst-last so a listing can sort by concern.
 STATE_RESULT_READY = "result_ready"
+STATE_LIMITED_RECOVERY = "limited_recovery"
 STATE_NEEDS_ATTENTION = "needs_attention"
 STATE_COULD_NOT_COMPLETE = "could_not_complete"
 
 STATE_LABELS = {
     STATE_RESULT_READY: "Result ready",
+    STATE_LIMITED_RECOVERY: "Limited recovery",
     STATE_NEEDS_ATTENTION: "Needs attention",
     STATE_COULD_NOT_COMPLETE: "Could not complete",
 }
@@ -147,16 +149,49 @@ def _recovered(workspace, source_id: str) -> dict:
     }
 
 
+def _reached_an_interpretation(document) -> bool:
+    """Did the examination conclude ANYTHING beyond "here are some characters"?
+
+    Requirements, tables and a completed consistency check are the three things
+    that produce a "What GO made of it" line. If none of them happened, nothing
+    was interpreted - however many characters came back.
+    """
+    return bool(getattr(document, "requirements", None)
+                or getattr(document, "tables", None)
+                or getattr(document, "consistency_checked", False))
+
+
 def state_of(document, workspace) -> str:
-    """The job's outcome, derived only from what is actually recorded."""
+    """The job's outcome, derived only from what is actually recorded.
+
+    CLAUDE-DOCUMENT-SHOP-FLOW-01. This used to return "Result ready" the moment
+    ANY passage existed. A Product Owner phone photo of a drawing then produced
+    a page reading "Result ready - 14,306 characters recovered" beside "No
+    interpretation was reached", with pages of OCR noise under a heading that
+    said "Some of what was read". Confident gibberish, which is the one thing
+    this surface exists not to be.
+
+    The fix is NOT a text-quality score. Measured against real production
+    evidence, a word-like-token ratio does not separate noise from signal:
+    the pure-noise photo scored 0.434 while a legitimate low-yield scan scored
+    0.195 and a clean control 0.636. A threshold there would be invented
+    certainty dressed as a measurement.
+
+    So the state is derived from what the records already establish - text came
+    back, but nothing was concluded from it. That is LIMITED RECOVERY, and it
+    is true whether the cause was linework, contrast, skew or an engine limit.
+    """
     sources = _live_sources(workspace)
     if document is None or not sources:
         return STATE_COULD_NOT_COMPLETE
     recovered = _recovered(workspace, sources[0]["id"])
+    interpreted = _reached_an_interpretation(document)
+    if interpreted:
+        return STATE_RESULT_READY
     if recovered["passage_count"]:
-        return STATE_RESULT_READY
-    if getattr(document, "requirements", None):
-        return STATE_RESULT_READY
+        # Characters came back and nothing was made of them. Saying "ready"
+        # here is what made the result read as gibberish.
+        return STATE_LIMITED_RECOVERY
     # Nothing was read out of it. That is a real outcome and the customer is
     # owed it plainly - it is not a failure of the upload, and it is not a
     # result either.
@@ -215,6 +250,22 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
                 recovered["character_count"], how,
             ),
         })
+        if not _reached_an_interpretation(document):
+            # Said HERE, beside the character count, because the count on its
+            # own reads as success. 14,306 characters of nothing is still
+            # nothing, and the customer should not have to infer that.
+            not_established.append({
+                "label": "The recovered text could not be made sense of",
+                "value": (
+                    "Characters came back, but not enough of them form readable "
+                    "words for anything to be concluded. Photographing a drawing "
+                    "usually does this: linework, hatching and symbols are read "
+                    "as stray characters. The raw text is shown below so you can "
+                    "judge it yourself - it is not a reading of the document."
+                    if recovered["was_recovered"] else
+                    "Text came back, but nothing could be concluded from it."
+                ),
+            })
 
     requirements = list(getattr(document, "requirements", None) or [])
     tables = list(getattr(document, "tables", None) or [])
@@ -268,7 +319,10 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
                      "out of it.",
         })
 
-    if not interpretation:
+    if not interpretation and not recovered["passage_count"]:
+        # Only when there is genuinely nothing. Where text DID come back, the
+        # sharper line above already says so and this one would repeat it in
+        # vaguer words.
         not_established.append({
             "label": "No interpretation was reached",
             "value": "There was not enough recovered content for GO to say what this "
@@ -276,8 +330,15 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
         })
 
     state = state_of(document, workspace)
+    # CLAUDE-DOCUMENT-SHOP-FLOW-01: a photograph of a drawing yields marks and
+    # fragments, not sentences. When nothing was concluded from them, the page
+    # must present them AS fragments - the old heading "Some of what was read"
+    # framed pages of OCR noise as a reading, which is what made a working
+    # examination read as gibberish.
+    fragmentary = state == STATE_LIMITED_RECOVERY
     return {
         "name": display_name,
+        "fragmentary": fragmentary,
         "state": state,
         "state_label": STATE_LABELS[state],
         "filename": filename,

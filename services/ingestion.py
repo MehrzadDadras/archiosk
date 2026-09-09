@@ -441,7 +441,23 @@ def ingest_upload(
         )
 
     project_name = (project_name or "").strip() or None
-    _reject_if_name_taken(app, project_name or filename, owner)
+    # CLAUDE-DOCUMENT-SHOP-FLOW-01: uniqueness applies to a name the person
+    # actually CHOSE. It used to fall back to `filename`, which produced the
+    # defect the Product Owner hit on a phone: iOS names every photo from the
+    # library "image.jpg", so the SECOND photo was refused with "That name is
+    # already in use" - about a name they had never typed, for a field they had
+    # left blank. Reproduced on production before this line was touched:
+    # uploading twice with no name at all is refused both times.
+    #
+    # It also explains "the photo is not being examined": the upload was
+    # REFUSED, so nothing was examined. One rule, three reported symptoms.
+    #
+    # An unnamed container therefore reserves nothing. Its display name is
+    # still derived from the filename for READING (see _display_name_of) -
+    # showing a label and claiming a namespace are different things, and only
+    # the second one can refuse someone's upload.
+    if project_name:
+        _reject_if_name_taken(app, project_name, owner)
 
     # CLAUDE-PROJECT-CODE-01: every new project gets a governed acronym, and
     # nobody is made to invent one. A supplied value is validated; an absent one

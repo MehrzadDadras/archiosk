@@ -127,9 +127,23 @@ class StoredShapeTests(unittest.TestCase):
         self.assertIn("tesseract 4.1.1", got["read_by"])
         self.assertIn("FIRE DAMPER", got["preview"])
 
-    def test_recovered_text_makes_the_state_result_ready(self):
+    def test_recovered_text_alone_is_limited_recovery_not_result_ready(self):
+        """RETARGETED, CLAUDE-DOCUMENT-SHOP-FLOW-01.
+
+        This asserted RESULT_READY the moment any passage existed. A Product
+        Owner phone photo then produced "Result ready - 14,306 characters
+        recovered" beside "No interpretation was reached", with OCR noise under
+        a heading promising a reading. Text arriving is not a result; text
+        arriving AND something being concluded from it is.
+
+        What the test still protects is unchanged and is the reason it exists:
+        recovered text must be SEEN by the reader (the bug it was written for
+        was text being invisible). It is seen - the state now reflects it
+        honestly instead of overclaiming.
+        """
         self._register(["FIRE DAMPER SCHEDULE"])
-        self.assertEqual(dx.state_of(_doc(), self.ws), dx.STATE_RESULT_READY)
+        self.assertEqual(dx.state_of(_doc(), self.ws), dx.STATE_LIMITED_RECOVERY)
+        self.assertTrue(dx._recovered(self.ws, self.source_id)["passage_count"])
 
     def test_the_result_no_longer_denies_text_it_holds(self):
         self._register(["FIRE DAMPER SCHEDULE"])
@@ -141,7 +155,9 @@ class StoredShapeTests(unittest.TestCase):
         self.assertNotIn(FALSE_CLAIM, rendered)
         self.assertIn("Text recovered", rendered)
         self.assertIn("read from the image by tesseract 4.1.1", rendered)
-        self.assertEqual(result["state"], dx.STATE_RESULT_READY)
+        # Limited recovery, not Result ready: the text is reported, and nothing
+        # was concluded from it. See the retargeted state test above.
+        self.assertEqual(result["state"], dx.STATE_LIMITED_RECOVERY)
         self.assertIn("FIRE DAMPER", result["preview_text"])
 
     def test_direct_source_text_is_not_described_as_recovered_from_an_image(self):
@@ -259,7 +275,7 @@ class RealOcrIngestTests(unittest.TestCase):
             for group in ("established", "interpretation", "not_established")
             for i in result[group])
         self.assertNotIn(FALSE_CLAIM, rendered)
-        self.assertEqual(result["state"], dx.STATE_RESULT_READY)
+        self.assertEqual(result["state"], dx.STATE_LIMITED_RECOVERY)
         self.assertIn("DAMPER", result["preview_text"])
 
     def test_a_genuinely_blank_image_still_says_it_could_not_be_read(self):
