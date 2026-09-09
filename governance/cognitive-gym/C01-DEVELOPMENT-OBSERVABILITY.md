@@ -180,6 +180,10 @@ unnecessary precise timing. Sequence establishes order; unknown remains unknown.
 
 ## 8. Preservation and authority boundary
 
+Accepted delivery contract and proposed first qualification slice:
+[C01 development instrument contract](C01-DEVELOPMENT-INSTRUMENT-CONTRACT.md).
+This link authorizes neither implementation nor qualification execution.
+
 The C01 definition, C02 opening sequence, frozen C02 instructions, D0-D4 anchors,
 C09 TARGET semantics, append-only profile/history principles, existing evidence,
 launcher qualifications, and product code remain unchanged. Here target means
