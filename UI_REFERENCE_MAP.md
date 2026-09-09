@@ -1224,6 +1224,24 @@ model.
 | `document-shop.jobs.empty` | `<p>` | "Nothing here yet." | Honest zero state | When no accessible job exists | active |
 | `document-shop.jobs.new` | `<a class="btn btn-primary">` | "Examine a document" | Back to intake, closing the loop between the two surfaces | Always | active |
 
+## Source image preview (`templates/drawing_understanding.html` — CLAUDE-BLACK-BOX-IMAGE-PREVIEW-01)
+
+Closes a gap image intake created: a customer could upload a scan, reach the
+As-Read bench, and never see the thing they had uploaded — which for a blank or
+unreadable page left the surface showing almost nothing.
+
+Rendered ONLY when the governed source is an eligible PNG/JPEG; eligibility is
+decided in the route, so the template never reasons about formats. Deliberately
+a preview and nothing more: no annotation, no crop, no zoom/pan, and no overlay
+of recovered text onto the pixels.
+
+| Reference | Kind | Label / content | What it does, and why it is here | Condition | Status |
+|---|---|---|---|---|---|
+| `drawing-understanding.source-image` | `<figure>` | — | The bounded review region for the authoritative uploaded image | Only when the source is an eligible PNG/JPEG | active |
+| `drawing-understanding.source-image.label` | `<figcaption>` | "Source image" | Says SOURCE deliberately: these pixels are the authoritative evidence, and anything read from them is DERIVED and appears below under the engine that recovered it | Same | active |
+| `drawing-understanding.source-image.view` | `<img>` | The image itself | Browser-native scaling inside a bounded region — enough to read a page, and short of the viewer product this tranche is not. Served by `workspace.source_image`, which authorises through the same project boundary and derives its content type from the BYTES rather than the filename | Same | active |
+| `drawing-understanding.source-image.note` | `<p class="pane-note">` | "The image as it was uploaded…" | States the source-versus-derived distinction in the reader's own words rather than relying on the heading alone | Same | active |
+
 ## Deliberately NOT instrumented this stage
 
 Per-instance content inside a family (a single Finding card, a single

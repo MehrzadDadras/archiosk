@@ -2987,10 +2987,22 @@ def drawing_understanding_review(project_id, source_id):
 
     from services.environment_capabilities import WORKFLOW_DOCUMENT_SHOP
 
+    # CLAUDE-BLACK-BOX-IMAGE-PREVIEW-01: eligibility is decided HERE, from the
+    # governed source, so the template never has to reason about formats. A
+    # non-image source simply gets None and renders no preview region.
+    from services import image_intake as _image_intake
+
+    source_image_url = None
+    if source.get("file_path") and _image_intake.is_supported_image(
+            source.get("name") or ""):
+        source_image_url = url_for(
+            "workspace.source_image", project_id=project_id, source_id=source_id)
+
     return render_template(
         "drawing_understanding.html",
         project_id=project_id,
         source=source,
+        source_image_url=source_image_url,
         # CLAUDE-BLACK-BOX-D2-01: this bench does NOT currently render
         # base.html's Project Context topbar - measured, not assumed, and it is
         # why this surface already carried no project vocabulary. The flag is
@@ -3117,6 +3129,78 @@ def legend_item_snapshot(project_id, legend_item_id):
     if not path.is_file():
         abort(404)
     return send_file(str(path), mimetype="image/png")
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/image")
+@login_required
+def source_image(project_id, source_id):
+    """Serve one authoritative uploaded image, behind the SAME project boundary.
+
+    CLAUDE-BLACK-BOX-IMAGE-PREVIEW-01. A customer can upload a scan and reach
+    the bench without ever seeing what they uploaded, which for a blank or
+    unreadable page leaves the surface showing almost nothing. This closes that
+    and nothing else: it is a preview, not a viewer product.
+
+    Deliberately modelled on `legend_item_snapshot` above rather than given its
+    own access rules - `_load_workspace_or_404` authorises first, and the path
+    is read off the GOVERNED SOURCE RECORD, never off a request parameter. No
+    filename, no path fragment and no content type is taken from the caller.
+
+    THE CONTENT TYPE COMES FROM THE BYTES. `image_intake.verify_image_bytes`
+    re-reads the stored file at serve time and the response is built from what
+    it actually found, so a record that somehow points at something other than
+    a verified PNG/JPEG serves nothing at all rather than serving it under a
+    trusted-looking header. Intake already refuses those; this is the second
+    lock on the same door, because an inline image response is exactly the
+    place where trusting an extension turns into stored XSS.
+    """
+    from flask import send_file
+
+    from services import image_intake
+
+    _document, store, workspace = _load_workspace_or_404(project_id)
+    source = next(
+        (s for s in (workspace.sources or []) if s.get("id") == source_id), None)
+    # Belongs-to is part of authorisation here, not a convenience: a source id
+    # from another container must be indistinguishable from one that does not
+    # exist, which is the same generic-404 discipline the loader itself uses.
+    if source is None or source.get("removed_at") or not source.get("file_path"):
+        abort(404)
+
+    path = Path(source["file_path"])
+    # Defence in depth. The path is governed, not user-supplied, so this can
+    # only fire if a stored record is wrong - but an image response is not the
+    # place to find that out by serving the file anyway.
+    store_root = Path(current_app.config["REGISTRY_STORE_PATH"]).resolve()
+    try:
+        resolved = path.resolve()
+        resolved.relative_to(store_root)
+    except (OSError, ValueError):
+        abort(404)
+    if not resolved.is_file():
+        abort(404)
+
+    raw_bytes = resolved.read_bytes()
+    verdict = image_intake.verify_image_bytes(raw_bytes, source.get("name") or path.name)
+    if verdict["status"] != image_intake.VERIFIED:
+        abort(404)
+
+    response = send_file(
+        io.BytesIO(raw_bytes),
+        mimetype="image/png" if verdict["format"] == "PNG" else "image/jpeg",
+        # Inline, because looking at it is the entire point - but named from the
+        # GOVERNED source, never from anything the caller supplied.
+        as_attachment=False,
+        download_name=secure_filename(source.get("name") or path.name),
+    )
+    # This endpoint may only ever return one of two verified image types, so it
+    # is not a general file server and must not be sniffed into behaving like
+    # one. No Content-Security-Policy is set here on purpose: app.py's own
+    # after_request sets the application CSP and would overwrite anything
+    # written at this level, and a security header that is silently replaced is
+    # worse than an absent one - it reads as protection that is not there.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/document-context-claims/<claim_id>/review", methods=["POST"])

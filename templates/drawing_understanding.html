@@ -77,6 +77,34 @@
   examined, recovered where degraded, and understood &mdash; before Spin tests
   how it lives with the rest of the project.</p>
 
+  {# CLAUDE-BLACK-BOX-IMAGE-PREVIEW-01: the source itself, where the source is
+     an image.
+
+     A scan that recovered no text left this bench showing almost nothing - the
+     person could not see the very thing they had uploaded. This is a PREVIEW
+     and deliberately nothing more: no annotation, no crop, no zoom/pan, no
+     overlay of recovered text onto the pixels. Browser-native scaling inside a
+     bounded region is enough to read a page, and anything beyond it is a viewer
+     product this tranche is not.
+
+     The heading says SOURCE because the distinction is the point: these pixels
+     are the authoritative evidence, and any text found in them is DERIVED and
+     lives in the tables below under the engine that recovered it. #}
+  {% if source_image_url %}
+  <figure class="asread-source-image" data-ui-ref="drawing-understanding.source-image">
+    <figcaption class="workspace-pane-label"
+                data-ui-ref="drawing-understanding.source-image.label">Source image</figcaption>
+    <img src="{{ source_image_url }}" alt="The uploaded source image, shown as it was received."
+         data-ui-ref="drawing-understanding.source-image.view"
+         style="max-width:100%;max-height:70vh;height:auto;display:block;border:1px solid var(--border-subtle,#ccc);">
+    <p class="pane-note" data-ui-ref="drawing-understanding.source-image.note">
+      The image as it was uploaded. Anything read from it appears below as
+      recovered text, attributed to the engine that read it &mdash; never as
+      something the image itself states.
+    </p>
+  </figure>
+  {% endif %}
+
   {# COUNTS, NOT AN ALARM. "Contradictions" was applied to every held mark,
      including 25 held for a MISSING MEASUREMENT rather than a disagreement -
      which reads as 25 things being wrong when nothing is. A real contradiction
