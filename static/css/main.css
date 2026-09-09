@@ -10315,3 +10315,22 @@ body {
     max-width: 100%;
     margin: 0.5rem 0 1rem;
 }
+
+/* CLAUDE-DOCUMENT-SHOP-MOBILE-02 - the customer's own uploaded image.
+
+   Referenced by document_shop_result.html and previously defined nowhere, with
+   no global img rule to fall back on, so a scan or phone photo rendered at its
+   natural width - far wider than a phone screen - and scrolled the whole page
+   sideways. Found alongside the recovered-text defect and deliberately left
+   then, because that authorization covered two defects and said not to
+   broaden.
+
+   Bounded to the column it sits in, aspect ratio preserved. This is a DISPLAY
+   constraint only: nothing is cropped, nothing is resampled, and the
+   authoritative original is untouched - it is exactly the bytes the download
+   link beside the figure still serves. */
+.asread-source-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}

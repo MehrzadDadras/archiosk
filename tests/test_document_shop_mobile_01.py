@@ -87,6 +87,44 @@ class RecoveredTextWrappingTests(unittest.TestCase):
                           "if a global pre rule is ever added, revisit this")
 
 
+class SourceImageContainmentTests(unittest.TestCase):
+    """CLAUDE-DOCUMENT-SHOP-MOBILE-02 - the customer's uploaded image.
+
+    Undefined with no global img rule to fall back on, so a scan or phone photo
+    rendered at natural width and scrolled the whole page sideways.
+    """
+
+    def test_the_template_still_uses_the_class(self):
+        self.assertIn("asread-source-image", RESULT_HTML)
+
+    def test_the_class_is_defined(self):
+        self.assertIsNotNone(_rule(".asread-source-image"))
+
+    def test_the_image_cannot_exceed_its_container(self):
+        rule = _rule(".asread-source-image")
+        self.assertRegex(rule, r"max-width\s*:\s*100%")
+
+    def test_aspect_ratio_is_preserved(self):
+        rule = _rule(".asread-source-image")
+        self.assertRegex(rule, r"height\s*:\s*auto",
+                         "a fixed height would distort the customer's own scan")
+
+    def test_it_does_not_crop_or_hide_anything(self):
+        rule = _rule(".asread-source-image")
+        for forbidden in ("object-fit: cover", "clip-path", "overflow: hidden",
+                          "display: none"):
+            self.assertNotIn(forbidden, rule)
+
+    def test_no_global_img_rule_is_relied_on(self):
+        self.assertIsNone(_rule("img"),
+                          "if a global img rule appears, revisit this")
+
+    def test_project_and_admin_image_styling_is_untouched(self):
+        """Scoped to the one class - no shared image selector was changed."""
+        for foreign in (".drawing-", ".workspace-", ".thumbnail", ".pdf-page"):
+            self.assertNotIn(foreign, _rule(".asread-source-image") or "")
+
+
 class CustomerTopBarMobileTests(unittest.TestCase):
     def test_the_bar_has_a_small_screen_rule(self):
         blocks = _media_blocks(560)
@@ -132,10 +170,11 @@ class ReferencedClassesResolveTests(unittest.TestCase):
     LAYOUT_NEUTRAL = {"plain-list", "plain-list-item", "np-section-title",
                       "field-label", "field-note"}
 
-    # Undefined, and DOES change layout: an unbounded image is wider than a
-    # phone. Reported to the Product Owner rather than fixed - this tranche was
-    # authorized for two defects, and broadening was explicitly excluded.
-    KNOWN_REPORTED = {"asread-source-image"}
+    # CLAUDE-DOCUMENT-SHOP-MOBILE-02: this set held "asread-source-image" while
+    # that defect was reported-but-unfixed. It is fixed, so the allowance is
+    # gone rather than left behind as a hole nobody revisits - which is what
+    # the removed test below existed to force.
+    KNOWN_REPORTED = set()
 
     def test_no_new_layout_affecting_class_goes_undefined(self):
         defined = set(re.findall(r"\.([A-Za-z][A-Za-z0-9_-]*)", CSS))
@@ -152,12 +191,10 @@ class ReferencedClassesResolveTests(unittest.TestCase):
                     "or, if its absence genuinely changes no layout, add it to "
                     "LAYOUT_NEUTRAL with that reasoning." % sorted(missing))
 
-    def test_the_reported_gap_is_still_only_the_one_we_named(self):
-        """If asread-source-image ever gets defined, delete it from the
-        exception rather than leaving a stale allowance behind."""
-        defined = set(re.findall(r"\.([A-Za-z][A-Za-z0-9_-]*)", CSS))
-        self.assertNotIn("asread-source-image", defined,
-                         "now defined - remove it from KNOWN_REPORTED")
+    def test_no_stale_allowances_remain(self):
+        """An exception set that outlives its defect is how a known gap
+        becomes an invisible one."""
+        self.assertEqual(self.KNOWN_REPORTED, set())
 
 
 if __name__ == "__main__":
