@@ -32,7 +32,30 @@ db = SQLAlchemy()
 
 ROLE_ADMIN = "admin"
 ROLE_READ_ONLY = "read_only"
-ROLES = (ROLE_ADMIN, ROLE_READ_ONLY)
+# CLAUDE-DOCUMENT-SHOP-CUSTOMER-ROLE-01: an account identity for an external
+# Document Shop customer.
+#
+# ROLE DESCRIBES ACCOUNT SEMANTICS. ENTITLEMENT AUTHORIZES DURABLE ACTION.
+# The two are deliberately not collapsed: holding this role says what kind of
+# account this is, and says NOTHING about whether it may create durable
+# storage. That remains `services.auth.user_can_upload_to_storage`'s question,
+# unchanged by this tranche, so a customer account can exist and be exercised
+# safely BEFORE creation is widened to it.
+#
+# CUSTOMER IS NOT A PROJECT ROLE. It is an account identity usable by any
+# operating line - distinct from `services.case_workspace`'s Participant
+# role_type (who a person represents inside a project) and from
+# `routes/project_manage.py`'s ISSUABLE_ROLES (scoped access tokens). Those
+# vocabularies are unrelated and are not touched.
+#
+# It is NOT a rename of read_only, and does not inherit its contract. See
+# ROLE_READ_ONLY below for what that contract actually is - established from
+# governance rather than from the name.
+ROLE_CUSTOMER = "customer"
+#: Every account role this deployment recognises. `is_admin()` tests for
+#: ROLE_ADMIN specifically, so any role added here is non-admin by default -
+#: which is why adding one cannot silently widen administrative reach.
+ROLES = (ROLE_ADMIN, ROLE_READ_ONLY, ROLE_CUSTOMER)
 
 
 class User(db.Model):
@@ -44,6 +67,26 @@ class User(db.Model):
     role is a plain string, validated at the application layer (the CLI's
     --role choices), not a DB-level CHECK constraint -- with no migration
     tooling, a DB-level constraint would be painful to loosen later.
+
+    WHAT `read_only` ACTUALLY MEANS (CLAUDE-DOCUMENT-SHOP-CUSTOMER-ROLE-01,
+    established from governance rather than from the name). It means NON-ADMIN,
+    not "may write nothing". `governance/current/kernel-object-model.md` states
+    the contract directly: "an authorized read_only user remains unable to
+    perform admin_required actions inside a project they can now open". So a
+    read_only account that OWNS a container can legitimately use As-Read,
+    record governed decisions, and remove or restore what it owns - all
+    non-admin_required actions on its own material.
+
+    The name is a misnomer for that contract and is NOT corrected here: the
+    established mechanism for narrowing a specific action is to gate that
+    action, which is exactly what CLAUDE-P38 (OBS-04) did when recording a
+    Go/No-Go decision needed to become admin-only. Redefining the role itself
+    would change authority across every route that has ever relied on it -
+    materially wider blast radius than this tranche, and reported rather than
+    bundled.
+
+    ROLE_CUSTOMER therefore does not inherit this contract by resemblance. It
+    is defined explicitly above.
     """
     __tablename__ = "users"
 

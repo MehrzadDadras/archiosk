@@ -110,9 +110,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--username", help="Login username (prompted if omitted).")
     parser.add_argument(
-        "--role", choices=["admin", "read_only"], default=None,
+        "--role", choices=["admin", "read_only", "customer"], default=None,
         help=(
-            "Account role -- 'admin' can use /upload, 'read_only' cannot. "
+            "Account role -- 'admin' can use /upload; 'read_only' and "
+            "'customer' cannot. 'customer' is the account identity for an "
+            "external Document Shop user and carries NO creation entitlement "
+            "of its own (CLAUDE-DOCUMENT-SHOP-CUSTOMER-ROLE-01). "
             "Required when creating a new account (defaults to read_only if "
             "omitted); on an EXISTING account, omitting this leaves its "
             "current role unchanged rather than silently resetting it."
