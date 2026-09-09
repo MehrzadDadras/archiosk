@@ -183,21 +183,43 @@ class ResultIntelligibilityTests(unittest.TestCase):
         """The exact production case, with the Product Owner's own OCR text."""
         self._register(REAL_NOISE)
         result = dx.build_result(self._doc(), self.ws, display_name="Photo")
-        self.assertEqual(result["state"], dx.STATE_LIMITED_RECOVERY)
-        self.assertEqual(result["state_label"], "Limited recovery")
+        self.assertEqual(result["state"], dx.STATE_READ_NOT_INTERPRETED)
+        self.assertEqual(result["state_label"], "Read, not interpreted")
 
-    def test_it_says_the_text_could_not_be_made_sense_of(self):
+    def test_it_says_nothing_was_concluded_without_judging_the_text(self):
+        """CORRECTED after a live proof, CLAUDE-DOCUMENT-SHOP-FLOW-01.
+
+        The first wording said the text "could not be made sense of". A clean
+        photograph whose text OCR read perfectly got that caption too, because
+        an image never reaches an interpretation at all - so the claim was
+        false, in the opposite direction from the overclaim it replaced.
+        """
         self._register(REAL_NOISE)
         result = dx.build_result(self._doc(), self.ws, display_name="Photo")
         labels = " ".join(i["label"] for i in result["not_established"])
-        self.assertIn("could not be made sense of", labels)
+        values = " ".join(i["value"] for i in result["not_established"])
+        self.assertIn("Nothing has been concluded", labels)
+        self.assertNotIn("could not be made sense of", labels)
+        self.assertNotIn("not enough of them form readable words", values)
+
+    def test_cleanly_read_text_is_not_described_as_unreadable(self):
+        """The live case that caught the over-correction."""
+        self._register("FIRE DAMPER SCHEDULE\nROOM 101 DETECTOR FD-1\n"
+                       "DAMPER FD-1 CLOSE ON ALARM")
+        result = dx.build_result(self._doc(), self.ws, display_name="Clean photo")
+        blob = " ".join(i["label"] + " " + i["value"]
+                        for i in result["not_established"])
+        for false_claim in ("could not be made sense of", "unreadable",
+                            "not enough of them form readable"):
+            self.assertNotIn(false_claim, blob)
+        self.assertIn("FIRE DAMPER", result["preview_text"])
 
     def test_the_raw_text_is_flagged_as_fragments_not_a_reading(self):
         self._register(REAL_NOISE)
         result = dx.build_result(self._doc(), self.ws, display_name="Photo")
         self.assertTrue(result["fragmentary"])
         values = " ".join(i["value"] for i in result["not_established"])
-        self.assertIn("not a reading of the document", values)
+        self.assertIn("for you to judge", values)
 
     def test_the_character_count_is_not_left_reading_as_success(self):
         """14,306 characters of nothing is still nothing."""

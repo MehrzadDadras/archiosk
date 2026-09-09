@@ -33,13 +33,13 @@ from typing import Any, Optional
 # What a person is told about their job, and the only three outcomes a stored
 # record can support. Ordered worst-last so a listing can sort by concern.
 STATE_RESULT_READY = "result_ready"
-STATE_LIMITED_RECOVERY = "limited_recovery"
+STATE_READ_NOT_INTERPRETED = "read_not_interpreted"
 STATE_NEEDS_ATTENTION = "needs_attention"
 STATE_COULD_NOT_COMPLETE = "could_not_complete"
 
 STATE_LABELS = {
     STATE_RESULT_READY: "Result ready",
-    STATE_LIMITED_RECOVERY: "Limited recovery",
+    STATE_READ_NOT_INTERPRETED: "Read, not interpreted",
     STATE_NEEDS_ATTENTION: "Needs attention",
     STATE_COULD_NOT_COMPLETE: "Could not complete",
 }
@@ -177,9 +177,23 @@ def state_of(document, workspace) -> str:
     0.195 and a clean control 0.636. A threshold there would be invented
     certainty dressed as a measurement.
 
-    So the state is derived from what the records already establish - text came
-    back, but nothing was concluded from it. That is LIMITED RECOVERY, and it
-    is true whether the cause was linework, contrast, skew or an engine limit.
+    So the state is derived from what the records already establish: text came
+    back, and nothing was concluded from it.
+
+    IT IS DELIBERATELY NOT CALLED "LIMITED RECOVERY". That was the first
+    attempt, and a live proof caught it overclaiming in the opposite direction:
+    a clean photograph whose text OCR read perfectly - "FIRE DAMPER SCHEDULE /
+    ROOM 101 DETECTOR FD-1" - was labelled Limited recovery and captioned "could
+    not be made sense of", which is false. An IMAGE never reaches an
+    interpretation at all, because the parser finds no native text in one, so
+    that state applies to every image equally and cannot mean the recovery went
+    badly.
+
+    "Read, not interpreted" is what actually happened, and it is true of the
+    clean photograph and the dense drawing alike. Which of the two a person is
+    holding is visible in the recovered text itself, which is shown to them -
+    and judging that for them would need the quality score this refuses to
+    invent.
     """
     sources = _live_sources(workspace)
     if document is None or not sources:
@@ -191,7 +205,7 @@ def state_of(document, workspace) -> str:
     if recovered["passage_count"]:
         # Characters came back and nothing was made of them. Saying "ready"
         # here is what made the result read as gibberish.
-        return STATE_LIMITED_RECOVERY
+        return STATE_READ_NOT_INTERPRETED
     # Nothing was read out of it. That is a real outcome and the customer is
     # owed it plainly - it is not a failure of the upload, and it is not a
     # result either.
@@ -255,15 +269,16 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
             # own reads as success. 14,306 characters of nothing is still
             # nothing, and the customer should not have to infer that.
             not_established.append({
-                "label": "The recovered text could not be made sense of",
+                "label": "Nothing has been concluded from the recovered text",
                 "value": (
-                    "Characters came back, but not enough of them form readable "
-                    "words for anything to be concluded. Photographing a drawing "
-                    "usually does this: linework, hatching and symbols are read "
-                    "as stray characters. The raw text is shown below so you can "
-                    "judge it yourself - it is not a reading of the document."
+                    "The text below was read off your file and is shown exactly "
+                    "as the engine produced it. Nothing has been worked out from "
+                    "it. Photographing a drawing often returns marks and "
+                    "fragments as well as words - linework and symbols get read "
+                    "as stray characters - so it is shown for you to judge "
+                    "rather than summarised for you."
                     if recovered["was_recovered"] else
-                    "Text came back, but nothing could be concluded from it."
+                    "Text came back, but nothing has been concluded from it."
                 ),
             })
 
@@ -335,7 +350,7 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
     # must present them AS fragments - the old heading "Some of what was read"
     # framed pages of OCR noise as a reading, which is what made a working
     # examination read as gibberish.
-    fragmentary = state == STATE_LIMITED_RECOVERY
+    fragmentary = state == STATE_READ_NOT_INTERPRETED
     return {
         "name": display_name,
         "fragmentary": fragmentary,

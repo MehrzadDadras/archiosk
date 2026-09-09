@@ -142,7 +142,7 @@ class StoredShapeTests(unittest.TestCase):
         honestly instead of overclaiming.
         """
         self._register(["FIRE DAMPER SCHEDULE"])
-        self.assertEqual(dx.state_of(_doc(), self.ws), dx.STATE_LIMITED_RECOVERY)
+        self.assertEqual(dx.state_of(_doc(), self.ws), dx.STATE_READ_NOT_INTERPRETED)
         self.assertTrue(dx._recovered(self.ws, self.source_id)["passage_count"])
 
     def test_the_result_no_longer_denies_text_it_holds(self):
@@ -157,7 +157,7 @@ class StoredShapeTests(unittest.TestCase):
         self.assertIn("read from the image by tesseract 4.1.1", rendered)
         # Limited recovery, not Result ready: the text is reported, and nothing
         # was concluded from it. See the retargeted state test above.
-        self.assertEqual(result["state"], dx.STATE_LIMITED_RECOVERY)
+        self.assertEqual(result["state"], dx.STATE_READ_NOT_INTERPRETED)
         self.assertIn("FIRE DAMPER", result["preview_text"])
 
     def test_direct_source_text_is_not_described_as_recovered_from_an_image(self):
@@ -275,7 +275,7 @@ class RealOcrIngestTests(unittest.TestCase):
             for group in ("established", "interpretation", "not_established")
             for i in result[group])
         self.assertNotIn(FALSE_CLAIM, rendered)
-        self.assertEqual(result["state"], dx.STATE_LIMITED_RECOVERY)
+        self.assertEqual(result["state"], dx.STATE_READ_NOT_INTERPRETED)
         self.assertIn("DAMPER", result["preview_text"])
 
     def test_a_genuinely_blank_image_still_says_it_could_not_be_read(self):
