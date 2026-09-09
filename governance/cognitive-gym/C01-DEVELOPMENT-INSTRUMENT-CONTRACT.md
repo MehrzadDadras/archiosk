@@ -204,3 +204,63 @@ Next proposed authorization: C01 DEVELOPMENT INSTRUMENT QUALIFICATION 01,
 limited to this slice, additive evaluator-only implementation and disposable
 controls, frozen execution/financial contract before calls, separate dimension
 verdicts, no C01 assessment and no C02 changes. It is not issued by this document.
+
+## 7. CLARIFY 2.0 - accepted prospective repair
+
+Product Owner authority: `GO COGNITIVE GYM - C01 CLARIFICATION CONTRACT REPAIR /
+REQUALIFICATION 01`, 2026-09-09. This addendum registers the accepted response
+repair and separately authorized bounded evaluator requalification. Earlier
+qualification evidence remains historical, not rewritten by this addendum.
+
+Required: type CLARIFY, one non-empty focused question, and one valid
+paused_decision reference. Optional alternatives mean concise interpretations;
+there is no fixed item-count limit. Omission is preferred when interpretations
+add nothing; an empty array is structurally valid. More alternatives do not mean
+better clarification. Focus and usefulness are examiner interpretations, not
+claims established by counting entries or question marks.
+
+The exact response schema is:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CLARIFY 2.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "question", "paused_decision"],
+  "properties": {
+    "type": {"const": "CLARIFY"},
+    "question": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "paused_decision": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "alternatives": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "pattern": "\\S"}
+    }
+  }
+}
+```
+
+Runtime validation additionally requires exact binding to the pending decision,
+an allowed response type, strict JSON including duplicate-key rejection, and
+successful non-truncated completion. Preserve raw content. No silent truncation,
+dropped entries, coercion, JSON repair, normalization, or answer-quality retry.
+The output ceiling stays 256 tokens; it bounds output, not semantic quality.
+If truncation occurs, preserve evidence and stop.
+
+The same CLARIFY 2.0 schema applies in DEVELOPMENT and ASSESSMENT. Subsequent
+support remains mode/protocol governed: explicitly logged development support;
+assessment clarification only where its frozen protocol permits it. This does
+not change existing frozen C02 instructions or authorize a new assessment path.
+
+The max-three limit originated in the first evaluator implementation's
+tools/core.py validator and prompt assembly, not the accepted numerical
+measurement requirements. The first run remains NOT QUALIFIED; call 4 remains
+invalid under that run's frozen contract. Immutable stopped-evidence seal:
+ab2a1598a9f2e795a7f3f83ada42aa78c14c8eac7a5ecde10dea003e63a03188.
+
+Repair uses a new qualification identity, version, freeze, and evidence seal.
+Retain previous parsing, versioning, mode-denial and isolation evidence as
+support, with targeted regression of changed contracts. Fresh proof must complete
+selection delivery, replacement, declared encounter state, clarification flow,
+external collection and execution validity. Only disposable instrument controls
+may be used; no C01 developmental games, cognitive assessments or product changes.
