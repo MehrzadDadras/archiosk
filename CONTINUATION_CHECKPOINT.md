@@ -1,5 +1,46 @@
 # Continuation checkpoint
 
+## 2026-09-08 (application) — `cf2bff7`: a person can see what they uploaded
+
+Appended above the entries below, none of which is altered. **Deployment
+authorized.**
+
+### Accepted
+
+- **Route: `workspace.source_image`** — read-only, serves one authoritative
+  PNG/JPEG for preview.
+- **Authoritative bytes served byte-identical** — no recompressed substitute.
+- **Content type comes from the BYTES**, re-verified at serve time, never from
+  the filename. A record whose name and content disagree serves nothing.
+- **Access reuses the existing workspace boundary** (`_load_workspace_or_404`)
+  plus belongs-to and removed-source checks; a foreign source id, an unknown
+  id and a removed source all return the same generic 404. No second access
+  mechanism.
+- **Zero provider egress**, pinned by tests across both the asset route and the
+  bench render.
+- **No annotation, crop, zoom/pan, editor or OCR overlay** — browser-native
+  scaling in a bounded region. SOURCE stays authoritative evidence; recovered
+  text stays DERIVED, below, under the engine that read it.
+- **As-Read shows the preview only for eligible PNG/JPEG sources**; eligibility
+  is decided in the route, so the template never reasons about formats.
+- Viewing mutates nothing — `workspace.version` unchanged after a fetch.
+
+### Registered, not addressed
+
+**`workspace.source_file` derives its response content type from
+`mimetypes.guess_type(source["name"])` — the filename.** Fine for a download,
+wrong for anything rendered inline. Not currently exploitable
+(`ALLOWED_UPLOAD_EXTENSIONS` admits no HTML-typed format). It is **shared
+infrastructure with a wider blast radius than Black Box preview**, so it needs
+its own hardening tranche: should generic governed source serving derive
+content type from verified bytes or governed metadata rather than a
+user-controlled filename? **Deliberately untouched here.**
+
+### Gate
+
+**7,236 passed, 3 skipped, 3,097 subtests, 0 failed, 9:12** (parallel,
+`-n 8 --dist loadfile`).
+
 ## 2026-09-08 (application) — `1b022e3`: a scan may enter, and may not leave
 
 Appended above the entries below, none of which is altered. **Deployment
