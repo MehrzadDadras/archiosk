@@ -131,6 +131,10 @@ appropriate clarification, restraint, and recovery, not verbosity, confidence,
 blanket hesitation, or agreement. Playful surprise must not secretly change
 rules and attribute the resulting confusion to cognition.
 
+Accepted bounded specification: [C01 developmental observability](C01-DEVELOPMENT-OBSERVABILITY.md).
+This defines encounter records and examiner attribution, not instrumentation or
+assessment execution authority.
+
 ## 6. Realms and transfer
 
 Realm is independent of capability and of knowledge requirements. Initial realm
