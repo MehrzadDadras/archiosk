@@ -10390,3 +10390,73 @@ dl.plain-list dd {
         margin: 0;
     }
 }
+
+/* CLAUDE-DOCUMENT-SHOP-CONVERSATION-01 - "Ask GO about this document".
+
+   Mobile-first and single-column by construction, not by breakpoint: there is
+   no desktop panel to collapse, so there is nothing to get wrong on a phone.
+   The composer is full width at every size; the send control sits below the
+   box rather than beside it, so an open keyboard never pushes it off-screen or
+   into a cramped column beside the text. */
+.ds-conversation {
+    list-style: none;
+    margin: 0 0 1.25rem;
+    padding: 0;
+}
+
+.ds-turn {
+    display: block;
+    margin: 0 0 0.9rem;
+    max-width: 100%;
+}
+
+.ds-turn-who {
+    display: block;
+    font-weight: 600;
+    opacity: 0.7;
+    margin-bottom: 0.15rem;
+}
+
+/* Long words in a recovered quotation must break, not widen the page - the
+   same rule the recovered-text block needed, for the same reason. */
+.ds-turn-text {
+    display: block;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* Who said it, shown structurally as well as by the label above - a thread
+   read on a phone needs the two voices separable at a glance. */
+.ds-turn-go {
+    border-left: 2px solid currentColor;
+    padding-left: 0.75rem;
+    opacity: 0.95;
+}
+
+.ds-turn-you {
+    padding-left: 0.75rem;
+}
+
+.ds-composer {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+    max-width: 100%;
+}
+
+.ds-composer-input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    min-height: 4.5rem;
+}
+
+.ds-composer-note {
+    opacity: 0.75;
+    margin: 0 0 1.5rem;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}

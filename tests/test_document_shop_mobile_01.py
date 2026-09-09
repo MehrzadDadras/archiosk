@@ -257,7 +257,11 @@ class ReferencedClassesResolveTests(unittest.TestCase):
         for name in ("document_shop_result.html", "document_shop_jobs.html",
                      "document_shop_intake.html"):
             html = (_REPO_ROOT / "templates" / name).read_text(encoding="utf-8")
-            used = {c for attr in re.findall(r'class="([^"]*)"', html)
+            # Strip Jinja before reading class attributes: a conditional
+            # class renders one of its branches, and the expression's own
+            # tokens ("if", "else", the quoted names) are not class names.
+            plain = re.sub(r"\{\{.*?\}\}|\{%.*?%\}", " ", html, flags=re.S)
+            used = {c for attr in re.findall(r'class="([^"]*)"', plain)
                     for c in attr.split() if "{" not in c}
             missing = used - defined - self.LAYOUT_NEUTRAL - self.KNOWN_REPORTED
             with self.subTest(template=name):

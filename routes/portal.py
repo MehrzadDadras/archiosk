@@ -25,7 +25,7 @@ from services.auth import (
     user_is_document_shop_customer,
 )
 from services.rate_limit import limiter
-from services import document_examination, image_intake
+from services import document_conversation, document_examination, image_intake
 from services.case_workspace import (
     CONTAINER_STATE_BLACK_BOX,
     KNOWN_SOURCE_DOMAINS, SOURCE_DOMAIN_CLIENT_ISSUED, SOURCE_DOMAIN_UNKNOWN,
@@ -3095,8 +3095,9 @@ def document_shop_jobs():
                            can_create=user_can_create_document_shop_container())
 
 
-@portal_bp.route('/document-shop/jobs/<project_id>')
+@portal_bp.route('/document-shop/jobs/<project_id>', methods=['GET', 'POST'])
 @login_required
+@limiter.limit("30 per hour", methods=["POST"])
 def document_shop_result(project_id):
     """CLAUDE-DOCUMENT-SHOP-DOOR-01: the Document Examination Result.
 
@@ -3135,8 +3136,42 @@ def document_shop_result(project_id):
     result = document_examination.build_result(
         document, workspace,
         display_name=_document_display_name(document, store))
+
+    # CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: "Ask GO about this document".
+    # Posting here rather than to a route of its own, because the question is
+    # ABOUT this result and the answer is read beside it - a separate endpoint
+    # would have to re-establish the same identity and the same two gates, and
+    # the two would drift at the first change to either.
+    #
+    # The stored examination result is NOT touched by any of this. The only
+    # write is the conversation turn itself.
+    conversation_error = None
+    if request.method == 'POST':
+        question = (request.form.get('question') or '').strip()
+        if question:
+            reply = document_conversation.ask(
+                document, workspace, result, question, app=current_app)
+            # Recorded whether or not the provider answered: a customer who
+            # asked and was told the service is unavailable should still see
+            # that they asked, rather than an empty thread that looks like the
+            # question was never sent.
+            document_conversation.record_turn(
+                store, workspace,
+                actor=session.get('username', ''),
+                question=question, answer=reply['answer'],
+                governance_log=get_governance_log(current_app))
+            # POST/redirect/GET so a refresh cannot re-ask, and so the stored
+            # turn is re-read rather than guessed at in memory.
+            return redirect(url_for('portal.document_shop_result',
+                                    project_id=project_id, _anchor='conversation'))
+        # An empty box is not worth a round trip - re-render and say so.
+        conversation_error = "Type a question first."
+
+
     return render_template(
         'document_shop_result.html', result=result, project_id=project_id,
+        conversation=document_conversation.conversation_for(workspace),
+        conversation_error=conversation_error,
         can_create=user_can_create_document_shop_container())
 
 

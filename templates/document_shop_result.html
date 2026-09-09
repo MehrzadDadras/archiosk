@@ -80,6 +80,53 @@
 </p>
 {% endif %}
 
+{# CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: the continuation.
+
+   Placed BELOW the result and above the way onward, because it is a
+   continuation of the examination, not a replacement for it. The stored result
+   above is unchanged by anything said here. #}
+<h2 class="np-section-title" id="conversation"
+    data-ui-ref="document-shop.conversation.title">Ask GO about this document</h2>
+
+{% if conversation %}
+<ol class="ds-conversation" data-ui-ref="document-shop.conversation.thread">
+    {% for turn in conversation %}
+    <li class="ds-turn {{ 'ds-turn-you' if turn.is_customer else 'ds-turn-go' }}"
+        data-ui-ref="document-shop.conversation.turn">
+        <span class="ds-turn-who mono">{{ 'You' if turn.is_customer else 'GO' }}</span>
+        <span class="ds-turn-text mono">{{ turn.text }}</span>
+    </li>
+    {% endfor %}
+</ol>
+{% endif %}
+
+{% if conversation_error %}
+<p class="mono form-error" data-ui-ref="document-shop.conversation.error">{{ conversation_error }}</p>
+{% endif %}
+
+<form method="post" class="ds-composer"
+      action="{{ url_for('portal.document_shop_result', project_id=project_id) }}"
+      data-ui-ref="document-shop.conversation.form">
+    {# Server-rendered, for the same reason the upload form is: a form whose
+       token arrives only via JavaScript reports its own failure as an expired
+       session, which sends the person to re-authenticate over nothing. #}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="field-label" for="ds-question">Ask GO about this document</label>
+    <textarea id="ds-question" name="question" rows="3" class="text-input ds-composer-input"
+              data-ui-ref="document-shop.conversation.input"
+              placeholder="e.g. What does this document require?"></textarea>
+    <button type="submit" class="btn btn-primary"
+            data-ui-ref="document-shop.conversation.send">Ask</button>
+</form>
+
+{# Plain-language disclosure. Named here rather than buried in a policy page,
+   because this is the moment the person decides to send something. #}
+<p class="mono ds-composer-note" data-ui-ref="document-shop.conversation.disclosure">
+    To answer, the text of this document is sent to the AI service that powers
+    GO. The image or file itself is never sent. Everything already found above
+    was worked out here and does not change.
+</p>
+
 {# Section 7: there is always a way onward. #}
 <p data-ui-ref="document-shop.result.next">
     <a class="btn btn-primary" href="{{ url_for('portal.document_shop_jobs') }}"
