@@ -13407,3 +13407,75 @@ against an authenticated test client. And the new `@media (max-width: 560px)`
 Help rules: `resize_window` could not drive the viewport below Chrome's minimum,
 so intrinsic reflow is verified and the breakpoint is not. Both are worth a
 minute on a real phone.
+
+## Session checkpoint: customer operating-line containment — `e25ba93` live
+
+**CLAUDE-CUSTOMER-CONTAINMENT-01.** Pushed and deployed; production is
+`e25ba93` (`systemctl show archiosk-go -p Description` reads
+`Gunicorn - ArchiOSK GO (accepted build e25ba93)`), both `archiosk-go` and
+`archiosk-perception` active, `/health` 200 internally and publicly.
+
+### What was wrong, stated as the condition rather than the symptom
+
+The reported symptom was one link. The condition was that **sign-in's
+`_resolve_next_url` was the only role-aware destination in the application** —
+the root and all seven generic error handlers each held their own hard-coded
+answer, so every one of them disagreed with it. `role_home_endpoint()` /
+`role_home_label()` in `services/auth.py` are now the single place the policy
+lives, and each surface reads it.
+
+Re-reading the handlers rather than trusting the earlier count of six found a
+**seventh**: `@errorhandler(413)` sent a customer whose photo was too large to
+`portal.upload` — the Project intake form, wrong operating line and a form they
+have no authority to use.
+
+Carry-through: `/gateway` inherits the fix (it only redirects to the root) and
+`/dashboard` inherits it through `/projects`. `/projects` and `/projects/choose`
+were `@login_required` only, so a typed URL or an old tab still landed a
+customer on a Projects directory — `_elsewhere_if_customer()` now contains both.
+A redirect, not a 403: `_accessible_documents` was already filtering, so nothing
+leaked and nothing was ever refused to them. What was wrong was the operating
+line, not the permission.
+
+### The 409 was investigated, not assumed
+
+It is **not** primarily a double-tap. `document_shop_result` reads the
+workspace, calls the provider — seconds, not milliseconds — then writes, while
+the perception worker is legitimately writing recovered evidence to that same
+workspace throughout. The worker already re-read and re-applied from its side;
+the customer's side did not, so a person asking about a document still being
+read was shown "Someone else saved first" about a background job that is nobody
+else. `document_conversation._post_with_retry` now tolerates it, per message
+rather than around the pair (retrying both would re-post a stored question).
+The composer additionally disables on submit, reusing `upload.html`'s existing
+guard and carrying its same acknowledged limit — it closes the second tap, not
+two racing tabs.
+
+### Evidence
+
+- Gate on the frozen tree: **7,466 passed, 3 skipped, 3,261 subtests, 10:00,
+  parallel `-n 8 --dist loadfile`, `PYTEST_EXIT=0`.**
+- `tests/test_customer_containment_01.py` — 28 tests, pinning **both**
+  directions. A containment fix that quietly relocates the other role is the
+  same defect facing the other way.
+- Live on `e25ba93` as the disposable ROLE_CUSTOMER over real HTTPS: **25/25**,
+  including a positive control (sign-in must genuinely succeed before any
+  downstream result counts) and two genuinely concurrent conversation submits,
+  neither of which produced a 409 and both of which were recorded.
+
+No `static/` asset changed, so `STATIC_VERSION` was correctly **not** bumped; it
+remains 171 and is served as `?v=171`.
+
+### Registered, not actioned
+
+- **Rollback directories: 36**, thirty-three above the keep-3 rule, and **34 of
+  them hold a copy of `.env`**. That is the exposure surface the rule exists to
+  limit, and it has grown since the rule was written at 13. 758 MB against 88 GB
+  free — disk is not the argument and should not be cited as one. Pruning is a
+  separate deliberate decision by that rule's own terms and was not folded into
+  this deploy's cleanup.
+- **The Project-user side is proven by suite, not live.** Both directions are
+  asserted against an authenticated test client; the live half used only the
+  customer account and an anonymous control, because admin credentials are not
+  entered here. Worth one real sign-in to confirm a Project user's 404 still
+  reads "Back to home".
