@@ -327,10 +327,21 @@ class ImageFoundingTests(unittest.TestCase):
                          "the Source exists whether or not text was recovered")
         self.assertEqual(workspace.sources[0]["kind"], SOURCE_KIND_UNCLASSIFIED)
 
-    def test_entitlement_is_unchanged(self):
+    def test_the_intake_door_is_still_gated(self):
+        """Superseded by CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A.
+
+        This asserted `@admin_required` - correct while that was the gate, and
+        while this tranche's job was to prove image intake had not widened it.
+        The Product Owner has since split origination from Project upload
+        authority, so the door now asks the narrower question. The surviving
+        intent is that the door is GATED and that the gate is a single named
+        authority rather than a role test grown here.
+        """
         source = (_REPO_ROOT / "routes" / "portal.py").read_text(encoding="utf-8")
-        header = source[:source.index("def document_shop_intake")]
-        self.assertIn("@admin_required", header[-300:])
+        window = source[source.index("def document_shop_intake"):]
+        window = window[:window.index("def ", 40)]
+        self.assertIn("user_can_create_document_shop_container()", window)
+        self.assertIn("abort(403)", window)
 
 
 class ExifPolicyTests(unittest.TestCase):

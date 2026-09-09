@@ -274,12 +274,30 @@ class ListingBoundaryTests(unittest.TestCase):
 
     # -- what this tranche did NOT do ----------------------------------------
 
-    def test_no_entitlement_was_widened(self):
+    def test_the_jobs_listing_shows_only_what_the_caller_may_reach(self):
+        """Superseded by CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A.
+
+        This asserted the listing held the SAME authority as the door
+        (`@admin_required` on both). That is no longer true and should not be:
+        viewing a job you are already authorized for is a weaker authority than
+        originating one, and requiring the stronger question here would hide a
+        container from someone with legitimate access to it.
+
+        What survives is the invariant that actually protects isolation - the
+        listing shows exactly what the access filter permits, and nothing else.
+        """
         source = (_REPO_ROOT / "routes" / "portal.py").read_text(encoding="utf-8")
-        window = source[source.index("def document_shop_jobs"):]
-        header = source[:source.index("def document_shop_jobs")]
-        self.assertTrue(header.rstrip().endswith("@admin_required"),
-                        "the jobs listing holds the same authority as the door")
+        jobs = source[source.index("def document_shop_jobs"):]
+        jobs = jobs[:jobs.index("def ", 40)]
+        self.assertIn("_accessible_documents", jobs)
+        self.assertIn("LISTING_SCOPE_DOCUMENT_SHOP", jobs)
+        # The origination helper IS consulted here - but only to decide whether
+        # to offer the intake control, never to gate the view. The distinction
+        # is the point, so it is asserted as such: no refusal in this view.
+        self.assertNotIn("abort(403)", jobs,
+                         "viewing must not require origination authority")
+        self.assertIn("can_create=", jobs,
+                      "origination authority decides the CTA, not access")
 
     def test_name_uniqueness_is_now_owner_scoped(self):
         """Superseded by CLAUDE-BLACK-BOX-OWNER-NAMES-01, not weakened.

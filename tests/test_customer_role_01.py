@@ -15,8 +15,9 @@ file pins both contracts so neither drifts into the other.
 
 Three tests carry the weight:
 
-`test_the_role_grants_no_creation_entitlement` - the whole point. Holding the
-role must not, on its own, let anyone create durable storage.
+`test_the_role_grants_no_project_creation` - an account role grants no PROJECT
+authority. Its Document Shop half was superseded when origination entitlement
+was granted; see that test's own docstring.
 
 `test_a_customer_cannot_reach_any_administrative_surface` - measured against
 real routes, not assumed from the decorator list.
@@ -123,12 +124,20 @@ class CustomerAuthorityTests(unittest.TestCase):
 
     # -- the point of the tranche --------------------------------------------
 
-    def test_the_role_grants_no_creation_entitlement(self):
-        """Holding the role must not, by itself, open durable creation."""
+    def test_the_role_grants_no_project_creation(self):
+        """Superseded in part by CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A.
+
+        This asserted a customer was refused at the Document Shop door too,
+        which was correct while the role existed without any entitlement - the
+        whole reason it landed first. Origination authority has since been
+        granted to CUSTOMER and is asserted in
+        tests/test_customer_entitlement_01.py.
+
+        What survives, and is the half that always mattered: an ACCOUNT ROLE
+        grants no PROJECT authority. /upload is still refused.
+        """
         client = self._client()
-        for path in ("/document-shop", "/document-shop/jobs", "/upload"):
-            with self.subTest(path=path):
-                self.assertEqual(client.get(path).status_code, 403)
+        self.assertEqual(client.get("/upload").status_code, 403)
 
     def test_the_entitlement_choke_point_was_not_changed(self):
         source = (_REPO_ROOT / "services" / "auth.py").read_text(encoding="utf-8")

@@ -44,8 +44,14 @@
 </p>
 {% endif %}
 
+{# CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A: viewing a job you are
+   authorized for and originating a new one are different authorities, so an
+   account that may only do the first is not offered a control that would
+   refuse it. #}
+{% if can_create %}
 <p>
     <a class="btn btn-primary" href="{{ url_for('portal.document_shop_intake') }}"
        data-ui-ref="document-shop.jobs.new">Examine a document</a>
 </p>
+{% endif %}
 {% endblock %}

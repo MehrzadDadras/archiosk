@@ -20,6 +20,7 @@ from werkzeug.datastructures import FileStorage
 
 from services.auth import (
     admin_required, check_credentials, is_admin, is_authenticated, log_in, log_out, login_required,
+    user_can_create_document_shop_container,
     user_can_upload_to_storage,
 )
 from services.rate_limit import limiter
@@ -3039,7 +3040,7 @@ def _pending_upload_store() -> PendingUploadStore:
 
 
 @portal_bp.route('/document-shop/jobs')
-@admin_required
+@login_required
 def document_shop_jobs():
     """The person's own Document Shop work, findable without entering Projects.
 
@@ -3055,6 +3056,13 @@ def document_shop_jobs():
     """
     from services.ingestion import _display_name_of as _document_display_name
 
+    # CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A: authenticated only, and
+    # deliberately NOT gated on creation entitlement. Viewing a job you are
+    # already authorized for is a different authority from originating one -
+    # requiring the stronger question here would hide a container from someone
+    # who has legitimate access to it. `_accessible_documents` already applies
+    # the ownership/allow-list filter, so this shows exactly what the caller
+    # may already reach and nothing else.
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
     documents = _accessible_documents(
@@ -3072,11 +3080,15 @@ def document_shop_jobs():
             'source_count': len(sources),
             'first_source_id': sources[0]['id'] if sources else None,
         })
-    return render_template('document_shop_jobs.html', jobs=jobs)
+    # The intake call-to-action renders only for an account that could
+    # actually use it - a button that answers 403 is a worse surface than
+    # no button.
+    return render_template('document_shop_jobs.html', jobs=jobs,
+                           can_create=user_can_create_document_shop_container())
 
 
 @portal_bp.route('/document-shop', methods=['GET', 'POST'])
-@admin_required
+@login_required
 @limiter.limit("20 per hour", methods=["POST"])
 def document_shop_intake():
     """CLAUDE-BLACK-BOX-DOOR-01: the first user-operable door into a governed
@@ -3106,6 +3118,13 @@ def document_shop_intake():
     bench. No interstitial, no workspace detour, no hunting for the file they
     just uploaded.
     """
+    # CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A: was @admin_required. This
+    # route ORIGINATES a container, so it asks the origination question - not
+    # the Project upload question, which a read_only account legitimately
+    # passes and which would have let it create Document Shop jobs.
+    if not user_can_create_document_shop_container():
+        abort(403)
+
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
     # What this door can actually accept as the FIRST document, which is not
     # the same set as ALLOWED_UPLOAD_EXTENSIONS. ingest_upload refuses .xlsx as

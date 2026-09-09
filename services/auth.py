@@ -93,8 +93,15 @@ def user_can_upload_to_storage() -> bool:
     user cannot bypass a cosmetic UI-only restriction by posting
     directly to the upload route.
 
-    Deliberately, honestly a no-op today: `models.User.ROLES` is
-    `(admin, read_only)` only - this codebase has no real public-trial
+    CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A: this answers "may I add
+    material to a container I am already authorized for?" and NOT "may I
+    originate a new one" - see user_can_create_document_shop_container below,
+    which was split out precisely because treating those as one question
+    would have removed the Project upload authority `read_only` has always
+    had. This function is unchanged.
+
+    Deliberately, honestly a no-op today: `models.User.ROLES` was
+    `(admin, read_only)` when this was written - this codebase has no real public-trial
     account/entitlement concept yet (`services/trial_request.py` is a
     lead-gen "request access" contact-email form, not real account
     provisioning; there is no self-serve signup flow). Every
@@ -105,6 +112,44 @@ def user_can_upload_to_storage() -> bool:
     the answer, so nothing else needs to be found and updated.
     """
     return True
+
+
+def user_can_create_document_shop_container() -> bool:
+    """May this account ORIGINATE a new Document Shop governed container?
+
+    CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A. A DISCOVERED DISTINCTION,
+    not a workaround for a failing test.
+
+        PROJECT UPLOAD AUTHORITY  - may I add material to a container I am
+                                    already authorized for?
+        THIS                      - may I bring a NEW governed container into
+                                    existence?
+
+    Those were treated as one question and are not. `user_can_upload_to_storage`
+    above answers the first and is deliberately UNCHANGED: a `read_only`
+    account has always been able to add documents to a Project it owns, that
+    behaviour is established by 21 existing tests, and an entitlement model
+    that quietly removed it would be reducing real authority to make a new
+    feature fit. The first attempt at this tranche did exactly that, the full
+    gate caught it, and this helper is the correction.
+
+        ADMIN     - may originate.
+        CUSTOMER  - may originate. This is what the account identity is FOR.
+        READ_ONLY - may NOT originate, and keeps every Project upload right it
+                    already had. PROJECT PARTICIPATION IS NOT DOCUMENT SHOP
+                    CUSTOMER ENTITLEMENT.
+
+    Fails CLOSED for an absent or unrecognised role: origination creates
+    durable governed storage under a new owner, and there is no prior
+    behaviour to preserve for a role nobody has issued.
+
+    This helper owns this one authority question, the way
+    `user_can_upload_to_storage` owns its own. Neither is a permissions
+    framework, and no route re-derives either answer.
+    """
+    from models import ROLE_ADMIN, ROLE_CUSTOMER
+
+    return session.get("role") in (ROLE_ADMIN, ROLE_CUSTOMER)
 
 
 def log_in(user: User) -> None:

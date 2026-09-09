@@ -4879,13 +4879,97 @@ def source_file(project_id, source_id):
     if not file_path.exists():
         abort(404)
 
-    mimetype, _ = mimetypes.guess_type(source["name"])
-    return send_file(
+    # CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01: CONTENT TYPE MUST COME FROM
+    # VERIFIED SOURCE FACTS, NOT A USER-CONTROLLED FILENAME.
+    #
+    # This used mimetypes.guess_type(source["name"]) - an OPEN-WORLD lookup over
+    # a name the uploader chose. That was acceptable while every account was an
+    # operator. It stops being acceptable in this same tranche, because a
+    # customer can now upload, and the name they pick would decide the header a
+    # browser renders their bytes under.
+    #
+    # Two changes, both narrowing:
+    #   1. A CLOSED map replaces the open-world guess. Anything not in it is
+    #      application/octet-stream - an honest "download this", never a guess.
+    #      A future upload format therefore has to be added here deliberately
+    #      rather than acquiring a rendered type for free.
+    #   2. For the image types the browser will render inline, the bytes are
+    #      VERIFIED and must agree with the extension. A file named .png that
+    #      is not a PNG serves as an attachment of unknown type rather than as
+    #      an image - the spoof cannot choose how it is rendered.
+    #
+    # Deliberately NOT merged with source_image. That route answers a narrower
+    # question (is this a previewable image?) and refuses everything else; this
+    # one must keep serving every governed source, including formats with no
+    # verifier. One primitive would have to be the looser of the two, which is
+    # the wrong direction for the route that renders inline.
+    requested_download = bool(request.args.get("download"))
+    mimetype, force_attachment = _governed_source_content_type(
+        file_path, source.get("name") or file_path.name)
+
+    response = send_file(
         file_path,
-        mimetype=mimetype or "application/octet-stream",
-        as_attachment=bool(request.args.get("download")),
+        mimetype=mimetype,
+        as_attachment=requested_download or force_attachment,
         download_name=source["name"],
     )
+    # A governed source is never a general web asset, and must not be sniffed
+    # into becoming one whichever branch above chose the type.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+#: The only content types a governed source may be served as. CLOSED on
+#: purpose: `mimetypes.guess_type` knows hundreds of types including active
+#: ones, and its answers come from a filename. Every entry here corresponds to
+#: an extension `ALLOWED_UPLOAD_EXTENSIONS` (config.py) actually admits, plus
+#: the two image types Black Box intake admits. Nothing else can be produced.
+_GOVERNED_SOURCE_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    # Plain text for all three: correct enough to read, and deliberately not
+    # text/markdown or text/csv, which browsers treat inconsistently and which
+    # buy nothing here.
+    ".txt": "text/plain",
+    ".md": "text/plain",
+    ".csv": "text/plain",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+
+#: The subset a browser renders as active-ish content and therefore the subset
+#: whose bytes must be verified before the type is trusted.
+_VERIFIED_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg"})
+
+
+def _governed_source_content_type(file_path: Path, name: str):
+    """(mimetype, force_attachment) for one governed source.
+
+    Never raises and never consults `mimetypes`. An unknown extension, or an
+    image whose bytes disagree with its name, both resolve to an
+    octet-stream attachment - the safest thing that still serves the file.
+    """
+    from services import image_intake
+
+    extension = Path(name).suffix.lower()
+    mimetype = _GOVERNED_SOURCE_CONTENT_TYPES.get(extension)
+    if mimetype is None:
+        return "application/octet-stream", True
+
+    if extension in _VERIFIED_IMAGE_EXTENSIONS:
+        try:
+            verdict = image_intake.verify_image_bytes(file_path.read_bytes(), name)
+        except OSError:
+            return "application/octet-stream", True
+        if verdict["status"] != image_intake.VERIFIED:
+            # Named like an image, not an image. Serve it, but never under a
+            # type that decides how a browser will treat it.
+            return "application/octet-stream", True
+        mimetype = "image/png" if verdict["format"] == "PNG" else "image/jpeg"
+
+    return mimetype, False
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/sources/<source_id>/replace")
