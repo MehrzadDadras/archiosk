@@ -72,33 +72,78 @@ def _page_units(workspace, source_id: str) -> list[dict]:
             if u.get("source_id") == source_id and u.get("unit_type") == "page"]
 
 
-def _regions_for(workspace, unit_ids: set) -> list[dict]:
-    return [r for r in (getattr(workspace, "addressable_regions", None) or [])
-            if r.get("structural_unit_id") in unit_ids
-            and r.get("content_type") == "text"]
+def _regions_for(workspace, unit_ids: set) -> dict:
+    """The addressing records for this source's pages, keyed by id.
+
+    A region carries WHERE something is (`region_type`, `address` with
+    page_index/paragraph_index) and nothing about what it says. That division
+    is the storage model, and this reader follows it rather than asking a
+    region for content it was never given.
+    """
+    return {r["id"]: r for r in (getattr(workspace, "addressable_regions", None) or [])
+            if r.get("structural_unit_id") in unit_ids}
 
 
 def _recovered(workspace, source_id: str) -> dict:
     """Text held against this Source, and HOW it got there.
 
-    `evidence_class` is the distinction that matters to a reader and is
-    already recorded per region by register_pdf_page_structure: text a
-    document itself carries is direct source evidence; text an OCR engine
-    read off an image is a reading OF the image. Both are shown; they are
-    never merged into one undifferentiated "content" number.
+    CLAUDE-DOCUMENT-SHOP-OCR-READER-01. This function previously read
+    `content` / `content_type` / `evidence_class` off `addressable_regions`,
+    where none of those fields exist. The storage model, confirmed against real
+    production records rather than inferred from a function's parameter names:
+
+        Source
+          -> StructuralUnit   (unit_type="page", source_id)      WHICH PAGE
+          -> AddressableRegion(structural_unit_id, address)       WHERE ON IT
+          -> EvidenceItem     (source_id, region_id, content,     WHAT IT SAYS
+                               content_type, evidence_class,
+                               extractor_version)
+
+    The consequence of reading the wrong record was not a blank section: a
+    successfully OCR-read image was told "No text could be read from this
+    image" while its text sat in evidence_items, and its state read Needs
+    attention. A customer-facing contradiction of the system's own evidence.
+
+    Scoped three ways, deliberately, because this text is customer material:
+    only this workspace (we are handed one), only evidence whose own
+    `source_id` matches, and only evidence anchored to a region belonging to a
+    page unit OF that source. `source_id` alone would be enough today; the
+    region join means a future record that carries a stale or absent source_id
+    still cannot cross a source boundary.
     """
+    from services.case_workspace import (
+        EVIDENCE_CLASS_DIRECT_SOURCE, EVIDENCE_CLASS_EXTRACTED,
+    )
+
     units = _page_units(workspace, source_id)
     regions = _regions_for(workspace, {u["id"] for u in units})
-    passages = [r.get("content", "") for r in regions if (r.get("content") or "").strip()]
-    classes = {r.get("evidence_class") for r in regions if r.get("evidence_class")}
-    extractors = {u.get("extractor_version") for u in units if u.get("extractor_version")}
+    items = [
+        e for e in (getattr(workspace, "evidence_items", None) or [])
+        if e.get("source_id") == source_id
+        and e.get("content_type") == "text"
+        and (e.get("content") or "").strip()
+        and e.get("region_id") in regions
+    ]
+
+    def _address(item):
+        addr = (regions[item["region_id"]].get("address") or {})
+        return (addr.get("page_index") or 0, addr.get("paragraph_index") or 0)
+
+    items.sort(key=_address)
+    passages = [e["content"] for e in items]
+    classes = {e.get("evidence_class") for e in items if e.get("evidence_class")}
+    engines = {e.get("extractor_version") for e in items if e.get("extractor_version")}
     return {
         "page_count": len(units),
         "passage_count": len(passages),
         "character_count": sum(len(p) for p in passages),
         "preview": "\n\n".join(passages[:3])[:1200],
-        "evidence_classes": sorted(c for c in classes if c),
-        "read_by": sorted(e for e in extractors if e),
+        # OCR-recovered text is a READING of an image; text a document carries
+        # is the document speaking. The evidence class already records which,
+        # so this reports it rather than guessing from the engine's name.
+        "was_recovered": EVIDENCE_CLASS_EXTRACTED in classes,
+        "is_direct_source": EVIDENCE_CLASS_DIRECT_SOURCE in classes,
+        "read_by": sorted(e for e in engines if e),
     }
 
 
@@ -132,7 +177,8 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
     ext = _ext(filename)
     recovered = _recovered(workspace, source["id"]) if source else {
         "page_count": 0, "passage_count": 0, "character_count": 0,
-        "preview": "", "evidence_classes": [], "read_by": [],
+        "preview": "", "was_recovered": False, "is_direct_source": False,
+        "read_by": [],
     }
 
     established: list[dict[str, str]] = []
@@ -155,15 +201,18 @@ def build_result(document, workspace, *, display_name: str) -> dict[str, Any]:
         })
 
     if recovered["passage_count"]:
-        ocr = "ocr" in " ".join(recovered["evidence_classes"]).lower() or bool(recovered["read_by"])
+        # How the text arrived is part of the claim, not decoration: one is the
+        # document speaking, the other is a machine reading a picture of it.
+        if recovered["was_recovered"]:
+            how = (" — read from the image by %s" % ", ".join(recovered["read_by"]))                 if recovered["read_by"] else " — read from the image"
+        else:
+            how = " — carried by the document itself"
         established.append({
-            "label": "Text recovered",
+            "label": "Text recovered" if recovered["was_recovered"] else "Text read",
             "value": "%d passage%s across %d page%s (%d characters)%s." % (
                 recovered["passage_count"], "" if recovered["passage_count"] == 1 else "s",
                 max(recovered["page_count"], 1), "" if recovered["page_count"] == 1 else "s",
-                recovered["character_count"],
-                (" — read from the image by %s" % ", ".join(recovered["read_by"]))
-                if (ocr and recovered["read_by"]) else "",
+                recovered["character_count"], how,
             ),
         })
 
