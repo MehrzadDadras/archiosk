@@ -13479,3 +13479,63 @@ remains 171 and is served as `?v=171`.
   customer account and an anonymous control, because admin credentials are not
   entered here. Worth one real sign-in to confirm a Project user's 404 still
   reads "Back to home".
+
+## Session checkpoint: region OCR + spatial bbox foundation — `f302800` live
+
+**CLAUDE-GO-PERCEPTION-REGION-OCR-01.** Deployed; production reads
+`Gunicorn - ArchiOSK GO (accepted build f302800)`, both services active,
+`/health` 200 internally and publicly, `STATIC_VERSION` unchanged at 171 (no
+static asset changed). Live proof as the disposable ROLE_CUSTOMER: **25/25**.
+
+### What changed
+
+Perception produced one unpositioned string per image. It now also records
+WHERE each line of recovered text sat, as `AddressableRegion` (rectangular,
+0-1 fractions) + `EvidenceItem` (`content_type="positioned_text"`,
+`evidence_class=extracted`), written by the worker in one save.
+
+### The measurements that decided it, kept because they close questions
+
+- **PyMuPDF `get_textpage_ocr`, asked twice off ONE textpage.** Costs
+  **+7.8%/+8.0%** (0.6-0.8s on an 8-10s job), not the ~100% a second OCR pass
+  would have. Five runs per side; on one source the distributions separate, on
+  the other they overlap.
+- **Tesseract TSV rejected.** It carries the per-word confidence PyMuPDF
+  lacks, and returned **0, 76, 623 and 0 words** across four real sources
+  against PyMuPDF's **114, 180, 1053, 2152**. Zero on half of them.
+- **Region second pass at `--psm 4` rejected.** This repository's own measured
+  PDF title-block win (legibility 0.23 -> 0.50) **does not transfer to a
+  photograph**: 0 words in 16.7 extra seconds. `raster_extraction`'s region
+  path stays a PDF path.
+- **Confidence threshold rejected.** On the noisy source a floor of 30 dropped
+  74% of words and took legible-ratio **0.449 -> 0.290**. No separating value
+  exists; none was invented. Same shape as the earlier refusal to invent a
+  legibility threshold, and the opposite of the OSD floor, which *was*
+  evidence because the populations separated cleanly.
+- **Lines, not words.** Word-level regions for one real source = **1,679 KB**
+  of JSON against **502 KB** for lines; the largest workspace record anywhere
+  in this system is 1,005 KB and is rewritten whole on every save.
+
+### What this establishes, and what it does not
+
+Crop-and-re-read grounding recovered 58% on a clean source and **0/12** on the
+noise-dominated one. An ink-density control separated the two possible causes
+rather than leaving it ambiguous: line boxes carry **3.8x the ink of random
+same-size controls**, with **zero boxes on blank paper**. **The geometry is
+sound; the reading on that photograph is not stable.** This establishes where
+marks that OCR treated as text are. It does **not** establish that the text
+read there is correct, and nothing here interprets what the drawing means.
+
+### Registered, not actioned
+
+- **PNG re-encoding roughly doubles recovery on unrotated JPEGs.** An early
+  draft did it by accident: **9,548 characters against the shipped path's
+  4,953**, at legible-ratio **0.631 against 0.426**. Deliberately not taken -
+  this tranche was authorized to attach coordinates, and changing what every
+  existing customer photograph yields deserves its own measurement and
+  decision. Parity is now character-exact (295/866/4,953). **This is the
+  single highest-value perception finding currently open.**
+- Non-image sources beyond the first are still stored but never examined.
+- Worker health is surfaced in no UI.
+- Positioned evidence has no reader yet - the viewer seam (§21) is unbuilt by
+  design.
