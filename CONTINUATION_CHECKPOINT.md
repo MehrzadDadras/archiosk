@@ -13605,3 +13605,56 @@ No probability is invented: strength is named, with its counts attached.
 - `LEGEND_EVIDENCE_MARKERS` is English-only.
 - Detection is fed only by image sources; PDF sheets have no positioned-OCR
   path yet, so A-01/E1 were measured directly rather than through the worker.
+
+## Session checkpoint: legend registration authority containment — `88059bb` live
+
+**CLAUDE-LEGEND-REGISTRATION-AUTHORITY-CONTAINMENT-01.** Deployed; production
+reads `Gunicorn - ArchiOSK GO (accepted build 88059bb)`, both services active,
+`/health` 200 internally and publicly, `STATIC_VERSION` unchanged at 171 (no
+static asset changed). Full gate on the frozen tree, parallel (`-n 8
+--dist loadfile`): **7,603 passed, 3 skipped, 0 failed, 3,552 subtests, in
+1:49:26**.
+
+### What was closed
+
+`governance/current/legend-of-understanding-and-craft-workshop.md` §7 recorded
+a conflict between ratified direction and implementation and did not fix it:
+both decision routes were `@login_required` only and took `scope_kind` from the
+form, so a Document Shop `ROLE_CUSTOMER` on a container they owned could turn
+GO's proposal into registered, reusable meaning at project or discipline scope.
+**Owning the sheet a mark was found on was conferring authority over what the
+mark MEANS.**
+
+Two refusals, neither of them new authority. A customer is refused with **403**
+— the existing 403 handler resolves HOME per role, so the refusal leaves them
+inside the Document Shop. A `scope_kind` outside `KNOWN_LEGEND_SCOPES` is
+refused with **400** rather than stored verbatim, which is what
+`normalize_open_world_value` does with an unrecognised value — right for an
+open-world vocabulary, wrong for a value arriving from a form and used as an
+authority boundary. **Rejected, never silently narrowed.**
+
+### What was deliberately not decided
+
+Every non-customer account keeps every scope it could already use, including
+`project` and `discipline`, and a test pins that rather than leaving it to
+inference. Who *should* hold project-wide registration authority remains the
+open Product Owner question.
+
+### Registered, not actioned
+
+- **The governance record's §7 now describes a conflict this commit closes.**
+  Amending it is a governance act and was left to the Product Owner.
+- **`test_the_entitlement_choke_point_was_not_changed` windows `services/auth.py`
+  from `def user_can_upload_to_storage` to `def log_in`** and asserts lowercase
+  "customer" is absent from it — a window wider than its own stated subject,
+  which now sweeps in any function added between the two. The new helper was
+  placed outside the window rather than rewording an honest docstring or
+  widening this tranche into editing a security-adjacent test.
+- **Live proof is incomplete and stopped rather than worked around.** The
+  sandbox refused both production data enumeration and a credential write to
+  the existing disposable `zz_disposable_cust_a` account, so no customer or
+  admin session could be obtained. Verified live: both routes registered
+  (405 on GET, POST-only), unauthenticated POST refused (302), sign-in 200,
+  `/health` 200, deployed files digest-matched to `88059bb`. **Not verified
+  live: the 403 itself, the Document Shop destination on refusal, and the
+  non-customer positive path** — all three are covered by the gate.
