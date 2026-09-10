@@ -307,13 +307,25 @@ class ImageFoundingTests(unittest.TestCase):
         # never source authority. Only the moment it comes into existence
         # moved, so the worker runs inside the same patch that stands in for
         # the OCR engine.
-        from services import perception_jobs, perception_worker
+        # CLAUDE-GO-PERCEPTION-REGION-OCR-01: the worker reads through the
+        # POSITIONED path now - one OCR pass answering both "what" and
+        # "where" - so the stand-in moves to that path's own engine seam.
+        # `extract_raster_pages` is still patched alongside it, because this
+        # test's subject is the ATTRIBUTION of recovered text and it must not
+        # start passing merely because a different reader happened to run.
+        from services import perception_jobs, perception_worker, positioned_text
+
+        def fake_ocr(_frame_bytes, _dpi, _filetype="png"):
+            return ([(10.0, 10.0, 90.0, 24.0, "RECOVERED", 0, 0, 0),
+                     (94.0, 10.0, 150.0, 24.0, "TEXT", 0, 0, 1)],
+                    (300.0, 225.0), "tesseract", "9.9.9", "RECOVERED TEXT")
 
         with patch.object(raster_extraction, "extract_raster_pages", fake_extract):
-            document = self._black_box("scan.png", _png())
-            perception_worker.run_one(
-                self.app, perception_jobs.PerceptionJobStore(
-                    self.app.config["REGISTRY_STORE_PATH"]), "test-worker")
+            with patch.object(positioned_text, "_default_ocr", fake_ocr):
+                document = self._black_box("scan.png", _png())
+                perception_worker.run_one(
+                    self.app, perception_jobs.PerceptionJobStore(
+                        self.app.config["REGISTRY_STORE_PATH"]), "test-worker")
 
         workspace = self.store.get(document.project_id)
         units = [u for u in (workspace.structural_units or [])

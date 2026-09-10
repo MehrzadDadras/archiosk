@@ -16973,6 +16973,163 @@ class CaseWorkspaceStore:
             "evidence_item_ids": evidence_item_ids,
         }
 
+    def register_positioned_text_regions(
+        self, workspace: ProjectWorkspace, source_id: str,
+        structural_unit_id: str, lines: list[dict], frame: Optional[dict] = None,
+        extractor_version: Optional[str] = None, actor: str = "system",
+        governance_log: Optional[GovernanceLog] = None,
+    ) -> dict:
+        """
+        CLAUDE-GO-PERCEPTION-REGION-OCR-01: one AddressableRegion + one
+        EvidenceItem per POSITIONED LINE of recovered text, written in a
+        single save.
+
+        WHY THIS EXISTS RATHER THAN A LOOP OVER THE EXISTING WRITERS.
+        `create_addressable_drawing_region` and `register_evidence_item`
+        already do exactly this for ONE region, and calling them in a loop
+        was the obvious first shape. It is the wrong shape here for two
+        measured reasons: `register_evidence_item` saves the whole workspace
+        per call, and `create_addressable_drawing_region` counts the unit's
+        existing regions per call to assign `region_index` - so a real
+        source producing 508 lines would perform 508 full JSON rewrites of a
+        record that reaches hundreds of kilobytes, and do O(n^2) work
+        assigning indices. This method is `register_pdf_page_structure`'s
+        own batch shape - append everything, save once - applied to bbox
+        regions, which is the pattern this store already established for
+        registering many records from one extraction.
+
+        `lines` carry x/y/width/height as 0-1 FRACTIONS of the frame named
+        by `frame`, the same normalized-fraction convention
+        `create_addressable_drawing_region` documents and validates. The
+        validation below is that method's, not a relaxed copy: a region
+        outside the frame is refused rather than clamped, because a bbox
+        that cannot be trusted to lie on the drawing is worse than no bbox.
+        It is refused PER LINE, though - the untrustworthy box is dropped and
+        counted in `rejected`, and the lines that were fine are still stored.
+        Refusing the whole batch would let one bad box cost a source every
+        coordinate it had, which is not what "refuse the untrustworthy" should
+        ever mean.
+
+        `frame` is recorded ONCE on the StructuralUnit's `modality_metadata`
+        rather than repeated on every region. It carries the whole
+        coordinate story - the normalized frame size, the OCR frame it was
+        read in, the factor between them, and the render dpi - so a later
+        reader can reconstruct original -> normalized -> OCR -> fraction
+        without guessing which raster any number came from.
+
+        Evidence is EVIDENCE_CLASS_EXTRACTED without exception. Positioned
+        text is a READING OF AN IMAGE, never the document speaking, and
+        `content_type` is deliberately not "text" so that
+        services/document_examination.py's customer-facing reader - which
+        selects "text" and joins what it finds into a preview - does not
+        pick these up and turn a person's result into a column of
+        fragments.
+        """
+        source = self._find(workspace.sources, source_id)
+        if source is None or source["project_id"] != workspace.project_id:
+            raise CaseWorkspaceError(f"Source {source_id} was not found.")
+
+        unit = self._find(workspace.structural_units, structural_unit_id)
+        if (unit is None or unit["project_id"] != workspace.project_id
+                or unit.get("source_id") != source_id):
+            raise CaseWorkspaceError(
+                f"Structural unit {structural_unit_id} was not found on this Source.")
+
+        starting_index = len(self.regions_for_structural_unit(workspace, structural_unit_id))
+        region_ids: list[str] = []
+        evidence_ids: list[str] = []
+
+        rejected: list[dict] = []
+
+        for offset, line in enumerate(lines or []):
+            # PARTIAL SUCCESS IS THE CONTRACT, not all-or-nothing. An
+            # untrustworthy bbox is refused - a box that cannot be relied on to
+            # lie on the drawing is worse than no box - but refusing it must
+            # not discard the lines that were fine. An earlier draft raised
+            # here, which meant one bad line silently cost a source every
+            # coordinate it had.
+            try:
+                x = float(line["x"]); y = float(line["y"])
+                width = float(line["width"]); height = float(line["height"])
+            except (KeyError, TypeError, ValueError):
+                rejected.append({"index": offset, "reason": "missing usable geometry"})
+                continue
+            text = (line.get("text") or "").strip()
+            if not text:
+                continue
+            if not (0 <= x <= 1 and 0 <= y <= 1):
+                rejected.append({"index": offset, "reason": "x/y outside 0-1"})
+                continue
+            if width <= 0 or height <= 0:
+                rejected.append({"index": offset, "reason": "non-positive extent"})
+                continue
+            if x + width > 1 + 1e-9 or y + height > 1 + 1e-9:
+                rejected.append({"index": offset, "reason": "extends past the frame"})
+                continue
+
+            region = AddressableRegion(
+                id=_new_id(), project_id=workspace.project_id,
+                structural_unit_id=structural_unit_id,
+                region_type="rectangular",
+                address={
+                    "x": x, "y": y, "width": width, "height": height,
+                    "region_index": starting_index + offset + 1,
+                    # Which reading produced this box. Two passes over the same
+                    # frame must stay distinguishable, and a region with no pass
+                    # identity cannot be reconciled against anything later.
+                    "extraction_pass": line.get("extraction_pass") or "positioned_ocr",
+                    "word_count": line.get("word_count"),
+                },
+                created_at=_now(), created_by=actor,
+            )
+            workspace.addressable_regions.append(asdict(region))
+            region_ids.append(region.id)
+
+            evidence = EvidenceItem(
+                id=_new_id(), project_id=workspace.project_id, source_id=source_id,
+                evidence_class=EVIDENCE_CLASS_EXTRACTED,
+                content=text, content_type="positioned_text",
+                created_at=_now(), created_by=actor,
+                region_id=region.id, extractor_version=extractor_version,
+            )
+            workspace.evidence_items.append(asdict(evidence))
+            evidence_ids.append(evidence.id)
+
+        if frame is not None and unit is not None:
+            metadata = dict(unit.get("modality_metadata") or {})
+            metadata["perception_frame"] = frame
+            unit["modality_metadata"] = metadata
+
+        self.save(workspace)
+
+        if governance_log is not None:
+            governance_log.append(
+                project_id=workspace.project_id,
+                event_type="positioned_text_registered",
+                actor=actor, role="system",
+                payload={
+                    "source_id": source_id,
+                    "structural_unit_id": structural_unit_id,
+                    "region_count": len(region_ids),
+                    "evidence_item_count": len(evidence_ids),
+                    "rejected_count": len(rejected),
+                    "extractor_version": extractor_version,
+                    "frame": frame,
+                },
+                correlation_id=source_id,
+            )
+
+        return {
+            "region_count": len(region_ids),
+            "addressable_region_ids": region_ids,
+            "evidence_item_ids": evidence_ids,
+            # What was refused, and why. Counted rather than swallowed: a
+            # source whose geometry was partly unusable is a real condition
+            # someone may need to investigate, and a silent skip hides it.
+            "rejected_count": len(rejected),
+            "rejected": rejected,
+        }
+
     def register_plain_text_structure(
         self, workspace: ProjectWorkspace, source_id: str, text: str,
         extractor_version: Optional[str] = None, actor: str = "system",

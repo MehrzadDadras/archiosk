@@ -103,6 +103,75 @@ def _write_evidence_with_retry(store, workspace_id, source_id, text,
     return None, "workspace kept changing: %s" % last_error
 
 
+def _write_positioned_with_retry(store, job, positioned, extractor_version,
+                                 governance_log):
+    """Attach positioned lines, and NEVER fail the job for them.
+
+    CLAUDE-GO-PERCEPTION-REGION-OCR-01, safe degradation (Section 16). The
+    text evidence has already been written and the examination has already
+    succeeded by the time this runs. Coordinates are an addition to that
+    result, so every outcome here - no lines found, the frame unreadable, the
+    store refusing a bbox, the workspace moving underneath us - returns None
+    and leaves a completed examination completed. A source that could be read
+    but not located is a weaker result, not a failed one.
+
+    Anchored to the page StructuralUnit the text evidence already created, so
+    positioned regions and paragraphs address the SAME frame of the SAME
+    source rather than a second, parallel structure that could drift from it.
+    """
+    if not positioned or not positioned.get("lines"):
+        return None
+
+    from services.case_workspace import CaseWorkspaceError
+
+    for attempt in range(CONCURRENT_WRITE_RETRIES):
+        workspace = store.get(job["workspace_id"])
+        if workspace is None:
+            return None
+        unit = next(
+            (u for u in (getattr(workspace, "structural_units", None) or [])
+             if u.get("source_id") == job["source_id"]
+             and u.get("unit_type") == "page"), None)
+        if unit is None:
+            logger.info("no page unit for source %s - positioned text not stored",
+                        job["source_id"])
+            return None
+        # EXACTLY-ONCE, by the same re-check the text evidence uses rather than
+        # by trusting that a job runs once: a replayed job must not attach a
+        # second copy of every line.
+        already = [e for e in (getattr(workspace, "evidence_items", None) or [])
+                   if e.get("source_id") == job["source_id"]
+                   and e.get("content_type") == "positioned_text"]
+        if already:
+            return {"evidence_item_ids": [e["id"] for e in already],
+                    "region_count": len(already), "replayed": True}
+        try:
+            return store.register_positioned_text_regions(
+                workspace, source_id=job["source_id"],
+                structural_unit_id=unit["id"],
+                lines=positioned["lines"],
+                frame=positioned.get("frame"),
+                extractor_version=extractor_version,
+                actor="perception-worker",
+                governance_log=governance_log)
+        except CaseWorkspaceError as exc:
+            # A refused bbox is a real refusal and must not be retried into
+            # existence - the geometry is wrong, and looping cannot fix it.
+            logger.warning("positioned text refused for source %s: %s",
+                           job["source_id"], exc)
+            return None
+        except Exception as exc:  # noqa: BLE001
+            if type(exc).__name__ not in ("ConcurrentModificationError",
+                                          "WriteCollisionError"):
+                logger.warning("positioned text not stored for source %s (%s: %s)",
+                               job["source_id"], type(exc).__name__, exc)
+                return None
+            time.sleep(0.2 * (attempt + 1))
+    logger.warning("positioned text gave up after contention on source %s",
+                   job["source_id"])
+    return None
+
+
 def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     """Claim and process a single job. Returns the terminal record, or None."""
     from services import image_intake, perception_jobs
@@ -131,12 +200,25 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
             job, state=perception_jobs.STATE_NEEDS_ATTENTION,
             failure_reason="no perception path for this file type yet")
 
+    # CLAUDE-GO-PERCEPTION-REGION-OCR-01: the positioned read, which is the
+    # SAME reading with coordinates attached - one OCR pass produces both, so
+    # this does not lengthen the job. If it fails for any reason the
+    # unpositioned path still runs, because knowing WHERE text is must never
+    # become a precondition for knowing THAT it is there.
+    positioned = None
     try:
-        recovered = image_intake.extract_image_text(raw, name)
+        recovered = image_intake.extract_image_positioned_text(raw, name)
+        positioned = recovered
     except Exception as exc:
-        logger.exception("perception job %s raised", job["job_id"][:12])
-        return jobs.release_for_retry(
-            job, reason="%s: %s" % (type(exc).__name__, exc))
+        logger.warning("positioned read failed on job %s (%s: %s) - falling "
+                       "back to the unpositioned path",
+                       job["job_id"][:12], type(exc).__name__, exc)
+        try:
+            recovered = image_intake.extract_image_text(raw, name)
+        except Exception as exc2:
+            logger.exception("perception job %s raised", job["job_id"][:12])
+            return jobs.release_for_retry(
+                job, reason="%s: %s" % (type(exc2).__name__, exc2))
 
     orientation = recovered.get("orientation") or {}
     if governance_log is not None:
@@ -182,11 +264,18 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
                if e.get("source_id") == job["source_id"]
                and e.get("content_type") == "text"]
     if already:
+        # The text landed on an earlier run. Coordinates may not have - every
+        # source examined before this tranche has text and no geometry - so
+        # the positioned write still runs here. It is idempotent by its own
+        # re-check, so a genuine replay adds nothing twice.
+        replay_positioned = _write_positioned_with_retry(
+            store, job, positioned, extractor_version, governance_log)
         return jobs.complete(
             job, state=perception_jobs.STATE_COMPLETED,
             extractor=recovered.get("engine"),
             extractor_version=recovered.get("engine_version"),
-            evidence_refs=[e["id"] for e in already])
+            evidence_refs=([e["id"] for e in already]
+                           + list((replay_positioned or {}).get("evidence_item_ids") or [])))
 
     outcome, error = _write_evidence_with_retry(
         store, job["workspace_id"], job["source_id"], text,
@@ -194,11 +283,15 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     if error:
         return jobs.release_for_retry(job, reason=error)
 
+    positioned_outcome = _write_positioned_with_retry(
+        store, job, positioned, extractor_version, governance_log)
+
     return jobs.complete(
         job, state=perception_jobs.STATE_COMPLETED,
         extractor=recovered.get("engine"),
         extractor_version=recovered.get("engine_version"),
-        evidence_refs=list((outcome or {}).get("evidence_item_ids") or []))
+        evidence_refs=(list((outcome or {}).get("evidence_item_ids") or [])
+                       + list((positioned_outcome or {}).get("evidence_item_ids") or [])))
 
 
 def serve(app=None, *, poll_seconds: float = POLL_SECONDS, once: bool = False):

@@ -267,7 +267,13 @@ class WorkerIntegrationTests(unittest.TestCase):
                     "text": "FIRE DAMPER SCHEDULE",
                     "orientation": {"authority": "exif", "changed": False}}
 
-        with patch("services.image_intake.extract_image_text", fake_extract):
+        # CLAUDE-GO-PERCEPTION-REGION-OCR-01: the worker now reads through
+        # `extract_image_positioned_text` - the SAME OCR pass, asked once for
+        # both the text and the coordinates rather than run twice. The
+        # property under test is unchanged; only the seam it is patched at
+        # moved, so the patch moves with it.
+        with patch("services.image_intake.extract_image_positioned_text",
+                   fake_extract):
             done = pw.run_one(self.app, self.jobs, "w1")
         self.assertEqual(done["state"], pj.STATE_COMPLETED)
 
@@ -280,7 +286,8 @@ class WorkerIntegrationTests(unittest.TestCase):
         replayed = self.jobs.get(done["job_id"])
         replayed["state"] = pj.STATE_QUEUED
         self.jobs._write(replayed)
-        with patch("services.image_intake.extract_image_text", fake_extract):
+        with patch("services.image_intake.extract_image_positioned_text",
+                   fake_extract):
             pw.run_one(self.app, self.jobs, "w1")
         workspace = self.store.get(pid)
         evidence = [e for e in workspace.evidence_items
@@ -295,7 +302,7 @@ class WorkerIntegrationTests(unittest.TestCase):
                     "engine_version": "4.1.1", "reason": None, "text": "",
                     "orientation": {}}
 
-        with patch("services.image_intake.extract_image_text", empty):
+        with patch("services.image_intake.extract_image_positioned_text", empty):
             done = pw.run_one(self.app, self.jobs, "w1")
         self.assertEqual(done["state"], pj.STATE_NEEDS_ATTENTION,
                          "an established-nothing outcome was called a fault")
@@ -306,10 +313,38 @@ class WorkerIntegrationTests(unittest.TestCase):
         def boom(raw, name, **kwargs):
             raise RuntimeError("engine died")
 
-        with patch("services.image_intake.extract_image_text", boom):
-            done = pw.run_one(self.app, self.jobs, "w1")
+        # CLAUDE-GO-PERCEPTION-REGION-OCR-01: BOTH seams must raise for the job
+        # to be retried, because a positioned read that fails deliberately
+        # falls back to the unpositioned one - knowing WHERE text is must never
+        # become a precondition for knowing THAT it is there. Only a genuine
+        # extractor failure, with no path left, requeues the job.
+        with patch("services.image_intake.extract_image_positioned_text", boom):
+            with patch("services.image_intake.extract_image_text", boom):
+                done = pw.run_one(self.app, self.jobs, "w1")
         self.assertEqual(done["state"], pj.STATE_QUEUED)
         self.assertEqual(done["attempt_count"], 1)
+
+    def test_a_failed_positioned_read_still_produces_the_examination(self):
+        """The fallback the test above proves is load-bearing, proven forward."""
+        r = self._upload([(io.BytesIO(_jpeg()), "image.jpg")])
+        pid = self._pid(r)
+
+        def boom(raw, name, **kwargs):
+            raise RuntimeError("positioned path died")
+
+        def plain(raw, name, **kwargs):
+            return {"ran": True, "status": "readable", "engine": "tesseract",
+                    "engine_version": "4.1.1", "reason": None,
+                    "text": "FIRE DAMPER SCHEDULE",
+                    "orientation": {"authority": "exif", "changed": False}}
+
+        with patch("services.image_intake.extract_image_positioned_text", boom):
+            with patch("services.image_intake.extract_image_text", plain):
+                done = pw.run_one(self.app, self.jobs, "w1")
+        self.assertEqual(done["state"], pj.STATE_COMPLETED)
+        workspace = self.store.get(pid)
+        self.assertTrue([e for e in workspace.evidence_items
+                         if e.get("content_type") == "text"])
 
     def test_the_worker_never_takes_a_path_from_the_job_record(self):
         r = self._upload([(io.BytesIO(_jpeg()), "image.jpg")])

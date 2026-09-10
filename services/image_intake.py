@@ -432,3 +432,88 @@ def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None,
         # nothing yielded nothing, and As-Read must be able to say so.
         "text": pages.get(0, ""),
     }
+
+
+def extract_image_positioned_text(raw_bytes: bytes, filename: str, *,
+                                  ocr=None, osd_reader=None) -> dict:
+    """The same reading as `extract_image_text`, with coordinates attached.
+
+    CLAUDE-GO-PERCEPTION-REGION-OCR-01. A SIBLING of the function above, not a
+    replacement for it, and not a second pipeline: both normalise orientation
+    the same way and both hand the same derived frame to the same engine. What
+    differs is only that this one also asks where each line was.
+
+    It costs ONE OCR pass, not two. services/positioned_text.py builds a single
+    PyMuPDF textpage and reads the plain text and the positioned words off that
+    same object, so attaching coordinates does not lengthen a job that already
+    runs 5-21 seconds on a real photograph.
+
+    Verified against production before being relied on, over three real stored
+    sources: 295 -> 295, 866 -> 866 and 4,953 -> 4,953 characters, character
+    for character, at identical legible ratios. Coordinates were added; the
+    perception was not changed. The comment below records the one place that
+    was nearly untrue and what was done about it.
+
+    Returns `extract_image_text`'s shape plus `lines`, `frame`, and the counts,
+    so a caller that only wants text can use it interchangeably.
+    """
+    from PIL import Image
+
+    from services import positioned_text
+
+    ext = Path(filename or "").suffix.lower()
+    normalised = normalise_orientation(raw_bytes, filename, osd_reader=osd_reader)
+    orientation = normalised["observation"]
+
+    # THE SAME BYTES AND THE SAME FILETYPE `extract_image_text` HANDS OVER.
+    #
+    # The first version of this re-encoded every frame to PNG, on the reasoning
+    # that a lossless frame is the honest thing to give a reader. Measured
+    # against the shipped path on three real sources, that turned out to CHANGE
+    # THE READING on an unrotated JPEG - 4,953 characters became 9,548, at a
+    # higher legible ratio. Better, and not this tranche's to take: the
+    # authorized scope is attaching coordinates, and silently improving what
+    # text every existing customer's photograph yields is a perception change
+    # nobody asked for and nobody measured the consequences of. The finding is
+    # recorded for a bounded tranche of its own.
+    #
+    # So the filetype rule below is `extract_image_text`'s, character for
+    # character, and the bytes are the ones it would have sent.
+    frame_bytes = normalised["bytes"]
+    filetype = "png" if (ext == ".png" or orientation["changed"]) else "jpeg"
+    frame_size = orientation.get("normalised_size")
+    try:
+        image = Image.open(io.BytesIO(frame_bytes))
+        image.load()
+        frame_size = list(image.size)
+    except Exception as exc:  # noqa: BLE001 - an undecodable frame is a result
+        return {
+            "ran": False, "status": None, "engine": None, "engine_version": None,
+            "reason": "the frame could not be decoded (%s)" % type(exc).__name__,
+            "orientation": orientation, "text": "", "lines": [],
+            "line_count": 0, "word_count": 0, "dropped_line_count": 0,
+            "truncated": False, "frame": None, "confidence_available": False,
+        }
+
+    read = positioned_text.read_positioned_lines(
+        frame_bytes, frame_size, filetype=filetype, ocr=ocr)
+
+    text = (read.get("text") or "")
+    return {
+        "ran": read.get("ran", False),
+        # The same three-state vocabulary raster_extraction uses, derived the
+        # same way: something readable, or an honest nothing. No new states.
+        "status": ("readable" if text.strip() else "unreadable"),
+        "engine": read.get("engine"),
+        "engine_version": read.get("engine_version"),
+        "reason": read.get("reason"),
+        "orientation": orientation,
+        "text": text,
+        "lines": read.get("lines") or [],
+        "line_count": read.get("line_count", 0),
+        "word_count": read.get("word_count", 0),
+        "dropped_line_count": read.get("dropped_line_count", 0),
+        "truncated": read.get("truncated", False),
+        "confidence_available": read.get("confidence_available", False),
+        "frame": read.get("frame"),
+    }
