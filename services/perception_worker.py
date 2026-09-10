@@ -172,6 +172,128 @@ def _write_positioned_with_retry(store, job, positioned, extractor_version,
     return None
 
 
+def _detect_legend_candidates(store, job, positioned, governance_log):
+    """Look for a legend block, and NEVER fail the job for it.
+
+    CLAUDE-GO-PERCEPTION-LEGEND-DETECT-01. This runs after the positioned text
+    has already been written and the examination has already succeeded. A
+    candidate legend region is DETECTION EVIDENCE - a place worth looking at -
+    so every failure here returns None and leaves a completed examination
+    completed, exactly as the positioned write does.
+
+    Stored through the store's EXISTING single-item writers rather than a new
+    batch method: a sheet yields none, one or a couple of candidates, so the
+    per-call save that made 508 positioned lines unaffordable costs nothing
+    here, and adding a second batch registrar for two rows would be inventing
+    an abstraction the volume does not justify.
+    """
+    from services import legend_detection
+    from services.case_workspace import EVIDENCE_CLASS_EXTRACTED
+
+    if not positioned or not positioned.get("lines"):
+        return None
+
+    try:
+        detection = legend_detection.detect_candidates(
+            positioned["lines"], source_id=job["source_id"])
+    except Exception as exc:  # noqa: BLE001 - detection is an addition, never a gate
+        logger.warning("legend detection raised for source %s (%s: %s)",
+                       job["source_id"], type(exc).__name__, exc)
+        return None
+
+    if governance_log is not None:
+        # Recorded even when nothing was found. "This sheet does not explain
+        # its own symbols" is a real finding about a drawing set, and a log
+        # that only records successes cannot answer how often that is true.
+        governance_log.append(
+            project_id=job["workspace_id"],
+            event_type="legend_candidates_detected",
+            actor="perception-worker", role="system",
+            payload={
+                "source_id": job["source_id"],
+                "outcome": detection.get("outcome"),
+                "candidate_count": len(detection.get("candidates") or []),
+                "rejected_count": len(detection.get("rejected") or []),
+                "detection_method": detection.get("detection_method"),
+                "detection_version": detection.get("detection_version"),
+            },
+            correlation_id=job["source_id"])
+
+    candidates = detection.get("candidates") or []
+    if not candidates:
+        return detection
+
+    from services.case_workspace import CaseWorkspaceError
+
+    workspace = store.get(job["workspace_id"])
+    if workspace is None:
+        return detection
+    unit = next(
+        (u for u in (getattr(workspace, "structural_units", None) or [])
+         if u.get("source_id") == job["source_id"]
+         and u.get("unit_type") == "page"), None)
+    if unit is None:
+        return detection
+
+    # EXACTLY-ONCE by re-check, the same discipline the evidence writes use.
+    already = [e for e in (getattr(workspace, "evidence_items", None) or [])
+               if e.get("source_id") == job["source_id"]
+               and e.get("content_type") == legend_detection.CANDIDATE_CONTENT_TYPE]
+    if already:
+        return detection
+
+    stored = []
+    for candidate in candidates:
+        region_box = candidate["region"]
+        try:
+            workspace = store.get(job["workspace_id"])
+            region = store.create_addressable_region(
+                workspace, structural_unit_id=unit["id"],
+                region_type=legend_detection.CANDIDATE_REGION_TYPE,
+                address={
+                    "x": region_box["x"], "y": region_box["y"],
+                    "width": region_box["width"], "height": region_box["height"],
+                    # What this region IS, carried on the region itself so a
+                    # reader never has to infer it from the evidence beside it.
+                    "detection": legend_detection.CANDIDATE_CONTENT_TYPE,
+                    "detection_method": candidate["detection_method"],
+                    "detection_version": candidate["detection_version"],
+                    "heading_text": candidate["heading"]["text"],
+                    "marker_kind": candidate["heading"]["marker_kind"],
+                    "layout": candidate["layout"],
+                    "strength": candidate["strength"],
+                    "reason": candidate["reason"],
+                    "row_count": candidate["spatial_support"].get("row_count"),
+                    "short_label_count":
+                        candidate["spatial_support"].get("short_label_count"),
+                    "stop_reason": candidate["spatial_support"].get("stop_reason"),
+                    # Said in the record, not only in a docstring.
+                    "status": candidate["status"],
+                },
+                actor="perception-worker", governance_log=governance_log)
+            workspace = store.get(job["workspace_id"])
+            evidence = store.register_evidence_item(
+                workspace, source_id=job["source_id"],
+                evidence_class=EVIDENCE_CLASS_EXTRACTED,
+                # The heading is what was READ. No meaning is asserted, and the
+                # strength sits beside it rather than inside the claim.
+                content=candidate["heading"]["text"],
+                content_type=legend_detection.CANDIDATE_CONTENT_TYPE,
+                region_id=region["id"],
+                extractor_version=candidate["detection_version"],
+                actor="perception-worker", governance_log=governance_log)
+            stored.append(evidence["id"])
+        except CaseWorkspaceError as exc:
+            logger.warning("legend candidate refused for source %s: %s",
+                           job["source_id"], exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("legend candidate not stored for source %s (%s: %s)",
+                           job["source_id"], type(exc).__name__, exc)
+
+    detection["stored_evidence_item_ids"] = stored
+    return detection
+
+
 def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     """Claim and process a single job. Returns the terminal record, or None."""
     from services import image_intake, perception_jobs
@@ -285,6 +407,10 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
 
     positioned_outcome = _write_positioned_with_retry(
         store, job, positioned, extractor_version, governance_log)
+
+    # CLAUDE-GO-PERCEPTION-LEGEND-DETECT-01: where does this sheet explain its
+    # own symbols? Detection only - nothing here registers a meaning.
+    _detect_legend_candidates(store, job, positioned, governance_log)
 
     return jobs.complete(
         job, state=perception_jobs.STATE_COMPLETED,
