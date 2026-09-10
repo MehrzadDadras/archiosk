@@ -245,6 +245,7 @@ def _detect_legend_candidates(store, job, positioned, governance_log):
     stored = []
     for candidate in candidates:
         region_box = candidate["region"]
+        region = None
         try:
             workspace = store.get(job["workspace_id"])
             region = store.create_addressable_region(
@@ -283,6 +284,11 @@ def _detect_legend_candidates(store, job, positioned, governance_log):
                 extractor_version=candidate["detection_version"],
                 actor="perception-worker", governance_log=governance_log)
             stored.append(evidence["id"])
+            # CLAUDE-GO-PERCEPTION-LEGEND-SLICE-01 needs the PARENT region id
+            # to hang slices from, and this is the only place it exists.
+            # Carried on the candidate rather than returned separately so a
+            # slice can never be attached to the wrong block.
+            candidate["stored_region_id"] = region["id"]
         except CaseWorkspaceError as exc:
             logger.warning("legend candidate refused for source %s: %s",
                            job["source_id"], exc)
@@ -292,6 +298,140 @@ def _detect_legend_candidates(store, job, positioned, governance_log):
 
     detection["stored_evidence_item_ids"] = stored
     return detection
+
+
+def _slice_legend_candidates(store, job, detection, positioned, governance_log):
+    """Split each stored candidate into PROPOSED entry slices. Never a gate.
+
+    CLAUDE-GO-PERCEPTION-LEGEND-SLICE-01. Runs after detection has already
+    stored its candidates and the examination has already succeeded, and
+    returns None on every failure - a slice is a convenience for a later
+    reviewer, and a completed examination stays completed without it.
+
+    NOTHING HERE REGISTERS MEANING. One child AddressableRegion per proposed
+    entry, hung off the candidate's own region via the store's existing
+    `parent_region_id`, plus one EvidenceItem carrying the text that was READ
+    in it. No LegendItem is created, no decision is recorded, no family is
+    confirmed and no scope exists to widen - the store methods that could do
+    any of those are not called and not imported.
+
+    STORED THROUGH THE EXISTING SINGLE-ITEM WRITERS, measured rather than
+    assumed: see the tranche's own timing note. A real block yields entries in
+    the tens, not the hundreds that made `register_positioned_text_regions`
+    necessary, and a second batch registrar for that volume would be an
+    abstraction the measurement does not justify.
+    """
+    from services import legend_slicing
+    from services.case_workspace import CaseWorkspaceError, EVIDENCE_CLASS_EXTRACTED
+
+    if not detection or not positioned or not positioned.get("lines"):
+        return None
+    candidates = [c for c in (detection.get("candidates") or [])
+                  if c.get("stored_region_id")]
+    if not candidates:
+        return None
+
+    workspace = store.get(job["workspace_id"])
+    if workspace is None:
+        return None
+    unit = next(
+        (u for u in (getattr(workspace, "structural_units", None) or [])
+         if u.get("source_id") == job["source_id"]
+         and u.get("unit_type") == "page"), None)
+    if unit is None:
+        return None
+
+    # EXACTLY-ONCE by re-check, the same discipline every other write here uses.
+    already = [e for e in (getattr(workspace, "evidence_items", None) or [])
+               if e.get("source_id") == job["source_id"]
+               and e.get("content_type") == legend_slicing.ENTRY_CONTENT_TYPE]
+    if already:
+        return None
+
+    results = []
+    for candidate in candidates:
+        try:
+            sliced = legend_slicing.slice_candidate(candidate, positioned["lines"])
+        except Exception as exc:  # noqa: BLE001 - slicing is an addition, never a gate
+            logger.warning("legend slicing raised for source %s (%s: %s)",
+                           job["source_id"], type(exc).__name__, exc)
+            continue
+
+        if governance_log is not None:
+            # Recorded even when a block did not resolve. "This legend could
+            # not be subdivided" is a real fact about a drawing, and a log that
+            # only records successes cannot say how often it happens.
+            governance_log.append(
+                project_id=job["workspace_id"],
+                event_type="legend_entries_proposed",
+                actor="perception-worker", role="system",
+                payload={
+                    "source_id": job["source_id"],
+                    "parent_region_id": candidate["stored_region_id"],
+                    "outcome": sliced.get("outcome"),
+                    "entry_count": sliced.get("entry_count"),
+                    "row_count": sliced.get("row_count"),
+                    "rhythm_established": sliced.get("rhythm_established"),
+                    "slice_method": sliced.get("slice_method"),
+                    "slice_version": sliced.get("slice_version"),
+                },
+                correlation_id=job["source_id"])
+
+        stored = []
+        for entry in sliced.get("entries") or []:
+            box = entry["region"]
+            try:
+                workspace = store.get(job["workspace_id"])
+                region = store.create_addressable_region(
+                    workspace, structural_unit_id=unit["id"],
+                    region_type=legend_slicing.ENTRY_REGION_TYPE,
+                    # The whole point of the child link: a slice detached from
+                    # the block it came from is a rectangle with no provenance.
+                    parent_region_id=candidate["stored_region_id"],
+                    address={
+                        "x": box["x"], "y": box["y"],
+                        "width": box["width"], "height": box["height"],
+                        "detection": legend_slicing.ENTRY_CONTENT_TYPE,
+                        "slice_method": entry["slice_method"],
+                        "slice_version": entry["slice_version"],
+                        # ORDER IS PERSISTED, never re-derived later from a
+                        # UUID, a creation time or a filename.
+                        "entry_index": entry["entry_index"],
+                        "text_bbox": entry["text_bbox"],
+                        "icon_zone": entry["icon_zone"],
+                        "icon_zone_reason": entry["icon_zone_reason"],
+                        "row_count": entry["row_count"],
+                        "text_part_count": entry["text_part_count"],
+                        "slice_resolution": entry["slice_resolution"],
+                        "reason": entry["reason"],
+                        "parent_heading_text": candidate["heading"]["text"],
+                        "parent_strength": candidate["strength"],
+                        "status": entry["status"],
+                    },
+                    actor="perception-worker", governance_log=governance_log)
+                workspace = store.get(job["workspace_id"])
+                evidence = store.register_evidence_item(
+                    workspace, source_id=job["source_id"],
+                    evidence_class=EVIDENCE_CLASS_EXTRACTED,
+                    # WHAT WAS READ, not what it means. This stays observed
+                    # text; turning it into a declared meaning is the next
+                    # tranche's question and needs a human in it.
+                    content=entry["observed_text"],
+                    content_type=legend_slicing.ENTRY_CONTENT_TYPE,
+                    region_id=region["id"],
+                    extractor_version=entry["slice_version"],
+                    actor="perception-worker", governance_log=governance_log)
+                stored.append(evidence["id"])
+            except CaseWorkspaceError as exc:
+                logger.warning("legend entry refused for source %s: %s",
+                               job["source_id"], exc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("legend entry not stored for source %s (%s: %s)",
+                               job["source_id"], type(exc).__name__, exc)
+        sliced["stored_evidence_item_ids"] = stored
+        results.append(sliced)
+
+    return results
 
 
 def run_one(app, jobs, worker_id: str) -> Optional[dict]:
@@ -410,7 +550,11 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
 
     # CLAUDE-GO-PERCEPTION-LEGEND-DETECT-01: where does this sheet explain its
     # own symbols? Detection only - nothing here registers a meaning.
-    _detect_legend_candidates(store, job, positioned, governance_log)
+    detection = _detect_legend_candidates(store, job, positioned, governance_log)
+
+    # CLAUDE-GO-PERCEPTION-LEGEND-SLICE-01: and what are the ENTRIES in that
+    # block? Proposal only - still nothing registered, still no human decision.
+    _slice_legend_candidates(store, job, detection, positioned, governance_log)
 
     return jobs.complete(
         job, state=perception_jobs.STATE_COMPLETED,
