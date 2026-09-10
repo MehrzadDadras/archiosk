@@ -48,7 +48,13 @@ from PIL import Image
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-from services.auth import admin_required, is_admin, login_required, user_can_upload_to_storage
+from services.auth import (
+    admin_required,
+    is_admin,
+    login_required,
+    user_can_record_registered_understanding,
+    user_can_upload_to_storage,
+)
 from services.change_arrival import ChangeArrivalError, propose_change
 from services.change_application import (
     ChangeApplicationConflict,
@@ -3021,6 +3027,45 @@ def drawing_understanding_review(project_id, source_id):
     )
 
 
+def _require_legend_decision_authority(submitted_scope_kind):
+    """The one gate in front of every route that registers reusable meaning.
+
+    CLAUDE-LEGEND-REGISTRATION-AUTHORITY-CONTAINMENT-01. Two refusals, in this
+    order, both of them containment rather than new authority:
+
+    1. A Document Shop customer is refused outright - 403, not a redirect,
+       because nothing here is a wrong turn to be steered out of; it is an act
+       their operating line has no authority for. The 403 handler already
+       resolves HOME per role (CLAUDE-CUSTOMER-CONTAINMENT-01), so a refusal
+       leaves them inside the Document Shop rather than in Projects.
+
+    2. A scope_kind that is not one of the five known scopes is refused with
+       400. `normalize_open_world_value` stores an unrecognised value VERBATIM
+       - correct for an open-world vocabulary a human is describing, wrong for
+       a value arriving from a form and used as an authority boundary. Both
+       decision surfaces offer a fixed <select>; anything else was hand-posted.
+
+    WHAT IS DELIBERATELY NOT DECIDED HERE. Every non-customer account keeps
+    every scope it could already use, including `project` and `discipline`.
+    Whether that is RIGHT is the open Product Owner question recorded in
+    `governance/current/legend-of-understanding-and-craft-workshop.md` §7; this
+    function closes the gap that let container ownership alone confer
+    registration authority, and answers nothing beyond it.
+
+    REJECT, NEVER SILENTLY NARROW. A request for a scope the caller may not use
+    is refused with the scope it asked for intact in the refusal. Narrowing it
+    to something permitted would record a decision nobody made and hide the
+    unauthorised request inside a successful-looking one.
+    """
+    from services.case_workspace import KNOWN_LEGEND_SCOPES
+
+    if not user_can_record_registered_understanding():
+        abort(403)
+    scope_kind = (submitted_scope_kind or "").strip()
+    if scope_kind and scope_kind not in KNOWN_LEGEND_SCOPES:
+        abort(400)
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/understanding/<legend_item_id>/decide",
                     methods=["POST"])
 @login_required
@@ -3033,6 +3078,10 @@ def decide_legend_item_route(project_id, legend_item_id):
     """
     _document, store, workspace = _load_workspace_or_404(project_id)
     source_id = (request.form.get("source_id") or "").strip()
+    scope_kind = (request.form.get("scope_kind") or "").strip()
+    # AFTER the project boundary, never instead of it: a container that is not
+    # this caller's stays a generic 404, exactly as it was.
+    _require_legend_decision_authority(scope_kind)
     try:
         # CLAUDE-ASREAD-SURFACE-01: proposition-aware, and defaulting to
         # IDENTITY so every existing caller and test posts exactly what it
@@ -3049,7 +3098,7 @@ def decide_legend_item_route(project_id, legend_item_id):
             action=(request.form.get("action") or "").strip(),
             actor=_reviewer(),
             value=(request.form.get("meaning") or "").strip() or None,
-            scope_kind=(request.form.get("scope_kind") or "").strip() or None,
+            scope_kind=scope_kind or None,
             note=(request.form.get("note") or "").strip() or None,
             governance_log=_log(),
         )
@@ -3086,13 +3135,20 @@ def decide_legend_family_route(project_id, family_id):
 
     _document, store, workspace = _load_workspace_or_404(project_id)
     source_id = (request.form.get("source_id") or "").strip()
+    scope_kind = (request.form.get("scope_kind") or "source").strip()
+    # Same gate, same order, same reasons as the single-item route above. The
+    # default differs (`source`, because a family spans a sheet) and that
+    # difference is deliberately left as it was - narrowing it is a decision,
+    # recorded as open in the governance record, not something to slip into a
+    # containment change.
+    _require_legend_decision_authority(scope_kind)
     try:
         result = confirm_family(
             store, workspace, family_id,
             action=(request.form.get("action") or "").strip(),
             actor=_reviewer(),
             meaning=(request.form.get("meaning") or "").strip() or None,
-            scope_kind=(request.form.get("scope_kind") or "source").strip(),
+            scope_kind=scope_kind,
             scope_id=(request.form.get("scope_id") or "").strip() or None,
             note=(request.form.get("note") or "").strip() or None,
             governance_log=_log(),

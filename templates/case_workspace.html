@@ -3977,7 +3977,8 @@
                 {% if message.decision_card %}{{ macros.as_read_decision_card(
                     project_id, message,
                     (as_read_card_state.get(message.id) or {}).get("disposition") or {},
-                    (as_read_card_state.get(message.id) or {}).get("available") or {}) }}{% endif %}
+                    (as_read_card_state.get(message.id) or {}).get("available") or {},
+                    can_record_registered_understanding) }}{% endif %}
             </div>
             {% else %}
             {# CLAUDE-P40-B (3.7): this example previously always
@@ -4130,7 +4131,8 @@
                 {% if message.decision_card %}{{ macros.as_read_decision_card(
                     project_id, message,
                     (as_read_card_state.get(message.id) or {}).get("disposition") or {},
-                    (as_read_card_state.get(message.id) or {}).get("available") or {}) }}{% endif %}
+                    (as_read_card_state.get(message.id) or {}).get("available") or {},
+                    can_record_registered_understanding) }}{% endif %}
             </div>
             {% else %}
             <p class="conversation-empty">No Project Conversation yet.</p>

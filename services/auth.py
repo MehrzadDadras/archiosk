@@ -195,6 +195,50 @@ def user_is_document_shop_customer() -> bool:
     return session.get("role") == ROLE_CUSTOMER
 
 
+def user_can_record_registered_understanding() -> bool:
+    """May this account record a Legend of Understanding decision?
+
+    CLAUDE-LEGEND-REGISTRATION-AUTHORITY-CONTAINMENT-01. The third helper of
+    the same narrow shape, for the same reason: one authority question, owned
+    in one place, so no route and no template re-derives a role.
+
+    READ ACCESS IS NOT REGISTRATION AUTHORITY. A Document Shop customer can
+    open the As-Read bench on a source they own - established behaviour, pinned
+    by `test_a_customer_can_use_as_read_on_its_own_source`, and deliberately
+    unchanged. What they must not do is turn GO's proposal into REGISTERED,
+    REUSABLE meaning: `governance/current/legend-of-understanding-and-craft-
+    workshop.md` §8 ratifies that the indexing act is separate from the
+    authority of the meaning, and until this function existed nothing enforced
+    it. Owning the container the mark was found on was conferring authority
+    over what the mark MEANS, at project or discipline scope.
+
+    THIS FUNCTION ANSWERS ONLY THE NEGATIVE HALF, and that is deliberate. It
+    removes the customer and preserves every other account's CURRENT behaviour
+    verbatim - both decision routes were `@login_required` only, so admin and
+    read_only could already record decisions at any scope, and they still can.
+    It does NOT decide who SHOULD be able to register project-wide or
+    discipline-wide meaning, whether an Indexer holds registration authority,
+    or whether architect/admin/developer accounts differ. Those are open
+    Product Owner questions (§7 of the same record), and answering one of them
+    here by choosing a convenient return value would be inventing authority
+    rather than containing a gap.
+
+    DELIBERATELY NOT ROUTED THROUGH `user_is_document_shop_customer` above,
+    which answers a PRESENTATION question. The two agree today and are not the
+    same question: if the presentation rule ever changes, a permission must not
+    move with it silently. Same discovered distinction that split
+    `user_can_create_document_shop_container` out of `user_can_upload_to_storage`.
+
+    Does NOT fail closed on an unrecognised role, unlike origination above:
+    there, no prior behaviour existed to preserve; here, every authenticated
+    session could already do this, and quietly withdrawing that from a role
+    nobody has issued yet would be a second, unrequested authority change.
+    """
+    from models import ROLE_CUSTOMER
+
+    return session.get("role") != ROLE_CUSTOMER
+
+
 def role_home_endpoint() -> str:
     """Where HOME is for this session. The single role-routing rule.
 

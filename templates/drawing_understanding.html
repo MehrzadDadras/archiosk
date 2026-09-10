@@ -25,6 +25,16 @@
 
 {% macro decision_columns(action_url, id_prefix, source_id, scope_default,
                           scope_options, extra_actions) %}
+  {# CLAUDE-LEGEND-REGISTRATION-AUTHORITY-CONTAINMENT-01: a caller the decision
+     route will refuse is not offered the control. The evidence, GO's reading
+     and every recorded decision stay fully visible above - READ ACCESS IS NOT
+     REGISTRATION AUTHORITY, and only the second half is withdrawn here. The
+     route is the enforcement; this is the honest surface in front of it. #}
+  {% if not can_record_registered_understanding %}
+  <p class="muted" data-ui-ref="drawing-understanding.decision.not-yours">
+    Recorded by the reviewers who hold this drawing&rsquo;s meaning.
+  </p>
+  {% else %}
   {# One <form> per row. Each decision is its own column button, so governing a
      row is a single click - the meaning box and scope selector are progressive
      disclosure, not a prerequisite. The routes already default scope
@@ -65,6 +75,7 @@
       </select>
     </details>
   </form>
+  {% endif %}
 {% endmacro %}
 
 {% block content %}

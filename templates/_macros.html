@@ -775,7 +775,7 @@
    data-ui-ref="{{ ui_prefix }}.reply" aria-live="polite" hidden></p>
 {% endmacro %}
 
-{% macro as_read_decision_card(project_id, message, disposition, available) %}
+{% macro as_read_decision_card(project_id, message, disposition, available, can_decide) %}
 {#
   CLAUDE-VISUAL-COMPOSER-01: one governed As-Read question, answered in one click.
 
@@ -793,6 +793,13 @@
   GENERIC BY CONSTRUCTION. Nothing here names a sheet, a project, or a symbol
   kind - the card carries a target_kind and a target_id, and any future As-Read
   review item that can name those renders through this same macro.
+
+  `can_decide` is passed IN rather than read from context, and has no default,
+  because this file is imported without context: a macro here cannot see
+  `can_record_registered_understanding`, and a default would let a future call
+  site offer a control the route refuses without anyone noticing
+  (CLAUDE-LEGEND-REGISTRATION-AUTHORITY-CONTAINMENT-01). The question, not the
+  role, is what travels - the same rule base.html already states.
 #}
 {% set card = message.decision_card %}
 {% if card %}
@@ -845,6 +852,10 @@
   {% elif disposition.settled %}
   <p class="asread-card-settled" data-ui-ref="chat.as-read-card.settled">
     &#10003; Settled &mdash; recorded as <strong>{{ disposition.state }}</strong> in As-Read.
+  </p>
+  {% elif not can_decide %}
+  <p class="asread-card-not-yours" data-ui-ref="chat.as-read-card.not-yours">
+    Recorded by the reviewers who hold this drawing&rsquo;s meaning.
   </p>
   {% else %}
   {% set action_url = url_for('workspace.decide_legend_family_route', project_id=project_id, family_id=card.target_id)

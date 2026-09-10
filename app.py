@@ -872,7 +872,12 @@ def _register_context_processors(app: Flask) -> None:
 
         from flask import request, session
 
-        from services.auth import is_admin, is_authenticated, user_is_document_shop_customer
+        from services.auth import (
+            is_admin,
+            is_authenticated,
+            user_can_record_registered_understanding,
+            user_is_document_shop_customer,
+        )
         from services.case_workspace import CaseWorkspaceStore
         from services.verification_access import is_verification_session
         from services.template_identity import template_identity_for_endpoint
@@ -960,6 +965,16 @@ def _register_context_processors(app: Flask) -> None:
             # Projects/CAD shell. Injected here, from the one helper that
             # owns the question, so no template carries a role literal.
             "customer_mode": authenticated and user_is_document_shop_customer(),
+            # CLAUDE-LEGEND-REGISTRATION-AUTHORITY-CONTAINMENT-01: the SAME
+            # answer the decision routes gate on, so a control is never
+            # offered to someone the route will refuse. This is the established
+            # two-sided shape `user_can_upload_to_storage` already documents -
+            # grey the control AND gate the route - and the template asks the
+            # authority question rather than reading a role, exactly like
+            # customer_mode above. Not a substitute for the route gate: hiding
+            # a button stops nobody who posts directly.
+            "can_record_registered_understanding": (
+                authenticated and user_can_record_registered_understanding()),
             "is_admin": is_admin() and not on_standalone_auth_page,
             # CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one place
             # this flag is ever read into template context - a plain
