@@ -626,6 +626,61 @@ unnecessary systemd configuration risk merely to display a hash. Whatever the
 mechanism, the durable requirement is: **it must always be possible to determine
 exactly which git commit is live**, checkable without guessing.
 
+### Deployed text files are CRLF — normalise before reading a digest mismatch
+
+**This is the third independent rediscovery of the same fact, and the first time
+it has been written where the person doing the check will see it.** It was
+recorded in `CONTINUATION_CHECKPOINT.md` and again in
+`docs/DECISION_PROVENANCE_LEDGER.md`, both times as a session artifact, and both
+times it surfaced again later as a surprise. Session artifacts are not where
+someone verifying a live host is reading; this section is.
+
+`git archive` is run from a Windows host with `core.autocrlf=true`, which
+converts LF to CRLF on export. So **deployed TEXT files are not byte-identical
+to their committed blobs**:
+
+```
+raw digest of the host file  !=  raw digest of the git blob
+```
+
+**That inequality is expected, and is not corruption on its own.** Measured
+2026-09-09 while verifying the retained rollback trees:
+`services/document_examination.py` on the host carries 495 CR bytes the blob
+does not, and every sampled file matched its blob exactly once CR was stripped.
+
+**The rule is: normalise the known transformation, then interpret what is
+left.**
+
+```bash
+# host side
+ssh ubuntu@<server> "sudo tr -d '\r' < /var/www/archiosk/<path> | md5sum"
+# repository side - cat-file, not `git show`, to avoid any filter of its own
+git cat-file blob <commit>:<path> | md5sum
+```
+
+Three things this does **not** license:
+
+- **It is not permission to weaken the check.** Normalisation is applied to one
+  known, proven transformation. A difference that survives it is a real
+  difference and must be explained, never normalised away further.
+- **It does not apply to binaries.** Rasters, fonts and other non-text files are
+  not converted, so a digest mismatch on one of those *is* meaningful. The same
+  holds for the two paths `.gitattributes` exempts from conversion — the NREOCRC
+  corpus and the vendored PDF.js files — whose whole purpose is to stay
+  byte-identical.
+- **It does not settle the `core.autocrlf` question.** That is a repository-wide
+  decision, not a deploy-time one. Recorded here as the operational consequence,
+  deliberately not changed here.
+
+Why it matters enough to write down: the failure mode is a **false positive on
+an integrity check** — the class of error that gets acted on quickly and
+wrongly. It has already cost real work once, when live had to be pinned by
+CRLF-normalised checksum because no marker recorded the deployed commit (see
+`docs/DECISION_PROVENANCE_LEDGER.md`). The `Description=` marker above is the
+primary answer to "which commit is live"; digest comparison is the fallback for
+when that marker is missing or untrusted, and this note is what makes the
+fallback usable.
+
 ## 13. Clean up this deploy's own scratch (do this every time, not just when it piles up)
 
 `CLAUDE-DEV-CLEANUP-01` found eight superseded deploy tarballs (~21.5MB) sitting in
