@@ -59,6 +59,27 @@ Contemplated Change Notice. CCN lifecycle is durably traced through the
 existing GovernanceLog; no project evidence, authority, or mutation is
 created. See `current/developer-mode-ccn.md`.
 
+**Craft Workshop / Visual Dictionary / Legend of Understanding** — naming
+ratified and existing doctrine recorded (Product Owner `LEGEND OF UNDERSTANDING
+— CRAFT WORKSHOP GOVERNANCE RATIFICATION 01`, 2026-09-10). **Craft Workshop**
+discovers and refines meaning; **Visual Dictionary** is its working vocabulary
+and exemplars; **Legend of Understanding** registers accepted, reusable meaning
+within a declared scope. A GO hypothesis does not become registered
+understanding merely because it was proposed. The generic term *Workshop* keeps
+its existing qualification/capability-measurement sense in
+`specified-unbuilt/architect-studio.md` and is not redefined. **INDEXER** is
+recorded as a working human role term only — the indexing act is separate from
+the authority of the meaning, and no role, permission or route is created.
+The subsystem itself (`services/legend_of_understanding.py`,
+`CaseWorkspaceStore.LegendItem`, four routes in `routes/workspace.py`,
+`templates/drawing_understanding.html`) was already implemented and tested; this
+registers its doctrine, which previously lived only in a module docstring. It
+also records **one conflict between ratified direction and current
+implementation** — the decision routes are `@login_required` only and accept
+`scope_kind` from the form, so nothing yet separates the indexing act from the
+authority of the meaning. No code was changed. See
+`current/legend-of-understanding-and-craft-workshop.md`.
+
 `services/case_workspace.py` (backend repo), 10 Foundation Batches plus the `promote_requirement_item()` bridge, Case-visibility (Private/Shared), the collaboration-threshold/retraction tranche, the Archive tranche, the Case-lineage/Derive tranche, the Selective Adopt/Carry-Forward tranche, the Camel MM1 Multimodal Foundation and Evidence Contract (`StructuralUnit`/`AddressableRegion`/`EvidenceItem`/`DerivedObservation`), the Camel MM2 PDF and Document Intelligence stage (`register_pdf_page_structure`, `services/pdf_intelligence.py`), the Camel MM3 Spreadsheet and Structured-Data Intelligence stage (`register_spreadsheet_structure`, `services/spreadsheet_intelligence.py`), the Camel MM4 Drawing Intelligence and Orientation-Normalized Comparison stage (`register_drawing_sheet_structure`, `create_addressable_drawing_region`, `build_evidence_sachet`, `services/drawing_intelligence.py`), the Camel MM5 Image, Screenshot, and Camera Evidence stage (`create_addressable_marker_region`, `services/image_intelligence.py`, the real governed Eye pane), the Camel MM6 Cross-Document and Cross-Modal Relationship River stage (`record_evidence_relationship`, `resolve_relationship_status`, `explain_evidence_trust`, the bounded river viewer in `static/js/drawing_image_viewer.js`), and the Camel MM7 Governed Investigation, Analytical Reasoning, and Trustworthy Answers stage (`Claim`, `record_investigation_claim`, `explain_investigation_answer`, `services/cross_modal_investigation.py`), 324 passing `unittest` tests as of the tranche this sentence was last updated for (see `current/kernel-object-model.md` for the current real count). Full detail and code anchors: `current/kernel-object-model.md`. In one sentence: `Source`, `Requirement`, `Finding`, `Relationship`, `Case`, `ReviewerValidation`, `Disposition`, `RequirementAdjudication`, `Snapshot`, `Supersession`, `TemporalObligation`, `AnalysisRun`/`AnalysisTrigger`, `GovernanceLog`, the `promote_requirement_item()` bridge, Case visibility (`CASE_VISIBILITY_PRIVATE`/`CASE_VISIBILITY_SHARED`, `visible_cases_for`, `share_case`), the Collaborative state/threshold (`CASE_VISIBILITY_COLLABORATIVE`, `retract_case_to_private`), terminal Case Archive (`CASE_STATUS_OPEN`/`CASE_STATUS_ARCHIVED`, `archive_case`, the centralized `_require_case_not_archived` frozen-state guard), Derive (`derive_case_from_archive`, `derived_cases_of`, `RELATIONSHIP_TYPE_DERIVED_FROM`), and Selective Adopt/Carry-Forward for Finding + ReviewMessage (`adopt_finding_into_case`, `adopt_review_message_into_case`, `carried_forward_adoptions_for_case`, the new `CarriedForwardAdoption` primitive) all exist, are tested, and are the ground truth for everything else in this baseline. `RequirementAdjudication`, the promotion bridge, and the full Private→Shared→Collaborative→Archived→Derived→Adopted Case lifecycle are also now reachable through minimal route wiring in `routes/workspace.py` (`promote_requirement_item_route`, `adjudicate_requirement`, `share_case`, `retract_case`, `archive_case`, `derive_case`, `adopt_finding`, `adopt_review_message`).
 
 ## What's specified but unbuilt (fully designed, zero code)
