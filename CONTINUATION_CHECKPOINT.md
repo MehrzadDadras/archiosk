@@ -13539,3 +13539,69 @@ read there is correct, and nothing here interprets what the drawing means.
 - Worker health is surfaced in no UI.
 - Positioned evidence has no reader yet - the viewer seam (§21) is unbuilt by
   design.
+
+## Session checkpoint: spatial legend candidate detection — `9014e89` live
+
+**CLAUDE-GO-PERCEPTION-LEGEND-DETECT-01.** Deployed; production reads
+`(accepted build 9014e89)`, both services active, `/health` 200 internally and
+publicly, `STATIC_VERSION` unchanged at 171. Live proof as the disposable
+ROLE_CUSTOMER: **19/19**. Real-sheet proof across 11 stored sources: **42/42**.
+
+### What existed already, and what was actually missing
+
+The Workshop/visual-dictionary capability is **largely already built** as
+`services/legend_of_understanding.py` (1,686 lines) — GO proposes, a human
+confirms, meaning becomes reusable, with append-only decisions, five scopes and
+a `LEGEND_PRECEDENCE_ORDER` that puts an explicit sheet legend above every
+guess. What was missing was purely spatial: `find_legend_evidence` searched
+**source names, page labels and observed strings** — text markers in three
+places, no geometry — because positioned OCR did not exist when it was written.
+
+This tranche adds the spatial signal and **no store code at all**:
+`create_addressable_region` already takes an arbitrary address dict and
+`register_evidence_item` already takes a content type.
+
+### Three things the real sheets changed
+
+- **One stop rule was not enough.** A title-to-list gap and a row-to-row gap are
+  different physical things. The gap from `CIRCULATION LEGEND` to its first
+  entry is **3.3x the heading height**, so a tight single rule found nothing; a
+  loose one ran to 46 rows on A-01A. First gap now scales off the heading, the
+  rest off the rows.
+- **`beside` was demoted to a fallback.** Taking whichever side had more rows
+  gave a real A-01 a **159-row "legend" across 0.558 of the sheet**; bounding it
+  in both directions still left A-01A at 82. On dense CAD sheets the larger side
+  is the *denser* one, not the better one — and there is no real beside-layout
+  legend to measure against. After the fix A-01 bounds at 11 rows / 0.140x0.103.
+- **A floating-point boundary cut a regular list to one row.** `0.35 - 0.33` is
+  `0.020000000000000018`, which loses to `0.01 * 2.0`. **Found by a sanity
+  check, not by a test** — the fixture sat just inside the boundary and passed
+  while the rule was fragile. A test now sits exactly on it.
+
+### What was deliberately not done
+
+Three photographs of the **same** real sheet gather 3, 3 and 1 rows for the same
+legend. The geometry was **not** loosened until all three read SUPPORTED; the
+thin one reports AMBIGUOUS. Fitting until every observation passed would have
+tuned the rule to five samples and called it a law. The live synthetic sheet
+behaved the same way — AMBIGUOUS on thin support — which is the honest
+degradation, not a defect to tune away.
+
+No probability is invented: strength is named, with its counts attached.
+
+### Registered, not actioned
+
+- **"Workshop" is already taken.** `governance/specified-unbuilt/architect-studio.md`
+  uses it for *"Workshop / AFT / Gym — qualification and capability
+  measurement"*. A drawing-study bench under that name would collide. **Product
+  Owner decision, not mine.**
+- **Legend of Understanding has no governance record.** Its doctrine —
+  precedence, append-only decisions, snapshot-required, style-informs-confidence
+  -never-meaning — lives only in a module docstring and `MANIFEST.md`. There is
+  no `governance/` file and no `STATUS.md` row. Its nearest cognitive home is
+  Gym **C09** (*"symbolic meaning and reference binding… keeps IDENTITY and
+  TARGET distinct"*), which the module already implements under those exact two
+  names.
+- `LEGEND_EVIDENCE_MARKERS` is English-only.
+- Detection is fed only by image sources; PDF sheets have no positioned-OCR
+  path yet, so A-01/E1 were measured directly rather than through the worker.
