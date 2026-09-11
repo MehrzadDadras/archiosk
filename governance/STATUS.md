@@ -197,6 +197,14 @@ If any future session is tempted to build something from `specified-unbuilt/` or
 - What's designed but not built: `specified-unbuilt/*.md`
 - What's acknowledged but not designed: `deferred-reserved/reservations.md`
 - How this baseline itself may change: `governance-of-governance/amendment-and-ratification.md`
+- Where drawing intelligence is going, and what is already built for it:
+  `proposals/drawing-intelligence-master-plan.md` (PROPOSAL, 2026-09-11) — the
+  reconciliation of two external architecture reviews against the repository,
+  the phased plan to a first cross-discipline discrepancy, and **one unresolved
+  conflict**: the plan's measured-clearance spine against
+  `proposals/dimensional-reconciliation-and-scale-regions.md` §7 ("does not
+  measure drawings") and `current/kernel-object-model.md` ("scale/measurement:
+  recorded, never authoritative"). Surfaced, not resolved.
 - What exists in the historic Explorer corpus and where it maps: `history-mapping.md`
 
 ## Current PSD analysis terminology

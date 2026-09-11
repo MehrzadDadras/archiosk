@@ -13733,3 +13733,93 @@ worker concurrency unchanged.
   discover. Anyone gating in a worktree must copy that directory first.
 - **Rollback trees now number 7** against the keep-3 rule. Pruning remains a
   separate deliberate decision, deliberately not folded into deploy cleanup.
+
+## Session checkpoint: drawing intelligence master plan — governance only, nothing deployed
+
+**`ARCHIOSK DRAWING INTELLIGENCE — CONVERGED MASTER PLAN & DURABLE GOVERNANCE 01`**,
+2026-09-11. Planning and governance registration only; **no feature
+implementation, no deployment, no dependency installed, no zero-egress change.**
+Live remains `6b8f135`.
+
+Durable record: **`governance/proposals/drawing-intelligence-master-plan.md`**
+(PROPOSAL), indexed from `governance/STATUS.md`'s "Where to go next".
+
+### The finding that should change how future proposals are weighed
+
+Two external architecture reviews proposed replacing the perception spine. Tested
+against the repository at `6b8f135`, **neither survived** — because the primitives
+they proposed to add mostly exist, and **the most capable ones are built, tested
+and unreachable**:
+
+- **`services/sheet_vision.py`** (831 lines) — governed Gemini vision over a
+  rendered sheet, Product-Owner-authorized 2026-08-29: local-first spatial read
+  *before* the gate, conjunctive governance (DENY at RESTRICTED+), allowlist
+  egress digest, bounded rasterization, prompt-injection fencing, audit record on
+  every call including refusals. **Zero callers outside `tests/`.**
+- **`DerivedView`** + `services/derived_view.py` — scale state/value/method,
+  North, rotation, `may_measure`, view↔source transforms, `may_compare_spatially`.
+  **Unwired.**
+- **`services/drawing_segmentation.py`** — title-block segmentation and
+  scale-notation parsing. **Unwired.**
+- **`engine/pdf_extractor.py`** — per-page vectors including closed rectangles,
+  stroke widths and dashes: the raw material for viewport boundaries. **Unwired
+  from perception.**
+
+So "ARCHIOSK needs viewport detection / scale handling / multimodal reading" is
+not a missing capability. It is a second implementation of an existing one.
+
+### What is genuinely missing, in dependency order
+
+1. **Raster PDFs yield no coordinates, and the break is two lines deep.**
+   `raster_extraction.py:245-247` builds the *same* PyMuPDF OCR textpage
+   `positioned_text._default_ocr` uses, then reads only
+   `page.get_text(textpage=…)` and discards the word boxes the engine already
+   produced (`positioned_text.py:130` is the read that recovers them, at no extra
+   OCR cost). `perception_worker.run_one:458-463` then refuses every non-PNG/JPEG
+   file — while `ingestion.py:1007` **already enqueues PDFs**, so scanned
+   drawings are queued today and dead-end at that gate. The store side is generic
+   and ready; only the producer is missing.
+2. **Nothing ever proposes a relationship between two Sources** — the empty
+   centre. 45 relationship types, **three** production writers, two manual.
+   `cross_modal_investigation` reads that graph and can only abstain.
+3. **No evidence package spans two Sources** (every sachet excludes every other
+   Source); Spin is text-only under a 60k-char cap and never sees a region.
+4. **No shared spatial frame between sheets**; `may_compare_spatially` is a veto,
+   not a transform.
+
+### Unresolved governance conflict — do not bypass it with a plan
+
+The direction proposes `measure_clearance(…)` and page→view→world transforms.
+`proposals/dimensional-reconciliation-and-scale-regions.md` §7 says **"ARCHIOSK
+reconciles stated dimensions. It does not measure drawings, and no mechanism …
+may be implemented in a way that produces a magnitude from page geometry."**
+`current/kernel-object-model.md` records the implemented position: **"Scale/
+measurement: recorded, never authoritative"** — no calibration, no pixel-to-real
+conversion, plus a mandatory viewer warning.
+
+**Proposed reconciliation (Product Owner decision required):** anchor by declared
+IDENTITY, not coordinates. "Grid C/4" on A-201 and "Grid C/4" on S-201 are the
+same place by declaration. Topology (overlap, containment) is a boolean, not a
+magnitude. The first deterministic check is **stated-value reconciliation**, which
+needs no calibration and is what a professional can sign. Measured clearance
+stays closed per §7 consequence 2.
+
+### Storage — the one measured limit
+
+502 KB of positioned-region JSON for one real source; largest workspace record
+1,005 KB, rewritten whole on every save; per-write cost measured at 32 ms
+(151 KB) and 71 ms (615 KB), 5 runs each. A 500-sheet project extrapolates to
+**~245 MB in one workspace JSON**. HIGH confidence on direction, MEDIUM on
+magnitude. **Not an argument for a graph database** — the deficiency to answer is
+whole-record rewrite cost on a per-project file.
+
+### Next critical-path tranche
+
+**Phase 1A — PDF positioned OCR** (return the word boxes; per-page unit binding;
+remove the image-only worker gate), then **1B PNG working frame** (decouple frame
+format from the orientation decision — measured 4,953 chars / 0.426 legible
+against 9,548 / 0.631), then **1C `rows_beside`**.
+
+Explicitly NOT on the critical path: Cognitive Gym, Architect Studio, sketch-to-BIM,
+3D reconstruction, multi-provider voting, graph-database experimentation, deeper
+legend sophistication.
