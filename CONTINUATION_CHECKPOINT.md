@@ -13899,3 +13899,82 @@ Codex findings are evidence about GO **behaviour** and do not rewrite applicatio
 architecture on their own. Claude findings are evidence about application
 **capability** and do not promote GO cognitive status on their own. Pure
 Cognitive Gym work depending on no application capability continues independently.
+
+## Session checkpoint: PDF positioned OCR (Phase 1A) — `1e764b3` live
+
+**CLAUDE-GO-PERCEPTION-PDF-OCR-01.** Deployed; production reads
+`Gunicorn - ArchiOSK GO (accepted build 1e764b3)`, both services active,
+`/health` 200 internally and publicly, perception worker `NRestarts=0`, queue
+clean. Full gate, parallel, on a frozen isolated worktree: **7,681 passed,
+3 skipped, 0 failed, 3,817 subtests, in 8:57.**
+
+**Product Owner decision 2026-09-11: Option C (hybrid) ACCEPTED.** Identity-first
+/ stated-value reconciliation is the governing path; physical magnitude is not
+derived from page geometry; calibrated measurement is DEFERRED, not prohibited,
+and needs its own evidence, governance review and authorization. `§7` of
+`proposals/dimensional-reconciliation-and-scale-regions.md` is preserved intact.
+
+### What changed
+
+Raster PDFs are first-class in positioned perception. `A-01.pdf` — a real sheet
+with `textlen = 0` that ARCHIOSK could not see at all — now yields **565
+positioned lines / 2,427 words in 13.0s**, and legend detection immediately
+resolves **`GENERAL NOTES:` and `LEGEND`, both SUPPORTED**, on it.
+
+The worker's image-only gate is **narrowed, not opened**: `.pdf` routes to its
+own path, `.docx` still terminates honestly. Document Shop intake had been
+enqueueing PDF jobs all along; they were dead-ending at that gate.
+
+### NATIVE ALWAYS WINS WHERE IT EXISTS — measured, not assumed
+
+`raster_extraction`'s own rule, reused for GEOMETRY. Measured on three real
+sheets **before** the rule was written:
+
+| Sheet | Native | OCR 200dpi | Outcome |
+|---|---|---|---|
+| M2_OF_3 (embedded OCR layer) | **903 words**, 0.011s | 522 words, 4.9s | re-OCR **loses 42%** |
+| RD-A-L03-001 (vector) | 291 words, 0.011s | 364 words, 1.6s — but **76 of 101 lines dropped illegible** | native cleaner, **145x faster** |
+| A-01 (no text layer) | 0 | **2,427 words**, 13.0s | OCR is the only option |
+
+Only a page with no usable text is OCR'd. `extraction_pass` records which read
+produced each region (`native_text` / `positioned_ocr`). `5 Nipigon.pdf` routes
+**per page within one document** — native page 0 (finding `GENERAL NOTES` and
+`DRAWING INDEX`), OCR pages 1–2 — which is the mixed-PDF case working rather
+than asserted.
+
+### Page binding — the defect this tranche existed to fix
+
+The prior writer took the Source's **first** page unit: correct for a one-frame
+image, silently wrong for a document, and the geometry would have looked
+entirely plausible while pointing at the wrong sheet. The exactly-once re-check
+was likewise Source-wide, which on a multi-page PDF would have reported pages
+2..n as an already-done replay. Both are now explicit and per-page, and legend
+detection and slicing take the same unit so no stage can bind elsewhere.
+
+### Registered, not actioned
+
+- **`ingest_upload` still enqueues perception only for an IMAGE founding
+  source.** A PDF uploaded as a Project's *founding document* is therefore still
+  not perceived; only `attach_document_shop_sources` queues PDFs. Changing it
+  would start OCR on every Project PDF upload — a real behavioural and cost
+  change on a path this tranche was not asked to touch. **Reported, not done.**
+- `MAX_PDF_PAGES = 60`; pages beyond the bound are reported as skipped, never
+  silently dropped. A 49-page set reads 3 pages in 14.7s under the harness.
+- OCR quality on noisy raster is unchanged and still weak — 1,087 of 1,652 lines
+  dropped as illegible on A-01. Phase 1B is the next lever.
+- **STATIC_VERSION is 172**, bumped by the concurrent Cognitive Gym session's
+  `static/css/cognitive_gym.css`, **not** by this tranche, which changed no
+  static asset.
+- Rollback trees now number **9** against the keep-3 rule. Still a separate,
+  deliberate decision; still not folded into deploy cleanup.
+
+### Frontiers
+
+**CLAUDE DEVELOPMENT FRONTIER:** Phase 1B — PNG working frame (recommended
+next; see the handoff below for why the evidence points there).
+
+**CODEX SAFE TRAINING FRONTIER:** `CLAUDE-GO-PERCEPTION-LEGEND-SLICE-01`
+(`6b8f135`) and everything before it — advanced one capability now that legend
+slicing has a full gate and a live tranche behind it. **Phase 1A itself is NOT
+handed over**: it is one tranche old, its real-source behaviour on noisy raster
+is still weak, and Phase 1B may change what every PDF page yields.
