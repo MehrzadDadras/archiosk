@@ -27,11 +27,30 @@ closer to Requirement (source-stated meaning) than to an analysis conclusion."
 An index entry is exactly that: the document stating something, not ARCHIOSK
 concluding something.
 
-The decisive practical consequence is RESOLUTION AT READ TIME. An index that
-lists a sheet nobody has uploaded resolves to nothing today and resolves the
-moment that sheet arrives - with no mutation, no reprocessing, and no stored
-answer to go stale. A Relationship would have to be written at a moment in time
-and would be wrong until that moment.
+CORRECTION, CLAUDE-SHEET-IDENTITY-WIRING-01. This docstring previously claimed
+the decisive consequence was RESOLUTION AT READ TIME - "an index that lists a
+sheet nobody has uploaded resolves to nothing today and resolves the moment that
+sheet arrives, with no mutation, no reprocessing, and no stored answer to go
+stale." **THAT IS NOT TRUE OF THIS FAMILY, and it was never true.**
+`extract_and_register_source_references` stores `resolution_status` and
+`resolved_target_ids` at write time, and the store's one read-time re-resolver
+(`resolve_source_reference_status`) re-resolves SECTION citations against
+Requirements - not SHEET citations against Sources. A sheet delivered after its
+index therefore stays `target_not_found`, and the idempotency key that correctly
+prevents duplicate records is also what prevents that one from being upgraded.
+
+The claim was harmless while the register had no caller. Wiring it into the
+perception lifecycle makes it a live production property, so it is corrected
+here rather than left to be discovered, and pinned by
+`tests/test_sheet_identity_wiring_01.py::ArrivalOrder` - a MEASURED assertion
+with an instruction to flip it when a read-time sheet resolver exists.
+
+What remains true, and is still why SourceReference is the right primitive: the
+record is a citation the DOCUMENT made, not a conclusion ARCHIOSK drew, and the
+verbatim declaration survives non-resolution instead of being discarded. The
+ordinary Document Shop path attaches every file of an examination before any
+perception job runs, so an index is normally perceived with its siblings already
+present - the limit bites on incremental delivery, not on the common path.
 
 FALSE CANDIDATES ARE FILTERED BY RESOLUTION, NOT BY A THRESHOLD. The same real
 index yielded `JAN18` and `JAN29` - dates from a revision block that happen to

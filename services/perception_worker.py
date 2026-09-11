@@ -495,6 +495,96 @@ def _slice_legend_candidates(store, job, detection, positioned, governance_log,
     return results
 
 
+def _register_sheet_index(store, job, governance_log, record):
+    """Register declared sheet identities, strictly downstream of a DONE job.
+
+    CLAUDE-SHEET-IDENTITY-WIRING-01. `register_sheet_index` was built, tested
+    and deployed with no application caller at all - reachable only by direct
+    service invocation, which is not a workflow. This is the whole of the
+    wiring: one stage, in the lifecycle point where page evidence exists.
+
+    RUNS AFTER THE JOB IS ALREADY TERMINAL, which is why failure isolation here
+    is STRUCTURAL rather than promised. `record` is the completed job record;
+    the perception evidence is already written and the job is already marked
+    completed before this function is entered. Nothing it can do - raise,
+    refuse, or write badly - can turn a successful examination into a failed
+    one, because there is no longer a job in flight to fail.
+
+    NO SECOND READ OF THE DOCUMENT. Candidates come from
+    `recovered_pages_for`, which reads the evidence the job just wrote to the
+    workspace. The bytes are not re-opened, no page is re-OCR'd, and the
+    incremental cost is a workspace scan rather than a perception pass.
+
+    CALLED ONLY WHEN JUSTIFIED, and the justification is the existing
+    recognition rule: `register_sheet_index` inspects each page, returns
+    `is_index=False` for a document whose pages announce no sheet list, and
+    writes nothing. An ordinary drawing sheet no-ops here. Abstention is
+    preserved exactly as it was measured - nothing is scored and nothing tuned.
+
+    IDEMPOTENT THROUGH THE STORE'S OWN RULE, not a new one:
+    `extract_and_register_source_references` keys an existing reference on
+    (source_id, reference_text, reference_type, origin_context), and this
+    caller's origin_context is derived from the Source's own page units, which
+    are registered once. A revisited Source therefore re-resolves and creates
+    nothing.
+    """
+    from services import perception_jobs, sheet_identity
+
+    if not record or record.get("state") != perception_jobs.STATE_COMPLETED:
+        return None
+
+    try:
+        workspace = store.get(job["workspace_id"])
+        if workspace is None:
+            return None
+        report = sheet_identity.register_sheet_index(
+            store, workspace, job["source_id"],
+            actor="perception-worker", governance_log=governance_log)
+    except Exception as exc:  # noqa: BLE001 - the examination is already complete
+        # SURFACED, NOT SWALLOWED. The one thing that must not happen is a
+        # silent "this source is unreadable" for a document whose drawing
+        # evidence was produced perfectly well.
+        logger.warning("sheet index registration raised for source %s (%s: %s)",
+                       job["source_id"], type(exc).__name__, exc)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=job["workspace_id"],
+                event_type="sheet_index_registration_failed",
+                actor="perception-worker", role="system",
+                payload={"source_id": job["source_id"],
+                         "error_type": type(exc).__name__,
+                         "error": str(exc),
+                         "perception_state": record.get("state")},
+                correlation_id=job["source_id"])
+        return None
+
+    if governance_log is not None:
+        # Recorded even when the document was not an index. "This source
+        # declares no sheet list" is a real fact about a drawing set, and a log
+        # that only records index pages cannot say how rare one is.
+        governance_log.append(
+            project_id=job["workspace_id"],
+            event_type="sheet_index_registered",
+            actor="perception-worker", role="system",
+            payload={
+                "source_id": job["source_id"],
+                "is_index": report.get("is_index"),
+                "boundary": report.get("boundary"),
+                "pages_inspected": report.get("pages_inspected"),
+                "index_pages": report.get("index_pages"),
+                "candidates": report.get("candidates"),
+                "references_created": report.get("references_created"),
+                "resolved": len(report.get("resolved") or []),
+                "ambiguous": len(report.get("ambiguous") or []),
+                "not_found": len(report.get("not_found") or []),
+                "method": report.get("method"),
+                "version": report.get("version"),
+                "reason": report.get("reason"),
+            },
+            correlation_id=job["source_id"])
+    return report
+
+
 def _run_pdf_job(app, jobs, store, job, raw, governance_log):
     """Perceive a PDF, page by page, binding page n to page n.
 
@@ -600,10 +690,14 @@ def _run_pdf_job(app, jobs, store, job, raw, governance_log):
             },
             correlation_id=job["source_id"])
 
-    return jobs.complete(
+    record = jobs.complete(
         job, state=perception_jobs.STATE_COMPLETED,
         extractor=engine, extractor_version=engine_version,
         evidence_refs=evidence_refs)
+    # CLAUDE-SHEET-IDENTITY-WIRING-01: does this document declare which sheets
+    # the project HAS? Downstream of the completed record on purpose.
+    _register_sheet_index(store, job, governance_log, record)
+    return record
 
 
 def _write_pdf_pages_with_retry(store, workspace_id, source_id, page_texts,
@@ -741,12 +835,16 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
         # re-check, so a genuine replay adds nothing twice.
         replay_positioned = _write_positioned_with_retry(
             store, job, positioned, extractor_version, governance_log)
-        return jobs.complete(
+        record = jobs.complete(
             job, state=perception_jobs.STATE_COMPLETED,
             extractor=recovered.get("engine"),
             extractor_version=recovered.get("engine_version"),
             evidence_refs=([e["id"] for e in already]
                            + list((replay_positioned or {}).get("evidence_item_ids") or [])))
+        # A genuine replay reaches here, which is exactly where idempotency has
+        # to hold: this re-runs registration and must create nothing.
+        _register_sheet_index(store, job, governance_log, record)
+        return record
 
     outcome, error = _write_evidence_with_retry(
         store, job["workspace_id"], job["source_id"], text,
@@ -765,12 +863,16 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     # block? Proposal only - still nothing registered, still no human decision.
     _slice_legend_candidates(store, job, detection, positioned, governance_log)
 
-    return jobs.complete(
+    record = jobs.complete(
         job, state=perception_jobs.STATE_COMPLETED,
         extractor=recovered.get("engine"),
         extractor_version=recovered.get("engine_version"),
         evidence_refs=(list((outcome or {}).get("evidence_item_ids") or [])
                        + list((positioned_outcome or {}).get("evidence_item_ids") or [])))
+    # A scanned index sheet is a single page, and the image path registers one
+    # synthetic page unit for it - so the same page boundary applies here.
+    _register_sheet_index(store, job, governance_log, record)
+    return record
 
 
 def serve(app=None, *, poll_seconds: float = POLL_SECONDS, once: bool = False):
