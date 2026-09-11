@@ -14063,3 +14063,97 @@ blocks relationship work.
 **CODEX SAFE TRAINING FRONTIER:** `CLAUDE-GO-PERCEPTION-PDF-OCR-01` (`1e764b3`)
 and everything before it. Phase 1A advances into the safe set; **Phase 1B is NOT
 handed over** — one tranche old, and it carries a known per-source regression.
+
+## Session checkpoint: sheet identity register — `382b3d8` live
+
+**CLAUDE-SHEET-IDENTITY-REGISTER-01.** Deployed; production reads
+`Gunicorn - ArchiOSK GO (accepted build 382b3d8)`, both services active,
+`/health` 200 internally and publicly, worker `NRestarts=0`, queue clean,
+`STATIC_VERSION` unchanged at 172. Full gate, parallel, frozen isolated
+worktree: **7,727 passed, 3 skipped, 0 failed, 3,929 subtests, in 10:44.**
+
+    DRAWING INDEX ENTRY -> PROJECT SHEET IDENTITY -> ACTUAL SOURCE
+
+### Chosen by measurement, and the measurement overturned the obvious choice
+
+Reconnaissance across four extraction classes and nine real documents found the
+keyword-led citation family (`"See Drawing A-204"`) **unrecoverable**: keywords
+survive, identifiers survive, and the two are adjacent in the parser's required
+form **zero times — including in perfect native text.** That rules out OCR as
+the cause: real drawings put the identifier inside a graphical callout. The
+previous tranche's zero proposals were abstention working correctly.
+
+### Real Nipigon proof
+
+**48 resolved · 0 ambiguous · 90 abstained · 0.24s.** 100% precision on links
+produced, 98% recall against the 49 sheet Sources present. Verified by hand:
+`'A101' -> 212109 A101 SITE PLAN.pdf`, `'A204' -> 212109 A204 GROUND FLOOR
+PLAN.pdf`. The single miss is `A100`, the cover sheet its own index does not list.
+
+### A SourceReference, not a Relationship
+
+The store's own distinction, and decisive in practice because **resolution is
+derived at read time**: an index listing a sheet nobody has uploaded resolves to
+nothing today and resolves the moment it arrives — no mutation, no stored answer
+to go stale. A Relationship would be written at a moment in time and wrong until
+then.
+
+### The general parser was NOT widened
+
+`extract_and_register_source_references` gained one optional `candidates`
+parameter. A bare `A101` in prose is still not a sheet citation, and the
+`known_sheets` consumption rule that prevents false orphan tags is intact — both
+asserted by test.
+
+### CORRECTION — recorded rather than left standing
+
+**The commit message for `382b3d8` conflates two measurements.** It lists
+`JAN18` alongside `M2K`, `Ae0s` and `ft92s` as though all came from the
+implementation's proof run. They did not:
+
+- `JAN18`/`JAN29` were measured in **reconnaissance**, reading raw page-0 text
+  via `page.get_text()`. They are real.
+- The implementation reads `recovered_text_for()` — positioned-evidence lines,
+  segmented differently — and **`JAN18` never formed as a token there.** It
+  appears nowhere in the 90 abstentions.
+- The behaviour is still pinned, but by a **synthetic** unit test
+  (`test_a_date_shaped_candidate_creates_no_link`), not by the real run.
+
+The module docstring's own claim ("the same real index yielded `JAN18` and
+`JAN29`") is accurate — it describes the reconnaissance read. Only the commit
+message's grouping is misleading, and gated history is corrected forward here
+rather than amended.
+
+### TWO FINDINGS THE REAL ABSTENTION LIST REVEALED
+
+1. **`RSE37`, `RSI17`, `RSi37`, `R837` are four OCR readings of one structural
+   sheet identifier.** The Nipigon set has ten `RS5xx` STRUCTURAL FRAMING
+   sheets, so the structural sheets ARE declared and their identifiers are
+   corrupted past resolution. **This is the Architecture <-> Structure link
+   failing on OCR quality, visible for the first time.**
+2. **The index read is not bounded to the index.** `looks_like_index` found
+   `DRAWING INDEX` on page 0 and then read tokens from the **whole 49-page
+   document** — which is where the `RS*` variants and most of the 90 false
+   candidates came from. Page 0 alone is native and clean. **Bounding the read
+   to the index region (or at least the index page) is the single highest-value
+   next correction**, and is why 138 SourceReferences were created for one index.
+
+### Registered, not actioned
+
+- Perception cost dominates: reading an index on page 0 cost **294.6s**, because
+  the worker perceives all 49 pages. Resolution itself is 0.24s.
+- 138 `SourceReference` records for one index page, 90 of them governed records
+  of postal codes and OCR noise. Correct, and the store's discipline is never to
+  discard a parsed reference silently — but noisy, and fixed by the bounding
+  above.
+- Rollback trees now **11** against the keep-3 rule.
+
+### Frontiers
+
+**CLAUDE DEVELOPMENT FRONTIER:** index-region bounding, then the next
+relationship family (see below).
+
+**CODEX SAFE TRAINING FRONTIER:** `CLAUDE-GO-PERCEPTION-WORKING-FRAME-01`
+(`6b37511`) and everything before it. Phase 1B advances into the safe set;
+**the sheet identity register is NOT handed over** — one tranche old, and its
+index read is known to be unbounded.
