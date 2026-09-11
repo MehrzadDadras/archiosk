@@ -1,5 +1,73 @@
 # Continuation checkpoint
 
+## 2026-09-11 — detail callout family live at `e9ff790`, and a MEASUREMENT CORRECTION that reopens the cross-discipline route
+
+Appended above the entries below, none of which is altered.
+
+### Shipped and live
+
+| | |
+|---|---|
+| `cff3259` | **CLAUDE-SHEET-IDENTITY-WIRING-01** — the sheet index register gained its first application caller. 58 records / 48 resolved / 10 preserved unresolved on real `5 Nipigon.pdf`; all ten `RS501`–`RS510` resolve. Stage 0.362s against 272.9s perception. |
+| `e9ff790` | **CLAUDE-DETAIL-CALLOUT-01** — first relationship family the corpus earned. 50 candidates / 50 resolved / 0 unresolved / 0 ambiguous on RS501–RS510; 32 directed edges, 16 mutual; 847 of 897 pairings rejected. Full gate 7,792 passed / 3 skipped / 3,957 subtests. |
+
+Deployed `e9ff790`, `/health` 200 internal and public, both services active,
+perception `NRestarts=0`, live AST confirms the worker calls both registers.
+
+### THE CORRECTION — architectural sheets were being read at the WRONG ORIENTATION
+
+Three prior conclusions rested on architectural raster sheets yielding nothing
+useful. **They were measured at the page's stored rotation, and that is not the
+orientation the content is drawn at.**
+
+| measured at | rot=0 (what production reads) | rot=270 |
+|---|---|---|
+| A401 datum levels | **0** | 4 |
+| A402 datum levels | **0** | 6 |
+| A403 datum levels | **0** | 2 |
+| A204 datum levels | **0** | 1 |
+
+**5 of 6 architectural sheets read best at rot=270. Zero datum levels at rot=0
+on every one of them.**
+
+**FIVE ARCHITECTURAL DATUM VALUES MATCH STRUCTURAL STATED VALUES EXACTLY:**
+`186670`, `186960`, `188220`, `188620`, `192610` — architecture states metres
+(`192.61`), structure states millimetres (`192610`), and the named datums agree
+(`T/O GR. FL. SLAB`, `U/S PARK. FTG`, `U/S EXT. ST. FTG`, `T/O PARK. SLAB`).
+
+**This is the first real cross-discipline anchor in the corpus**, and it needs no
+geometry, no callout and no grid — only two stated values under a shared declared
+name.
+
+What is corrected, plainly:
+
+- **"No shared stated datum level across disciplines" — WRONG.** Five shared.
+  The error was mine twice over: a regex that matched only 6-digit millimetre
+  integers, then a conclusion drawn at the wrong orientation.
+- **"Architectural grid labels are not recoverable" — PARTIALLY corrected.**
+  More letters appear at rot=270, but they include `I`, which a real grid skips.
+  Grid remains unreliable; this does NOT reopen grid as the critical path.
+- **The master plan is NOT wrong.** Identity → relationship → deterministic fact
+  → discrepancy is vindicated: a cross-discipline anchor exists.
+
+### Current frontier
+
+**Claude application frontier:** `e9ff790`, deployed.
+**Codex safe frontier:** `6b37511` — unchanged. Neither the sheet register, the
+wiring, nor the callout family is handed over; all are one tranche old or newer.
+
+**Next evidence-supported tranche:** apply orientation detection to PDF pages in
+perception, reusing `image_intake._osd_observation` (Tesseract OSD, already
+installed, confidence-gated at 2.0) rather than a new mechanism. That single
+defect is what has been hiding the architectural side of this corpus.
+
+### Deferred, registered, not blocking
+
+Late-arrival `SourceReference` re-resolution; founding-PDF perception gap
+(`ingest_upload` enqueues only `if image_founding`); 49-page perception cost;
+region-bounding refinement; rollback trees above the keep-3 rule.
+
+
 ## 2026-09-09 (verification) — production SMTP delivers, and self-service recovery is proven live
 
 Appended above the entries below, none of which is altered. **No application
