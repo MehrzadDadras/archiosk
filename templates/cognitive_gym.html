@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Cognitive Gym — ARCHIOSK{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/cognitive_gym.css') }}?v={{ static_version }}">{% endblock %}
+{% macro fact(value) %}{% if value is sameas true %}Yes{% elif value is sameas false %}No{% else %}Not recorded{% endif %}{% endmacro %}
+{% block content %}
+<main class="gym" aria-label="Cognitive Gym development dashboard">
+  <header class="gym-focus">
+    <p class="gym-kicker">Cognitive Gym / Current training focus</p>
+    {% set focused = gym.bars | selectattr('code', 'equalto', gym.focus) | first %}
+    <h1>{% if focused %}<span class="gym-code">{{ focused.code }}</span> {{ focused.name }}{% else %}Awaiting developmental evidence{% endif %}</h1>
+    <p class="gym-direction">{% if focused %}{{ focused.next_move }}{% else %}No adaptive decision recorded{% endif %}</p>
+    {% if focused %}<p>Recorded next step: {{ focused.next_step }}</p>{% endif %}
+    <p>Show everything that happened. Promote only what was proven.</p>
+    <p class="gym-muted">{% if focused %}Development observations only · No capability promotion{% endif %}</p>
+    <a href="{{ url_for('portal.cognitive_gym_dashboard') }}" class="gym-refresh">Refresh evidence</a>
+  </header>
+  <div class="gym-metrics" aria-label="Evidence counts">{% for label, value in gym.metrics.items() %}<div><strong>{{ value }}</strong><span>{{ label }}</span></div>{% endfor %}</div>
+  <p class="gym-provenance">{{ gym.source }} · As of {{ gym.generated_at }} · Read only</p>
+  <details class="gym-method"><summary>Coverage, freshness and movement rules</summary>
+    <p>{{ gym.coverage }}</p><p>→ Gathering evidence means recorded development without a governed promotion. ↑ / ↘ mark proposed challenge changes, not achieved capability. ↗ Transfer proposed is not transfer begun. ! marks a recorded stop or instrument issue. — Untested means no assessed capability status.</p>
+    <p>Local evaluator scans rebuild on every refresh. Published snapshots update when the evaluator projection is rebuilt and published; this page shows their capture time. File timestamps are labelled when an event timestamp is missing. A seal reference identifies evidence; this view does not requalify it.</p>
+  </details>
+  {% if gym.issues %}<aside class="gym-issues"><strong>Evidence gaps</strong>{% for issue in gym.issues %}<p>{{ issue }}</p>{% endfor %}</aside>{% endif %}
+  <section class="gym-ticker" aria-label="Recent activity"><h2>Recent activity</h2><div>{% for item in gym.ticker %}<span><b>{{ item.code }}</b> {{ item.text }}</span>{% else %}<span>No recorded activity</span>{% endfor %}</div></section>
+  <section aria-label="Long-term plan">
+    <div class="gym-section-heading"><h2>C01–C28 / Long-term plan</h2><span>KEEP THE PLAN. ADAPT THE PATH.</span></div>
+    <p class="gym-muted">Status and activity are separate. DEVELOPMENT / EXEMPLAR / ASSESSMENT remain distinct.</p>
+    <div class="gym-board-scroll" tabindex="0" aria-label="Scrollable capability board"><table class="gym-board">
+      <thead><tr><th>Bar</th><th>Capability</th><th>Status / movement</th><th>Latest activity / condition</th><th>Adaptive direction</th><th>Last activity</th><th>Assessment / transfer</th></tr></thead>
+      <tbody>{% for bar in gym.bars %}<tr data-bar="{{ bar.code }}"><th><a href="#{{ bar.code }}">{{ bar.code }}</a></th><td><a href="#{{ bar.code }}">{{ bar.name }}</a></td><td><strong>{{ bar.status }}</strong><small>{{ bar.movement }}</small></td><td><span class="gym-session-name">{{ bar.latest }}</span><small>{{ bar.condition }}</small></td><td>{{ bar.next_move }}</td><td>{{ bar.time }}<small>{{ bar.time_basis }}</small></td><td>{{ bar.assessment }}<small>Transfer: {{ bar.transfer }}</small></td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section aria-label="Current adaptive path"><div class="gym-section-heading"><h2>Current adaptive path / Evidence detail</h2><span>Discrete events · No intelligence score</span></div>
+  {% for bar in gym.bars %}<details class="gym-detail" id="{{ bar.code }}" {% if bar.code == gym.focus %}open{% endif %}>
+    <summary><b>{{ bar.code }}</b> {{ bar.name }} <span>{{ bar.status }}</span></summary>
+    <p>{{ bar.status_note }}. {{ bar.assessment }}. Transfer: {{ bar.transfer }}.</p>
+    {% if bar.sessions %}<div class="gym-timeline" aria-label="{{ bar.code }} categorical session history">
+      {% for category in ['PREPARATION', 'QUALIFICATION', 'STOPPED / DEFECT', 'ASSESSMENT', 'TRANSFER'] %}
+      {% set entries = bar.sessions | selectattr('kind', 'equalto', category) | list %}
+      {% if entries %}<div class="gym-band"><b>{{ category }}</b><div>{% for entry in entries %}<span class="gym-history-event" title="{{ entry.identity }}">{{ entry.time[:10] }}<small>{{ entry.status }}</small></span>{% endfor %}</div></div>{% endif %}
+      {% endfor %}
+    </div>{% endif %}
+    {% if bar.events %}
+    <div class="gym-timeline" role="img" aria-label="{{ bar.code }} categorical developmental timeline; horizontal sequence, separate actor bands">
+      {% for actor in ['GO', 'GO TEACHING', 'GOTEX'] %}<div class="gym-band"><b>{{ actor }}</b><div>{% for event in bar.events %}{% if event.actor == actor %}<a href="#{{ event.id | replace("/", "-") }}" title="{{ event.time }}">{{ event.title }}<small>{% if event.aligned is sameas true %}Target aligned{% else %}Response recorded{% endif %}</small></a>{% endif %}{% endfor %}</div></div>{% endfor %}
+    </div><p class="gym-muted">Left to right within each actor band: developmental sequence. GOtex is an intervention track, never pooled into GO performance.</p>
+    {% endif %}
+    {% for session in bar.sessions | reverse %}<article class="gym-session">
+      <p class="gym-kicker">{{ session.kind }}{% if session.qualification %} / QUALIFICATION{% endif %}</p><h3>{{ session.identity }}</h3>
+      {% if session.assessment_record %}<pre>{{ session.assessment_record }}</pre>{% endif %}{% if session.transfer_record %}<pre>{{ session.transfer_record }}</pre>{% endif %}
+      <p>{{ session.time }} · {{ session.time_basis }}</p>
+      {% if session.next_move != 'Not recorded' %}<p><b>Next: {{ session.next_move }}</b> · Proposed, not executed by this dashboard</p><p>{{ session.rationale }}</p>{% endif %}
+      {% if session.next_step != 'Not recorded' %}<p>Recorded next step: {{ session.next_step }}</p>{% endif %}
+      {% for event in session.events %}<details id="{{ event.id | replace("/", "-") }}" class="gym-event" {% if event.actor == 'GOTEX' %}data-track="gotex"{% endif %}>
+        <summary>{{ event.title }} · {% if event.aligned is sameas true %}Target aligned{% elif event.actor == 'GO TEACHING' %}Exact authored teaching available{% else %}Response recorded{% endif %}</summary>
+        <p>{{ event.mode }} · {{ event.encounter }} · {{ event.time }} ({{ event.time_basis }})</p>
+        {% if event.actor == 'GOTEX' %}<p><b>Apprenticeship intervention · Causation: {{ event.causation }}</b></p><p>Source GO exercise: {{ event.source_exercise }}</p><p>Exact authored teaching appears separately in this session's GO TEACHING record.</p>{% endif %}
+        <dl><dt>Objective</dt><dd>{{ event.objective }}</dd><dt>Target / distractor</dt><dd>{{ event.target }} / {{ event.distractor }}</dd><dt>Condition</dt><dd>{{ event.condition }}</dd><dt>Execution valid</dt><dd>{{ fact(event.valid) }}</dd><dt>Target aligned</dt><dd>{{ fact(event.aligned) }}</dd><dt>Clarification</dt><dd>{{ fact(event.clarification) }}</dd></dl>
+        <pre>{{ event.raw }}</pre>
+        <p>Tokens in / out: {{ event.usage.input_tokens if event.usage.input_tokens is not none else 'Not recorded' }} / {{ event.usage.output_tokens if event.usage.output_tokens is not none else 'Not recorded' }} · Cost USD: {{ event.cost if event.cost is not none else 'Not recorded' }} · Elapsed seconds: {{ event.elapsed if event.elapsed is not none else 'Not recorded' }}</p>
+        <p class="gym-ref">{{ event.ref }}</p>
+      </details>{% endfor %}
+      {% if session.incomplete_raw %}<details><summary>Incomplete historical teaching — preserved</summary><pre>{{ session.incomplete_raw }}</pre></details>{% endif %}
+      <details><summary>Session report / qualifications / stops / evidence references</summary><pre>{{ session.report }}</pre>{% for seal in session.seals %}<p class="gym-ref">{{ seal.ref }} · {{ seal.status }}</p>{% endfor %}<ul>{% for ref in session.refs %}<li class="gym-ref">{{ ref }}</li>{% endfor %}</ul></details>
+    </article>{% else %}<p>No session evidence found for this bar.</p>{% endfor %}
+  </details>{% endfor %}</section>
+</main>
+{% endblock %}

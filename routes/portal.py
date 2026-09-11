@@ -712,6 +712,18 @@ def developer_tools():
     )
 
 
+@portal_bp.route('/admin/cognitive-gym', methods=['GET'])
+@admin_required
+def cognitive_gym_dashboard():
+    """Examiner-only projection; viewing cannot invoke an evaluator or provider."""
+    _require_developer_tools()
+    from services.cognitive_gym import dashboard
+    projection = dashboard(current_app.config, current_app.instance_path)
+    response = current_app.make_response(render_template('cognitive_gym.html', gym=projection))
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @portal_bp.route('/admin/developer-tools/reset-analysis', methods=['POST'])
 @admin_required
 def developer_reset_analysis():

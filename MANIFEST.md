@@ -1,5 +1,11 @@
 # MANIFEST
 
+Cognitive Gym visibility: `services/cognitive_gym.py` projects evaluator summaries;
+`templates/cognitive_gym.html` and `static/css/cognitive_gym.css` present the
+read-only Developer Mode board at `/admin/cognitive-gym` (routes/portal.py).
+`tools/export_cognitive_gym.py` rebuilds the non-authoritative live snapshot;
+`docs/COGNITIVE_GYM_DASHBOARD.md` documents sources, limits and publication.
+
 The standalone spatial viewport uses vendored Three.js r160 modules at
 `static/js/vendor/three/three.module.js` and `OrbitControls.js`. They are
 MIT-licensed, pinned to the upstream r160 release, and documented with
