@@ -14157,3 +14157,67 @@ relationship family (see below).
 (`6b37511`) and everything before it. Phase 1B advances into the safe set;
 **the sheet identity register is NOT handed over** — one tranche old, and its
 index read is known to be unbounded.
+
+## Session checkpoint: sheet index evidence boundary — `9a89f25` live
+
+**CLAUDE-SHEET-INDEX-BOUNDARY-01.** Deployed; production reads
+`Gunicorn - ArchiOSK GO (accepted build 9a89f25)`, both services active,
+`/health` 200 internally and publicly, worker `NRestarts=0`, `STATIC_VERSION`
+unchanged at 172. Full gate, parallel, frozen isolated worktree: **7,734 passed,
+3 skipped, 0 failed, 3,944 subtests, in 10:13.**
+
+> IF ARCHIOSK SAYS "THIS IS THE DRAWING INDEX", THEN SHEET-IDENTITY CANDIDATES
+> MUST COME FROM THE INDEX PAGE, NOT THE REST OF THE DOCUMENT.
+
+**PAGE-BOUNDED, not region-bounded**, recorded as `boundary: "page"` in the
+report and in every record's `origin_context`. The page `StructuralUnit` is an
+existing governed boundary; isolating the index rectangle needs segmentation
+nobody has measured.
+
+### Real Nipigon re-proof, same corpus
+
+| | before | after |
+|---|---|---|
+| candidates | 138 | **58** (−58%) |
+| **resolved** | 48 | **48 unchanged** |
+| unresolved | 90 | **10** (−89%) |
+| ambiguous | 0 | 0 |
+| candidate precision | 34.8% | **82.8%** |
+| records created | 138 | **58** |
+
+### The structural finding resolves — and corrects an earlier reading
+
+`RSE37`/`RSI17`/`RSi37`/`R837`: **zero occurrences after bounding.** They were
+**contamination from OCR'd pages elsewhere in the bound set, never failed index
+entries.** The previous checkpoint read them as "the Architecture ↔ Structure
+link failing on OCR quality"; that was **wrong about where they came from** and
+is corrected here rather than left standing.
+
+What is true is narrower: **the index page declares no `RS5xx` structural
+identity at all.** Whether the structural sheets are declared anywhere is now an
+open question rather than a half-answered one.
+
+### Honest ceiling of page granularity
+
+The 10 survivors are genuinely ON the cover page: Canadian postal codes from the
+consultant address block (`M2K`, `L4B`, `N6A`, `L9T`, `M2N`) and `SP1`, a civil
+sheet declared but absent. **Page granularity cannot remove an address block;
+region granularity could.**
+
+### Perception cost NOT addressed, and not claimed to be
+
+The worker still perceives every page before index parsing can begin. Measured
+at **294.6s and 5927.6s on two runs of identical work** — a 20× spread that is
+machine contention, not a property of this change. Reading an index on page 0
+should not require perceiving 49 pages; a perceive-on-demand / index-page-first
+path is the apparent optimization, **identified and deliberately not built**.
+
+### Frontiers
+
+**CLAUDE:** whether structural sheet identities are declared anywhere in the
+corpus — the question the RS* correction opened — before choosing between
+region-bounding and revision/supersession.
+
+**CODEX SAFE:** `CLAUDE-GO-PERCEPTION-WORKING-FRAME-01` (`6b37511`) and prior,
+**unchanged**. Codex is paused on model-baseline unavailability; no Cognitive
+Gym state touched.
