@@ -16463,6 +16463,7 @@ class CaseWorkspaceStore:
         resolved_target_type: Optional[str] = None,
         extractor_version: Optional[str] = None,
         include_drawing_tokens: bool = False,
+        candidates: Optional[list[dict]] = None,
         actor: str = "system",
         governance_log: Optional[GovernanceLog] = None,
     ) -> list[dict]:
@@ -16491,9 +16492,20 @@ class CaseWorkspaceStore:
         # exist should not also have to remember to repeat them here. Same
         # reasoning visible_cases_for records - a rule every future caller must
         # remember is not a rule.
-        candidates = parse_source_reference_text(
-            text, include_drawing_tokens=include_drawing_tokens,
-            known_sheets=(known_targets or {}).get(REFERENCE_TYPE_SHEET))
+        # CLAUDE-SHEET-IDENTITY-REGISTER-01: a caller that has ALREADY read a
+        # structured region may supply its own candidates. The general parser
+        # is deliberately untouched and is NOT relaxed - a bare "A101" in prose
+        # is still not a sheet citation, and the `known_sheets` consumption
+        # rule that prevents false orphan tags still governs every text that
+        # goes through it. A DRAWING INDEX is a different reading: it is a list
+        # whose entire purpose is to name sheets, so the bare token is the
+        # evidence rather than a guess about prose. Supplying candidates keeps
+        # that context-specific judgement with the caller who has it, instead
+        # of widening a parser that cannot know where its text came from.
+        if candidates is None:
+            candidates = parse_source_reference_text(
+                text, include_drawing_tokens=include_drawing_tokens,
+                known_sheets=(known_targets or {}).get(REFERENCE_TYPE_SHEET))
         existing_keys = {
             (
                 reference.get("source_id"), reference.get("reference_text"),
