@@ -159,9 +159,19 @@ class _RegisterCase(unittest.TestCase):
                                      reason="superseded")
         return source
 
-    def _register(self, text=INDEX_TEXT, dry_run=False):
+    def _pages(self, *texts):
+        """Recovered text ONE ENTRY PER PAGE - the evidence boundary the
+        bounded reader works in (CLAUDE-SHEET-INDEX-BOUNDARY-01)."""
+        return [{"unit": {"id": "unit-%d" % n, "label": "Page %d" % (n + 1),
+                          "order_index": n, "unit_type": "page",
+                          "source_id": self.index_source["id"]},
+                 "text": text}
+                for n, text in enumerate(texts)]
+
+    def _register(self, text=INDEX_TEXT, dry_run=False, pages=None):
         workspace = self.store.get(self.project_id)
-        with patch.object(si, "recovered_text_for", lambda *_a, **_k: text):
+        supplied = pages if pages is not None else self._pages(text)
+        with patch.object(si, "recovered_pages_for", lambda *_a, **_k: supplied):
             return si.register_sheet_index(
                 self.store, workspace, self.index_source["id"],
                 actor="t", dry_run=dry_run)
@@ -246,6 +256,81 @@ class Resolution(_RegisterCase):
         report = self._register(dry_run=True)
         self.assertTrue(report["resolved"])
         self.assertEqual(self._refs(), [])
+
+
+class TheEvidenceBoundary(_RegisterCase):
+    """CLAUDE-SHEET-INDEX-BOUNDARY-01.
+
+    IF ARCHIOSK SAYS "THIS IS THE DRAWING INDEX", THEN SHEET-IDENTITY
+    CANDIDATES MUST COME FROM THE INDEX PAGE, NOT THE REST OF THE DOCUMENT.
+
+    Measured on the real bound set before this correction: `DRAWING INDEX` was
+    recognised on page 0 and tokens were then taken from all 49 pages, producing
+    90 unresolved records of postal codes, detail markers and OCR garbage — and
+    four OCR readings of one structural identifier that looked like failed index
+    entries and were contamination from elsewhere in the document.
+    """
+
+    def test_an_index_on_one_page_of_many_is_recognised(self):
+        self._add("212109 A101 SITE PLAN.pdf")
+        report = self._register(pages=self._pages(
+            "COVER", INDEX_TEXT, "GROUND FLOOR PLAN"))
+        self.assertTrue(report["is_index"])
+        self.assertEqual([p["order_index"] for p in report["index_pages"]], [1])
+        self.assertEqual(report["pages_inspected"], 3)
+
+    def test_a_sheet_shaped_token_on_a_non_index_page_is_ignored(self):
+        """The exact contamination that produced RSE37/RSi37/R837."""
+        self._add("212109 A101 SITE PLAN.pdf")
+        self._add("212109 A204 GROUND FLOOR PLAN.pdf")
+        report = self._register(pages=self._pages(
+            "DRAWING INDEX\nA101 SITE PLAN",
+            "GROUND FLOOR PLAN\nA204 RSE37 M2K DET-1 ft92s"))
+        texts = {r["reference_text"] for r in
+                 report["resolved"] + report["not_found"] + report["ambiguous"]}
+        self.assertIn("A101", texts)
+        for contaminant in ("A204", "RSE37", "M2K", "DET-1", "ft92s"):
+            with self.subTest(token=contaminant):
+                self.assertNotIn(contaminant, texts)
+
+    def test_a_document_with_no_index_page_produces_nothing(self):
+        self._add("212109 A101 SITE PLAN.pdf")
+        report = self._register(pages=self._pages(
+            "GROUND FLOOR PLAN\nA101", "ROOF PLAN\nA206"))
+        self.assertFalse(report["is_index"])
+        self.assertEqual(report["candidates"], 0)
+        self.assertEqual(self._refs(), [])
+
+    def test_the_boundary_is_page_and_says_so(self):
+        """PAGE-BOUNDED, not REGION-BOUNDED - recorded, not blurred."""
+        self._add("212109 A101 SITE PLAN.pdf")
+        report = self._register()
+        self.assertEqual(report["boundary"], "page")
+        for reference in self._refs():
+            with self.subTest(ref=reference["reference_text"]):
+                self.assertEqual(reference["origin_context"]["boundary"], "page")
+
+    def test_provenance_names_the_page_the_candidate_came_from(self):
+        self._add("212109 A101 SITE PLAN.pdf")
+        report = self._register(pages=self._pages("COVER", INDEX_TEXT))
+        self.assertEqual(report["index_pages"][0]["label"], "Page 2")
+        for reference in self._refs():
+            pages = reference["origin_context"]["index_pages"]
+            with self.subTest(ref=reference["reference_text"]):
+                self.assertEqual([p["order_index"] for p in pages], [1])
+
+    def test_a_legitimate_unresolved_index_entry_is_still_recorded(self):
+        """Bounding must not silently discard a genuine declaration merely
+        because its target Source is absent."""
+        self._add("212109 A101 SITE PLAN.pdf")
+        report = self._register()
+        self.assertIn("S301", {r["reference_text"] for r in report["not_found"]})
+
+    def test_the_whole_document_reader_still_exists_for_document_questions(self):
+        workspace = self.store.get(self.project_id)
+        with patch.object(si, "recovered_pages_for",
+                          lambda *_a, **_k: self._pages("one", "two")):
+            self.assertEqual(si.recovered_text_for(workspace, "x"), "one\ntwo")
 
 
 class Provenance(_RegisterCase):
