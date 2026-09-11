@@ -13658,3 +13658,78 @@ open Product Owner question.
   `/health` 200, deployed files digest-matched to `88059bb`. **Not verified
   live: the 403 itself, the Document Shop destination on refusal, and the
   non-customer positive path** — all three are covered by the gate.
+
+## Session checkpoint: legend entry slicing — `6b8f135` live
+
+**CLAUDE-GO-PERCEPTION-LEGEND-SLICE-01.** Deployed; production reads
+`Gunicorn - ArchiOSK GO (accepted build 6b8f135)`, both services active,
+`/health` 200 internally and publicly, `STATIC_VERSION` unchanged at 171 (no
+static asset changed), perception queue clean (10/10 completed, worker
+`NRestarts=0`). Full gate, parallel (`-n 8 --dist loadfile`): **7,642 passed,
+3 skipped, 0 failed, 3,755 subtests, in 9:55**.
+
+### What was added, and where it stops
+
+`CANDIDATE LEGEND REGION -> PROPOSED ENTRY SLICES`, and nothing further. A slice
+is a **candidate visual exemplar**: no LegendItem, no decision, no family, no
+scope, no meaning, `resolve_meaning` never entered — asserted by walking the
+module's AST for the calls it must not make, and again over the worker's own
+slicing function, because the worker is where a shortcut would be taken.
+
+### What positioned OCR cannot see, which decided the shape
+
+A drawn symbol produces no text, so the icon is not observable at all. The crop
+box is therefore the **row band** spanning the block's width — proven on
+RD-A-L03-001, where every coloured swatch falls inside its entry's band despite
+OCR never having seen one — and `icon_zone` is a measured intra-row gap or an
+honest `None` **with a reason**, never a guessed rectangle.
+
+### One upstream property that would have silently ruined this
+
+`legend_detection.gather_rows` skips a line whose gap to the previous one is
+zero, so of `AD  AREA DRAIN` only the FIRST survives into the gathered rows —
+and the stored candidate region is the union of what survived. **Slicing inside
+that box would have seen a column of two-letter codes and called it the
+legend.** The region supplies the vertical span only; horizontal extent is
+recovered per row by `bound_row_extent`, using `gather_rows`'s own two-part stop
+rule turned on its side, with both multiples imported rather than restated.
+
+### Measured on real stored sheets
+
+- **RD-A-L03-001 Rev02** (`CIRCULATION LEGEND`, vector text): SUPPORTED, 7 rows
+  → **6 entries**, five matching the sheet's authored **18pt pitch** exactly,
+  and the two-line note beneath correctly merged into **one** entry.
+- **M2_OF_3** (real 2000-era scan, `LEGENDS`): 4 entries, **2 AMBIGUOUS**.
+- **Nipigan Starter** and the **Rev03 stub**: no candidate, so slicing never
+  runs.
+
+Two guards came from those sheets rather than from anticipation: an entry under
+half its block's median row height, or carrying no letter or digit, is now
+AMBIGUOUS (M2_OF_3 produced one 0.0012 tall whose whole text was a backslash);
+and the icon-gap outlier is excluded from its own median, because including it
+meant the test could never fire on a two-part row — the commonest legend shape
+there is.
+
+Cost, 5 runs per configuration: **32 ms/entry at 151 KB, 71 ms at 615 KB**, so a
+real 4–11 entry block costs **0.13–0.78s** of an 8–10s job. No batch registrar;
+worker concurrency unchanged.
+
+### Registered, not actioned
+
+- **The weak real case is weak because DETECTION mis-located the block**, via
+  its `beside` fallback, and slicing faithfully sliced the title block it was
+  handed. The slicer does not repair a bad parent, and should not — but
+  `rows_beside` is now the weakest link in the chain rather than the stop rule.
+- **A note inside a legend block slices as an entry.** On RD-A-L03-001, entry 5
+  is the sheet's own two-line note. The geometry cannot tell a note from an
+  entry, and inventing a rule to would be fitting to one sheet.
+- **Committed from a SHARED worktree.** A concurrent Cognitive Gym session added
+  nine files between 19:39 and 19:56. None was touched, staged or gated; the
+  `MANIFEST.md` hunk was staged individually and the gate was run in an isolated
+  worktree pinned at `6b8f135`.
+- **`static/nipigon/` is git-ignored**, so a fresh `git worktree` lacks its 35
+  generated assets and 5 tests in `test_nipigon_vector_and_disciplines_01.py`
+  fail there for purely environmental reasons. Cost one 34-minute gate to
+  discover. Anyone gating in a worktree must copy that directory first.
+- **Rollback trees now number 7** against the keep-3 rule. Pruning remains a
+  separate deliberate decision, deliberately not folded into deploy cleanup.
