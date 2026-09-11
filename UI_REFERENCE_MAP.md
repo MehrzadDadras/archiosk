@@ -114,6 +114,7 @@ otherwise.
 | `developer-tools.reset-test-project.submit` (registered 2026-09-05) | `<button type="submit" class="review-btn reject">` | "Reset Test Project" | Performs that reset. Gated on typing `RESET TEST PROJECT: <project name>` into a `required` field, so the confirmation names the specific project and cannot be typed from muscle memory against the wrong one | `templates/developer_tools.html` · `/admin/developer-tools` — Developer Mode, **admin only** | active |
 | `menu.archiosk.developer.ui-reveal-toggle` | `<button>` | UI Reveal | Toggles developer template identity visibility | Admin only | active |
 | `menu.archiosk.developer.tools` | `<a>` | Developer Tools | Opens protected Developer Tools | Admin only | active |
+| `menu.archiosk.developer.cognitive-gym` | `<a>` | Cognitive Gym | Opens read-only evaluator development board | Admin + Developer Mode | active |
 
 ---
 
