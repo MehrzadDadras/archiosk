@@ -13823,3 +13823,79 @@ against 9,548 / 0.631), then **1C `rows_beside`**.
 Explicitly NOT on the critical path: Cognitive Gym, Architect Studio, sketch-to-BIM,
 3D reconstruction, multi-provider voting, graph-database experimentation, deeper
 legend sophistication.
+
+## Session checkpoint: master-plan acceptance prep + Codex handoff cadence — governance only
+
+**`MASTER PLAN ACCEPTANCE PREP + CODEX TRAINING HANDOFF CADENCE 01`**, 2026-09-11.
+Documents only; **no feature code, no deploy, no install, no API call, no image
+egress, no database.** Live remains `6b8f135`.
+
+Durable records: the decision brief, storage trigger, corrections table and
+revised order are **Addenda 1–4 of
+`governance/proposals/drawing-intelligence-master-plan.md`** (appended, not a new
+file). The **Claude → Codex cadence** is in `CLAUDE.md`, beside the existing
+North Star rule, because it is an operating practice for working on this
+repository rather than domain doctrine.
+
+### Awaiting Product Owner decision
+
+Measurement boundary: **Option A** (identity-first / stated-value), **Option B**
+(governed calibrated measurement, requiring a §7 amendment and an eight-part
+calibration contract), or **Option C** (hybrid — A now, B later and separately
+governed). Claude recommends **C**. Not decided; the plan does not proceed past
+Phase 1A authorization without it.
+
+**Phase 1A is TECHNICALLY UNBLOCKED, AWAITING PRODUCT OWNER AUTHORIZATION.** It
+produces positioned regions in the existing 0–1 fraction space and derives no
+magnitude, so it is compatible with A, B and C alike. Not started.
+
+### Frontiers — two separate lines, refreshed per tranche
+
+**CLAUDE DEVELOPMENT FRONTIER:** Phase 1A — PDF positioned OCR (planned,
+authorized-pending, not started).
+
+**CODEX SAFE TRAINING FRONTIER:** `CLAUDE-LEGEND-REGISTRATION-AUTHORITY-
+CONTAINMENT-01` (`88059bb`) and everything before it. This deliberately
+**excludes legend entry slicing (`6b8f135`)** — one tranche old, and its own
+checkpoint registers `rows_beside` as producing wrong-region / correct-downstream
+results. That is the definition of not-yet-stable.
+
+### Capability handoff baseline — what Codex may train against today
+
+| Capability | Status | Surface | Evidence |
+|---|---|---|---|
+| Source & evidence navigation | **READY** | `GET /api/v1/documents`, `/documents/<id>`, `/structural-units`, `/evidence` | MM1, stable across many tranches |
+| Region provenance & citation | **READY** | `GET /documents/<id>/citations/<region_id>` | `resolve_region_citation`, read-time derivation |
+| Single-anchor micro-context sachets | **READY** | `GET /regions/<id>/evidence-sachet`, `/relationships/<id>/sachet`, `/investigations/<id>/sachet` | Read-time, never persisted, explicit `excluded` manifest |
+| Relationship READING & status resolution | **READY (read only)** | `GET /relationships`, `/relationships/<id>/status` | 45 types, precedence implemented; **nothing proposes edges**, so an empty graph is the normal case |
+| Evidence trust explanation | **READY** | `GET /evidence/<id>/trust` | `explain_evidence_trust` |
+| Supersession behaviour | **READY (read)** | Source revision lineage | Only real writer is `register_source_revision`; behaviour stable |
+| Candidate vs confirmed meaning | **READY** | As-Read bench; `legend_of_understanding` | `status="candidate_only"`, `LEGEND_PRECEDENCE_ORDER`, append-only decisions |
+| Legend registration authority boundary | **READY** | Both decision routes | Deployed `88059bb`, 26 tests: customer 403, wider scope rejected not narrowed, foreign container still 404 |
+| Positioned IMAGE evidence | **READY (images only)** | Perception worker, PNG/JPEG | Line-level 0–1 regions; **PDFs are not covered** |
+| Deterministic cross-modal investigation | **READY (with limits)** | `POST /investigations`, `GET .../answer` | Not a model call; **abstains honestly on an empty graph** — that abstention is itself worth training against |
+| Spin | **READY (with limits)** | `run_spin_route` | Text-only, 30-document / 60k-char caps, never sees a region |
+
+### Explicitly NOT ready
+
+| Capability | Status | Reason |
+|---|---|---|
+| Legend entry slicing | **DO NOT TRAIN AGAINST YET** | One tranche old; `rows_beside` mis-location is registered and unrepaired |
+| Governed external-vision refusal | **DO NOT TRAIN AGAINST YET** | `sheet_vision` has zero callers outside tests — no reachable surface to exercise |
+| PDF positioned evidence | **NOT YET STABLE** | Does not exist; Phase 1A |
+| Cross-Source relationship proposal | **NOT YET STABLE** | Does not exist; the empty centre |
+| Two-sided micro-context | **NOT YET STABLE** | Every sachet excludes other Sources by construction |
+| Viewport / scale / `DerivedView` | **DO NOT TRAIN AGAINST YET** | Built but unwired; `may_compare_spatially` refuses every real pair today |
+
+**Local-vs-external perception distinction** is READY as *doctrine GO may reason
+about* and NOT ready as *behaviour GO may exercise* — the production perception
+worker is local and zero-egress; the separately governed, classification-gated
+`sheet_vision` seam denies at RESTRICTED+ and is unwired. Making ordinary
+customer perception depend on external vision is **not currently authorized**.
+
+### Lane discipline
+
+Codex findings are evidence about GO **behaviour** and do not rewrite application
+architecture on their own. Claude findings are evidence about application
+**capability** and do not promote GO cognitive status on their own. Pure
+Cognitive Gym work depending on no application capability continues independently.

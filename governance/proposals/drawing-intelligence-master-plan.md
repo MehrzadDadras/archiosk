@@ -369,3 +369,177 @@ this document, `CONTINUATION_CHECKPOINT.md`'s entry for `6b8f135`, and
 drawing components are built and unwired** (§2), **the empty centre is
 relationship proposal, not perception** (§3.2), and **the measurement boundary
 conflict is unresolved and must not be bypassed by a plan** (§4).
+
+---
+
+# Addendum 1 — Product Owner decision brief: the measurement boundary
+
+**Added 2026-09-11** under `MASTER PLAN ACCEPTANCE PREP + CODEX TRAINING HANDOFF
+CADENCE 01`. Appended to this proposal rather than filed separately: the conflict
+is this document's §4, and a second file would create a second authority on one
+subject. **The decision is the Product Owner's. Nothing below is enacted.**
+
+## The question, stated once
+
+May ARCHIOSK derive a physical magnitude from drawing page geometry, and if so
+under what contract? Existing doctrine says no
+(`dimensional-reconciliation-and-scale-regions.md` §7; `kernel-object-model.md`
+"recorded, never authoritative"), both grounded in constitutional invariant #2.
+
+## Option A — Identity-first / stated-value reconciliation
+
+Relationships and comparisons rest on **declared** identity: grids, levels, tags,
+callouts, view identities, stated dimensions, explicit datum values. No physical
+magnitude is ever derived from page geometry.
+
+- **Benefit.** No governance change required — it is already compliant. Fastest
+  to a first finding. Every claim carries the author's own authority, so a
+  finding is signable without ARCHIOSK vouching for a measurement. Immune to the
+  export/crop/reissue problem §7 names.
+- **Risk.** Cannot detect a discrepancy that exists only geometrically — two
+  elements that physically clash while every stated value agrees. Depends on
+  drawings being adequately annotated, which poor sets are not.
+- **Constitutional impact.** None. Invariant #2 is satisfied by construction.
+- **Effect on MVP.** Enables it. This is the shortest path to Phase 6.
+- **Implementation burden.** Lowest. No calibration, no transform provenance, no
+  tolerance model.
+- **Professional / liability.** Strongest position: ARCHIOSK reports what the
+  documents state and who stated it. It never asserts a dimension of its own.
+- **New governance required.** None beyond ratifying this plan.
+
+## Option B — Governed calibrated measurement
+
+Magnitude from geometry is permitted only when an explicit calibration contract
+is satisfied. If adopted, §7 must be **amended through its own process**, not
+bypassed, and at minimum the contract must fix all eight of:
+
+1. **Authoritative scale source** — and its rank against a conflicting one
+   (`DerivedView.scale_method` already enumerates: printed notation, title label,
+   graphic scale bar, known dimension, vector metadata, manual confirmation).
+2. **Calibration evidence** — what was measured against what known quantity, by
+   whom, and when. §7's "a stated scale is not a calibration" must survive.
+3. **Viewport boundary** — which view the transform belongs to. Page is not view.
+4. **Transform provenance** — the full chain, reconstructable, per invariant #3.
+5. **Tolerance** — per operation, not universal.
+6. **Uncertainty** — carried into every claim, never dropped downstream.
+7. **Claim restrictions** — what may and may not be asserted from a measured
+   value, and the language it must be reported in.
+8. **Professional authority** — whether a measured magnitude is ever ARCHIOSK's
+   assertion or always a human professional's, and what the human is signing.
+
+- **Benefit.** Detects geometric-only discrepancies. Matches what competitors
+  claim, and is the capability a clearance check genuinely needs.
+- **Risk.** The one §7 names precisely: *"a more precise answer to the wrong
+  question is the most attractive failure mode available to this product, because
+  it looks like rigour."* A calibrated number invites correction of a value that
+  may not be wrong. Export scaling, cropping and reissue silently invalidate a
+  calibration that still looks valid.
+- **Constitutional impact.** **Direct tension with invariant #2** unless the
+  contract keeps the magnitude as inference and never promotes it to authority.
+  This is the crux and it is not a drafting detail.
+- **Effect on MVP.** Delays it materially — calibration is a research problem on
+  raster sheets, not an implementation task.
+- **Implementation burden.** Highest by a wide margin.
+- **Professional / liability.** Weakest. ARCHIOSK becomes the author of a
+  dimension a professional may rely on.
+- **New governance required.** A §7 amendment with supersession record, a
+  calibration contract, probably a `CIC-*`, and revised claim language.
+
+## Option C — Hybrid
+
+Option A is the default and the MVP path. Calibrated measurement becomes a
+later, **separately governed** capability for narrowly defined operations where
+calibration evidence genuinely exists (e.g. a sheet carrying a graphic scale bar
+plus a verifiable known dimension).
+
+- **Benefit.** Ships A's speed and safety without foreclosing B. Matches §7's own
+  consequence 2, which says the `measured` origin *stays closed* — closed is not
+  abolished. Real evidence from Phases 1–6 then informs whether B is worth its
+  cost, instead of deciding now.
+- **Risk.** "Later" can become permanent drift, or the narrow exception can widen
+  quietly. Needs the trigger condition written down now.
+- **Constitutional impact.** None today; defers B's invariant-#2 question to the
+  point where it must actually be answered.
+- **Effect on MVP.** Identical to A.
+- **Implementation burden.** Identical to A today.
+- **Professional / liability.** Identical to A today.
+- **New governance required.** None now. A future B-style authorization later,
+  through §7's own process.
+
+## Recommendation
+
+**Option C**, and the reasoning is that it is Option A plus honesty about the
+future rather than a different plan. A and C are indistinguishable in code for
+the whole of Phases 1–6; they differ only in whether the corpus records that
+measurement is *deferred pending evidence* or *excluded in principle*. Recording
+it as deferred is truer to what is actually known: nobody here has yet measured
+whether calibration is achievable on real raster sheets, and excluding it
+permanently would be a decision made without that evidence — the same error in
+the opposite direction.
+
+Option B should not be taken now. Not because measurement is wrong in principle,
+but because its hardest part is unmeasured, its governance cost is real, and the
+first commercially meaningful discrepancy demonstrably does not need it.
+
+**This is a recommendation. The decision is the Product Owner's, and the plan
+does not proceed past Phase 1A's authorization without it.**
+
+---
+
+# Addendum 2 — Storage: measured scale limit, registered as a future trigger
+
+Registered, not acted on. **No replacement storage is proposed or chosen.**
+
+- ~**502 KB** positioned-region payload for one measured real source
+- largest current workspace record ~**1,005 KB**, **rewritten whole on every save**
+- measured write cost rising with workspace size: **32 ms** at 151 KB,
+  **71 ms** at 615 KB (5 runs each)
+- **~245 MB** extrapolated for a 500-sheet project in one workspace JSON —
+  **direction HIGH confidence, magnitude MEDIUM**
+
+**Trigger, stated so a future session inherits a condition rather than a
+judgement call:** flat workspace JSON remains valid for present small-scale
+workflows and is not credible as the permanent persistence mechanism for
+500–2,000 sheet positioned-evidence projects. The eventual decision must follow
+**actual access and query requirements**, and the deficiency it must answer is
+*whole-record rewrite cost on a per-project file* — not the absence of a graph
+engine. ARCHIOSK needs a relationship graph; that does not imply a graph
+database, and relationship proposal (§3.2) must not be solved by introducing one.
+
+---
+
+# Addendum 3 — Corrected statements, preserved rather than overwritten
+
+Per `CLAUDE.md`'s **CURRENT STATE MUST NOT LAUNDER HISTORY**. Four claims made
+earlier in this plan's own development were wrong or too broad. They are recorded
+here with their corrections so the evolution stays reconstructable.
+
+| Earlier claim | Correction | Why it was wrong |
+|---|---|---|
+| "ARCHIOSK has zero image egress" | True of the **production perception worker**. False of ARCHIOSK as a whole: `services/sheet_vision.py` is a separately governed, classification-gated external vision seam that denies at RESTRICTED+. Making ordinary customer perception depend on it is **not currently authorized**. | Generalized one path's property to the whole system. |
+| "An external-vision architecture would be a governance reversal" | The governed seam **already exists** and was Product-Owner-authorized 2026-08-29. What would be a reversal is routing *customer perception* through it, or sending RESTRICTED+ material. It is a policy question about existing machinery, not an architecture question. | Asserted from the perception path without searching for an existing seam. |
+| "No storage change is needed at 500–2,000 sheets" | No longer supportable. See Addendum 2. | Stated before the positioned-evidence payload was measured. |
+| Viewport / scale placed early on the critical path | Moved later. Most of it is **built and unwired**, and the first discrepancy needs identity anchoring, not coordinate registration. It enters only where a selected discrepancy actually requires it. | Component names sounded foundational; dependency analysis said otherwise. |
+
+---
+
+# Addendum 4 — Revised development order
+
+Subject to the Addendum 1 decision:
+
+**Phase 1A — PDF positioned OCR.** Then evidence decides:
+
+- **usable geometry** → 1B PNG working frame → cross-Source relationship proposal
+- **poor geometry** → 1B PNG working frame **first** → remeasure → then
+  relationship proposal
+
+Then: relationship proposal → two-sided micro-context → stated-value
+reconciliation → first auditable discrepancy.
+
+**Viewport / scale wiring enters only where the selected discrepancy requires
+it** — not earlier because the component names sound foundational.
+
+**Phase 1A is technically independent of the measurement decision.** It produces
+positioned text regions in the existing normalized 0–1 fraction space and derives
+no magnitude of any kind, so it is compatible with Options A, B and C alike. It
+is **TECHNICALLY UNBLOCKED, AWAITING PRODUCT OWNER AUTHORIZATION.**

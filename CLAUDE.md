@@ -813,6 +813,63 @@ invariant #3. When the rename does happen it applies to the proving
 project's *current* identity, not to the record of what was already
 proven under the old one.
 
+**Claude → Codex stable-capability handoff cadence.** Product Owner
+direction, 2026-09-11, recorded here beside the North Star rule because it
+governs the same Claude/Codex loop and is an operating practice for working on
+this repository, not domain doctrine.
+
+> **GO TRAINS ON PROVEN CAPABILITY, NOT EXPERIMENTAL CAPABILITY.**
+> **CODEX GENERALLY TRAILS CLAUDE BY ONE STABLE APPLICATION CAPABILITY.**
+
+"One step behind" means **the latest stable capability SET, never the previous
+git SHA.** A Claude tranche is often several commits, and a capability becomes
+trainable only when its stability conditions are met — not when it is merely
+committed. This is a synchronization rule, not a commit-count rule.
+
+After every completed application/perception tranche, Claude states one of two
+things explicitly, and saying nothing is not an option:
+
+- **CODEX TRAINING HANDOFF** — when the capability is implemented, tested,
+  stable enough for development exercise, not being materially redesigned, and
+  safe for GO to use.
+- **DO NOT TRAIN AGAINST YET** — otherwise, with the reason.
+
+A handoff carries thirteen fields: capability name; status; what is actually
+available; the exact existing surface (service / route / record / evidence
+interface); what GO may receive; what GO may do; what output GO may rely on;
+known limitations; governance and authority boundaries; failure and degradation
+states; suitable training behaviours; what must not yet be tested; and the
+previous stable capability set.
+
+**Claude exposes the stable world. Codex designs the developmental exercise.**
+Claude does not design Gym exercises, and the handoff is an inventory rather
+than a curriculum.
+
+**Keep the two lanes distinct.** Codex findings are evidence about GO
+*behaviour* and do not rewrite application architecture on their own; Claude
+findings are evidence about application *capability* and do not promote GO
+cognitive status on their own. Pure Cognitive Gym work that depends on no
+application capability continues independently of this cadence.
+
+The current handoff baseline and both frontiers are implementation STATE, so
+they live in `CONTINUATION_CHECKPOINT.md` and are refreshed per tranche — never
+here, where they would go stale silently.
+
+**Integration gap before architecture gap.** Two rules that earned their place
+by being violated in analysis before they were written down:
+
+> **BUILD THE MINIMUM NEW MACHINERY NEEDED TO CONNECT CAPABILITIES ARCHIOSK
+> ALREADY POSSESSES.**
+> **A CAPABILITY THAT EXISTS BUT IS UNREACHABLE IS AN INTEGRATION GAP BEFORE IT
+> IS AN ARCHITECTURE GAP.**
+
+Wire before rebuild; extend before duplicate. Two external architecture reviews
+proposed replacing this repository's perception spine, and both were answered by
+`services/sheet_vision.py`, `DerivedView`, `services/drawing_segmentation.py`
+and `engine/pdf_extractor.py` — all built, tested, and simply not called. Check
+`governance/proposals/drawing-intelligence-master-plan.md` §2 before accepting
+that any drawing-intelligence capability is missing.
+
 **No general provenance-tagging system beyond what already exists.** Commit
 messages already carry authorship/reasoning/evidence for every
 substantial change in this repo's history — that's sufficient
