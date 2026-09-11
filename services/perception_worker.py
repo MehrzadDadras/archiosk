@@ -103,8 +103,50 @@ def _write_evidence_with_retry(store, workspace_id, source_id, text,
     return None, "workspace kept changing: %s" % last_error
 
 
+def _page_units_for(workspace, source_id):
+    """This Source's page StructuralUnits, in the document's own order.
+
+    CLAUDE-GO-PERCEPTION-PDF-OCR-01. `register_pdf_page_structure` creates one
+    unit per page and assigns `order_index` from the page's position, so the
+    document's order is already recorded and does not need to be re-derived
+    from creation time or from a uuid.
+    """
+    units = [u for u in (getattr(workspace, "structural_units", None) or [])
+             if u.get("source_id") == source_id and u.get("unit_type") == "page"]
+    units.sort(key=lambda u: (u.get("order_index") if u.get("order_index") is not None
+                              else 0))
+    return units
+
+
+def _resolve_unit(workspace, source_id, structural_unit_id):
+    """The named page unit, or the Source's first one when none is named.
+
+    One lookup for every stage, so the PDF path cannot bind positioned text to
+    page n while legend detection binds to page 1.
+    """
+    units = _page_units_for(workspace, source_id)
+    if structural_unit_id is None:
+        return units[0] if units else None
+    return next((u for u in units if u.get("id") == structural_unit_id), None)
+
+
+def _evidence_on_unit(workspace, source_id, unit, content_type):
+    """Evidence of this type already attached to THIS page.
+
+    The exactly-once re-check every write stage uses, scoped to one page rather
+    than to the whole Source - on a multi-page document the Source-wide form
+    would report pages 2..n as an already-completed replay.
+    """
+    region_ids = {r["id"] for r in (getattr(workspace, "addressable_regions", None) or [])
+                  if r.get("structural_unit_id") == unit["id"]}
+    return [e for e in (getattr(workspace, "evidence_items", None) or [])
+            if e.get("source_id") == source_id
+            and e.get("content_type") == content_type
+            and e.get("region_id") in region_ids]
+
+
 def _write_positioned_with_retry(store, job, positioned, extractor_version,
-                                 governance_log):
+                                 governance_log, structural_unit_id=None):
     """Attach positioned lines, and NEVER fail the job for them.
 
     CLAUDE-GO-PERCEPTION-REGION-OCR-01, safe degradation (Section 16). The
@@ -118,6 +160,14 @@ def _write_positioned_with_retry(store, job, positioned, extractor_version,
     Anchored to the page StructuralUnit the text evidence already created, so
     positioned regions and paragraphs address the SAME frame of the SAME
     source rather than a second, parallel structure that could drift from it.
+
+    PAGE n MUST BIND TO PAGE n. `structural_unit_id` is passed EXPLICITLY by
+    the PDF path. Before CLAUDE-GO-PERCEPTION-PDF-OCR-01 this function chose
+    the first page unit on the Source itself, which is correct for a
+    one-frame image and silently wrong for a multi-page document - every
+    page's lines would have landed on page 1, and the geometry would have
+    looked entirely plausible while pointing at the wrong sheet. The image
+    path keeps the old behaviour by passing None.
     """
     if not positioned or not positioned.get("lines"):
         return None
@@ -128,10 +178,16 @@ def _write_positioned_with_retry(store, job, positioned, extractor_version,
         workspace = store.get(job["workspace_id"])
         if workspace is None:
             return None
-        unit = next(
-            (u for u in (getattr(workspace, "structural_units", None) or [])
-             if u.get("source_id") == job["source_id"]
-             and u.get("unit_type") == "page"), None)
+        if structural_unit_id is not None:
+            unit = next(
+                (u for u in (getattr(workspace, "structural_units", None) or [])
+                 if u.get("id") == structural_unit_id
+                 and u.get("source_id") == job["source_id"]), None)
+        else:
+            unit = next(
+                (u for u in (getattr(workspace, "structural_units", None) or [])
+                 if u.get("source_id") == job["source_id"]
+                 and u.get("unit_type") == "page"), None)
         if unit is None:
             logger.info("no page unit for source %s - positioned text not stored",
                         job["source_id"])
@@ -139,9 +195,18 @@ def _write_positioned_with_retry(store, job, positioned, extractor_version,
         # EXACTLY-ONCE, by the same re-check the text evidence uses rather than
         # by trusting that a job runs once: a replayed job must not attach a
         # second copy of every line.
+        #
+        # SCOPED TO THIS UNIT, not to the Source. A per-Source check was right
+        # while a Source had exactly one frame; on a multi-page PDF it would
+        # have let page 1 write and then reported every later page as an
+        # already-done replay, producing a document positioned on its first
+        # page only - a wrong result that looks like a successful one.
+        region_ids = {r["id"] for r in (getattr(workspace, "addressable_regions", None) or [])
+                      if r.get("structural_unit_id") == unit["id"]}
         already = [e for e in (getattr(workspace, "evidence_items", None) or [])
                    if e.get("source_id") == job["source_id"]
-                   and e.get("content_type") == "positioned_text"]
+                   and e.get("content_type") == "positioned_text"
+                   and e.get("region_id") in region_ids]
         if already:
             return {"evidence_item_ids": [e["id"] for e in already],
                     "region_count": len(already), "replayed": True}
@@ -172,7 +237,8 @@ def _write_positioned_with_retry(store, job, positioned, extractor_version,
     return None
 
 
-def _detect_legend_candidates(store, job, positioned, governance_log):
+def _detect_legend_candidates(store, job, positioned, governance_log,
+                              structural_unit_id=None):
     """Look for a legend block, and NEVER fail the job for it.
 
     CLAUDE-GO-PERCEPTION-LEGEND-DETECT-01. This runs after the positioned text
@@ -228,17 +294,14 @@ def _detect_legend_candidates(store, job, positioned, governance_log):
     workspace = store.get(job["workspace_id"])
     if workspace is None:
         return detection
-    unit = next(
-        (u for u in (getattr(workspace, "structural_units", None) or [])
-         if u.get("source_id") == job["source_id"]
-         and u.get("unit_type") == "page"), None)
+    unit = _resolve_unit(workspace, job["source_id"], structural_unit_id)
     if unit is None:
         return detection
 
-    # EXACTLY-ONCE by re-check, the same discipline the evidence writes use.
-    already = [e for e in (getattr(workspace, "evidence_items", None) or [])
-               if e.get("source_id") == job["source_id"]
-               and e.get("content_type") == legend_detection.CANDIDATE_CONTENT_TYPE]
+    # EXACTLY-ONCE by re-check, the same discipline the evidence writes use,
+    # and scoped to THIS page so a multi-page PDF is not stopped after its first.
+    already = _evidence_on_unit(workspace, job["source_id"], unit,
+                                legend_detection.CANDIDATE_CONTENT_TYPE)
     if already:
         return detection
 
@@ -300,7 +363,8 @@ def _detect_legend_candidates(store, job, positioned, governance_log):
     return detection
 
 
-def _slice_legend_candidates(store, job, detection, positioned, governance_log):
+def _slice_legend_candidates(store, job, detection, positioned, governance_log,
+                             structural_unit_id=None):
     """Split each stored candidate into PROPOSED entry slices. Never a gate.
 
     CLAUDE-GO-PERCEPTION-LEGEND-SLICE-01. Runs after detection has already
@@ -334,17 +398,14 @@ def _slice_legend_candidates(store, job, detection, positioned, governance_log):
     workspace = store.get(job["workspace_id"])
     if workspace is None:
         return None
-    unit = next(
-        (u for u in (getattr(workspace, "structural_units", None) or [])
-         if u.get("source_id") == job["source_id"]
-         and u.get("unit_type") == "page"), None)
+    unit = _resolve_unit(workspace, job["source_id"], structural_unit_id)
     if unit is None:
         return None
 
-    # EXACTLY-ONCE by re-check, the same discipline every other write here uses.
-    already = [e for e in (getattr(workspace, "evidence_items", None) or [])
-               if e.get("source_id") == job["source_id"]
-               and e.get("content_type") == legend_slicing.ENTRY_CONTENT_TYPE]
+    # EXACTLY-ONCE by re-check, the same discipline every other write here uses,
+    # scoped to THIS page for the same reason detection's is.
+    already = _evidence_on_unit(workspace, job["source_id"], unit,
+                                legend_slicing.ENTRY_CONTENT_TYPE)
     if already:
         return None
 
@@ -434,6 +495,147 @@ def _slice_legend_candidates(store, job, detection, positioned, governance_log):
     return results
 
 
+def _run_pdf_job(app, jobs, store, job, raw, governance_log):
+    """Perceive a PDF, page by page, binding page n to page n.
+
+    CLAUDE-GO-PERCEPTION-PDF-OCR-01. The real drawing corpus is predominantly
+    raster - of every real sheet available to this project, all but one carry no
+    native text layer at all - so a pipeline that positions only standalone
+    images cannot see the documents clients actually send. `ingestion` has been
+    enqueueing perception jobs for PDFs all along; they were terminating at a
+    file-type gate.
+
+    NO SECOND OCR PASS. Each page is read exactly as an image frame is: one
+    `get_textpage_ocr`, asked twice for plain text and word boxes. The geometry
+    recovered here was already being produced and thrown away.
+
+    NO MAGNITUDE, NO TRANSFORM, NO VIEWPORT. Every coordinate stays a fraction
+    of the page it was read from, which is the existing convention and the
+    reason nothing here needs a scale. Product Owner decision of 2026-09-11
+    (Option C) governs: identity-first, and physical magnitude is not derived
+    from page geometry.
+    """
+    from services import perception_jobs, positioned_text
+    from services.case_workspace import EVIDENCE_CLASS_EXTRACTED
+
+    read = positioned_text.read_pdf_positioned_pages(raw)
+    if not read.get("ran"):
+        return jobs.complete(
+            job, state=perception_jobs.STATE_NEEDS_ATTENTION,
+            failure_reason=read.get("reason") or "no page of this PDF could be read")
+
+    pages = read.get("pages") or []
+    page_texts = [(p.get("text") or "") for p in pages]
+    if not any(t.strip() for t in page_texts):
+        # Ran, established nothing. A fact about the document, not a fault -
+        # the same answer the image path gives for an unreadable photograph.
+        return jobs.complete(
+            job, state=perception_jobs.STATE_NEEDS_ATTENTION,
+            failure_reason="no readable text was recovered from any page")
+
+    engine = next((p.get("engine") for p in pages if p.get("engine")), None)
+    engine_version = next((p.get("engine_version") for p in pages
+                           if p.get("engine_version")), None)
+    extractor_version = "%s %s" % (engine, engine_version)
+
+    # PAGE STRUCTURE IS REGISTERED ONCE, AND ONLY IF IT IS NOT ALREADY THERE.
+    # A Project-path PDF had its pages registered during ingestion; a Document
+    # Shop PDF did not. Registering a second time would give one Source two
+    # parallel page structures, and every later stage would have to guess which
+    # one it meant.
+    workspace = store.get(job["workspace_id"])
+    if workspace is None:
+        return jobs.complete(job, state=perception_jobs.STATE_FAILED,
+                             failure_reason="workspace no longer exists")
+    if not _page_units_for(workspace, job["source_id"]):
+        _outcome, error = _write_pdf_pages_with_retry(
+            store, job["workspace_id"], job["source_id"], page_texts,
+            extractor_version, governance_log, EVIDENCE_CLASS_EXTRACTED)
+        if error:
+            return jobs.release_for_retry(job, reason=error)
+
+    workspace = store.get(job["workspace_id"])
+    units = _page_units_for(workspace, job["source_id"])
+    evidence_refs, positioned_pages = [], 0
+
+    for index, page in enumerate(pages):
+        if index >= len(units):
+            # Fewer units than pages read. Reported rather than silently
+            # dropped: binding a page to a unit that is not its own is the one
+            # failure this tranche exists to prevent.
+            logger.warning("source %s: page %d has no structural unit - skipped",
+                           job["source_id"], index)
+            break
+        unit_id = units[index]["id"]
+        outcome = _write_positioned_with_retry(
+            store, job, page, extractor_version, governance_log,
+            structural_unit_id=unit_id)
+        if outcome:
+            positioned_pages += 1
+            evidence_refs.extend(outcome.get("evidence_item_ids") or [])
+
+        detection = _detect_legend_candidates(
+            store, job, page, governance_log, structural_unit_id=unit_id)
+        _slice_legend_candidates(
+            store, job, detection, page, governance_log,
+            structural_unit_id=unit_id)
+
+    if governance_log is not None:
+        governance_log.append(
+            project_id=job["workspace_id"],
+            event_type="pdf_pages_perceived",
+            actor="perception-worker", role="system",
+            payload={
+                "source_id": job["source_id"],
+                "page_count": read.get("page_count"),
+                "pages_read": len(pages),
+                "pages_positioned": positioned_pages,
+                # Said out loud so a short result is never mistaken for a
+                # complete one.
+                "pages_skipped_over_bound": read.get("skipped_pages"),
+                "max_pages": positioned_text.MAX_PDF_PAGES,
+                "extractor_version": extractor_version,
+                "processing_location": job.get("processing_location"),
+                "egress": job.get("egress"),
+            },
+            correlation_id=job["source_id"])
+
+    return jobs.complete(
+        job, state=perception_jobs.STATE_COMPLETED,
+        extractor=engine, extractor_version=engine_version,
+        evidence_refs=evidence_refs)
+
+
+def _write_pdf_pages_with_retry(store, workspace_id, source_id, page_texts,
+                                extractor_version, governance_log,
+                                evidence_class):
+    """Register one page unit per page, tolerating a concurrent customer.
+
+    The multi-page sibling of `_write_evidence_with_retry`, which registers the
+    single synthetic page an image gets. Same retry discipline, same reason.
+    """
+    last_error = None
+    for attempt in range(CONCURRENT_WRITE_RETRIES):
+        workspace = store.get(workspace_id)
+        if workspace is None:
+            return None, "workspace no longer exists"
+        try:
+            outcome = store.register_pdf_page_structure(
+                workspace, source_id=source_id, pages=page_texts,
+                extractor_version=extractor_version, actor="perception-worker",
+                governance_log=governance_log,
+                evidence_class_by_page={index: evidence_class
+                                        for index in range(len(page_texts))})
+            return outcome, None
+        except Exception as exc:
+            last_error = exc
+            if type(exc).__name__ not in ("ConcurrentModificationError",
+                                          "WriteCollisionError"):
+                raise
+            time.sleep(0.2 * (attempt + 1))
+    return None, "workspace kept changing: %s" % last_error
+
+
 def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     """Claim and process a single job. Returns the terminal record, or None."""
     from services import image_intake, perception_jobs
@@ -455,6 +657,13 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
                              failure_reason="source bytes unavailable")
 
     name = job.get("source_name") or ""
+    # CLAUDE-GO-PERCEPTION-PDF-OCR-01: PDFs have their own path now. The gate
+    # is NARROWED, not opened - a .docx or .xlsx still terminates honestly
+    # below, because neither has a perception path and pretending otherwise
+    # would turn "we cannot look at this" into a silent empty result.
+    if name.lower().endswith(".pdf"):
+        return _run_pdf_job(app, jobs, store, job, raw, governance_log)
+
     if not image_intake.is_supported_image(name):
         # Honest, not a fault: there is no perception path for this file type
         # beyond the founding parse that already ran in the request.
