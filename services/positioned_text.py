@@ -183,7 +183,8 @@ def pdf_page_count(pdf_bytes: bytes) -> int:
 
 
 def read_pdf_positioned_pages(pdf_bytes: bytes, *, dpi: int = OCR_RENDER_DPI,
-                              ocr=None, max_pages: int = MAX_PDF_PAGES) -> dict:
+                              ocr=None, max_pages: int = MAX_PDF_PAGES,
+                              osd_reader=None) -> dict:
     """Positioned lines for each page of a PDF, page by page. Never raises.
 
     CLAUDE-GO-PERCEPTION-PDF-OCR-01. The real ARCHIOSK drawing corpus is
@@ -224,14 +225,27 @@ def read_pdf_positioned_pages(pdf_bytes: bytes, *, dpi: int = OCR_RENDER_DPI,
         # tranche exists - is OCR the better answer, and there it is the only
         # one: A-01 has zero native words and yields 2,427 through OCR.
         page = _native_positioned_lines(pdf_bytes, index)
+        orientation = None
         if page is None:
+            # ONLY THE OCR PATH NEEDS THIS. Native text carries its own
+            # coordinates in the page's own space and is already correct
+            # whichever way the sheet is drawn - measured: OSD calls both
+            # native structural sheets upright, at confidence 3.87 and 3.70.
+            # Probing them would pay 3-6s a page to confirm what is already
+            # true, so the cheapest orientation decision is the one not taken.
+            orientation = page_orientation(pdf_bytes, index, osd_reader=osd_reader)
             # The page rect is not known until the reader opens it, and
             # `read_positioned_lines` derives every fraction from the rect it
             # gets back rather than from this hint - so an inexact frame size
             # can never move a box. It is recorded for the audit chain only.
-            page = read_positioned_lines(pdf_bytes, (0, 0), filetype="pdf",
-                                         dpi=dpi, ocr=ocr, page_index=index)
+            page = read_positioned_lines(
+                pdf_bytes, (0, 0), filetype="pdf", dpi=dpi, ocr=ocr,
+                page_index=index, rotation=orientation.get("applied_rotation"))
         page["page_index"] = index
+        # Recorded on the page whether it changed anything or not: "this sheet
+        # was read the way it was stored" is a fact a later reader needs just
+        # as much as "this one was turned".
+        page["orientation"] = orientation
         pages.append(page)
 
     return {
@@ -243,8 +257,105 @@ def read_pdf_positioned_pages(pdf_bytes: bytes, *, dpi: int = OCR_RENDER_DPI,
     }
 
 
+#: DPI for the orientation probe only. A drawing's orientation is legible at a
+#: fraction of the resolution its TEXT needs, and this render is thrown away, so
+#: it is deliberately coarse: measured 3.2-6.4s per page at 100 against 5-21s for
+#: the OCR pass it protects from being wasted entirely.
+OSD_RENDER_DPI = 100
+
+
+def page_orientation(frame_bytes: bytes, page_index: int = 0, *,
+                     osd_reader=None, dpi: int = OSD_RENDER_DPI) -> dict:
+    """Which way up is this PDF page actually drawn? Never raises.
+
+    CLAUDE-PDF-ORIENTATION-01, and the defect it repairs is severe rather than
+    cosmetic. A PDF page carries a stored `/Rotate`, and this pipeline trusted
+    it. On a real architectural drawing set that value does not describe the
+    orientation the CONTENT is drawn at, and OCR reading a sideways page
+    recovers noise that still looks like words.
+
+    Measured on the real Nipigon set, at the page's stored rotation versus the
+    orientation the drawing is actually drawn at:
+
+        A401 datum levels  0 -> 4      A402  0 -> 6
+        A403 datum levels  0 -> 2      A204  0 -> 1
+
+    ZERO on every architectural sheet at the stored rotation. Those levels are
+    the project's own declared floor and footing elevations, and they are the
+    first evidence in this corpus that crosses Architecture and Structure - so
+    the orientation defect was not degrading a result, it was hiding one.
+
+    THE EXISTING PRIMITIVE, NOT A NEW ONE. `image_intake._osd_observation` is
+    Tesseract `--psm 0`, already installed and already used for photographs.
+    It is reused here verbatim.
+
+    WHAT IS DELIBERATELY NOT DONE: the image path only acts on OSD at
+    `OSD_MINIMUM_CONFIDENCE` (2.0), and that threshold is NOT applied here. It
+    was calibrated on photographs of documents, where signal and noise separate
+    cleanly; a drawing is sparse line-work and scores below it while still being
+    unambiguously sideways - A401 reports 1.46 and A402 0.39, and both are
+    genuinely rotated 270. Importing that threshold would keep the defect.
+
+    Two alternatives were measured and REJECTED rather than assumed:
+      - picking the orientation with more legible tokens: it chose the WRONG one
+        for A401 (303 tokens against 223) while recovering zero datum levels,
+        because a sideways read produces more noise that passes a token test;
+      - a second full OCR pass to compare readings: 146% overhead, which
+        section 13 of the operating charter does not justify for this gain.
+
+    KNOWN AND MEASURED LIMIT: OSD is right on A401, A402, A204 and on both
+    native structural sheets (which it correctly calls upright), and WRONG on
+    A403, where it reports 90 and 270 reads better. That is recorded here rather
+    than smoothed over, and it is still strictly better than the previous
+    behaviour, which read every rotated sheet at the wrong orientation.
+    """
+    observation = {"ran": False, "rotate": None, "confidence": None,
+                   "stored_rotation": None, "applied_rotation": None,
+                   "engine": None, "reason": None, "probe_dpi": dpi}
+    try:
+        import pymupdf
+    except ImportError:  # pragma: no cover - PyMuPDF is a hard dependency
+        observation["reason"] = "pymupdf unavailable"
+        return observation
+    from services.image_intake import _osd_observation
+
+    document = None
+    try:
+        document = pymupdf.open(stream=frame_bytes, filetype="pdf")
+        page = document.load_page(page_index)
+        observation["stored_rotation"] = int(page.rotation)
+        png = page.get_pixmap(dpi=dpi).tobytes("png")
+    except Exception as exc:  # noqa: BLE001 - an unreadable page is a result
+        observation["reason"] = "%s: %s" % (type(exc).__name__, exc)
+        return observation
+    finally:
+        if document is not None:
+            try:
+                document.close()
+            except Exception:  # pragma: no cover
+                pass
+
+    osd = _osd_observation(png, reader=osd_reader)
+    observation["engine"] = osd.get("engine")
+    observation["confidence"] = osd.get("confidence")
+    observation["reason"] = osd.get("reason")
+    if not osd.get("ran") or not osd.get("rotate"):
+        # Upright, or undetermined. Both leave the page exactly as stored - the
+        # difference is recorded, never guessed at.
+        observation["ran"] = bool(osd.get("ran"))
+        observation["rotate"] = osd.get("rotate")
+        observation["applied_rotation"] = observation["stored_rotation"]
+        return observation
+
+    observation["ran"] = True
+    observation["rotate"] = int(osd["rotate"])
+    observation["applied_rotation"] = (
+        (observation["stored_rotation"] + int(osd["rotate"])) % 360)
+    return observation
+
+
 def _default_ocr(frame_bytes: bytes, dpi: int, filetype: str = "png",
-                 page_index: int = 0):
+                 page_index: int = 0, rotation: Optional[int] = None):
     """The real engine. Isolated so tests never need the binary installed.
 
     Returns `(words, page_rect, engine, version)` where `words` is PyMuPDF's
@@ -267,6 +378,12 @@ def _default_ocr(frame_bytes: bytes, dpi: int, filetype: str = "png",
     document = pymupdf.open(stream=frame_bytes, filetype=filetype)
     try:
         page = document.load_page(page_index)
+        if rotation is not None and int(rotation) != int(page.rotation):
+            # THE ORIENTATION DECISION, APPLIED IN ONE PLACE. Every coordinate
+            # below is taken from `page.rect` AFTER this, so the fractions stay
+            # fractions of the frame that was actually read - there is no
+            # transform to apply later and nothing downstream needs to know.
+            page.set_rotation(int(rotation))
         rect = (float(page.rect.width), float(page.rect.height))
         textpage = page.get_textpage_ocr(
             dpi=dpi, full=True, **({"tessdata": tessdata} if tessdata else {}))
@@ -286,7 +403,7 @@ def _default_ocr(frame_bytes: bytes, dpi: int, filetype: str = "png",
 
 
 def _call_ocr(reader, frame_bytes: bytes, dpi: int, filetype: str,
-              page_index: int = 0):
+              page_index: int = 0, rotation=None):
     """Call the OCR seam, tolerating a reader that predates its later arguments.
 
     Tests inject two- and three-argument readers, and they should not all have
@@ -296,6 +413,11 @@ def _call_ocr(reader, frame_bytes: bytes, dpi: int, filetype: str,
     INSIDE a reader would otherwise be silently retried with fewer arguments and
     surface as a confusing arity error instead of the real fault.
     """
+    if rotation is not None:
+        try:
+            return reader(frame_bytes, dpi, filetype, page_index, rotation)
+        except TypeError:
+            pass
     try:
         return reader(frame_bytes, dpi, filetype, page_index)
     except TypeError:
@@ -309,7 +431,7 @@ def _call_ocr(reader, frame_bytes: bytes, dpi: int, filetype: str,
 def read_positioned_lines(frame_bytes: bytes, frame_size, *,
                           filetype: str = "png",
                           dpi: int = OCR_RENDER_DPI, ocr=None,
-                          page_index: int = 0) -> dict:
+                          page_index: int = 0, rotation=None) -> dict:
     """Read one normalized frame into positioned LINES. Never raises.
 
     `frame_size` is the orientation-normalized frame's own pixel size, and is
@@ -333,7 +455,8 @@ def read_positioned_lines(frame_bytes: bytes, frame_size, *,
     }
     try:
         words, rect, engine, version, plain = _call_ocr(
-            ocr or _default_ocr, frame_bytes, dpi, filetype, page_index)
+            ocr or _default_ocr, frame_bytes, dpi, filetype, page_index,
+            rotation)
     except Exception as exc:  # noqa: BLE001 - an unreadable frame is a result
         logger.warning("positioned OCR failed: %s: %s", type(exc).__name__, exc)
         result["reason"] = "positioned OCR failed (%s)" % type(exc).__name__
