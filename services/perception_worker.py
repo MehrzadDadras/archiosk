@@ -585,6 +585,74 @@ def _register_sheet_index(store, job, governance_log, record):
     return report
 
 
+def _register_detail_callouts(store, job, governance_log, record):
+    """Register declared detail callouts, strictly downstream of a DONE job.
+
+    CLAUDE-DETAIL-CALLOUT-01, and deliberately the SAME shape as
+    `_register_sheet_index`: a bounded downstream capability that runs after the
+    job record is already terminal, so failure isolation is structural rather
+    than promised. There is no job in flight for it to fail.
+
+    NO SECOND READ. Candidates come from the positioned evidence the job just
+    wrote, joined page by page. The bytes are not reopened and no page is
+    re-OCR'd.
+
+    JUSTIFIED, NOT BLIND. `register_detail_callouts` proposes nothing unless a
+    detail number and a sheet token that names a REAL Source share one split
+    bubble. An ordinary sheet with no callouts registers nothing.
+    """
+    from services import detail_callout, perception_jobs
+
+    if not record or record.get("state") != perception_jobs.STATE_COMPLETED:
+        return None
+
+    try:
+        workspace = store.get(job["workspace_id"])
+        if workspace is None:
+            return None
+        report = detail_callout.register_detail_callouts(
+            store, workspace, job["source_id"],
+            actor="perception-worker", governance_log=governance_log)
+    except Exception as exc:  # noqa: BLE001 - the examination is already complete
+        logger.warning("detail callout registration raised for source %s (%s: %s)",
+                       job["source_id"], type(exc).__name__, exc)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=job["workspace_id"],
+                event_type="detail_callout_registration_failed",
+                actor="perception-worker", role="system",
+                payload={"source_id": job["source_id"],
+                         "error_type": type(exc).__name__, "error": str(exc),
+                         "perception_state": record.get("state")},
+                correlation_id=job["source_id"])
+        return None
+
+    if governance_log is not None:
+        # Recorded even when a sheet declares nothing. "This drawing points
+        # nowhere" is a real fact about a set, and a log that records only
+        # successes cannot say how common it is.
+        governance_log.append(
+            project_id=job["workspace_id"],
+            event_type="detail_callouts_registered",
+            actor="perception-worker", role="system",
+            payload={
+                "source_id": job["source_id"],
+                "boundary": report.get("boundary"),
+                "pages_inspected": report.get("pages_inspected"),
+                "pages": report.get("pages"),
+                "candidates": report.get("candidates"),
+                "references_created": report.get("references_created"),
+                "resolved": len(report.get("resolved") or []),
+                "ambiguous": len(report.get("ambiguous") or []),
+                "not_found": len(report.get("not_found") or []),
+                "method": report.get("method"),
+                "version": report.get("version"),
+                "reason": report.get("reason"),
+            },
+            correlation_id=job["source_id"])
+    return report
+
+
 def _run_pdf_job(app, jobs, store, job, raw, governance_log):
     """Perceive a PDF, page by page, binding page n to page n.
 
@@ -697,6 +765,8 @@ def _run_pdf_job(app, jobs, store, job, raw, governance_log):
     # CLAUDE-SHEET-IDENTITY-WIRING-01: does this document declare which sheets
     # the project HAS? Downstream of the completed record on purpose.
     _register_sheet_index(store, job, governance_log, record)
+    # CLAUDE-DETAIL-CALLOUT-01: and which sheets does it POINT AT?
+    _register_detail_callouts(store, job, governance_log, record)
     return record
 
 
@@ -844,6 +914,7 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
         # A genuine replay reaches here, which is exactly where idempotency has
         # to hold: this re-runs registration and must create nothing.
         _register_sheet_index(store, job, governance_log, record)
+        _register_detail_callouts(store, job, governance_log, record)
         return record
 
     outcome, error = _write_evidence_with_retry(
@@ -872,6 +943,7 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     # A scanned index sheet is a single page, and the image path registers one
     # synthetic page unit for it - so the same page boundary applies here.
     _register_sheet_index(store, job, governance_log, record)
+    _register_detail_callouts(store, job, governance_log, record)
     return record
 
 

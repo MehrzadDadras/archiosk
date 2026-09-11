@@ -154,9 +154,10 @@ def _native_positioned_lines(pdf_bytes: bytes, page_index: int):
         except Exception:  # pragma: no cover
             pass
 
+    # NATIVE TEXT IS NOT RECOGNISED, SO IT CANNOT BE MISRECOGNISED.
     result = _assemble_positioned(words, rect, (0, 0), plain,
                                   engine="pymupdf-native", version="native",
-                                  dpi=0)
+                                  dpi=0, garbage_control=False)
     for line in result["lines"]:
         line["extraction_pass"] = PASS_NATIVE
     return result
@@ -343,14 +344,32 @@ def read_positioned_lines(frame_bytes: bytes, frame_size, *,
 
 
 def _assemble_positioned(words, rect, frame_size, plain, engine, version, dpi,
-                         result=None):
+                         result=None, garbage_control=True):
     """Group words into LINES and express every box as a fraction of its frame.
 
-    Extracted so the OCR path and the NATIVE path cannot drift: garbage
-    control, corner clamping, the line cap and the zero-extent refusal are one
-    implementation, and a native read is held to exactly the rules a recognised
-    one is. The only difference between the two callers is where the words came
-    from, which is recorded as `extraction_pass` rather than inferred later.
+    Extracted so the OCR path and the NATIVE path cannot drift: corner
+    clamping, the line cap and the zero-extent refusal are one implementation.
+    The only difference between the two callers is where the words came from,
+    which is recorded as `extraction_pass` rather than inferred later.
+
+    CLAUDE-DETAIL-CALLOUT-01 - `garbage_control` is the ONE rule that is now
+    correctly asymmetric, and the asymmetry is the point. `is_legible_token`
+    exists, in its own words, as "a refusal to store what is obviously not text
+    at all". **That is an OCR concern. It cannot apply to text the document
+    positioned itself**, where there is nothing to recognise and so nothing to
+    be garbage.
+
+    Applying it to native text was measurably destructive. On the real Nipigon
+    structural sheets it discarded **40-45% of every page**, and what it
+    discarded was the drawing's own vocabulary: the datum abbreviations `U/S`,
+    `T/O`, `F.F.`, `GR.`, `FL.`, the grid letters `A`-`H`, and EVERY detail
+    number in every section callout - because the rule requires three
+    characters and a detail number is one. On the OCR side the same rule
+    discarded 85% and what it discarded was `RN}`, `;-—=>`, `fo)`, `}` - doing
+    exactly its job.
+
+    So it stays on for OCR and comes off for native. Nothing is loosened for
+    recognised text, and the zero-extent refusal still governs both.
     """
     if result is None:
         result = {
@@ -417,7 +436,7 @@ def _assemble_positioned(words, rect, frame_size, plain, engine, version, dpi,
         # is a per-token test rather than a per-source one. It is not a
         # quality claim about what survives; it is a refusal to store what is
         # obviously not text at all.
-        if not any(is_legible_token(t) for *_, t in items):
+        if garbage_control and not any(is_legible_token(t) for *_, t in items):
             result["dropped_line_count"] += 1
             continue
         # Clamped to the OCR frame BEFORE the fraction is taken, not after.
