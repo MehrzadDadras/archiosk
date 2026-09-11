@@ -291,7 +291,24 @@ class ExtractorIntegrationTests(unittest.TestCase):
         self.assertEqual(Image.open(io.BytesIO(captured["bytes"])).size, (300, 400),
                          "the extractor did not receive upright pixels")
 
-    def test_an_upright_image_reaches_the_extractor_untouched(self):
+    def test_an_upright_image_is_not_rotated_on_its_way_to_the_extractor(self):
+        """SUPERSEDED IN MECHANISM, PRESERVED IN INTENT by
+        CLAUDE-GO-PERCEPTION-WORKING-FRAME-01.
+
+        This test used to assert that the extractor received the caller's own
+        bytes object, as the proxy for "nothing was done to an upright image".
+        That proxy is no longer true and is no longer supposed to be: the
+        working frame is now an explicit decision rather than a by-product of
+        whether the image needed rotating, so an upright JPEG is handed over as
+        a lossless frame like every other image.
+
+        The ORIENTATION intent - an upright image is not rotated - is what this
+        test was actually for, and it is asserted directly below rather than
+        through a byte-identity stand-in. The source-preservation guarantee is
+        unaffected and is pinned independently by
+        `test_original_bytes_are_never_returned_altered_when_upright`, which
+        covers `normalise_orientation` itself and did not change.
+        """
         captured = {}
 
         def fake_pages(raw, indices, filetype=None, engine=None):
@@ -305,11 +322,22 @@ class ExtractorIntegrationTests(unittest.TestCase):
         raster_extraction.extract_raster_pages = fake_pages
         try:
             raw = _jpeg_with_orientation(1)
-            ii.extract_image_text(raw, "image.jpg")
+            before = bytes(raw)
+            result = ii.extract_image_text(raw, "image.jpg")
         finally:
             raster_extraction.extract_raster_pages = original
-        self.assertIs(captured["bytes"], raw)
-        self.assertEqual(captured["filetype"], "jpeg")
+
+        # The intent: nothing was ROTATED.
+        self.assertFalse(result["orientation"]["changed"])
+        self.assertEqual(result["orientation"]["applied_rotation_degrees"], 0)
+        self.assertFalse(result["orientation"]["applied_mirror"])
+        # And the caller's own bytes were not touched.
+        self.assertEqual(raw, before)
+        # The frame is now an explicit lossless working frame, and the pixels
+        # reaching the extractor are still the upright ones.
+        self.assertEqual(captured["filetype"], ii.WORKING_FRAME_FILETYPE)
+        self.assertEqual(Image.open(io.BytesIO(captured["bytes"])).size,
+                         Image.open(io.BytesIO(raw)).size)
 
 
 if __name__ == "__main__":

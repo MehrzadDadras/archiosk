@@ -392,6 +392,74 @@ def _encode_frame(image):
     return buffer.getvalue()
 
 
+#: The one working-frame container. Every frame handed to perception is a
+#: lossless PNG, whatever arrived and whatever happened to it on the way.
+WORKING_FRAME_FILETYPE = "png"
+
+
+def working_frame(normalised: dict, filename: str):
+    """The frame perception reads, decided EXPLICITLY. Returns (bytes, filetype).
+
+    CLAUDE-GO-PERCEPTION-WORKING-FRAME-01. The defect this repairs is not a
+    quality defect - it is that the frame's REPRESENTATION was an accident of
+    something unrelated. `normalise_orientation` re-encodes to PNG when it
+    rotates and passes the original bytes through when it does not, and the
+    caller then set `filetype` from that same fact. So the SAME photograph, of
+    the SAME drawing, was read through a different container depending on which
+    way up the phone was held - and the container is not cosmetic: measured on
+    three real drawing rasters, the pixels PyMuPDF finally hands the OCR engine
+    differ between the two by 20-56% of the frame, with a maximum per-channel
+    delta of 147. Two identical images must not be read differently because one
+    of them needed rotating.
+
+    THE QUALITY CLAIM THAT PROMPTED THIS TRANCHE DID NOT REPRODUCE, and saying
+    so is part of the repair. The recorded 4,953 -> 9,548 character result came
+    from a customer JPEG that is not on this machine. Measured on three real
+    rasters delivered as JPEG, a lossless frame gave +7.8%, -3.7% and -11.5%
+    characters - mixed, source-dependent, and no systematic win. What it DID do
+    is improve the downstream answer on two of the three (A-01 gained a
+    SUPPORTED `LEGEND` candidate it did not previously find at all, M2_OF_3
+    gained `LEGENDS:`) and degrade it on none. On an already-PNG source the
+    re-encode is provably a no-op: every metric moved 0.0% across all three.
+
+    So the justification is DETERMINISM AND EQUAL TREATMENT, not a quality
+    improvement - and one deterministic rule is enough. Choosing per source
+    would mean reading every image twice to find out which container won, which
+    is a real doubling of the most expensive step in the pipeline for a benefit
+    this measurement cannot establish.
+
+    NOTHING IS ENHANCED. No sharpening, denoising, thresholding, rescaling or
+    model runs here. The frame is the same pixels in a container that does not
+    depend on rotation.
+    """
+    from PIL import Image
+
+    frame = normalised["bytes"]
+    if normalised["observation"].get("changed"):
+        # Already a lossless PNG: `normalise_orientation` encodes what it
+        # rotated. Re-encoding it a second time would cost work to change
+        # nothing.
+        return frame, WORKING_FRAME_FILETYPE
+    if (Path(filename or "").suffix.lower() == ".png"):
+        # Already lossless, and the control measurement proves a round trip
+        # changes literally nothing - 0.0% on every metric on three real
+        # sources. Passing it through is the same frame for less work.
+        return frame, WORKING_FRAME_FILETYPE
+    try:
+        image = Image.open(io.BytesIO(frame))
+        image.load()
+    except Exception as exc:  # noqa: BLE001 - an undecodable frame is a result
+        logger.warning("working frame could not be decoded (%s: %s); "
+                       "reading the stored bytes as-is",
+                       type(exc).__name__, exc)
+        # HONEST DEGRADATION, not a failure. A frame that cannot be decoded
+        # here would not survive the extractor either; handing over what
+        # arrived keeps the old behaviour rather than turning a readable-ish
+        # image into no reading at all.
+        return frame, "jpeg"
+    return _encode_frame(image), WORKING_FRAME_FILETYPE
+
+
 def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None,
                        osd_reader=None) -> dict:
     """Local OCR over a standalone image. Never raises, never egresses.
@@ -407,14 +475,13 @@ def extract_image_text(raw_bytes: bytes, filename: str, *, engine=None,
     """
     from services import raster_extraction
 
-    ext = Path(filename or "").suffix.lower()
-
     # CLAUDE-GO-PERCEPTION-ORIENTATION-01: read the frame the PERSON sees. The
     # stored source is untouched; this is a derived processing frame only.
     normalised = normalise_orientation(raw_bytes, filename, osd_reader=osd_reader)
-    frame = normalised["bytes"]
     orientation = normalised["observation"]
-    filetype = "png" if (ext == ".png" or orientation["changed"]) else "jpeg"
+    # CLAUDE-GO-PERCEPTION-WORKING-FRAME-01: an explicit decision now, not a
+    # by-product of whether this image happened to need rotating.
+    frame, filetype = working_frame(normalised, filename)
 
     result = raster_extraction.extract_raster_pages(
         frame, [0], filetype=filetype, engine=engine)
@@ -461,26 +528,23 @@ def extract_image_positioned_text(raw_bytes: bytes, filename: str, *,
 
     from services import positioned_text
 
-    ext = Path(filename or "").suffix.lower()
     normalised = normalise_orientation(raw_bytes, filename, osd_reader=osd_reader)
     orientation = normalised["observation"]
 
-    # THE SAME BYTES AND THE SAME FILETYPE `extract_image_text` HANDS OVER.
+    # THE SAME BYTES AND THE SAME FILETYPE `extract_image_text` HANDS OVER -
+    # still true, and now true of one explicit decision instead of two copies
+    # of a conditional.
     #
-    # The first version of this re-encoded every frame to PNG, on the reasoning
-    # that a lossless frame is the honest thing to give a reader. Measured
-    # against the shipped path on three real sources, that turned out to CHANGE
-    # THE READING on an unrotated JPEG - 4,953 characters became 9,548, at a
-    # higher legible ratio. Better, and not this tranche's to take: the
-    # authorized scope is attaching coordinates, and silently improving what
-    # text every existing customer's photograph yields is a perception change
-    # nobody asked for and nobody measured the consequences of. The finding is
-    # recorded for a bounded tranche of its own.
-    #
-    # So the filetype rule below is `extract_image_text`'s, character for
-    # character, and the bytes are the ones it would have sent.
-    frame_bytes = normalised["bytes"]
-    filetype = "png" if (ext == ".png" or orientation["changed"]) else "jpeg"
+    # CLAUDE-GO-PERCEPTION-WORKING-FRAME-01 took the bounded tranche the note
+    # that stood here asked for. What it found is not what that note predicted:
+    # the 4,953 -> 9,548 result came from a customer JPEG that is not on this
+    # machine and DID NOT REPRODUCE on three real drawing rasters, which gave
+    # +7.8%, -3.7% and -11.5% characters. The frame rule changed anyway,
+    # because the defect was never really about quality - it was that the SAME
+    # photograph was read through a different container depending on whether it
+    # needed rotating, and the container moves 20-56% of the pixels the engine
+    # finally sees. See `working_frame` for the full reasoning.
+    frame_bytes, filetype = working_frame(normalised, filename)
     frame_size = orientation.get("normalised_size")
     try:
         image = Image.open(io.BytesIO(frame_bytes))
