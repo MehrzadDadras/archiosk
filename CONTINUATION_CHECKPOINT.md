@@ -13978,3 +13978,88 @@ next; see the handoff below for why the evidence points there).
 slicing has a full gate and a live tranche behind it. **Phase 1A itself is NOT
 handed over**: it is one tranche old, its real-source behaviour on noisy raster
 is still weak, and Phase 1B may change what every PDF page yields.
+
+## Session checkpoint: working-frame normalization (Phase 1B) — `6b37511` live
+
+**CLAUDE-GO-PERCEPTION-WORKING-FRAME-01.** Deployed; production reads
+`Gunicorn - ArchiOSK GO (accepted build 6b37511)`, both services active,
+`/health` 200 internally and publicly, worker `NRestarts=0`, queue clean,
+`STATIC_VERSION` unchanged at 172 (no static asset changed). Full gate,
+parallel, frozen isolated worktree: **7,698 passed, 3 skipped, 0 failed,
+3,871 subtests, in 8:54.**
+
+### The defect, and what it actually was
+
+`normalise_orientation` re-encodes to PNG when it rotates and passes original
+bytes through when it does not; both callers then derived `filetype` from that
+same fact. **The same photograph of the same drawing was read through a
+different container depending on which way up the phone was held.** That is not
+cosmetic: on three real drawing rasters the pixels PyMuPDF finally hands the OCR
+engine differ between the two containers by **20–56% of the frame**, maximum
+per-channel delta 147.
+
+### THE QUALITY CLAIM DID NOT REPRODUCE
+
+The recorded **4,953 → 9,548** result came from a customer JPEG that **is not on
+this machine** — the only JPEGs present live under the sibling
+`archiosk-explorer` repository, which this repository is scope-barred from.
+
+Measured instead on three real rasters delivered as JPEG: **+7.8%, −3.7%,
+−11.5%** characters. Through the **shipped** path:
+
+| Source | Delivery | chars before → after | legend |
+|---|---|---|---|
+| A-01 | PNG | 2,312 → 2,312 | unchanged |
+| A-01 | **JPEG** | 2,396 → **2,584** | **none → `LEGEND` [supported]** |
+| M2_OF_3 | PNG | 2,155 → 2,155 | unchanged |
+| M2_OF_3 | JPEG | 1,973 → 1,973 | unchanged |
+| E1 | PNG | 2,557 → 2,557 | unchanged |
+| E1 | **JPEG** | 2,728 → **2,413 (−11.5%)** | none → none |
+
+**PNG sources: zero change on every metric, all three.** JPEG: one materially
+better, one identical, one materially worse. Cost **+0.5–1.6s per image**
+(~20–45%).
+
+**So the justification shipped is DETERMINISM AND EQUAL TREATMENT, not quality**,
+and the code, commit and manifest all say so rather than dressing a marginal
+result up as an improvement.
+
+### One deterministic rule, not selection
+
+Choosing the better container per image means OCR-ing every image twice —
+doubling the most expensive step in the pipeline — for a benefit this
+measurement cannot establish. **Registered as a possible later bounded
+quality-selection policy; not built.** The E1 regression is the strongest
+argument for it and is recorded rather than averaged away.
+
+### Registered, not actioned
+
+- **E1's −11.5% is a real per-source regression**, not noise.
+- **`rows_beside` unchanged and still the known silent-failure class**
+  (wrong region + plausible downstream processing). Observed during this
+  tranche: no new occurrence, and no repair attempted — it needed no
+  compatibility change.
+- One test **superseded in mechanism, preserved in intent**, surfaced rather
+  than quietly rewritten:
+  `test_an_upright_image_reaches_the_extractor_untouched` asserted the extractor
+  received the caller's own bytes OBJECT as a proxy for "nothing was done". That
+  proxy is exactly what this tranche was authorized to change. Its orientation
+  intent is now asserted directly; its source-preservation half was never that
+  test's to hold and is pinned independently on `normalise_orientation`, which
+  did not change.
+- Rollback trees now **10** against the keep-3 rule. Still a separate deliberate
+  decision.
+- The **4,953 → 9,548 source remains unavailable**; if it ever returns, the
+  measurement should be repeated on it before this conclusion is treated as
+  final.
+
+### Frontiers
+
+**CLAUDE DEVELOPMENT FRONTIER:** **CROSS-SOURCE RELATIONSHIP PROPOSAL** — the
+empty centre. Perception is now good enough: real raster PDFs and images both
+produce page-bound positioned evidence, and no remaining perception defect
+blocks relationship work.
+
+**CODEX SAFE TRAINING FRONTIER:** `CLAUDE-GO-PERCEPTION-PDF-OCR-01` (`1e764b3`)
+and everything before it. Phase 1A advances into the safe set; **Phase 1B is NOT
+handed over** — one tranche old, and it carries a known per-source regression.
