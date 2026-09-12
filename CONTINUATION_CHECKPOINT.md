@@ -1,5 +1,70 @@
 # Continuation checkpoint
 
+## 2026-09-11 (charter run 2) — corroboration boundary live at `c92e380`; Option 3 investigated
+
+Appended above the entries below, none of which is altered.
+
+### Shipped, gated and deployed
+
+| SHA | capability | gate |
+|---|---|---|
+| `cff3259` | Sheet identity register **wired** | 7,757 / 3,944 subtests |
+| `e9ff790` | **Declared detail callout family** | 7,792 / 3,957 subtests |
+| `d306f4b` | **PDF page orientation correction** | 7,810 / 3,966 subtests |
+| `c92e380` | **Datum corroboration boundary** | 7,837 / 3,988 subtests |
+
+Live `c92e380`; `/health` 200 internal and public; both services active;
+perception `NRestarts=0`. Rollback points through `archiosk-backup-d306f4b`.
+
+### Corroboration boundary (Product Owner decision, Option 1)
+
+AN EXACT MATCH MAY CORROBORATE; A MISMATCH MAY NOT ACCUSE.
+`RELATIONSHIP_TYPE_CORRESPONDS_TO`, `provisional=True`, no new vocabulary.
+On the real corpus it **correctly abstained**: 0 corroborations, 0
+relationships, 3 unresolved.
+
+### OPTION 3 — three approaches measured, all negative, and ONE ROOT CAUSE FOUND
+
+Established: architectural sheets carry **zero fonts and zero text spans** —
+every character is a vector outline. Glyph shapes DO repeat (66–71% in classes
+seen 2+ times; the native structural control has only 74 such outlines).
+
+| approach | result |
+|---|---|
+| isolate glyph paths, replay, re-read | **worse** (A401 3→0 levels) and **570–1,104s/sheet** |
+| region-clip OCR | `get_textpage_ocr` takes no `clip` |
+| per-hit magnified crop | 0 reads — coordinate-space mismatch between `get_text(words)` after `set_rotation` and `get_pixmap(matrix=)` |
+
+**THE ACTUAL ROOT CAUSE OF THE ARCHITECTURAL MIS-ASSOCIATION**, found by
+rendering the sheet and looking at it: the two disciplines use DIFFERENT datum
+layouts.
+
+    STRUCTURAL:    PERIMETER BEAM ( 191500 / U/S )   <- name BESIDE the bubble
+    ARCHITECTURAL: ( T/O / 192.61 )                  <- name BELOW the bubble
+                     GR. FL. SLAB
+
+`datum_corroboration.names_beside` searches LEFT and RIGHT only. That is right
+for structure (measured gap ~0.001 of frame) and wrong for architecture, and it
+is exactly why `188.22` took `PARK. SLAB` and `188.62` took `PARK. FTG` —
+inverted. **This is a bounded, concrete fix, not a dead end.**
+
+### Current frontier
+
+**Claude application frontier:** `c92e380`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED, nothing handed over.
+
+**Next evidence-supported tranche:** extend `names_beside` to the BELOW
+position, measured per discipline rather than assumed, then re-run the real
+corroboration. That is the shortest path to a real cross-discipline
+corroboration and it needs no new extraction capability.
+
+### Deferred, registered, not blocking
+
+Glyph-outline clustering (feasible, too slow as implemented); late-arrival
+`SourceReference` re-resolution; founding-PDF perception gap; 49-page
+perception cost; OSD wrong on A403; rollback trees above the keep-3 rule.
+
+
 ## 2026-09-11 (charter run) — three tranches live; cross-discipline ANCHOR proven, DISCREPANCY not earned
 
 Appended above the entries below, none of which is altered.
