@@ -724,6 +724,19 @@ def cognitive_gym_dashboard():
     return response
 
 
+@portal_bp.route('/admin/operational-convergence', methods=['GET'])
+@admin_required
+def operational_flight_deck():
+    """Authorized diagnostics only; no provider, training or registry actions."""
+    _require_developer_tools()
+    from services.operational_flight_deck import dashboard
+    projection = dashboard(current_app.config, current_app.instance_path)
+    response = current_app.make_response((render_template('operational_flight_deck.html', deck=projection),
+                                          200 if projection['available'] else 503))
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @portal_bp.route('/admin/developer-tools/reset-analysis', methods=['POST'])
 @admin_required
 def developer_reset_analysis():

@@ -118,7 +118,7 @@ class BaseConfig:
     # NOTE: the "19" default below is dead in practice once .env sets a
     # real STATIC_VERSION - python-dotenv never overrides an already-set
     # env var. .env is the actual source of truth; bump it there.
-    STATIC_VERSION = os.getenv("STATIC_VERSION", "19")
+    STATIC_VERSION = os.getenv("STATIC_VERSION", "20")
 
     # -- Password reset email (optional; see services/email.py) ------------
     # "Configured" means SMTP_HOST is non-blank (services/password_reset.py's

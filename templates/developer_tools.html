@@ -5,6 +5,7 @@
 
 {% block content %}
 {% call macros.page_header('Developer Tools') %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.operational_flight_deck') }}">Operational Flight Deck</a>
     <a class="btn btn-ghost" href="{{ url_for('portal.cognitive_gym_dashboard') }}">Cognitive Gym</a>
     <a class="btn btn-ghost" href="{{ url_for('portal.projects_list') }}">&larr; Back to Projects</a>
 {% endcall %}

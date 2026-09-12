@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Operational Convergence — ARCHIOSK{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operational_flight_deck.css') }}?v={{ static_version }}"><script defer src="{{ url_for('static', filename='js/operational_flight_deck.js') }}?v={{ static_version }}"></script>{% endblock %}
+{% macro fact(value) %}{% if value is sameas true %}YES{% elif value is sameas false %}NO{% else %}UNRESOLVED{% endif %}{% endmacro %}
+{% block content %}
+<main class="flight-deck" aria-label="Operational Convergence Flight Deck">
+  <header class="fd-focus">
+    <p class="fd-kicker">ARCHIOSK / Core diagnostics</p><h1>Operational Convergence</h1>
+    <p>System diagnostic evidence. Successful use of the live application remains product proof.</p>
+    <nav aria-label="Diagnostic surfaces"><a href="{{ url_for('portal.operational_flight_deck') }}">Refresh evidence</a><a href="{{ url_for('portal.cognitive_gym_dashboard') }}">Cognitive Gym / AI Learning Lab</a><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a></nav>
+    {% if deck.available %}<p class="fd-kicker">Recorded product target</p><h2>{{ deck.product_target }}</h2>{% endif %}
+  </header>
+  {% if not deck.available %}
+  <section class="fd-warning" aria-label="Evidence unavailable"><h2>Flight Deck evidence unavailable</h2><p>No operational health conclusion is displayed.</p>{% for issue in deck.issues %}<p>{{ issue }}</p>{% endfor %}</section>
+  {% else %}
+  <div class="fd-summary">
+    <section><h2>Claude application frontier</h2><p>{{ deck.data.frontiers.active }}</p><h3>Stable handoff frontier</h3><p>{{ deck.data.frontiers.stable_handoff }}</p></section>
+    <section><h2>GO development frontier</h2>{% for row in deck.developing %}<a href="#{{ row.capability_id }}">{{ row.capability_name }}</a><small>{{ row.go_state }} · {{ row.negative_control_state }}</small>{% else %}<p>No mapped developmental observations</p>{% endfor %}</section>
+    <section><h2>Shared operational frontier</h2>{% for row in deck.shared %}<a href="#{{ row.capability_id }}">{{ row.capability_name }}</a>{% else %}<p>No operation satisfies the mapped shared-use criteria.</p>{% endfor %}<small>Development is not certification or promotion.</small></section>
+  </div>
+  <section class="fd-gap"><h2>Recorded developmental gap</h2><p>{{ deck.current_gap }}</p><p><b>Owner:</b> {{ deck.gap_owner }}</p><p><b>Next evidence-supported action:</b> {{ deck.next_action }}</p></section>
+  <p class="fd-muted">{{ deck.source }} · Latest recorded encounter time: {{ deck.last_evidence_at }} · Read only</p>
+  {% if deck.transitions %}<section class="fd-gap" aria-label="Recorded lifecycle corrections"><h2>Recorded lifecycle corrections</h2>{% for row in deck.transitions %}<p><a href="#{{ row.capability_id }}">{{ row.capability_name }}</a> · REACHABLE: {{ fact(row.application_facets.reachable) }} · TRAINABLE: {{ fact(row.application_facets.trainable) }}<br>{{ row.training_boundary }}</p>{% endfor %}</section>{% endif %}
+  <details class="fd-method"><summary>Freshness, source priority and interpretation</summary><p>Snapshot publication is manual. Refreshing a published snapshot does not acquire newer evidence. Source timestamps are preserved; missing timestamps remain unresolved.</p><p>Matrix position shows component application evidence and mapped GO readiness. Shared-state badges also account for training holds, negative controls and governance. A stable component is not automatically trainable.</p><p>EXCELLENT, GOOD, ADEQUATE and POOR remain reserved. No intelligence score or numeric readiness threshold is used.</p><p class="fd-ref">Projection: {{ deck.data.sha256 }}</p><p>{{ deck.data.frontiers.source_priority }}</p></details>
+  <section aria-label="Product spine"><h2>Critical path / mapped operations</h2><p class="fd-muted">Navigation through existing operations, not proof of an end-to-end implemented workflow.</p><ol class="fd-spine">{% for row in deck.spine %}<li><a href="#{{ row.capability_id }}">{{ row.capability_name }}</a><small>APP {{ row.application_state }}</small><small>GO {{ row.go_state }}</small><span class="fd-state" data-state="{{ row.shared_state }}">{{ row.shared_state }}</span><small>{{ row.gap_owner }} · {{ row.last_verified_at }}</small></li>{% endfor %}</ol></section>
+  <section aria-label="Convergence matrix"><h2>Convergence matrix</h2><p class="fd-muted">Application stability → · GO operational readiness ↑</p><div class="fd-matrix-scroll" tabindex="0" aria-label="Scrollable categorical convergence matrix"><div class="fd-matrix">
+    {% for cell in deck.matrix %}<section class="fd-cell {% if not cell.rows %}fd-empty{% endif %}" data-app="{{ cell.app }}" data-go="{{ cell.go }}"><h3>{{ cell.app }}<small>{{ cell.go }}</small></h3>{% for row in cell.rows %}<a href="#{{ row.capability_id }}">{{ row.capability_name }}<span class="fd-state" data-state="{{ row.shared_state }}">{{ row.shared_state }}</span></a>{% else %}<p>No mapped operation</p>{% endfor %}</section>{% endfor %}
+  </div></div></section>
+  <section aria-label="Product definition questions" class="fd-questions"><h2>Product decisions / unresolved</h2>{% for question in deck.data.taxonomy_reconciliation.product_questions %}<p><b>{{ question.state }} · {{ question.owner }}</b><br>{{ question.question }}</p>{% endfor %}</section>
+  <section aria-label="Operation evidence inspector"><h2>Evidence and bottleneck inspector</h2><p class="fd-muted">Open an operation to inspect its controls, limits, history and source references.</p>
+  {% for row in deck.rows %}<details class="fd-operation" id="{{ row.capability_id }}" data-operation="{{ row.capability_id }}"><summary><span>{{ row.capability_name }}<small>{{ row.capability_id }}</small></span><span class="fd-state" data-state="{{ row.shared_state }}">{{ row.shared_state }}</span></summary>
+    <div class="fd-operation-body"><div class="fd-facets">{% for name,value in row.application_facets.items() %}<div><small>{{ name | replace('_',' ') | upper }}</small><b>{{ fact(value) }}</b></div>{% endfor %}</div>
+    <dl><dt>Application summary</dt><dd>{{ row.application_state }}</dd><dt>GO readiness</dt><dd>{{ row.go_state }}</dd><dt>Shared state</dt><dd>{{ row.shared_state }}</dd><dt>Gap owner</dt><dd>{{ row.gap_owner }}</dd><dt>Band</dt><dd>{{ row.qualitative_band }}</dd><dt>Why this band?</dt><dd>{{ row.why_this_band }}</dd><dt>Positive control</dt><dd>{{ row.positive_control_state }}</dd><dt>Negative control</dt><dd>{{ row.negative_control_state }}{% for finding in row.negative_control_findings | default([]) %} · {{ finding }}{% endfor %}</dd><dt>Governance</dt><dd>{{ row.governance_state }}</dd><dt>Model baseline</dt><dd>{{ row.model_baseline }}</dd><dt>Application path</dt><dd>{{ row.lifecycle }}</dd><dt>Scope</dt><dd>{{ row.scope }}</dd><dt>Training boundary</dt><dd>{{ row.training_boundary }}</dd></dl>
+    {% if row.exclusions %}<h3>Not established by this operation</h3><ul>{% for item in row.exclusions %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    {% for reason in row.unresolved_reasons %}<p class="fd-warning">{{ reason }}</p>{% endfor %}
+    {% if row.state_transitions %}<details><summary>Historical state → current state</summary>{% for transition in row.state_transitions %}<pre>{{ transition | tojson(indent=2) }}</pre>{% endfor %}</details>{% endif %}
+    {% for encounter in row.observations %}<details class="fd-encounter"><summary>{{ encounter.control }} · {{ encounter.contract_compliance }} · {{ encounter.timestamp }}</summary><p class="fd-ref">{{ encounter.record_id }}</p><dl><dt>Task content</dt><dd><pre>{{ encounter.task_content | tojson(indent=2) }}</pre></dd><dt>Contract compliance</dt><dd>{{ encounter.contract_compliance }}</dd><dt>Instrument validity</dt><dd>{{ encounter.instrument_validity }}</dd><dt>Application defect</dt><dd>{{ encounter.application_defect }}</dd></dl><h3>Exact recorded response</h3><pre>{{ encounter.raw_response }}</pre></details>{% endfor %}
+    <details><summary>Evidence references / source priority</summary><p>{{ row.source_priority }}</p>{% for ref in row.latest_evidence %}<div class="fd-reference"><p class="fd-ref">{{ ref.path }}<br>SHA256 {{ ref.sha256 }}</p>{% if ref.excerpt %}<pre>{{ ref.excerpt }}</pre>{% endif %}</div>{% endfor %}</details>
+    <p class="fd-muted">No retained image is supplied by this operation projection. Address geometry is not a rendered crop.</p></div>
+  </details>{% endfor %}</section>
+  <details class="fd-method"><summary>Forward correction and preserved historical mappings</summary><p>{{ deck.data.taxonomy_reconciliation.history_correction }}</p>{% for row in deck.data.taxonomy_reconciliation.retired_projection_entries %}<p class="fd-ref">{{ row.capability_id }} · historical projection label only</p>{% endfor %}</details>
+  {% endif %}
+</main>
+{% endblock %}

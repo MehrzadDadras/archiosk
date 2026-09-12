@@ -1,5 +1,10 @@
 # MANIFEST
 
+Operational Flight Deck: `services/operational_flight_deck.py`, the GET-only
+admin route in `routes/portal.py`, `templates/operational_flight_deck.html`, and
+matching CSS/JS render the proven read-only feed. `docs/OPERATIONAL_FLIGHT_DECK.md`
+documents authorization, publication, evidence limits and responsive behavior.
+
 `services/operational_frontier.py` derives scoped application/GO/shared states
 from handoffs and normalized evidence. `tests/test_operational_frontier.py`
 checks categorical rules; `docs/OPERATION_EVIDENCE_RULES.md` defines their
@@ -15,7 +20,8 @@ by the existing Gym scanner/exporter. `tests/test_convergence_projection.py`
 checks attribution, invalid output, preservation and deterministic projection.
 `docs/CONVERGENCE_RECORD_MAPPING.md` records schema, coverage and the UI gate;
 `docs/COGNITIVE_GYM_PLUGIN_BOUNDARY.md` records the first-party plugin candidate
-boundary and passive cleanup classification. No Flight Deck UI is registered.
+boundary and passive cleanup classification. The Flight Deck consumes the derived
+operational view without changing Gym or core authority.
 
 Cognitive Gym visibility: `services/cognitive_gym.py` projects evaluator summaries;
 `templates/cognitive_gym.html` and `static/css/cognitive_gym.css` present the
