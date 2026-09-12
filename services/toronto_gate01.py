@@ -523,6 +523,12 @@ def run(address, *, reader, retrieved_at=None) -> dict:
         "runner_version": RUNNER_VERSION,
         "source_version": gathered["source_version"],
         "zoning_layer": (gathered.get("zoning") or {}).get("layer"),
+        # CLAUDE-FEASIBILITY-VALUE-04: the zone's RAW ATTRIBUTES, retained so a
+        # downstream consumer can be given facts rather than this module's
+        # finished prose. Measured need: feeding the compiler these statements
+        # instead of these attributes suppressed its interpretation entirely -
+        # 17 statements in, 17 out, zero derivations, five runs out of five.
+        "zoning_attributes": (gathered.get("zoning") or {}).get("attributes"),
         "overlays": [{k: v for k, v in f.items()
                       if k not in ("witness_geometry", "geometry", "token")}
                      for f in gathered.get("overlays") or []],

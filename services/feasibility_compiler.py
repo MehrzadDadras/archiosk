@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@5"
+COMPILER_VERSION = "feasibility-compiler@7"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -204,6 +204,16 @@ approval outcome. Do not predict whether an application would be approved. Do no
 assert a definite spatial relationship that the supplied deterministic spatial
 results do not contain - copy their tokens; never mint one.
 
+Where the supplied evidence together supports a conclusion that no single item
+states on its own, record it as GO_INTERPRETS and list the statement_ids it rests
+on in `derived_from`. Combining supplied controls is the point: if two figures
+together bound the envelope more tightly than either does alone, or if one
+condition creates a dependency another does not mention, that is worth stating.
+
+If the evidence does not earn such a conclusion, write none. Silence is a correct
+answer here and padding is not - a restated fact labelled GO_INTERPRETS is worse
+than no interpretation at all.
+
 Preserve material ambiguity. If the evidence leaves something genuinely
 undetermined, say so and leave it unresolved rather than resolving it plausibly.
 
@@ -327,21 +337,28 @@ class FeasibilityEvidence:
 def evidence_from_gate01(outcome, *, investigation_id) -> FeasibilityEvidence:
     """Build the bounded package from a deterministic Gate-01 result.
 
-    This is the seam that keeps the compiler downstream of everything governed.
-    It reads an already-produced `toronto_gate01` / `mississauga_gate01` outcome -
-    authorities already classified and admitted, spatial tokens already computed
-    by `deterministic_spatial`, unresolved issues already raised - and carries
-    ONLY those forward. The compiler therefore cannot widen the evidence, only
-    reason over it.
+    PASS FACTS, NOT CONCLUSIONS. Version 1 forwarded the deterministic runner's
+    FINISHED STATEMENT OBJECTS - statement_id, kind, topic, written text, status,
+    confidence - and the effect was measured rather than suspected: an A/B on the
+    same address, same model and same budget produced 17 statements in and 17 out
+    with ZERO derivations across five runs, while the identical retrieval reduced
+    to raw attributes produced a supported derivation in three runs out of three.
 
-    Note what is dropped: geometry coordinates. The model needs to know a token
-    said INSIDE and what produced it, never the ring it was computed from -
-    passing thousands of vertices would cost tokens, invite the model to
-    recompute geometry it must not recompute, and prove nothing.
+    Handing a model a nearly-finished document and asking for a document makes
+    transcription the cheapest correct answer. The interpretation was not absent;
+    it was suppressed by the shape of what I supplied, and I had reported that
+    silence as a property of the model.
+
+    So this reads `retrieval` - the attributes the runners actually retrieved -
+    and forwards those. Geometry coordinates are still dropped: a token said
+    INSIDE and what produced it is the fact; the ring it was computed from is
+    thousands of vertices that would invite the model to recompute geometry it
+    must not recompute.
     """
     document = (outcome or {}).get("document") or {}
     subject = document.get("subject") or {}
     retrieval = (outcome or {}).get("retrieval") or {}
+
     tokens = {}
     for name, token in ((outcome or {}).get("spatial_tokens") or {}).items():
         provenance = (token or {}).get("provenance") or {}
@@ -355,6 +372,7 @@ def evidence_from_gate01(outcome, *, investigation_id) -> FeasibilityEvidence:
             "layer_crs": provenance.get("layer_crs"),
             "transformation": provenance.get("transformation"),
         }
+
     return FeasibilityEvidence(
         investigation_id=investigation_id,
         input_address=subject.get("address_as_given") or "",
@@ -363,22 +381,13 @@ def evidence_from_gate01(outcome, *, investigation_id) -> FeasibilityEvidence:
         municipality=subject.get("municipality"),
         jurisdiction=subject.get("municipality"),
         identity_confidence=subject.get("identity_confidence"),
-        parcel_geometry_metadata={
-            "crs": (outcome or {}).get("identity", {}).get("_crs"),
-            "geometry_source": (outcome or {}).get("identity", {}).get(
-                "_geometry_source"),
-        },
+        parcel_geometry_metadata=_parcel_facts(outcome),
         spatial_results=tokens,
         admitted_authorities=document.get("authorities") or [],
-        zoning={"statements": [s for s in document.get("statements") or []
-                               if s.get("topic") == "ZONING_DESIGNATION"]},
+        zoning=_zoning_facts(retrieval),
         site_specific_exceptions=document.get("site_specific_exceptions") or [],
-        official_plan={"statements": [
-            s for s in document.get("statements") or []
-            if s.get("topic") == "OFFICIAL_PLAN_DESIGNATION"]},
-        overlays=[s for s in document.get("statements") or []
-                  if s.get("topic") not in (None, "ZONING_DESIGNATION",
-                                            "OFFICIAL_PLAN_DESIGNATION")],
+        official_plan=_official_plan_facts(retrieval, document),
+        overlays=_overlay_facts(retrieval),
         unresolved=document.get("unresolved") or [],
         provenance={
             "retrieved_at": retrieval.get("retrieved_at"),
@@ -387,6 +396,88 @@ def evidence_from_gate01(outcome, *, investigation_id) -> FeasibilityEvidence:
             "gate": document.get("gate"),
         },
     )
+
+
+#: Attribute keys that carry no planning meaning and only cost tokens.
+_NOISE_KEYS = ("OBJECTID", "FID", "Shape__Area", "Shape__Length", "SHAPE.AREA",
+               "SHAPE.LEN", "MSLINK", "COLOUR_CODE", "UTM_X", "UTM_Y",
+               "TRANS_ID_CREATE", "TRANS_ID_EXPIRE", "GlobalID")
+
+
+def _clean(attributes) -> dict:
+    return {k: v for k, v in (attributes or {}).items()
+            if k not in _NOISE_KEYS and v not in (None, "", " ", -1, -1.0)}
+
+
+def _parcel_facts(outcome) -> dict:
+    identity = (outcome or {}).get("identity") or {}
+    return {k: v for k, v in {
+        "crs": identity.get("_crs"),
+        "geometry_source": identity.get("_geometry_source"),
+        "parcel_count": identity.get("_parcel_count"),
+    }.items() if v is not None}
+
+
+def _zoning_facts(retrieval) -> dict:
+    """Raw zone attributes, from whichever municipal runner produced them."""
+    facts = {}
+    attributes = retrieval.get("zoning_attributes")
+    if attributes:
+        facts["attributes"] = _clean(attributes)
+    zoning = retrieval.get("zoning") or {}
+    if isinstance(zoning, dict) and zoning.get("zones"):
+        facts["zones"] = [_clean(z.get("attributes")) for z in zoning["zones"]]
+        facts["zone_count"] = zoning.get("zone_count")
+        # A boundary through the lot is a fact the model must be able to see.
+        facts["split_zoning"] = bool(zoning.get("split"))
+    exception = retrieval.get("exception")
+    if exception:
+        facts["site_specific_exception"] = {
+            "acquired": exception.get("acquired"),
+            "reason": exception.get("reason"),
+            "url": exception.get("url"),
+        }
+    return facts
+
+
+def _official_plan_facts(retrieval, document) -> dict:
+    land_use = retrieval.get("land_use") or {}
+    if isinstance(land_use, dict) and land_use.get("designations"):
+        return {"designations": [_clean(d.get("attributes"))
+                                 for d in land_use["designations"]],
+                "machine_readable": True}
+    plan = [a for a in document.get("authorities") or []
+            if "OFFICIAL-PLAN" in str(a.get("authority_id") or "")]
+    if plan:
+        return {"authority_id": plan[0].get("authority_id"),
+                "source_type": plan[0].get("source_type"),
+                "machine_readable": False,
+                "designation_available": False}
+    return {}
+
+
+def _overlay_facts(retrieval) -> list:
+    facts = []
+    for finding in retrieval.get("overlays") or []:
+        facts.append({k: v for k, v in {
+            "layer": finding.get("layer_name"),
+            "applies": finding.get("present"),
+            "attributes": _clean(finding.get("attributes")),
+            "absence_proved": finding.get("absence_established"),
+            "polygons_checked_nearby": finding.get("polygons_in_envelope"),
+            "note": finding.get("note"),
+        }.items() if v not in (None, {}, [])})
+    heritage = retrieval.get("heritage") or retrieval.get("heritage_register") or {}
+    if heritage:
+        covering = heritage.get("covering") or []
+        facts.append({k: v for k, v in {
+            "layer": "Heritage",
+            "applies": bool(covering) or None,
+            "attributes": [_clean(c.get("attributes")) for c in covering] or None,
+            "nearby_count": heritage.get("touching"),
+            "note": heritage.get("limitation") or heritage.get("basis"),
+        }.items() if v not in (None, {}, [])})
+    return facts
 
 
 def validate_evidence(evidence: FeasibilityEvidence) -> list:
