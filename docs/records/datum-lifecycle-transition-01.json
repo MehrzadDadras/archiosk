@@ -1,0 +1,18 @@
+{
+  "record_id": "DATUM-LIFECYCLE-TRANSITION-01",
+  "source": "Claude checkpoint 8355772 and direct repository/live verification, 2026-09-12; Product Owner RECONCILE CLAUDE FRONTIER + CLEAN CLOSEOUT 01",
+  "prior_record": "OPERATION-TAXONOMY-RECONCILIATION-01",
+  "capability_id": "op.datum-corroboration",
+  "commits": {"lifecycle": "1316d2f", "register_cost_fix": "b68624c", "checkpoint": "8355772"},
+  "application": {"implemented": true, "reachable": true, "deployed": true, "real_corpus_proven": true, "stable": "UNRESOLVED", "trainable": false},
+  "lifecycle": "perception_worker._run_pdf_job and run_job invoke _corroborate_datums after completion; _corroborate_datums calls record_corroborations with prebuilt registers",
+  "training_boundary": "No explicit new Claude training handoff. Reachability is proven; scoped stability acceptance remains unresolved. Codex safe frontier remains 6b37511 and earlier stable handoffs.",
+  "semantics": "Machine-derived provisional corresponds_to Relationship only; exact match may corroborate; mismatch remains unresolved. Same-discipline corroborations are possible; this is not exclusively cross-discipline.",
+  "idempotency": "Existing from_id/to_id/relationship_type keys are checked before writing; lifecycle rerun proof reports idempotence",
+  "failure_isolation": "Worker only enters the stage after completed perception; catches stage exceptions and records datum_corroboration_failed without changing completed perception state",
+  "writer_boundary": "No claim, finding or discrepancy writer introduced in this path",
+  "real_lifecycle_proof": {"corroborations": 5, "unresolved": 1, "claims": 0, "findings": 0, "idempotent": true, "stage_seconds": 0.800, "perception_seconds": 52.4, "datumless_noop_seconds": 0.034, "source": "Current Claude checkpoint real workflow proof, not a new acquisition or model call"},
+  "live_verification": {"accepted_build": "b68624c", "application_service": "active", "perception_service": "active", "perception_restarts": 0, "public_health_http": 200, "file_bytes_note": "Live hashes match isolated worktree bytes and CRLF-form b68624c Git blobs", "files": {"services/datum_corroboration.py": "85d68507261b911c2d0c6f01ea5bd1e0e8af3aef98d29a25a02404e929639be7", "services/perception_worker.py": "71c2f17f32893df962ce1a97976a01f2b5e87d29b8b9a9c01795fdd5190f8913"}},
+  "repository_evidence": ["CONTINUATION_CHECKPOINT.md", "services/perception_worker.py", "services/datum_corroboration.py", "tests/test_datum_corroboration_wiring_01.py"],
+  "sachet_dependency_correction": "The formerly unwired producer is now reachable. That removes the old producer-reachability explanation; it does not authorize relationship-sachet training or settle its product-definition limitations."
+}

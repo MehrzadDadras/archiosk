@@ -1,0 +1,84 @@
+{
+  "record_id": "OPERATION-TAXONOMY-RECONCILIATION-01",
+  "source": "Product Owner instruction: ARCHIOSK OPERATIONAL CONVERGENCE OPERATION TAXONOMY RECONCILIATION + CLEAN GATE 01; forwards Claude application-scope clarification",
+  "authority_note": "Retained input to the read-only projection. No application semantics, permission or training authorization is created by this copy.",
+  "supersedes_projection_labels_only": ["op.cross-source-relationship-proposal", "op.two-sided-micro-context"],
+  "codex_safe_frontier": "6b37511 and earlier stable handoffs; unchanged",
+  "history_correction": "The earlier observed absence of a package spanning two Sources is preserved. The sachet could already resolve two Sources; the missing input was a real cross-Source Relationship. This corrects the explanation forward, not the historical observation.",
+  "operations": [
+    {
+      "capability_id": "op.sheet-identity-reference",
+      "capability_name": "Declared sheet identity reference",
+      "replaces_projection_ids": ["op.sheet-identity-register"],
+      "implementation": "services/sheet_identity.py:register_sheet_index",
+      "lifecycle": "perception_worker._register_sheet_index",
+      "record_semantics": "SourceReference; reference_type=sheet",
+      "deployed_commit": "cff3259",
+      "real_proof": "48 resolved real sheet identities",
+      "application": {"implemented": true, "reachable": true, "deployed": true, "real_corpus_proven": true, "stable": "UNRESOLVED", "trainable": false},
+      "exclusions": ["Relationship", "cross-discipline correspondence", "discrepancy"],
+      "training_boundary": "DO NOT TRAIN AGAINST YET; no new safe handoff",
+      "training_gap_owner": "CLAUDE"
+    },
+    {
+      "capability_id": "op.detail-callout-reference",
+      "capability_name": "Declared detail callout reference",
+      "replaces_projection_ids": ["op.declared-detail-callout-family"],
+      "implementation": "services/detail_callout.py:register_detail_callouts",
+      "lifecycle": "perception_worker._register_detail_callouts",
+      "record_semantics": "SourceReference; reference_type=detail_callout",
+      "deployed_commit": "e9ff790",
+      "real_proof": "50/50 resolved real callouts",
+      "application": {"implemented": true, "reachable": true, "deployed": true, "real_corpus_proven": true, "stable": "UNRESOLVED", "trainable": false},
+      "exclusions": ["confirmed Relationship", "cross-discipline correspondence", "discrepancy"],
+      "training_boundary": "DO NOT TRAIN AGAINST YET; no new safe handoff",
+      "training_gap_owner": "CLAUDE"
+    },
+    {
+      "capability_id": "op.datum-corroboration",
+      "capability_name": "Provisional datum corroboration",
+      "replaces_projection_ids": ["op.datum-corroboration", "op.datum-association-correction"],
+      "implementation": "services/datum_corroboration.py:record_corroborations",
+      "lifecycle": "NO production caller; NO route; direct service invocation only",
+      "record_semantics": "Relationship; type=corresponds_to; provisional=True",
+      "deployed_commit": "21948a8",
+      "real_proof": "Real corroborations demonstrated through direct service invocation",
+      "application": {"implemented": true, "reachable": false, "deployed": true, "real_corpus_proven": true, "stable": false, "trainable": false},
+      "exclusions": ["confirmed correspondence", "discrepancy", "normal application lifecycle reachability"],
+      "training_boundary": "UNREACHABLE THROUGH NORMAL APPLICATION LIFECYCLE; NOT STABLE FOR TRAINING; NOT TRAINABLE",
+      "training_gap_owner": "CLAUDE"
+    },
+    {
+      "capability_id": "op.relationship-sachet",
+      "capability_name": "Relationship endpoint sachet",
+      "replaces_projection_ids": [],
+      "implementation": "services/case_workspace.py:build_relationship_sachet",
+      "lifecycle": "GET /api/documents/<project_id>/relationships/<relationship_id>/sachet",
+      "record_semantics": "Read-time relationship endpoint package; no new relational authority",
+      "real_proof": "Relationship endpoints successfully resolved across two different Sources",
+      "application": {"implemented": true, "reachable": true, "deployed": true, "real_corpus_proven": true, "stable": true, "trainable": false},
+      "includes": ["relationship type", "reason", "created_by", "derived status", "endpoint citations", "source IDs", "page", "region index", "normalized address geometry", "extraction_pass", "explicit exclusion summary"],
+      "exclusions": ["rendered image/crop", "sibling contextual evidence", "reliable owning Source currentness/supersession for region endpoints", "automatic discovery"],
+      "training_boundary": "DO NOT TRAIN AGAINST YET; currently proven real cross-source input Relationship comes from datum corroboration, which has no production application flow",
+      "training_gap_owner": "CLAUDE"
+    },
+    {
+      "capability_id": "op.cross-discipline-micro-context",
+      "capability_name": "Automatic governed cross-discipline micro-context",
+      "replaces_projection_ids": [],
+      "implementation": null,
+      "lifecycle": "NOT IMPLEMENTED; NOT REACHABLE",
+      "record_semantics": "Automatic governed package containing sufficient cross-discipline evidence for GO to reason over a real relationship",
+      "real_proof": "NOT REAL-CORPUS PROVEN",
+      "application": {"implemented": false, "reachable": false, "deployed": false, "real_corpus_proven": false, "stable": false, "trainable": false, "search_scope": "Explicit Claude clarification: automatic governed sufficient cross-discipline package, distinct from endpoint sachet"},
+      "exclusions": ["equivalence to relationship-sachet geometry"],
+      "training_boundary": "NOT TRAINABLE",
+      "training_gap_owner": "CLAUDE"
+    }
+  ],
+  "product_questions": [
+    {"id": "micro-context-visual-minimum", "state": "UNRESOLVED", "owner": "PRODUCT_OWNER", "question": "Does micro-context require rendered visual evidence/pixels, or can addressable region geometry plus citations satisfy the minimum contract?"},
+    {"id": "region-endpoint-source-currentness", "state": "UNRESOLVED", "owner": "PRODUCT_OWNER", "question": "Must a relationship sachet report current/superseded state of the owning Source for region endpoints?"},
+    {"id": "deployed-unwired-vocabulary", "state": "UNRESOLVED", "owner": "PRODUCT_OWNER", "question": "How should deployed-but-unwired capabilities be represented beyond IMPLEMENTED / UNREACHABLE?"}
+  ]
+}

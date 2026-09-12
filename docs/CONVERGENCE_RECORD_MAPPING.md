@@ -1,5 +1,9 @@
 # Operational convergence record mapping
 
+The optional operation-level derivation is documented in
+[OPERATION_EVIDENCE_RULES.md](OPERATION_EVIDENCE_RULES.md). Export it with
+`--frontier`; the default legacy snapshot and normalized records remain unchanged.
+
 Status: read-only foundation; Flight Deck health UI gated on material evidence.
 Authority for this tranche: Product Owner, OPERATIONAL CONVERGENCE RECORD MAPPING
 + PLUGIN SEAM + FLIGHT DECK FOUNDATION 01. No Assessment or promotion authority.

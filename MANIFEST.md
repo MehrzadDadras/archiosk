@@ -5,6 +5,9 @@ from handoffs and normalized evidence. `tests/test_operational_frontier.py`
 checks categorical rules; `docs/OPERATION_EVIDENCE_RULES.md` defines their
 evidence requirements. The exporter exposes this optional view with `--frontier`.
 It remains non-authoritative; unresolved operation mappings keep the UI gated.
+`docs/records/operation-taxonomy-clarification-01.json` retains the five-operation
+clarification; `docs/records/datum-lifecycle-transition-01.json` records the later
+reachability change without rewriting its unwired history or granting trainability.
 
 Operational convergence foundation: `services/convergence_projection.py` adapts
 legacy/autonomous/convergence evidence without mutating history; it is consumed
