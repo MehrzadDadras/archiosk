@@ -8,19 +8,49 @@ is that something, and its most important property is not what it can decide but
 what it REFUSES to decide.
 
 COMPETENCE IS DECLARED, NOT ASSUMED. The engine below is exact for the case it
-covers - simple closed rings, one coordinate reference system, no holes, no
-multipart geometry - and returns AMBIGUOUS the moment a question leaves that
-envelope. That is not a placeholder for a better engine. It is the whole design:
-a planning determination that quietly guesses at a polygon with holes is worse
-than one that says it cannot tell, because the first is indistinguishable from
-an answer.
+covers - simple closed rings WITH HOLES, one coordinate reference system, single
+part - and returns AMBIGUOUS the moment a question leaves that envelope. That is
+not a placeholder for a better engine. It is the whole design: a planning
+determination that quietly guesses is worse than one that says it cannot tell,
+because the first is indistinguishable from an answer.
 
-WHY NO GEOS. Shapely PASSES `tools/dependency_fit.py` and would widen competence
-to holes, multipart geometry and validity repair. It is deliberately not adopted
-here: it bundles a compiled C library into `requirements.txt`, which ships to the
-production host, and the abstention discipline above is required whichever engine
-runs. `ENGINE` is the swap point - adopting Shapely later changes this module and
-no caller.
+HOLES WERE ADMITTED BY MEASUREMENT, NOT BY AMBITION (CLAUDE-TORONTO-LIVE-01).
+Version 1 refused any polygon with a hole, and a test asserted that refusal. The
+first real subject retired it: the City of Toronto's authoritative zoning polygon
+governing 35 Taber Road is ONE exterior ring of 389 vertices with FIVE holes, and
+the nearest hole sits about nine metres from the subject parcel. Refusing that is
+not caution - it is refusing every question the engine exists to answer, because
+a municipal zone polygon with parks, ravines and differently-zoned islands punched
+out of it is the ordinary case rather than the exotic one.
+
+Admitting holes did NOT relax the discipline, because the even-odd rule is exact:
+a point is in the polygon when it lies inside the exterior ring and inside no
+hole. That is arithmetic with the same primitives already here, not an
+approximation. It also buys the case that actually matters - **a parcel sitting
+inside a hole is OUTSIDE the zone**, and version 1's blanket refusal could not
+distinguish that from a parcel comfortably within it.
+
+MULTIPART WAS ADMITTED THE SAME WAY, ONE STEP LATER. The first live run refused
+three of ten authority layers around the subject - including the height overlay,
+which is as material as a finding gets - and reported them to the reader as
+"could not be determined". That was not true. The City's polygons were fine; THIS
+ENGINE declined them. Mislabelling an engine limit as a data ambiguity is worse
+than either problem alone, because it sends a reader to look for evidence that
+already exists.
+
+Containment against a multipart polygon is not a question about intent after all:
+a subject is inside the union when it lies inside some part, and outside it when
+it lies outside every part. Same arithmetic, applied per part. What remains
+refused is what is genuinely undecidable - invalid rings, CRS mismatch, boundary
+proximity, and a subject whose vertices disagree with its own edges.
+
+WHY STILL NO GEOS. Shapely PASSES `tools/dependency_fit.py` and would add
+validity repair, buffering and true boolean overlay. The measured case above
+needed NONE of those - it needed holes, which cost thirty lines and no
+dependency. Shapely bundles a compiled C library into `requirements.txt`, which
+ships to the production host, and the abstention discipline is required whichever
+engine runs. `ENGINE` remains the swap point: adopting it later changes this
+module and no caller.
 
 EVERY TOKEN CARRIES ITS PROVENANCE. A bare "INSIDE" is unusable in a governed
 result: the record has to say which parcel geometry, which authority layer, what
@@ -37,7 +67,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-ENGINE = "archiosk-exact-ring@1"
+ENGINE = "archiosk-exact-ring@3"   # @2 holes, @3 multipart - see docstring
 
 RELATION_INSIDE = "INSIDE"
 RELATION_OUTSIDE = "OUTSIDE"
@@ -66,8 +96,8 @@ REASON_MISSING = "geometry_missing"
 REASON_INVALID = "geometry_invalid"
 REASON_CRS_MISMATCH = "crs_mismatch"
 REASON_CRS_UNSUPPORTED = "crs_unsupported"
-REASON_HOLES = "geometry_has_holes_beyond_engine_competence"
-REASON_MULTIPART = "multipart_geometry_beyond_engine_competence"
+REASON_HOLES = "geometry_has_holes_beyond_engine_competence"   # retained: no longer emitted by this engine, see docstring
+REASON_MULTIPART = "multipart_geometry_beyond_engine_competence"   # retained: no longer emitted, see docstring
 REASON_NEAR_BOUNDARY = "vertex_within_boundary_tolerance"
 REASON_CONFLICTING = "conflicting_authoritative_geometry"
 REASON_MULTIPLE_PARCELS = "address_resolves_to_multiple_parcels"
@@ -85,8 +115,14 @@ def geometry_hash(geometry) -> Optional[str]:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
-def _rings(geometry):
-    """(exterior, holes, parts) for a GeoJSON Polygon or MultiPolygon, or None."""
+def _parts(geometry):
+    """Every (exterior, holes) pair of a GeoJSON Polygon or MultiPolygon, or None.
+
+    Version 1 read only the FIRST part of a MultiPolygon and reported the count,
+    which was safe only because the caller then refused anything with more than
+    one. Now that multipart is computed rather than refused, silently dropping
+    parts would be the very error the refusal used to prevent.
+    """
     if not isinstance(geometry, dict):
         return None
     kind = geometry.get("type")
@@ -94,11 +130,29 @@ def _rings(geometry):
     if not coordinates:
         return None
     if kind == "Polygon":
-        return coordinates[0], list(coordinates[1:]), 1
+        return [(coordinates[0], list(coordinates[1:]))]
     if kind == "MultiPolygon":
-        first = coordinates[0]
-        return first[0], list(first[1:]), len(coordinates)
+        parts = []
+        for part in coordinates:
+            if not part:
+                return None
+            parts.append((part[0], list(part[1:])))
+        return parts
     return None
+
+
+def _point_in_parts(point, parts) -> bool:
+    """Inside the union: inside at least one part, honouring that part's holes."""
+    return any(_point_in_polygon(point, exterior, holes)
+               for exterior, holes in parts)
+
+
+def _all_rings(parts):
+    rings = []
+    for exterior, holes in parts:
+        rings.append(exterior)
+        rings.extend(holes)
+    return rings
 
 
 def _ring_is_valid(ring) -> bool:
@@ -138,6 +192,18 @@ def _point_in_ring(point, ring) -> bool:
     return inside
 
 
+def _point_in_polygon(point, exterior, holes) -> bool:
+    """Even-odd with holes, and exact: inside the exterior and inside no hole.
+
+    This is the whole of what admitting holes required. It also answers the case
+    version 1 could not distinguish at all - a parcel lying inside a hole is
+    genuinely OUTSIDE the polygon, not merely undecidable.
+    """
+    if not _point_in_ring(point, exterior):
+        return False
+    return not any(_point_in_ring(point, hole) for hole in holes)
+
+
 def _distance_point_to_segment(point, a, b) -> float:
     px, py = point[0], point[1]
     ax, ay, bx, by = a[0], a[1], b[0], b[1]
@@ -153,6 +219,11 @@ def _distance_point_to_segment(point, a, b) -> float:
 def _min_distance_to_ring(point, ring) -> float:
     return min(_distance_point_to_segment(point, ring[i], ring[i + 1])
                for i in range(len(ring) - 1))
+
+
+def _min_distance_to_polygon(point, rings) -> float:
+    """Nearest approach to ANY ring. A hole edge is a boundary too."""
+    return min(_min_distance_to_ring(point, ring) for ring in rings)
 
 
 def _segments_cross(p1, p2, p3, p4) -> bool:
@@ -187,6 +258,20 @@ def _rings_cross(a, b) -> bool:
     for i in range(len(a) - 1):
         for j in range(len(b) - 1):
             if _segments_cross(a[i], a[i + 1], b[j], b[j + 1]):
+                return True
+    return False
+
+
+def _any_crossing(subject_rings, layer_rings) -> bool:
+    """Does any ring of one polygon cross any ring of the other?
+
+    Hole rings are included on BOTH sides. A parcel whose edge clips the edge of
+    a hole punched out of a zone genuinely straddles that zone's boundary, even
+    though it never touches the exterior ring.
+    """
+    for a in subject_rings:
+        for b in layer_rings:
+            if _rings_cross(a, b):
                 return True
     return False
 
@@ -257,43 +342,63 @@ def relate(subject, layer, *, subject_source=None, layer_source=None,
         return _token(RELATION_AMBIGUOUS, REASON_CRS_MISMATCH,
                       provenance=provenance)
 
-    subject_parts = _rings(subject["geometry"])
-    layer_parts = _rings(layer["geometry"])
+    subject_parts = _parts(subject["geometry"])
+    layer_parts = _parts(layer["geometry"])
     if subject_parts is None or layer_parts is None:
         return _token(RELATION_AMBIGUOUS, REASON_NOT_VECTOR,
                       provenance=provenance)
 
-    subject_ring, subject_holes, subject_count = subject_parts
-    layer_ring, layer_holes, layer_count = layer_parts
+    subject_rings = _all_rings(subject_parts)
+    layer_rings = _all_rings(layer_parts)
 
-    if not _ring_is_valid(subject_ring) or not _ring_is_valid(layer_ring):
+    # EVERY ring must be computable - exteriors and holes, in every part. A
+    # malformed hole that silently vanished from the even-odd test would turn an
+    # OUTSIDE into an INSIDE, and a dropped part would do the same; both are the
+    # exact class of quiet error this module exists to refuse.
+    if not all(_ring_is_valid(ring) for ring in subject_rings + layer_rings):
         return _token(RELATION_AMBIGUOUS, REASON_INVALID, provenance=provenance)
-    if subject_count > 1 or layer_count > 1:
-        return _token(RELATION_AMBIGUOUS, REASON_MULTIPART, provenance=provenance)
-    if subject_holes or layer_holes:
-        return _token(RELATION_AMBIGUOUS, REASON_HOLES, provenance=provenance)
+
+    provenance["subject_part_count"] = len(subject_parts)
+    provenance["layer_part_count"] = len(layer_parts)
+    provenance["subject_hole_count"] = sum(len(h) for _e, h in subject_parts)
+    provenance["layer_hole_count"] = sum(len(h) for _e, h in layer_parts)
 
     # Boundary proximity, measured against the subject's own scale so the
-    # tolerance means the same thing in degrees and in metres.
-    minx, miny, maxx, maxy = _bbox(subject_ring)
+    # tolerance means the same thing in degrees and in metres. Every ring counts:
+    # a hole edge is a boundary of the zone just as much as an outer edge is.
+    subject_exterior = subject_parts[0][0]
+    minx, miny, maxx, maxy = _bbox(subject_exterior)
     diagonal = (((maxx - minx) ** 2 + (maxy - miny) ** 2) ** 0.5) or 1.0
     tolerance = diagonal * BOUNDARY_TOLERANCE_FRACTION
-    for vertex in subject_ring[:-1]:
-        if _min_distance_to_ring(vertex, layer_ring) <= tolerance:
+    subject_vertices = [v for exterior, _holes in subject_parts
+                        for v in exterior[:-1]]
+    for vertex in subject_vertices:
+        if _min_distance_to_polygon(vertex, layer_rings) <= tolerance:
             return _token(RELATION_AMBIGUOUS, REASON_NEAR_BOUNDARY,
                           provenance=provenance)
 
-    crossing = _rings_cross(subject_ring, layer_ring)
-    vertices_inside = [_point_in_ring(v, layer_ring) for v in subject_ring[:-1]]
+    crossing = _any_crossing(subject_rings, layer_rings)
+    vertices_inside = [_point_in_parts(v, layer_parts) for v in subject_vertices]
 
     if crossing:
         return _token(RELATION_INTERSECTS, None, provenance=provenance)
     if all(vertices_inside):
+        # No crossing and every vertex inside is not yet INSIDE once holes exist:
+        # the subject may enclose a hole entirely, so part of what it covers is
+        # not in the layer at all.
+        layer_hole_vertices = [v for _exterior, holes in layer_parts
+                               for hole in holes for v in hole[:-1]]
+        if any(_point_in_parts(v, subject_parts) for v in layer_hole_vertices):
+            return _token(RELATION_INTERSECTS, None, provenance=provenance)
         return _token(RELATION_INSIDE, None, provenance=provenance)
     if not any(vertices_inside):
-        # No crossing and no vertex inside still leaves one real case: the layer
-        # sitting wholly within the subject. That is an intersection, not a miss.
-        if any(_point_in_ring(v, subject_ring) for v in layer_ring[:-1]):
+        # No crossing and no vertex inside still leaves two real cases: the layer
+        # sitting wholly within the subject, which is an intersection rather than
+        # a miss - and the subject sitting wholly within a HOLE, which is a
+        # genuine OUTSIDE and the case version 1 could not see at all.
+        layer_exterior_vertices = [v for exterior, _holes in layer_parts
+                                   for v in exterior[:-1]]
+        if any(_point_in_parts(v, subject_parts) for v in layer_exterior_vertices):
             return _token(RELATION_INTERSECTS, None, provenance=provenance)
         return _token(RELATION_OUTSIDE, None, provenance=provenance)
     # Some in, some out, yet no edge crossing detected - the geometry disagrees

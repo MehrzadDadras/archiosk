@@ -255,18 +255,55 @@ class TheEngineRefusesWhatItCannotDecide(unittest.TestCase):
                         _layer(_square(0, 0, 100), crs="EPSG:999999"),
                         spatial.REASON_CRS_UNSUPPORTED)
 
-    def test_holes_are_beyond_competence(self):
-        holed = {"type": "Polygon", "coordinates": [
-            _square(0, 0, 100)["coordinates"][0],
-            _square(20, 20, 10)["coordinates"][0]]}
-        self._ambiguous(_layer(_square(30, 30, 2)), _layer(holed),
-                        spatial.REASON_HOLES)
+    def test_holes_are_no_longer_beyond_competence(self):
+        """SUPERSEDED DELIBERATELY, BY MEASUREMENT (CLAUDE-TORONTO-LIVE-01).
 
-    def test_multipart_geometry_is_beyond_competence(self):
+        This test previously asserted that any polygon with a hole was refused.
+        The first real subject retired it: the City of Toronto's authoritative
+        zoning polygon governing 35 Taber Road is ONE exterior ring of 389
+        vertices with FIVE holes. Refusing that refuses the ordinary municipal
+        case rather than an exotic one, and the even-odd rule decides it exactly
+        - so the engine was widened rather than the standard lowered.
+
+        The refusal it replaced is not weakened anywhere: multipart geometry, CRS
+        mismatch, invalid rings and boundary proximity are all still refused, a
+        malformed hole is refused too, and `tests/test_toronto_live_adapters_01.py`
+        pins the hole arithmetic including the case version 1 could not see at
+        all - a parcel lying inside a hole is OUTSIDE the zone.
+        """
+        holed = {"type": "Polygon", "coordinates": [
+            _square(0, 0, 1000)["coordinates"][0],
+            _square(200, 200, 100)["coordinates"][0]]}
+        token = spatial.relate(_layer(_square(600, 600, 20)), _layer(holed))
+        self.assertEqual(token["spatial_relation"], spatial.RELATION_INSIDE)
+        self.assertEqual(token["spatial_basis"], spatial.BASIS_DETERMINISTIC)
+        self.assertEqual(token["provenance"]["layer_hole_count"], 1)
+
+    def test_multipart_geometry_is_no_longer_beyond_competence(self):
+        """SUPERSEDED DELIBERATELY, BY MEASUREMENT (CLAUDE-TORONTO-LIVE-01).
+
+        The first live run refused three of ten authority layers around the
+        subject - the height overlay among them - and told the reader they "could
+        not be determined". The City's polygons were fine; this engine declined
+        them. Reporting an engine limit as a data ambiguity is worse than either
+        problem alone, because it sends a reader looking for evidence that
+        already exists.
+
+        Containment against a union is not a question about intent: a subject is
+        inside when it lies inside some part, and outside when it lies outside
+        every part. What is still refused is what is genuinely undecidable -
+        invalid rings, CRS mismatch, boundary proximity, and geometry that
+        disagrees with itself.
+        """
         multi = {"type": "MultiPolygon", "coordinates": [
             _square(0, 0, 10)["coordinates"], _square(50, 50, 10)["coordinates"]]}
-        self._ambiguous(_layer(_square(1, 1, 2)), _layer(multi),
-                        spatial.REASON_MULTIPART)
+        token = spatial.relate(_layer(_square(1, 1, 2)), _layer(multi))
+        self.assertEqual(token["spatial_relation"], spatial.RELATION_INSIDE)
+        self.assertEqual(token["provenance"]["layer_part_count"], 2)
+
+        between = spatial.relate(_layer(_square(30, 30, 2)), _layer(multi))
+        self.assertEqual(between["spatial_relation"], spatial.RELATION_OUTSIDE,
+                         "the gap between two parts is not in the union")
 
     def test_a_vertex_on_the_boundary_is_too_close_to_call(self):
         """Two layers digitised at different epochs routinely 'touch'."""
