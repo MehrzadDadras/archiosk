@@ -1,5 +1,153 @@
 # Continuation checkpoint
 
+## 2026-09-12 — live Toronto readers at `8630a53`; 35 Taber Gate-01 RUN, address only in
+
+Appended above the entries below, none of which is altered.
+
+### Shipped
+
+`8630a53` — **the live official readers, and the first real Gate-01 run.** Gate
+**8,018 passed / 3 skipped / 4,212 subtests / 0 failed / 10:27**, parallel
+(`-n 8 --dist loadfile`), `PYTEST_EXIT=0` read from the log's own exit line.
+Tier 0 first: **1,089 passed / 865 subtests / 23.6s**.
+
+The previous entry recorded 35 Taber as "blocked on LIVE READERS only". That
+blocker is cleared. `planning_authority.acquire` now has a real `fetcher` and
+`go_pdz_lifecycle.resolve_identity` a real `resolver`, both reading the City of
+Toronto's own ArcGIS services.
+
+### THE 35 TABER GATE-01 RESULT — address only in
+
+    address    1 official address point, ADDRESS_POINT_ID 9655872, "35 Taber Rd"
+    parcel     1 property boundary, PARCELID 5229145, plan 07358, 2,302.79 sq.m
+    zoning     E 1.0  |  By-law 569-2013, Chapter 60, Section 60.20
+    spatial    INSIDE / DETERMINISTIC_GIS  (computed here, not read off the City)
+    overlays   10 of 10 checked, 10 absences established, 6 on OUTSIDE tokens
+    exception  ZN_EXCPTN = 'N'  — none flagged
+    validation valid, promotable, 0 errors, 0 warnings across VR-01..VR-20
+    status     UNRESOLVED, on one MATERIAL issue that is real
+
+**The geometry corroborates itself.** The parcel ring's Web-Mercator area,
+de-scaled at latitude 43.72, gives 2,307 sq.m against the City's stated
+2,302.79 — 0.2%. Two independent quantities from the same record agreeing.
+
+### THE LAYER NAME IS THE CONTRACT, NOT THE LAYER NUMBER
+
+The single most expensive discovery, and the reason `verify_layer` exists.
+`Zoning Property Summary` (cot_geospatial11 layer 18) sounds exactly like the
+authoritative zoning coverage and is not: 1,999 rows with zero-area geometry, and
+a one-kilometre box drawn around the Etobicoke site returns an address downtown.
+The real coverage is layer 3, `Zoning Area`. A layer id is a POSITION in a shared
+map service, not an identifier for a dataset, so every query now asks the service
+what the layer is CALLED and refuses a drifted binding.
+
+Also measured rather than assumed: `MapServer/3` honours `returnGeometry=true`
+by returning an EMPTY geometry object while reporting success. Geometry comes
+from the FeatureServer. A MapServer polygon query yields a feature that looks
+fine and carries nothing to compute on.
+
+### THE ENGINE WAS WIDENED TWICE, BOTH TIMES BY MEASUREMENT — `@1` to `@3`
+
+`@1` refused any polygon with a hole, and a test asserted that refusal. The first
+real subject retired it: the City's authoritative zoning polygon governing this
+parcel is ONE exterior ring of 389 vertices with FIVE holes, the nearest about
+nine metres from the parcel. Refusing that refuses the ordinary municipal case.
+
+`@2` still refused multipart, and the first live run then declined three of ten
+authority layers — the height overlay among them — and reported to the reader
+that they "could not be determined". **That was false.** The City's polygons were
+fine; THIS ENGINE had declined. Mislabelling an engine limit as a data ambiguity
+is worse than either fault alone, because it sends a reader looking for evidence
+that already exists. After `@3`: zero undecided across all ten layers.
+
+NEITHER WIDENING RELAXED THE STANDARD. The even-odd rule and inside-some-part are
+exact arithmetic, and they buy the case `@1` could not distinguish at all — **a
+parcel lying inside a hole is OUTSIDE the zone**. Still refused: invalid rings
+(now including a malformed hole or a dropped part, either of which would silently
+turn an OUTSIDE into an INSIDE), CRS mismatch — never silently reprojected —
+unsupported CRS, boundary proximity, conflicting official geometry, several
+parcels, non-vector source, geometry that disagrees with its own edges.
+
+### SHAPELY: NOT REQUIRED, AND NOW THAT IS MEASURED RATHER THAN PREFERRED
+
+Section 6 asked for this only if a concrete topology case demanded it. One did —
+and it demanded holes and multipart, roughly sixty lines and no dependency, not
+Shapely. Shapely would add validity repair, buffering and true boolean overlay;
+no measured case has needed any of them. `ENGINE` remains the swap point.
+
+### TWO TESTS SUPERSEDED DELIBERATELY
+
+`test_holes_are_beyond_competence` and `test_multipart_geometry_is_beyond_competence`
+defended declared incompetence that measurement retired. Each is replaced by an
+assertion of the new competence and carries why it changed. This is the
+`CLAUDE.md` rule in practice: a test that pins behaviour we intend to supersede
+is a suspect, not a witness — and no safety refusal was removed to satisfy it.
+
+### THE MATERIAL GAP IS REAL, NOT A GAP IN THE READING
+
+All **504 layers across all 24** public City ArcGIS services were enumerated,
+plus the open data catalogue. **No Official Plan land use designation is
+published in machine-readable form** — it exists as PDF map sheets, which cannot
+ground a deterministic spatial answer. For an employment-zoned parcel the
+designation governs conversion policy and permitted uses, so it is decisive
+rather than incidental. Recorded MATERIAL, driving `result_status` to UNRESOLVED
+instead of being quietly omitted.
+
+### ABSENCE IS PROVEN TWICE OR NOT CLAIMED
+
+An overlay that does not apply is half of a planning envelope, and the half a
+summary silently drops. But an empty response is also what a broken query
+returns, so an absence requires the City's own point query to find nothing AND
+every polygon of that layer within 2 km to be independently computed OUTSIDE,
+with one witness geometry retained so the statement carries a deterministic token
+rather than asserting absence against nothing.
+
+### TWO GATE FAILURES THAT WERE MINE, AND WERE ENVIRONMENTAL
+
+Worth keeping because both looked catastrophic and neither was a regression. The
+remote had advanced three commits from the concurrent Operational Frontier
+session, so the combined tree needed its own gate; I built a clean worktree to
+avoid disturbing that session's uncommitted files, and a fresh worktree does not
+carry the deliberately-untracked half of this repository's configuration.
+
+- **2,418 failed** — `RuntimeError: Session backend did not open a session`. No
+  `SECRET_KEY`: `.env` is git-ignored by design.
+- **5 failed** — `static/nipigon/` is git-ignored (`.gitignore:48`), zero tracked
+  files, 35 generated assets present only in the primary checkout. With the
+  assets copied in, that file runs 21/21.
+
+Merged tree, both supplied: **8,024 passed + those 5 = 8,029, zero real failures.**
+The transient `.env` copy was deleted with the worktree.
+
+### A CONCURRENT SESSION'S WORKING TREE WAS NOT DISTURBED
+
+The primary checkout holds another session's uncommitted work. Rebasing it would
+have overwritten those files, so the commit was cherry-picked into a separate
+worktree and pushed from there. The primary checkout's `main` is left at `bc9e6ce`
+— identical in content to the pushed `8630a53`, and self-healing: a later
+`git pull --rebase` drops an already-applied patch.
+
+### Current frontier
+
+- **Application** — `8630a53`. GO-PDZ is reachable from an address for Toronto.
+  `toronto_gate01.run(address, reader=...)` is the entry point.
+- **What Gate 01 cannot yet answer** — the Official Plan land use designation, for
+  the measured reason above. That is a source-availability problem, not an
+  implementation gap, and no amount of further reading of gis.toronto.ca fixes it.
+- **Stops before owner program.** Gate 01 ends at the legal envelope; `assemble()`
+  has no parameter through which a program, count, massing or option could arrive.
+
+### DO NOT TRAIN AGAINST YET
+
+`toronto_planning_source` / `toronto_gate01` / `deterministic_spatial@3`. The
+capability is implemented, tested and gated, but it has been exercised against
+exactly ONE address. Its two competence widenings were both forced by the first
+real subject, which is direct evidence that the second and third addresses will
+find more. The Codex cadence trains on proven capability, and one specimen is not
+yet proof. The previous stable capability set is unchanged.
+
+---
+
 ## 2026-09-12 — GO-PDZ authority + deterministic GIS live at `a564e2f`; 35 Taber blocked on LIVE READERS only
 
 Appended above the entries below, none of which is altered.
