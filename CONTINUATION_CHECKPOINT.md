@@ -1,5 +1,69 @@
 # Continuation checkpoint
 
+## 2026-09-11 (charter run 4) — next-axis reconnaissance: no cross-discipline axis remains; an OBC Code Matrix appears
+
+Appended above the entries below, none of which is altered. **No code change in
+this run.** Live frontier remains `21948a8`.
+
+### Axes measured, and why each fails as a CROSS-DISCIPLINE discrepancy path
+
+| axis | finding |
+|---|---|
+| datums | **DONE** - 6 corroborations, 0 discrepancies. The drawings agree. |
+| steel members | Structure states 47 sizes and carries object MARKS (`G1`-`G8`, `C1`-`C3`). Architecture carries **no marks**, states only 5 sizes, and **DEFERS 13 times** (`BEAM REF. TO STRUC.`). No grounded counterpart identity -> cannot compare per section 4. |
+| grid | retired on earlier measurement |
+| doors / rooms / walls / equipment | `WALL SCHEDULE` and `DOOR, WINDOW AND ROOM SCHEDULE` are declared in the index, but they are **architectural-only**; Structure never names a door or a room. |
+| slab/wall thickness, rebar, assemblies | zero occurrences on either side |
+
+**THE SET IS COORDINATED BY DEFERRAL, NOT BY DUPLICATION.** Where architecture
+could contradict structure it writes "REF. TO STRUC." instead of stating a value.
+That is why no discrepancy exists to find: the drawings are built not to have one.
+
+### Corpora checked
+
+| corpus | result |
+|---|---|
+| Nipigon | A + S only. The index DECLARES mechanical and electrical sheets that are **not in the set**. |
+| ALSTEP | 4 disciplines (A/E/M/S) but **15 of 16 sheets are scanned images with zero text**; the one "native" sheet (M2_OF_3) is embedded OCR garbage (`;774P|`, `fyx`) and yields none of 11 candidate families. |
+| north-bayview | RFP/procurement corpus, not a drawing set |
+| Nipigon Ramp | one sheet |
+
+**No multi-discipline drawing corpus on this machine supports a deterministic
+cross-discipline comparison.**
+
+### WHAT DID APPEAR — an OBC Code Matrix on the Nipigon cover sheet
+
+Native, exact, numbered rows each carrying an explicit **Code clause citation**
+and a stated value:
+
+    2  Major Occupancy(s)   3.1.2.1.[1] 9.10.2   D-OFFICE BUILDING & F3 STORAGE GARAGE
+    3  Building Area (m2)   1.4.1.2              215.27 / 215.27
+    9  Sprinkler System     3.2.2.20-83 9.10.8.2 Proposed entire building
+    10 Standpipe required   3.2.9                Yes / No
+    11 Fire Alarm required  3.2.4.1-d 9.10.7.2   Yes / No
+    17 Barrier-Free         3.8 / 9.5.2          (NOT REQUIRED)
+
+Grounded identity (numbered row + Code clause), stated value, deterministic
+comparability - and it is **SMA territory**: sprinkler, standpipe, fire alarm,
+occupancy, construction type. It is NOT cross-discipline; it is a declaration
+against an EXTERNAL authority.
+
+### Current frontier
+
+**Claude application frontier:** `21948a8`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED.
+
+### Operational frontier clarity (section 10)
+
+- `op.sheet-identity-reference` — IMPLEMENTED / REACHABLE / DEPLOYED / PROVEN
+- `op.detail-callout-reference` — IMPLEMENTED / REACHABLE / DEPLOYED / PROVEN
+- `op.datum-corroboration` — IMPLEMENTED / **UNREACHABLE** (no lifecycle caller, no route) / DEPLOYED / PROVEN
+- `op.relationship-sachet` — IMPLEMENTED / REACHABLE / DEPLOYED / PROVEN across two Sources; its producer is unwired
+- `op.cross-discipline-micro-context` — **DOES NOT EXIST**
+
+None are TRAINABLE.
+
+
 ## 2026-09-11 (charter run 3) — FIRST CROSS-DISCIPLINE CORROBORATIONS live at `21948a8`
 
 Appended above the entries below, none of which is altered.
