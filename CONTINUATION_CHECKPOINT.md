@@ -1,5 +1,73 @@
 # Continuation checkpoint
 
+## 2026-09-12 — GO-PDZ address-only contract live at `f115025`; 35 Taber NOT yet eligible
+
+Appended above the entries below, none of which is altered.
+
+### Shipped and deployed
+
+`f115025` — **GO-PDZ-1.0-ONEPAGE contract + VR-01..VR-20 semantic validator.**
+Gate: **7,909 passed, 3 skipped, 4,104 subtests, 0 failed, 11:11** (back at the
+~11 min baseline, confirming the `registers_for` cost fix held). Live
+`f115025`; `/health` 200 internal and public; live golden fixture validates
+`valid=True errors=0 warnings=0`; 20 rules declared on the host.
+
+**DEPLOYED BUT INERT.** GO-PDZ has no route, no lifecycle caller and no
+consumer. It ships to keep production identical to `main`, not because anything
+uses it yet. Recorded as **IMPLEMENTED / DEPLOYED / UNREACHABLE**, the same
+honest state `op.datum-corroboration` carried before it was wired.
+
+### What the contract enforces
+
+Three layers, never collapsed: **STRUCTURE VALID != SEMANTICALLY VALID !=
+GOVERNED AUTHORITY.** Every result carries an `authority_note` saying so.
+Fail-closed: any ERROR blocks promotion; a WARNING leaves the result valid and
+visible.
+
+Two rules it exists for, both observed rather than imagined:
+
+- **VR-08 / VR-20** — an unreadable site-specific exception must not fall back to
+  the parent zone. VR-20 is the substantive half: declaring UNRESOLVED is not
+  enough if the document then states the parent height as established fact.
+- **VR-09 / VR-10** — an assertive spatial predicate requires deterministic
+  geometry. GO consumes a spatial token; GO never mints one.
+
+Golden fixture `100 Example Avenue`: zero errors. Ten negative fixtures, each
+tripping exactly ONE rule, all structurally valid.
+
+### DERIVATION, recorded rather than implied
+
+The authorizing prompt referred to "the supplied schema" and a
+`100 Example Avenue` fixture. **NEITHER WAS ATTACHED.** Both are derived from
+that prompt's own stated requirements. Rule ids live in ONE table
+(`go_pdz_validator.RULES`) so re-keying to a canonical specification is a single
+edit, not a rewrite.
+
+VR-05 was tightened during the build: it fires even when an authority IS cited,
+because attaching a citation to an inference does not convert it into a report
+of what the authority said.
+
+### 35 TABER IS NOT YET ELIGIBLE — two blockers, both Product Owner decisions
+
+1. **Authority acquisition.** The contract requires `AUTHORITY_SAYS` to cite
+   retrievable authorities with status and effective date. ARCHIOSK holds none;
+   `governance/specified-unbuilt/external-intelligence-airlock.md` is NOT
+   AUTHORIZED beyond Missions 01/02. Same boundary the OBC lane hit.
+2. **No deterministic spatial layer.** VR-09 requires `DETERMINISTIC_GIS` for any
+   assertive spatial predicate. No such interface exists.
+
+A blind run today would produce a document that correctly FAILS its own
+validator - honest, but proving nothing about GO.
+
+**ORACLE REMAINS SEALED.** No file under `224101 35 Taber Rd` was opened,
+indexed, OCR'd or hashed.
+
+### Current frontier
+
+**Claude application frontier:** `f115025`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED.
+
+
 ## 2026-09-12 — datum corroboration REACHABLE, live at `b68624c`; OBC lane stops at the authority boundary
 
 Appended above the entries below, none of which is altered.
