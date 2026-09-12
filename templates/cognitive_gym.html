@@ -18,7 +18,7 @@
   <p class="gym-provenance">{{ gym.source }} · As of {{ gym.generated_at }} · Read only</p>
   <details class="gym-method"><summary>Coverage, freshness and movement rules</summary>
     <p>{{ gym.coverage }}</p><p>→ Gathering evidence means recorded development without a governed promotion. ↑ / ↘ mark proposed challenge changes, not achieved capability. ↗ Transfer proposed is not transfer begun. ! marks a recorded stop or instrument issue. — Untested means no assessed capability status.</p>
-    <p>Local evaluator scans rebuild on every refresh. Published snapshots update when the evaluator projection is rebuilt and published; this page shows their capture time. File timestamps are labelled when an event timestamp is missing. A seal reference identifies evidence; this view does not requalify it.</p>
+    <p>Local evaluator scans rebuild on every refresh. Published snapshots update only when rebuilt and published. For mapped projections, “As of” is the latest recorded evidence time; missing timestamps remain unresolved. Older snapshots retain their original capture time and show a mapping warning. A seal reference identifies evidence; this view does not requalify it.</p>
   </details>
   {% if gym.issues %}<aside class="gym-issues"><strong>Evidence gaps</strong>{% for issue in gym.issues %}<p>{{ issue }}</p>{% endfor %}</aside>{% endif %}
   <section class="gym-ticker" aria-label="Recent activity"><h2>Recent activity</h2><div>{% for item in gym.ticker %}<span><b>{{ item.code }}</b> {{ item.text }}</span>{% else %}<span>No recorded activity</span>{% endfor %}</div></section>

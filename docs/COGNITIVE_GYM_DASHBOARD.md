@@ -4,6 +4,14 @@ Route: `/admin/cognitive-gym`, linked in the existing Developer Mode menu.
 Both the existing admin role and enabled Developer Mode are required, including
 for direct URL access. There are no execution or mutation endpoints.
 
+The projection now also covers `COGNITIVE-GYM-*` autonomous/convergence blocks
+and explicitly marked blocks outside those prefixes. See
+[record mapping](CONVERGENCE_RECORD_MAPPING.md) for exact discovery, explicit
+attribution, unresolved fields and the health-UI eligibility gate, and
+[plugin boundary](COGNITIVE_GYM_PLUGIN_BOUNDARY.md) for packaging ownership.
+Unknown capability never defaults to C01; unknown actor is not inferred from
+phase names. The existing board remains a development surface, not a Flight Deck.
+
 `services/cognitive_gym.py` rebuilds the board from the accepted capability
 catalog and evaluator summaries on each request when the evaluator is mounted.
 Set application config `COGNITIVE_GYM_EVALUATOR_ROOT` for a different mount.
@@ -35,6 +43,10 @@ no application code edit or restart is needed. The UI labels snapshot capture
 time so reload is never mistaken for a new evaluator synchronization. No timer
 or provider-triggering hook is introduced. Empty-source export fails rather
 than replacing a valid snapshot. Mounted-source refresh is automatic per GET.
+
+For deterministic exports, `generated_at` is the latest recorded evidence time
+(or UNRESOLVED), not scan wall time. Export stdout separately reports snapshot
+capture time and byte hash. Preserve that receipt when manually publishing.
 
 Counts are factual counts within recognized records, not intelligence scores.
 DEVELOPMENT ONLY is an activity label, not a governed capability status. Changes

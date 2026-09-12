@@ -5,8 +5,10 @@ Publish output to instance/cognitive_gym/projection.json on hosts without access
 to the evaluator. Re-run after newly completed records; no code edits needed.
 """
 import argparse
+import hashlib
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -25,6 +27,12 @@ if __name__ == "__main__":
         parser.error("No sessions found; refusing to publish an empty replacement")
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = json.dumps(data, ensure_ascii=False, sort_keys=True, indent=2)
+    temporary.write_text(payload, encoding="utf-8")
     temporary.replace(output)
-    print(json.dumps({"sessions": len(data["sessions"]), "events": len(data["events"]), "issues": data["issues"], "generated_at": data["generated_at"]}))
+    print(json.dumps({"sessions": len(data["sessions"]), "events": len(data["events"]),
+                      "issues": data["issues"], "evidence_timestamp": data["generated_at"],
+                      "snapshot_captured_at": datetime.now(timezone.utc).isoformat(),
+                      "snapshot_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+                      "normalized_records": len(data["normalized"]["records"]),
+                      "health_eligible": data["normalized"]["health_eligible"]}))

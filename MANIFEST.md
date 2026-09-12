@@ -1,5 +1,13 @@
 # MANIFEST
 
+Operational convergence foundation: `services/convergence_projection.py` adapts
+legacy/autonomous/convergence evidence without mutating history; it is consumed
+by the existing Gym scanner/exporter. `tests/test_convergence_projection.py`
+checks attribution, invalid output, preservation and deterministic projection.
+`docs/CONVERGENCE_RECORD_MAPPING.md` records schema, coverage and the UI gate;
+`docs/COGNITIVE_GYM_PLUGIN_BOUNDARY.md` records the first-party plugin candidate
+boundary and passive cleanup classification. No Flight Deck UI is registered.
+
 Cognitive Gym visibility: `services/cognitive_gym.py` projects evaluator summaries;
 `templates/cognitive_gym.html` and `static/css/cognitive_gym.css` present the
 read-only Developer Mode board at `/admin/cognitive-gym` (routes/portal.py).

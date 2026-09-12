@@ -9,8 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
+
+from services.convergence_projection import attribution, discover, linked_actor, project
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "governance/cognitive-gym/CAPABILITY-CATALOG.md"
@@ -69,10 +70,8 @@ class Reader:
         for key in ("timestamp", "timestamp_utc", "created_utc", "reviewed_utc"):
             if isinstance(data.get(key), str):
                 return data[key], "recorded"
-        try:
-            return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(), "file time (fallback)"
-        except OSError:
-            return "", "not recorded"
+        # Copying retained evidence must not change its chronology or projection.
+        return "", "not recorded"
 
 
 def _parse(raw):
@@ -88,12 +87,10 @@ def scan(root):
     sessions, events = [], []
     if not reader.root.is_dir():
         reader.issues.append("Evaluator source unavailable; no evidence can be inferred.")
-    for folder in sorted(reader.root.glob("GO-COGNITIVE-GYM*")):
+    for folder in discover(reader.root):
         if not folder.is_dir() or folder.is_symlink():
             continue
-        match = re.search(r"-C(\d{2})-", folder.name)
-        # GOtex instrument qualification supports C01's teaching seam, not GO performance.
-        code = "C" + match[1] if match else "C01"
+        code, _ = attribution("capability", [], folder.name)
         report = reader.get(folder / "REPORT.md", text=True)
         records = folder / "records"
         examiner = folder / "examiner"
@@ -116,6 +113,8 @@ def scan(root):
                    "status": clean(stopped.get("status", preflight.get("status", "See evidence")))}
         expected = reader.get(examiner / "expected.json") if not qualified and "C01" in folder.name else {}
         summary = reader.get(records / "development-record.json")
+        code, _ = attribution("capability", [summary], folder.name)
+        session["code"] = code
         early = reader.get(examiner / "development-record.json")
         cycle = reader.get(examiner / "cycle-results.json")
         decision = reader.get(records / "next-developmental-move.json") or reader.get(examiner / "next-developmental-move.json")
@@ -154,8 +153,14 @@ def scan(root):
             if not isinstance(data.get("raw"), str):
                 continue
             phase = data.get("phase", path.stem.replace("-result", ""))
-            actor = "GOTEX" if phase == "gotex" else ("GO TEACHING" if phase in ("cheat", "teach") else "GO")
             material = reader.get(records / (phase + "-material.json"))
+            observation = reader.get(records / (phase + "-observation.json"))
+            event_code, _ = attribution("capability", [data, material, observation], folder.name)
+            links = linked_actor(data, intervention, cycle.get("audit", []))
+            actor, _ = attribution("actor", [data, material, observation] + links)
+            actor = "GOTEX" if actor == "GOtex" else actor
+            if actor == "GO" and any(d.get("actor") in ("GO_CHEAT_SHEET", "GO TEACHING", "GO_TEACHING") for d in [data] + links):
+                actor = "GO TEACHING"
             state = reader.get(folder / "material" / phase / "state.json")
             legacy = reader.get(examiner / "policy.json") if not material else {}
             if not state and isinstance(legacy.get("state"), dict) and actor == "GO":
@@ -171,7 +176,9 @@ def scan(root):
             parsed = data.get("parsed") or data.get("parsed_action") or _parse(data["raw"])
             selected = parsed.get("selected")
             annotation = data.get("observable_annotation", "")
-            aligned = selected == [target] if target and isinstance(selected, list) else (True if annotation == "TARGET-ALIGNED BEHAVIOR" else None)
+            aligned = data.get("target_alignment", data.get("target_aligned"))
+            if aligned is None:
+                aligned = selected == [target] if target and isinstance(selected, list) else (True if annotation == "TARGET-ALIGNED BEHAVIOR" else None)
             dispatch_path = records / (phase + "-dispatch.json")
             dispatch = reader.get(dispatch_path)
             if not dispatch:
@@ -182,7 +189,9 @@ def scan(root):
             if validity is None and cycle.get("audit"):
                 audit = next((a for a in cycle["audit"] if a.get("phase") == phase), {})
                 validity = True if audit.get("exact_wire") and audit.get("raw_preserved") else None
-            event = {"id": f"{folder.name}/{phase}", "session": folder.name, "code": code,
+            if validity is False:
+                aligned = None  # Invalid/compound output is never salvaged into alignment.
+            event = {"id": f"{folder.name}/{phase}", "session": folder.name, "code": event_code,
                      "title": "GO Exercise " + phase[2:] if re.fullmatch(r"go\d+", phase) else actor,
                      "actor": actor, "kind": "DEVELOPMENT OBSERVATION", "mode": "DEVELOPMENT",
                      "phase": phase, "time": event_time, "time_basis": event_basis,
@@ -211,7 +220,8 @@ def scan(root):
     events.sort(key=lambda e: (e["time"], e["id"]))
     bars = []
     for item in catalog():
-        related = [s for s in sessions if s["code"] == item["code"]]
+        related = [s for s in sessions if s["code"] == item["code"] or any(
+            e["code"] == item["code"] for e in s["events"])]
         observed = [e for e in events if e["code"] == item["code"]]
         developments = [s for s in related if s["events"]]
         last = developments[-1] if developments else (related[-1] if related else None)
@@ -245,7 +255,10 @@ def scan(root):
     ticker = [{"code": e["code"], "text": e["title"] + " · " + ("target aligned" if e["aligned"] is True else "response recorded"), "time": e["time"]} for e in events]
     ticker += [{"code": s["code"], "text": s["kind"] + " · " + (s["next_move"] if s["next_move"] != "Not recorded" else s["status"]), "time": s["time"]} for s in sessions]
     ticker.sort(key=lambda e: e["time"], reverse=True)
-    return {"schema": SCHEMA, "generated_at": datetime.now(timezone.utc).isoformat(),
+    normalized = project(reader, clean)
+    return {"schema": SCHEMA, "generated_at": max((r["timestamp"] for r in normalized["records"]
+                                                    if r["timestamp"] != "UNRESOLVED"), default="UNRESOLVED"),
+            "normalized": normalized,
             "source": "Evaluator scan", "bars": bars, "focus": focus["code"] if focus else None,
             "sessions": sessions, "events": events, "ticker": ticker[:16], "issues": reader.issues,
             "source_hashes": reader.refs,
@@ -270,6 +283,8 @@ def dashboard(config, instance_path):
             {"code", "name", "status", "events", "sessions", "next_move"} <= b.keys() for b in data["bars"])
             and isinstance(data.get("metrics"), dict) and isinstance(data.get("ticker"), list)):
         data["source"] = "Published evaluator projection (snapshot)"
+        if "normalized" not in data:
+            data.setdefault("issues", []).append("Legacy snapshot lacks convergence mapping; health interpretation is unavailable.")
         return data
     data = scan(root)
     data["issues"] += reader.issues
