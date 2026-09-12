@@ -1,5 +1,145 @@
 # Continuation checkpoint
 
+## 2026-09-12 — GO-PDZ authority + deterministic GIS live at `a564e2f`; 35 Taber blocked on LIVE READERS only
+
+Appended above the entries below, none of which is altered.
+
+### Shipped and deployed
+
+`a564e2f` — **planning authority acquisition + deterministic spatial engine +
+GO-PDZ lifecycle.** Gate **7,954 passed / 3 skipped / 4,164 subtests / 0 failed**.
+Live: `/health` 200 internal and public, both services active, `NRestarts=0`, and
+verified ON THE HOST:
+
+    allowlist : toronto.ca=OFFICIAL  mcmillan.ca=SECONDARY  realtor.ca=REJECTED
+    spatial   : INSIDE / DETERMINISTIC_GIS / archiosk-exact-ring@1
+    refusal   : AMBIGUOUS / crs_mismatch
+
+### The three seams
+
+- `planning_authority.py` — OFFICIAL may ground `AUTHORITY_SAYS`; **SECONDARY
+  never can** (a law-firm bulletin about PPS 2024 is useful and is not the PPS);
+  REJECTED is not fetched at all. `source_class` is COMPUTED, not caller-supplied.
+  A record with neither retained bytes nor a stable pointer is a paraphrase and
+  is refused. `ADOPTED_NOT_IN_FORCE` is its own state (OPA 804).
+- `deterministic_spatial.py` — exact within declared competence, **AMBIGUOUS with
+  a NAMED reason** outside it (missing, invalid, crs_mismatch — never silently
+  reprojected — unsupported crs, holes, multipart, near-boundary, conflicting,
+  multiple parcels, non-vector). Full provenance on every token.
+- `go_pdz_lifecycle.py` — the reachable path. Non-official records EXCLUDED on
+  the way in; spatial tokens COPIED verbatim so no code path can write `INSIDE`;
+  **no parameter can carry an owner program** (asserted by signature inspection).
+
+### WATCHDOG LESSON, now confirmed twice
+
+A wall-clock watchdog cannot distinguish a slow gate from a SUSPENDED MACHINE.
+Gate 10 showed 1:06:12 wall-clock and was healthy throughout — 435% aggregate
+INSTANTANEOUS CPU across 8 active workers with the log growing. My earlier
+wall-clock alarm on gate 8 was wrong for the same reason, and cumulative CPU
+(~2%) misled in exactly the way `CLAUDE.md` already warns about.
+
+**Use log GROWTH as the stall signal, not elapsed time.** Growth separates
+stalled from slow; elapsed time does not.
+
+### 35 TABER: NOT ELIGIBLE — and the gap is now READERS, not machinery
+
+Met: authority acquisition reachable · spatial interface deterministic ·
+lifecycle reachable · validator passes · oracle sealed.
+
+**Missing: live readers.** Both seams are injectable by design (which is what
+makes every test hermetic) and neither has a live implementation. A run today
+would resolve no parcel, admit no authority, and produce a document that
+CORRECTLY FAILS its own validator.
+
+Two Product Owner decisions remain:
+
+1. **Authorization for live retrieval** against the official allowlist — a new
+   egress class under the charter's section 14, so not taken unilaterally.
+2. **A parcel-geometry source for Toronto** — an official ArcGIS / Open Data
+   endpoint satisfies both the allowlist and section 7's machine-readable
+   preference; the classifier already flags such endpoints.
+
+Optional: **Shapely** PASSES `tools/dependency_fit.py` and would extend spatial
+competence to holes and multipart geometry, which the engine currently abstains
+on. `ENGINE` is the swap point — one module, no callers.
+
+**ORACLE REMAINS SEALED.** No file under `224101 35 Taber Rd` has been opened,
+indexed, OCR'd or hashed at any point.
+
+### Current frontier
+
+**Claude application frontier:** `a564e2f`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED.
+
+
+## 2026-09-12 — GO-PDZ address-only contract live at `f115025`; 35 Taber NOT yet eligible
+
+Appended above the entries below, none of which is altered.
+
+### Shipped and deployed
+
+`f115025` — **GO-PDZ-1.0-ONEPAGE contract + VR-01..VR-20 semantic validator.**
+Gate: **7,909 passed, 3 skipped, 4,104 subtests, 0 failed, 11:11** (back at the
+~11 min baseline, confirming the `registers_for` cost fix held). Live
+`f115025`; `/health` 200 internal and public; live golden fixture validates
+`valid=True errors=0 warnings=0`; 20 rules declared on the host.
+
+**DEPLOYED BUT INERT.** GO-PDZ has no route, no lifecycle caller and no
+consumer. It ships to keep production identical to `main`, not because anything
+uses it yet. Recorded as **IMPLEMENTED / DEPLOYED / UNREACHABLE**, the same
+honest state `op.datum-corroboration` carried before it was wired.
+
+### What the contract enforces
+
+Three layers, never collapsed: **STRUCTURE VALID != SEMANTICALLY VALID !=
+GOVERNED AUTHORITY.** Every result carries an `authority_note` saying so.
+Fail-closed: any ERROR blocks promotion; a WARNING leaves the result valid and
+visible.
+
+Two rules it exists for, both observed rather than imagined:
+
+- **VR-08 / VR-20** — an unreadable site-specific exception must not fall back to
+  the parent zone. VR-20 is the substantive half: declaring UNRESOLVED is not
+  enough if the document then states the parent height as established fact.
+- **VR-09 / VR-10** — an assertive spatial predicate requires deterministic
+  geometry. GO consumes a spatial token; GO never mints one.
+
+Golden fixture `100 Example Avenue`: zero errors. Ten negative fixtures, each
+tripping exactly ONE rule, all structurally valid.
+
+### DERIVATION, recorded rather than implied
+
+The authorizing prompt referred to "the supplied schema" and a
+`100 Example Avenue` fixture. **NEITHER WAS ATTACHED.** Both are derived from
+that prompt's own stated requirements. Rule ids live in ONE table
+(`go_pdz_validator.RULES`) so re-keying to a canonical specification is a single
+edit, not a rewrite.
+
+VR-05 was tightened during the build: it fires even when an authority IS cited,
+because attaching a citation to an inference does not convert it into a report
+of what the authority said.
+
+### 35 TABER IS NOT YET ELIGIBLE — two blockers, both Product Owner decisions
+
+1. **Authority acquisition.** The contract requires `AUTHORITY_SAYS` to cite
+   retrievable authorities with status and effective date. ARCHIOSK holds none;
+   `governance/specified-unbuilt/external-intelligence-airlock.md` is NOT
+   AUTHORIZED beyond Missions 01/02. Same boundary the OBC lane hit.
+2. **No deterministic spatial layer.** VR-09 requires `DETERMINISTIC_GIS` for any
+   assertive spatial predicate. No such interface exists.
+
+A blind run today would produce a document that correctly FAILS its own
+validator - honest, but proving nothing about GO.
+
+**ORACLE REMAINS SEALED.** No file under `224101 35 Taber Rd` was opened,
+indexed, OCR'd or hashed.
+
+### Current frontier
+
+**Claude application frontier:** `f115025`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED.
+
+
 ## 2026-09-12 — datum corroboration REACHABLE, live at `b68624c`; OBC lane stops at the authority boundary
 
 Appended above the entries below, none of which is altered.
