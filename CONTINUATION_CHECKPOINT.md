@@ -1,5 +1,78 @@
 # Continuation checkpoint
 
+## 2026-09-11 (charter run 3) — FIRST CROSS-DISCIPLINE CORROBORATIONS live at `21948a8`
+
+Appended above the entries below, none of which is altered.
+
+### Shipped, gated and deployed
+
+| SHA | capability | gate |
+|---|---|---|
+| `cff3259` | Sheet identity register wired | 7,757 / 3,944 |
+| `e9ff790` | Declared detail callout family | 7,792 / 3,957 |
+| `d306f4b` | PDF page orientation correction | 7,810 / 3,966 |
+| `c92e380` | Datum corroboration boundary | 7,837 / 3,988 |
+| `21948a8` | **Datum association correction** | **7,860 / 4,001** |
+
+Live `21948a8`; `/health` 200 internal and public; both services active;
+perception `NRestarts=0`.
+
+### THE FIRST CROSS-DISCIPLINE CORROBORATIONS
+
+Same corpus, same pipeline, association corrected: **0 → 6 corroborations**,
+1 unresolved, idempotent, 0 claims, 0 findings.
+
+    EXT. ST. FTG   186.96 m (A401/A402) == 186960 mm (RS501)
+    PARK. FTG      188.22 m             == 188220 mm
+    PARK. SLAB     188.62 m             == 188620 mm
+
+### TWO CORRECTIONS TO MY OWN DIAGNOSIS
+
+1. **"Architecture puts the datum name BELOW the bubble" — FALSE.** Measured in
+   all four directions on real evidence: both disciplines put it BESIDE; every
+   "below" candidate is OCR noise. I had misread a rendered crop.
+2. The real defect: values and names ALTERNATE along one band and the CORRECT
+   name's box OVERLAPS the value's, so a wholly-left-or-right test skipped it
+   and took the neighbour's label. `associate_page_datums` (mutual nearest with
+   claiming) measures **13/13** where the previous rule was 10/13.
+3. **One mis-read value corrupts its neighbour.** `186.67` read as `(486.67`
+   freed `ELEV. FTG` for `186.96` to steal. Unreadable digit-bearing tokens now
+   hold their slot. Structure 7/8 → 8/8, architecture 3/5 → 5/5.
+
+### SECTION 9 GATE: DISCREPANCY NOT EARNED — BECAUSE THERE IS NONE TO FIND
+
+A random mis-read does not repeat identically, so a datum read the same way from
+two independent places is fidelity-verified. Measured across 4 structural and 3
+architectural sheets:
+
+| | |
+|---|---|
+| repeat-verified architectural datums | **2** |
+| of those, AGREEING with structure | **2** |
+| of those, DISAGREEING | **0** |
+| architecture-only (no counterpart) | 0 |
+
+**There is no repeat-verified cross-discipline datum disagreement in this
+corpus. Architecture and Structure are coordinated on levels.** The apparent
+mismatch (`PARK SLAB` → 186960 on A402) is seen ONCE and is a mis-read; it is
+correctly excluded by the repetition test rather than reported as a conflict.
+
+The blocker is NOT a capability gap. **The milestone cannot be reached on this
+axis of this corpus because the condition does not exist**, and manufacturing
+one would violate the charter's own section 7.
+
+### Current frontier
+
+**Claude application frontier:** `21948a8`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED.
+
+### Deferred, registered, not blocking
+
+Fidelity-by-repetition is measured but NOT implemented as a capability; glyph
+clustering (feasible, too slow); late-arrival re-resolution; founding-PDF gap;
+49-page perception cost; OSD wrong on A403.
+
+
 ## 2026-09-11 (charter run 2) — corroboration boundary live at `c92e380`; Option 3 investigated
 
 Appended above the entries below, none of which is altered.
