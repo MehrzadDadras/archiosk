@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.parse
 import urllib.request
 from typing import Optional
@@ -55,7 +56,7 @@ from services import planning_authority as authority
 
 logger = logging.getLogger(__name__)
 
-SOURCE_VERSION = "toronto-planning-source@1"
+SOURCE_VERSION = "toronto-planning-source@2"
 ARCGIS_ROOT = "https://gis.toronto.ca/arcgis/rest/services"
 
 #: The City serves everything in Web Mercator. Every query below is issued in it
@@ -94,25 +95,67 @@ OVERLAY_LAYERS = (
     LAYER_MTSA,
 )
 
-#: The enacting instrument. Retrieved so the record holds bytes rather than a
-#: paraphrase - `may_satisfy_authority_says` requires exactly that.
-ZONING_BYLAW_URL = "https://www.toronto.ca/legdocs/bylaws/2013/law0569.pdf"
+#: Individually listed heritage properties. A POINT layer, so it is handled
+#: apart from the polygon overlays and reported WITHOUT a deterministic
+#: containment claim - see `heritage_register_near`.
+LAYER_HERITAGE_REGISTER = ("cot_geospatial11", 56, "Heritage Register")
+
+#: The enacting instrument, and the DEFAULT only. The City's zoning record names
+#: the by-law that actually governs each zone in `BYLAW_DOCLINK`, and for the
+#: second live subject that was `2021/law0266.pdf`, not this one. Citing the
+#: enacting by-law for a zone amended eight years later is a false citation that
+#: happens to look right, so `zoning_bylaw_url_for` prefers the City's own link.
+BYLAW_DOC_BASE = "https://www.toronto.ca/legdocs/bylaws/"
+ZONING_BYLAW_URL = BYLAW_DOC_BASE + "2013/law0569.pdf"
 ZONING_BYLAW_TITLE = "City of Toronto Zoning By-law 569-2013 (as enacted)"
+
+#: Where the by-law's own chapter and exception pages are published. Measured:
+#: the `/zoning/bylaw_amendments/ZBL_NewProvision/` path in the City's own
+#: attribute values 404s; `/zoning/` serves them.
+ZONING_CHAPTER_BASE = "https://www.toronto.ca/zoning/"
+
+#: The consolidated Official Plan. Section 4's fallback: the land use
+#: designation is published only as map schedules inside this document, so the
+#: document is retained as a real authority and the DESIGNATION stays
+#: undetermined. An authority you cannot compute against is still an authority.
+OFFICIAL_PLAN_URL = ("https://www.toronto.ca/city-government/planning-development/"
+                     "official-plan-guidelines/official-plan/")
+OFFICIAL_PLAN_CHAPTERS_URL = OFFICIAL_PLAN_URL + "chapters-1-5/"
+OFFICIAL_PLAN_TITLE = "City of Toronto Official Plan (consolidation)"
+
+#: The consolidation is republished at a new dated path each time it is
+#: consolidated, so the link is DISCOVERED from the City's own index page rather
+#: than pinned here. Pinning it would silently serve a superseded Plan the moment
+#: the City consolidated again - the version would still look retrieved, and
+#: would be wrong in the direction that matters.
+_CONSOLIDATION_LINK = re.compile(
+    r'href="(?P<url>[^"]+\.pdf)"[^>]*>(?P<label>[^<]{0,90})', re.IGNORECASE)
 
 
 class LayerIdentityError(RuntimeError):
     """The service no longer calls this layer what we bound to. Refuse."""
 
 
-def live_reader(*, timeout=45, max_bytes=32 * 1024 * 1024):
+def live_reader(*, timeout=45, max_bytes=32 * 1024 * 1024, attested_by=None):
     """Build the real HTTP reader. The ONLY place this module touches a network.
 
     GET only, official hosts only (`planning_authority.classify_source` decides,
     so the allowlist has one definition rather than two), and capped. It returns
     bytes, which is what `planning_authority.acquire` hashes for provenance.
+
+    `attested_by` names an official catalogue that publishes on a hosting
+    platform, and it grants READ ACCESS to that platform - nothing more.
+    Mississauga serves its zoning and Official Plan schedules from
+    `services6.arcgis.com`, so without this the second municipality could not be
+    read at all; with it, ACCESS and AUTHORITY stay separate questions. The
+    reader may fetch the bytes; whether those bytes can ground a determination is
+    decided later, by `classify_source` at record time, and only after the
+    catalogue has actually been read and found to name the services. A caller
+    who passes a catalogue that names nothing gets the data and a MATERIAL
+    unresolved issue, not a promotion.
     """
     def read(url):
-        classification = authority.classify_source(url)
+        classification = authority.classify_source(url, attested_by=attested_by)
         if classification["source_class"] != authority.CLASS_OFFICIAL:
             raise PermissionError(
                 "refusing to read a non-official source: %s (%s)"
@@ -384,27 +427,42 @@ def zoning_at(subject_geometry, point, *, reader, cache=None) -> dict:
             "geometry": geometry, "token": token}
 
 
-def overlay_absence(binding, subject_geometry, point, *, reader, cache=None) -> dict:
-    """Prove an overlay does NOT apply, twice, or decline to claim it.
+def overlay_finding(binding, subject_geometry, point, *, reader, cache=None) -> dict:
+    """What this overlay does to the parcel: applies, does not, or undetermined.
 
-    An empty response is not evidence. So the City's own point query must return
-    nothing AND every polygon of that layer within `ABSENCE_ENVELOPE_METRES` of
-    the parcel must be independently computed OUTSIDE by our engine. When a
-    polygon inside the envelope cannot be decided, the absence is NOT asserted -
-    it is reported as undetermined, which is a different and honest answer.
+    PRESENCE IS MEASURED THE SAME WAY ABSENCE IS. Version 1 asked only whether a
+    polygon covered the address POINT and, when one did, reported its raw
+    attributes with no spatial basis at all - so a height overlay that genuinely
+    governs the site arrived carrying NOT_APPLICABLE, weaker evidence than the
+    absences beside it. The geometry is now fetched and related by our own
+    engine, so an overlay that applies says INSIDE or INTERSECTS on the same
+    footing as one that does not.
+
+    ABSENCE STILL REQUIRES TWO PROOFS. An empty response is also what a broken
+    query returns, so the City's own point query must find nothing AND every
+    polygon within `ABSENCE_ENVELOPE_METRES` must be computed OUTSIDE. An
+    undecidable polygon inside the envelope blocks the claim.
     """
     at_point = query_layer(binding, reader=reader, cache=cache,
-                           with_geometry=False,
+                           with_geometry=True,
                            **{"geometry": _point_param(point["x"], point["y"]),
                               "geometryType": "esriGeometryPoint",
                               "spatialRel": "esriSpatialRelIntersects",
                               "inSR": QUERY_WKID})
     if at_point["features"]:
         feature = at_point["features"][0]
+        geometry = esri_to_geojson(feature.get("geometry"))
+        token = spatial.relate(
+            {"crs": WKID_TO_CRS[102100], "geometry": subject_geometry},
+            {"crs": WKID_TO_CRS[102100], "geometry": geometry},
+            subject_source="City of Toronto Property Boundary",
+            layer_source="City of Toronto %s" % binding[2],
+            layer_version="By-law 569-2013") if geometry else None
         return {"layer_name": binding[2], "present": True,
                 "attributes": feature.get("attributes") or {},
+                "geometry": geometry, "token": token,
                 "absence_established": False, "url": at_point["url"],
-                "note": "overlay covers the subject point"}
+                "note": "overlay covers the subject"}
 
     half = ABSENCE_ENVELOPE_METRES
     envelope = json.dumps({"xmin": point["x"] - half, "ymin": point["y"] - half,
@@ -443,7 +501,7 @@ def overlay_absence(binding, subject_geometry, point, *, reader, cache=None) -> 
 
     established = (overlapping == 0 and undecided == 0)
     return {
-        "layer_name": binding[2], "present": False,
+        "layer_name": binding[2], "present": False, "token": None,
         "absence_established": established,
         "url": nearby["url"],
         "polygons_in_envelope": len(nearby["features"]),
@@ -458,19 +516,186 @@ def overlay_absence(binding, subject_geometry, point, *, reader, cache=None) -> 
     }
 
 
-def acquire_zoning_bylaw(*, reader, retrieved_at, effective_date="2013-05-09",
-                         provision_locator=None) -> dict:
-    """Retrieve the enacting by-law so the record holds bytes, not a paraphrase."""
+def zoning_bylaw_url_for(attributes) -> tuple:
+    """(url, authority_id, title) for the by-law that ACTUALLY governs this zone.
+
+    The City records it per zone in `BYLAW_DOCLINK`. The first live subject
+    carried `2013/law0569.pdf` and the second `2021/law0266.pdf`; hard-coding the
+    enacting by-law was therefore correct once and wrong immediately after, while
+    looking equally plausible both times. A citation that names the wrong
+    instrument is worse than no citation, because it survives review.
+    """
+    doclink = (attributes or {}).get("BYLAW_DOCLINK")
+    if not doclink or not isinstance(doclink, str):
+        return ZONING_BYLAW_URL, "TOR-ZBL-569-2013", ZONING_BYLAW_TITLE
+    doclink = doclink.lstrip("/")
+    number = doclink.rsplit("/", 1)[-1]          # law0266.pdf
+    year = doclink.split("/")[0] if "/" in doclink else None
+    digits = "".join(c for c in number if c.isdigit()).lstrip("0") or number
+    identifier = "TOR-BYLAW-%s-%s" % (digits, year) if year else "TOR-BYLAW-" + digits
+    title = ("City of Toronto By-law %s-%s (as published by the City for this zone)"
+             % (digits, year) if year else "City of Toronto By-law " + digits)
+    return BYLAW_DOC_BASE + doclink, identifier, title
+
+
+def acquire_zoning_bylaw(*, reader, retrieved_at, attributes=None,
+                         effective_date=None, provision_locator=None) -> dict:
+    """Retrieve the governing by-law so the record holds bytes, not a paraphrase."""
+    url, identifier, title = zoning_bylaw_url_for(attributes)
     return authority.acquire(
-        ZONING_BYLAW_URL, fetcher=reader,
-        authority_id="TOR-ZBL-569-2013",
+        url, fetcher=reader,
+        authority_id=identifier,
         issuing_authority="City of Toronto",
-        official_title=ZONING_BYLAW_TITLE,
+        official_title=title,
         retrieved_at=retrieved_at,
         effective_date=effective_date,
-        version_identifier="569-2013",
+        version_identifier=identifier.replace("TOR-BYLAW-", "").replace(
+            "TOR-ZBL-", ""),
         applicability=authority.APPLICABILITY_CURRENT,
         jurisdiction="City of Toronto",
         spatial_scope="City of Toronto",
         provision_locator=provision_locator,
-        retained_representation=ZONING_BYLAW_URL)
+        source_type=authority.SOURCE_TYPE_MACHINE_READABLE,
+        retained_representation=url)
+
+
+def discover_official_plan(*, reader) -> dict:
+    """Find the CURRENT consolidation from the City's own index page.
+
+    Returns `{url, version}`. The version is the City's own link label - "June
+    2026 Consolidation" - so the record states the edition the City is
+    publishing today rather than one this module believed in when it was written.
+    """
+    try:
+        payload = reader(OFFICIAL_PLAN_CHAPTERS_URL)
+    except Exception as exc:  # noqa: BLE001 - discovery failure is a result
+        logger.warning("official plan discovery failed (%s: %s)",
+                       type(exc).__name__, exc)
+        return {"url": OFFICIAL_PLAN_URL, "version": None,
+                "note": "consolidation link not discovered; index page retained"}
+    body = payload.decode("utf-8", "replace") if isinstance(
+        payload, (bytes, bytearray)) else str(payload)
+    for match in _CONSOLIDATION_LINK.finditer(body):
+        url, label = match.group("url"), (match.group("label") or "").strip()
+        if "consolidat" in (url + label).lower():
+            return {"url": url, "version": label or None}
+    return {"url": OFFICIAL_PLAN_URL, "version": None,
+            "note": "no consolidation link on the index page; index retained"}
+
+
+def acquire_official_plan(*, reader, retrieved_at) -> dict:
+    """Section 4. The Official Plan as a DOCUMENT authority, not a geometry one.
+
+    ABSENCE OF GEOMETRY IS NOT ABSENCE OF AUTHORITY. None of the 504 layers the
+    City publishes carries a land use designation; it exists as map schedules
+    inside the consolidated Plan. Treating that as a dead end would discard the
+    governing instrument because it is the wrong FILE FORMAT, which is the
+    opposite of a planning judgement. So the Plan is retrieved and admitted as a
+    real authority, and what degrades is the SPATIAL claim: `source_type` is a
+    map schedule, `supports_deterministic_spatial` is False, and nothing
+    downstream can mint an INSIDE from it.
+    """
+    discovered = discover_official_plan(reader=reader)
+    return authority.acquire(
+        discovered["url"], fetcher=reader,
+        authority_id="TOR-OFFICIAL-PLAN",
+        issuing_authority="City of Toronto",
+        official_title="%s%s" % (OFFICIAL_PLAN_TITLE,
+                                 " - " + discovered["version"]
+                                 if discovered.get("version") else ""),
+        retrieved_at=retrieved_at,
+        version_identifier=discovered.get("version"),
+        effective_date=discovered.get("version"),
+        applicability=authority.APPLICABILITY_CURRENT,
+        jurisdiction="City of Toronto",
+        spatial_scope="City of Toronto",
+        provision_locator="Land Use Plan map schedules",
+        source_type=authority.SOURCE_TYPE_MAP_SCHEDULE,
+        property_to_map_basis=None,
+        basis_confidence="LOW",
+        limitation=("Land use designation is published only as map schedules; no "
+                    "polygon layer exists, so the designation covering this "
+                    "parcel was not determined by computation and is not "
+                    "asserted."),
+        retained_representation=discovered["url"])
+
+
+def acquire_exception(exception_number, locator, *, reader, retrieved_at) -> dict:
+    """Retrieve a site-specific exception AND VERIFY THE PROVISION IS IN IT.
+
+    RETRIEVAL IS NOT THE TEST. The City's own attribute points at
+    `Chapter900_11.htm#900.11.10(2219)`; that page returns 200 and 56 KB and
+    contains no exception numbers at all - it is a shell. Accepting those bytes
+    as "the exception text" would produce a record with a real hash, a real URL,
+    a real 200, and none of the provision it claims to carry. So the exception
+    number must actually APPEAR in what came back, or this fails closed.
+    """
+    if not locator:
+        return {"acquired": False, "reason": "no exception locator published",
+                "record": None, "url": None}
+    url = ZONING_CHAPTER_BASE + str(locator).lstrip("/")
+    try:
+        payload = reader(url.split("#")[0])
+    except Exception as exc:  # noqa: BLE001 - a failed retrieval is a result
+        return {"acquired": False, "url": url, "record": None,
+                "reason": "%s: %s" % (type(exc).__name__, exc)}
+
+    body = payload.decode("utf-8", "replace") if isinstance(
+        payload, (bytes, bytearray)) else str(payload)
+    marker = "(%s)" % exception_number
+    if marker not in body:
+        return {
+            "acquired": False, "url": url, "record": None,
+            "reason": ("the page was retrieved (%d bytes) but does not contain "
+                       "exception %s - the provision text is not published at "
+                       "this locator" % (len(body), exception_number)),
+        }
+    return authority.acquire(
+        url.split("#")[0], fetcher=lambda _u: payload,
+        authority_id="TOR-ZBL-EXCEPTION-%s" % exception_number,
+        issuing_authority="City of Toronto",
+        official_title="Zoning By-law 569-2013 exception %s" % exception_number,
+        retrieved_at=retrieved_at,
+        applicability=authority.APPLICABILITY_CURRENT,
+        jurisdiction="City of Toronto",
+        provision_locator=str(locator),
+        source_type=authority.SOURCE_TYPE_POLICY_DOCUMENT,
+        retained_representation=url)
+
+
+def heritage_register_near(subject_geometry, *, reader, cache=None,
+                           margin_metres=60.0) -> dict:
+    """Individually listed heritage properties near the parcel. NOT a containment.
+
+    The register is a POINT layer, and this engine relates polygons. Deciding
+    whether a listed point falls inside the parcel would need point-in-polygon
+    competence, and NO MEASURED CASE HAS DEMANDED IT - neither live subject has a
+    listed property within 60 m. So the capability is deliberately not built, and
+    this reports proximity with the limitation stated rather than leaving an
+    individually listed building unmentioned. A silent gap is the worse failure:
+    a heritage listing on the site changes what may be done to the building.
+    """
+    ring = ((subject_geometry or {}).get("coordinates") or [[]])[0]
+    if not ring:
+        return {"checked": False, "reason": "no subject ring", "properties": []}
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    envelope = json.dumps({"xmin": min(xs) - margin_metres,
+                           "ymin": min(ys) - margin_metres,
+                           "xmax": max(xs) + margin_metres,
+                           "ymax": max(ys) + margin_metres,
+                           "spatialReference": {"wkid": 102100}})
+    found = query_layer(LAYER_HERITAGE_REGISTER, reader=reader, cache=cache,
+                        with_geometry=False,
+                        **{"geometry": envelope,
+                           "geometryType": "esriGeometryEnvelope",
+                           "spatialRel": "esriSpatialRelIntersects",
+                           "inSR": QUERY_WKID})
+    properties = [{"address": (f.get("attributes") or {}).get("ADDRESS"),
+                   "status": (f.get("attributes") or {}).get("STATUS"),
+                   "bylaw": (f.get("attributes") or {}).get("BYLAW")}
+                  for f in found["features"]]
+    return {"checked": True, "margin_metres": margin_metres,
+            "properties": properties, "url": found["url"],
+            "limitation": ("proximity within %.0f m of the parcel envelope; "
+                           "containment was NOT computed" % margin_metres)}

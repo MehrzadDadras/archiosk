@@ -149,6 +149,10 @@ def assemble(*, identity, authority_records, statements,
                 "instrument": record.get("issuing_authority"),
                 "citation": record.get("provision_locator"),
                 "effective_date": record.get("effective_date"),
+                "version_identifier": record.get("version_identifier"),
+                # Carried so a reader can tell a machine-readable layer from a
+                # map schedule without going back to the acquisition record.
+                "source_type": record.get("source_type"),
                 "authority_status": _applicability_to_authority_status(
                     record.get("applicability")),
                 "retrieved_at": record.get("retrieved_at"),

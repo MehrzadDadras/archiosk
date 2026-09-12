@@ -214,12 +214,6 @@ def validate_semantics(document) -> list:
                     "VR-17", path + ".authority_refs", sid,
                     "a superseded authority cannot establish a current standard",
                     ref, "an authority that is IN_FORCE"))
-            # VR-16
-            if not authority.get("effective_date"):
-                findings.append(_finding(
-                    "VR-16", "$.authorities", authority.get("authority_id"),
-                    "authority carries no effective date or version",
-                    None, "an effective_date"))
 
         # VR-09 - the deterministic spatial rule.
         if relation in ASSERTIVE_SPATIAL and basis != "DETERMINISTIC_GIS":
@@ -330,6 +324,21 @@ def validate_semantics(document) -> list:
             "VR-15", "$.result_status", subject_id,
             "a material unresolved issue must reach the result status",
             result_status, "UNRESOLVED"))
+
+    # VR-16, evaluated ONCE PER AUTHORITY rather than once per citation of one.
+    # It previously sat inside the statement loop, so a document citing one
+    # by-law from six statements reported six identical warnings - noise that
+    # also misstated how many authorities were deficient. And its own message
+    # offers "effective date OR version", so a version now satisfies it: a
+    # consolidated Official Plan is dated by its consolidation label, not by an
+    # in-force date, and rejecting that would penalise the correct record.
+    for authority in document.get("authorities") or []:
+        if not (authority.get("effective_date")
+                or authority.get("version_identifier")):
+            findings.append(_finding(
+                "VR-16", "$.authorities", authority.get("authority_id"),
+                "authority carries no effective date or version",
+                None, "an effective_date or a version_identifier"))
 
     order = list(RULES)
     findings.sort(key=lambda f: (order.index(f["rule_id"]), f["path"]))

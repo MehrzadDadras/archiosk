@@ -129,6 +129,12 @@ SCHEMA = {
                     "instrument": {"type": ["string", "null"]},
                     "citation": {"type": ["string", "null"]},
                     "effective_date": {"type": ["string", "null"]},
+                    # VR-16 asks for "an effective date OR a version", and a
+                    # consolidated Official Plan is dated by its consolidation
+                    # label rather than by an in-force date. Without this field
+                    # the document could not carry the answer the rule accepts.
+                    "version_identifier": {"type": ["string", "null"]},
+                    "source_type": {"type": ["string", "null"]},
                     "authority_status": {"enum": list(AUTHORITY_STATUSES)},
                     "retrieved_at": {"type": ["string", "null"]},
                     "url": {"type": ["string", "null"]},

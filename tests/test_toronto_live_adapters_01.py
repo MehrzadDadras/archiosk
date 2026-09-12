@@ -18,7 +18,7 @@ Two things this file deliberately pins:
    from the real layer 3, "Zoning Area".
 
 2. **Absence must be proven twice.** An empty response is also what a broken
-   query returns, so `overlay_absence` may only assert absence when the City's
+   query returns, so `overlay_finding` may only assert absence when the City's
    own point query finds nothing AND our engine independently computes OUTSIDE
    for every polygon of that layer near the parcel.
 """
@@ -333,23 +333,35 @@ class AbsenceMustBeProvenTwice(unittest.TestCase):
                                 [-10, -10]]]}
 
     def _reader(self, point_features, nearby_features):
+        """Point and envelope queries both hit the FeatureServer now, so the
+        fake distinguishes them the way the real service would - by the
+        geometryType the caller asked with."""
         return FakeService(
             layer_names={("cot_geospatial11", 9): "Zoning Height Overlay"},
-            responses={"MapServer/9/query": {"features": point_features},
-                       "FeatureServer/9/query": {"features": nearby_features}})
+            responses={"esriGeometryPoint": {"features": point_features},
+                       "esriGeometryEnvelope": {"features": nearby_features}})
 
-    def test_a_covering_overlay_is_reported_present(self):
-        finding = source.overlay_absence(
+    def test_a_covering_overlay_is_reported_present_WITH_A_TOKEN(self):
+        """Version 1 reported a covering overlay with NO spatial basis at all,
+        so a height limit that genuinely governs the site arrived as weaker
+        evidence than the absences beside it."""
+        covering = [{"attributes": {"HT_STRING": "HT 14.0"},
+                     "geometry": {"rings": [_square(-500, -500, 1000)]}}]
+        finding = source.overlay_finding(
             source.LAYER_ZONING_HEIGHT, self.SUBJECT, self.POINT,
-            reader=self._reader([{"attributes": {"HT_STRING": "HT 14.0"}}], []))
+            reader=self._reader(covering, []))
         self.assertTrue(finding["present"])
         self.assertFalse(finding["absence_established"])
         self.assertEqual(finding["attributes"]["HT_STRING"], "HT 14.0")
+        self.assertEqual(finding["token"]["spatial_relation"],
+                         spatial.RELATION_INSIDE)
+        self.assertEqual(finding["token"]["spatial_basis"],
+                         spatial.BASIS_DETERMINISTIC)
 
     def test_absence_is_established_when_every_nearby_polygon_is_outside(self):
         nearby = [{"attributes": {}, "geometry": {"rings": [_square(500, 500, 50)]}},
                   {"attributes": {}, "geometry": {"rings": [_square(900, 900, 50)]}}]
-        finding = source.overlay_absence(
+        finding = source.overlay_finding(
             source.LAYER_ZONING_HEIGHT, self.SUBJECT, self.POINT,
             reader=self._reader([], nearby))
         self.assertTrue(finding["absence_established"])
@@ -357,7 +369,7 @@ class AbsenceMustBeProvenTwice(unittest.TestCase):
         self.assertEqual(finding["undecided"], 0)
 
     def test_an_empty_envelope_still_establishes_absence(self):
-        finding = source.overlay_absence(
+        finding = source.overlay_finding(
             source.LAYER_ZONING_HEIGHT, self.SUBJECT, self.POINT,
             reader=self._reader([], []))
         self.assertTrue(finding["absence_established"])
@@ -373,7 +385,7 @@ class AbsenceMustBeProvenTwice(unittest.TestCase):
         orphaned = [{"attributes": {},
                      "geometry": {"rings": [_square(500, 500, 50),
                                             _hole(2000, 2000, 10)]}}]
-        finding = source.overlay_absence(
+        finding = source.overlay_finding(
             source.LAYER_ZONING_HEIGHT, self.SUBJECT, self.POINT,
             reader=self._reader([], orphaned))
         self.assertFalse(finding["absence_established"])
@@ -384,7 +396,7 @@ class AbsenceMustBeProvenTwice(unittest.TestCase):
         """The City said no and our engine says yes. Do not assert absence."""
         overlapping = [{"attributes": {},
                         "geometry": {"rings": [_square(-5, -5, 50)]}}]
-        finding = source.overlay_absence(
+        finding = source.overlay_finding(
             source.LAYER_ZONING_HEIGHT, self.SUBJECT, self.POINT,
             reader=self._reader([], overlapping))
         self.assertFalse(finding["absence_established"])
@@ -397,7 +409,9 @@ class NeverReachesTheNetwork(unittest.TestCase):
     def test_no_reader_has_a_default(self):
         import inspect
         for name in ("verify_layer", "query_layer", "resolve_address",
-                     "zoning_at", "overlay_absence", "acquire_zoning_bylaw"):
+                     "zoning_at", "overlay_finding", "acquire_zoning_bylaw",
+                     "acquire_official_plan", "acquire_exception",
+                     "heritage_register_near", "discover_official_plan"):
             signature = inspect.signature(getattr(source, name))
             parameter = signature.parameters.get("reader")
             self.assertIsNotNone(parameter, "%s must take a reader" % name)

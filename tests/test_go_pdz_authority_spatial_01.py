@@ -58,7 +58,7 @@ class SourceClassification(unittest.TestCase):
                     "https://www.ontario.ca/laws/statute/90p13",
                     "https://ero.ontario.ca/notice/025-0702",
                     "https://trca.ca/planning-permits/",
-                    "https://data.opendata.arcgis.com/datasets/zoning"):
+                    "https://www.mississauga.ca/zoning"):
             with self.subTest(url=url):
                 self.assertEqual(authority.classify_source(url)["source_class"],
                                  authority.CLASS_OFFICIAL)
@@ -88,9 +88,38 @@ class SourceClassification(unittest.TestCase):
                 self.assertEqual(authority.classify_source(url)["source_class"],
                                  authority.CLASS_REJECTED)
 
+    def test_a_hosting_platform_is_not_an_authority(self):
+        """SUPERSEDED DELIBERATELY, BY MEASUREMENT (CLAUDE-GENERALIZATION-02).
+
+        `.arcgis.com` was on the OFFICIAL list until a live probe searched
+        ArcGIS Online for land use layers and got back results owned by
+        `Loftuli59` and `userd9d9` beside municipal ones. Ownership cannot be
+        inferred from the host: the same domain, over the same path shape,
+        serves a city's authoritative zoning and a hobbyist's re-upload. Leaving
+        it OFFICIAL let any individual's hosted layer ground AUTHORITY_SAYS -
+        the exact failure this module's first line exists to prevent, admitted
+        through its own allowlist.
+        """
+        for url in ("https://services.arcgis.com/x/FeatureServer/0/query",
+                    "https://data.opendata.arcgis.com/datasets/zoning",
+                    "https://someone.maps.arcgis.com/home/item.html?id=abc"):
+            classification = authority.classify_source(url)
+            self.assertEqual(classification["source_class"],
+                             authority.CLASS_SECONDARY, url)
+            self.assertIn("hosting platform", classification["reason"])
+
+    def test_a_municipality_s_own_domain_is_still_official(self):
+        """The hardening must not throw away the real authorities with it."""
+        for url in ("https://gis.toronto.ca/arcgis/rest/services/x/MapServer/1",
+                    "https://www.toronto.ca/legdocs/bylaws/2021/law0266.pdf",
+                    "https://www.mississauga.ca/zoning"):
+            self.assertEqual(
+                authority.classify_source(url)["source_class"],
+                authority.CLASS_OFFICIAL, url)
+
     def test_machine_readable_geometry_endpoints_are_flagged(self):
         result = authority.classify_source(
-            "https://services.arcgis.com/x/FeatureServer/0/query?f=geojson")
+            "https://gis.toronto.ca/arcgis/rest/services/x/FeatureServer/0/query?f=geojson")
         self.assertTrue(result["machine_readable_geometry"])
 
 

@@ -49,7 +49,23 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 ACQUISITION_METHOD = "public_planning_authority"
-ACQUISITION_VERSION = "planning-authority@1"
+ACQUISITION_VERSION = "planning-authority@2"
+
+#: HOW an authority was obtained, which decides what it may support spatially.
+#: Only the first can carry a deterministic spatial predicate; the rest are real
+#: authorities whose geometry is not machine-readable, and a finding resting on
+#: one degrades to APPEARS_INSIDE or AMBIGUOUS rather than being discarded.
+#: ABSENCE OF GEOMETRY IS NOT ABSENCE OF AUTHORITY - a consolidated Official Plan
+#: published as a PDF schedule still governs the site; what it cannot do is
+#: prove containment by arithmetic.
+SOURCE_TYPE_MACHINE_READABLE = "OFFICIAL_MACHINE_READABLE_GEOMETRY"
+SOURCE_TYPE_CONSOLIDATED_DOCUMENT = "OFFICIAL_CONSOLIDATED_DOCUMENT"
+SOURCE_TYPE_MAP_SCHEDULE = "OFFICIAL_MAP_SCHEDULE"
+SOURCE_TYPE_WEB_MAP = "OFFICIAL_WEB_MAP_WITHOUT_EXTRACTABLE_POLYGONS"
+SOURCE_TYPE_POLICY_DOCUMENT = "OFFICIAL_POLICY_DOCUMENT"
+
+#: Source types that may support an assertive spatial predicate.
+DETERMINISTIC_SOURCE_TYPES = (SOURCE_TYPE_MACHINE_READABLE,)
 
 CLASS_OFFICIAL = "OFFICIAL"
 CLASS_SECONDARY = "SECONDARY"
@@ -76,8 +92,23 @@ OFFICIAL_HOST_SUFFIXES = (
     ".bracebridge.ca", ".orillia.ca", ".cornwall.ca",
     "trca.ca", ".trca.ca",
     ".conservationontario.ca",
-    ".arcgis.com",            # official ArcGIS/Open Data endpoints
-    ".opendata.arcgis.com",
+)
+
+#: A HOSTING PLATFORM IS NOT AN AUTHORITY (CLAUDE-GENERALIZATION-02).
+#: `.arcgis.com` was on the OFFICIAL list until the second live probe searched
+#: ArcGIS Online and got back land-use layers owned by `Loftuli59` and
+#: `userd9d9` alongside municipal ones. Ownership CANNOT be inferred from the
+#: host: arcgis.com serves a city's authoritative zoning and a hobbyist's
+#: re-upload from the same domain, over the same path shape. Leaving it OFFICIAL
+#: meant any individual's hosted layer could ground AUTHORITY_SAYS - the precise
+#: failure this module's first line exists to prevent, admitted through its own
+#: allowlist. Hosted platforms are therefore SECONDARY: usable for discovery,
+#: never as the authority a determination rests on. A municipality's OWN domain
+#: (gis.toronto.ca, and the municipal suffixes above) remains OFFICIAL, because
+#: there the host itself is the authority's attestation.
+HOSTED_PLATFORM_HINTS = (
+    "arcgis.com", "opendata.arcgis.com", "hub.arcgis.com",
+    "maps.arcgis.com", "services.arcgis.com",
 )
 
 #: Hosts that are informative but never authority. Listed explicitly so the
@@ -103,8 +134,18 @@ _GEOMETRY_PATH = re.compile(
     re.IGNORECASE)
 
 
-def classify_source(url: Optional[str]) -> dict:
-    """OFFICIAL, SECONDARY or REJECTED, with the reason stated."""
+def classify_source(url: Optional[str], *, attested_by=None) -> dict:
+    """OFFICIAL, SECONDARY or REJECTED, with the reason stated.
+
+    `attested_by` is the locator of an OFFICIAL catalogue that NAMES this url as
+    one of its own publications. It is the only thing that can promote a hosted
+    platform, and it exists because neither blanket rule survived real data:
+    calling `arcgis.com` official admits a private individual's re-upload, and
+    calling it never-official discards Mississauga's actual Official Plan
+    schedule, which the City publishes there and lists in its own catalogue on
+    its own domain. Provenance decides, not hostname - and the attestation is
+    itself classified, so a SECONDARY catalogue cannot promote anything.
+    """
     if not url or not isinstance(url, str):
         return {"source_class": CLASS_REJECTED, "host": None,
                 "reason": "no locator supplied"}
@@ -125,6 +166,24 @@ def classify_source(url: Optional[str]) -> dict:
         if hint in host:
             return {"source_class": CLASS_REJECTED, "host": host,
                     "reason": "host is a listing, blog or social source"}
+    for hint in HOSTED_PLATFORM_HINTS:
+        if host == hint or host.endswith("." + hint):
+            if attested_by:
+                attestation = classify_source(attested_by)
+                if attestation["source_class"] == CLASS_OFFICIAL:
+                    return {
+                        "source_class": CLASS_OFFICIAL, "host": host,
+                        "reason": ("hosted platform, ATTESTED as a municipal "
+                                   "publication by the official catalogue at %s"
+                                   % attested_by),
+                        "attested_by": attested_by,
+                        "machine_readable_geometry": bool(
+                            _GEOMETRY_PATH.search(parsed.path or "")),
+                    }
+            return {"source_class": CLASS_SECONDARY, "host": host,
+                    "reason": "a hosting platform, not an authority - ownership "
+                              "cannot be inferred from the host; usable for "
+                              "discovery only"}
     for hint in SECONDARY_HOST_HINTS:
         if hint in host:
             return {"source_class": CLASS_SECONDARY, "host": host,
@@ -156,15 +215,19 @@ def authority_record(*, authority_id, issuing_authority, official_title, url,
                      version_identifier=None,
                      applicability=APPLICABILITY_UNKNOWN, jurisdiction=None,
                      spatial_scope=None, provision_locator=None,
-                     amendment_history=None, retained_representation=None) -> dict:
+                     amendment_history=None, retained_representation=None,
+                     source_type=SOURCE_TYPE_MACHINE_READABLE,
+                     property_to_map_basis=None, basis_confidence=None,
+                     limitation=None, attested_by=None) -> dict:
     """One acquired authority, with everything section 2 requires retained.
 
     `source_class` is computed rather than supplied: a caller must not be able
     to declare a blog official by passing a field.
     """
-    classification = classify_source(url)
+    classification = classify_source(url, attested_by=attested_by)
     return {
         "authority_id": authority_id,
+        "attested_by": classification.get("attested_by"),
         "issuing_authority": issuing_authority,
         "official_title": official_title,
         "url": url,
@@ -187,6 +250,13 @@ def authority_record(*, authority_id, issuing_authority, official_title, url,
         "provenance_hash": provenance_hash(payload),
         "acquisition_method": ACQUISITION_METHOD,
         "acquisition_version": ACQUISITION_VERSION,
+        # Section 4. A document-based authority is still an authority; these
+        # fields are what keep it honest about what it can and cannot prove.
+        "source_type": source_type,
+        "property_to_map_basis": property_to_map_basis,
+        "basis_confidence": basis_confidence,
+        "limitation": limitation,
+        "supports_deterministic_spatial": source_type in DETERMINISTIC_SOURCE_TYPES,
     }
 
 
@@ -202,14 +272,14 @@ def may_satisfy_authority_says(record) -> bool:
 
 
 def acquire(url, *, fetcher, authority_id, issuing_authority, official_title,
-            retrieved_at, **fields) -> dict:
+            retrieved_at, attested_by=None, **fields) -> dict:
     """Retrieve one authority through an injected reader. Never raises.
 
     READ-ONLY BY CONSTRUCTION: `fetcher` is the only way bytes enter, there is no
     default, and nothing here writes to any store. A REJECTED host is not
     fetched at all - the classification happens before the call, not after.
     """
-    classification = classify_source(url)
+    classification = classify_source(url, attested_by=attested_by)
     if classification["source_class"] == CLASS_REJECTED:
         return {
             "acquired": False, "url": url,
@@ -233,7 +303,7 @@ def acquire(url, *, fetcher, authority_id, issuing_authority, official_title,
     record = authority_record(
         authority_id=authority_id, issuing_authority=issuing_authority,
         official_title=official_title, url=url, retrieved_at=retrieved_at,
-        payload=payload, **fields)
+        payload=payload, attested_by=attested_by, **fields)
     return {"acquired": True, "url": url,
             "source_class": record["source_class"],
             "reason": classification["reason"], "record": record}

@@ -44,6 +44,12 @@ it lies outside every part. Same arithmetic, applied per part. What remains
 refused is what is genuinely undecidable - invalid rings, CRS mismatch, boundary
 proximity, and a subject whose vertices disagree with its own edges.
 
+REPROJECTION IS STILL REFUSED HERE. A CRS mismatch between two geometries
+handed to `relate()` is AMBIGUOUS, exactly as before. What changed is only that a
+caller may now RECORD that the authority's own service delivered geometry in a
+requested CRS, so the provenance says who moved it. An untested transform
+written into this module remains the silent error it always was.
+
 WHY STILL NO GEOS. Shapely PASSES `tools/dependency_fit.py` and would add
 validity repair, buffering and true boolean overlay. The measured case above
 needed NONE of those - it needed holes, which cost thirty lines and no
@@ -292,7 +298,7 @@ def _token(relation, reason=None, **extra):
 
 def relate(subject, layer, *, subject_source=None, layer_source=None,
            layer_version=None, subject_parcel_count=1,
-           conflicting_layers=False) -> dict:
+           conflicting_layers=False, upstream_transformation=None) -> dict:
     """Where does `subject` sit relative to `layer`? Never raises.
 
     `subject` and `layer` are `{"crs": "EPSG:...", "geometry": <GeoJSON>}`.
@@ -315,7 +321,18 @@ def relate(subject, layer, *, subject_source=None, layer_source=None,
         "layer_version": layer_version,
         "subject_crs": subject.get("crs"),
         "layer_crs": layer.get("crs"),
-        "transformation": None,   # none performed, ever - see REASON_CRS_MISMATCH
+        # THIS ENGINE NEVER REPROJECTS. `transformation` records a reprojection
+        # performed UPSTREAM, by the publishing authority, when geometry was
+        # requested in a CRS other than the one the layer is authored in - which
+        # Mississauga's data makes unavoidable: its address and parcel layers are
+        # published in EPSG:3857 and its zoning and Official Plan schedules in
+        # EPSG:26917, so SOMETHING has to move before they can be compared. It
+        # is the publisher's own service that moves it, on request, and saying
+        # so is the difference between a transparent comparison and a silent one.
+        # None still means what it always meant: nothing was transformed.
+        "transformation": upstream_transformation,
+        "transformed_by": ("publishing authority (outSR request)"
+                           if upstream_transformation else None),
         "operation": "ring_containment_and_crossing",
     }
 
