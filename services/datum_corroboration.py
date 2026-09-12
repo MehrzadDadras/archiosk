@@ -33,13 +33,36 @@ own definition already says it makes no field-versus-design claim, written
 through the existing `record_relationship`. Nothing here creates a discrepancy
 type, a finding, or a claim.
 
-ASSOCIATION IS POSITIONAL, AND THE ALTERNATIVE WAS MEASURED AND REJECTED.
+ASSOCIATION IS POSITIONAL, AND TWO EARLIER RULES WERE MEASURED AND REJECTED.
+
 Reading a name from the text stream near a number returned `PERIMETER BEAM`
-against five different values, because a datum block interleaves names and
-numbers in reading order. On the page a datum marker is a bubble holding the
-value and its qualifier, with the name set immediately alongside: measured on
-stored evidence the name sits at a gap of ~0.001 of the frame while the next
-candidate is ten times further.
+against FIVE different values, because a datum block interleaves names and
+numbers in reading order.
+
+Replacing it with "the nearest label wholly left or wholly right" fixed
+structure and broke architecture, at 10/13 correct. On a real elevation the
+correct name's box OVERLAPS the value's, so a wholly-left-or-right test SKIPS it
+and takes the next label along - which belongs to the neighbouring datum. That
+is exactly and only why `188.22` took `PARK. SLAB` and `188.62` took `PARK. FTG`,
+inverted. `names_beside` survives as the primitive that answers "what is beside
+this", and is no longer what decides a datum's name.
+
+`associate_page_datums` is MUTUAL NEAREST WITH CLAIMING, and it measures 13/13
+correct across both disciplines. Values and names alternate along one band:
+
+    (186.67) ELEV. FTG (186.96) EXT. ST. FTG (188.22) PARK. FTG (188.62)
+
+so a name belongs to whichever value is nearest it, and a value may claim a name
+only if it is nearest that name in return. No threshold, no side preference, no
+per-discipline switch.
+
+AN UNREADABLE VALUE STILL HOLDS ITS PLACE, which took a second measurement to
+find. `186.67` came back from OCR as `(486.67` and parsed to nothing, so its
+label `ELEV. FTG` fell free and `186.96` took it - and `186.96`'s own correct
+name was then unreachable. ONE MIS-READ VALUE CORRUPTS ITS NEIGHBOUR. A
+digit-bearing token that cannot be read is therefore kept as a SLOT that claims
+its own label and is then discarded: the evidence saying "something is here I
+could not read" rather than pretending the space is empty.
 """
 from __future__ import annotations
 
@@ -155,6 +178,114 @@ def names_beside(value_line, lines) -> list:
             for side, (gap, line) in sorted(best.items())]
 
 
+#: A token carrying this many digits and no word occupies a VALUE SLOT, whether
+#: or not it could be read. See `associate_page_datums` for why that matters.
+MIN_SLOT_DIGITS = 3
+
+_DIGIT = re.compile(r"\d")
+_WORDY = re.compile(r"[A-Z]{2,}")
+
+
+def _value_slot(text: Optional[str]):
+    """(is this a value slot, its millimetres or None if unreadable)."""
+    candidate = (text or "").strip()
+    if not candidate:
+        return False, None
+    millimetres = to_millimetres(candidate)
+    if millimetres is not None:
+        return True, millimetres
+    if (len(_DIGIT.findall(candidate)) >= MIN_SLOT_DIGITS
+            and not _WORDY.search(candidate.upper())):
+        return True, None
+    return False, None
+
+
+def _is_name(text: Optional[str]) -> bool:
+    candidate = (text or "").strip()
+    if not candidate or _QUALIFIER.match(candidate):
+        return False
+    if _value_slot(candidate)[0]:
+        return False
+    return bool(_WORDY.search(candidate.upper()))
+
+
+def _centre(line):
+    return line["x"] + line["width"] / 2.0, line["y"] + line["height"] / 2.0
+
+
+def _separation(a, b):
+    ax, ay = _centre(a)
+    bx, by = _centre(b)
+    return abs(ax - bx) + abs(ay - by)
+
+
+def associate_page_datums(lines) -> list:
+    """Pair each datum value with its own name by MUTUAL NEAREST, with claiming.
+
+    THE RULE THAT REPLACED A MEASURED FAILURE. `names_beside` requires a label
+    to be wholly left or wholly right of the value, and on a real architectural
+    elevation the correct name's box OVERLAPS the value's - so it was skipped
+    and the NEXT label along was taken, which belongs to the neighbouring datum.
+    That is exactly and only why `188.22` took `PARK. SLAB` and `188.62` took
+    `PARK. FTG`, inverted.
+
+    Values and names alternate along one band:
+
+        (186.67) ELEV. FTG (186.96) EXT. ST. FTG (188.22) PARK. FTG (188.62)
+
+    so a name belongs to whichever value is nearest it, and a value may only
+    claim a name that is nearest IT in return. No threshold, no side preference,
+    no per-discipline switch - measured 13/13 correct across both disciplines
+    where the previous rule was 10/13 with the three errors that mattered.
+
+    UNREADABLE VALUES STILL HOLD THEIR PLACE, and this is the half that took a
+    second measurement to find. `186.67` came back from OCR as `(486.67`, which
+    parses to nothing - so under plain mutual-nearest its label `ELEV. FTG` fell
+    free and was taken by `186.96`, whose own correct name was then unreachable.
+    ONE MIS-READ VALUE CORRUPTS ITS NEIGHBOUR'S ASSOCIATION. A digit-bearing
+    token that cannot be read is therefore kept as a SLOT: it claims its own
+    label and is then discarded, which is the evidence saying "something is here
+    that I could not read" rather than pretending the space is empty.
+    """
+    slots, names = [], []
+    for line in lines:
+        text = (line.get("text") or "").strip()
+        is_slot, millimetres = _value_slot(text)
+        if is_slot:
+            slots.append((line, millimetres))
+        elif _is_name(text):
+            names.append(line)
+
+    paired, used_slots, used_names = {}, set(), set()
+    while True:
+        best = None
+        for si, (slot, _mm) in enumerate(slots):
+            if si in used_slots:
+                continue
+            for ni, name in enumerate(names):
+                if ni in used_names or not _centre_band(slot, name):
+                    continue
+                gap = _separation(slot, name)
+                if best is None or gap < best[0]:
+                    best = (gap, si, ni)
+        if best is None:
+            break
+        _gap, si, ni = best
+        rival = min(((_separation(slots[i][0], names[ni]), i)
+                     for i in range(len(slots))
+                     if i not in used_slots and _centre_band(slots[i][0], names[ni])),
+                    default=None)
+        used_slots.add(si)
+        used_names.add(ni)
+        if rival is not None and rival[1] == si and slots[si][1] is not None:
+            paired[si] = ni
+
+    return [{"value_line": slots[si][0], "value_mm": slots[si][1],
+             "name_line": names[ni],
+             "separation": round(_separation(slots[si][0], names[ni]), 6)}
+            for si, ni in sorted(paired.items())]
+
+
 def datum_register(workspace, source_id: str) -> list:
     """Every named datum level this Source states, with where it was read.
 
@@ -167,23 +298,21 @@ def datum_register(workspace, source_id: str) -> list:
     entries = []
     for page in detail_callout.positioned_pages_for(workspace, source_id):
         lines = page.get("lines") or []
-        for line in lines:
+        for pair in associate_page_datums(lines):
+            line = pair["value_line"]
             verbatim = (line.get("text") or "").strip()
-            millimetres = to_millimetres(verbatim)
-            if millimetres is None:
-                continue
-            names = names_beside(line, lines)
-            if not names:
-                # A level nobody named is not a datum this system can compare.
-                continue
+            name_text = (pair["name_line"].get("text") or "").strip()
             entries.append({
-                "value_mm": millimetres,
+                "value_mm": pair["value_mm"],
                 "verbatim": verbatim,
                 "unit_as_written": "mm" if _MM.match(verbatim) else "m",
-                "names": [n["text"] for n in names],
-                "name_tokens": [n["tokens"] for n in names],
-                "name_gaps": [n["gap"] for n in names],
+                # ONE name per datum now, because the association is exclusive:
+                # a name claimed by this value cannot also belong to another.
+                "names": [name_text],
+                "name_tokens": [name_tokens(name_text)],
+                "name_separation": pair["separation"],
                 "region_id": line.get("region_id"),
+                "name_region_id": pair["name_line"].get("region_id"),
                 "structural_unit_id": page["unit"]["id"],
                 "page_label": page["unit"].get("label"),
                 "extraction_pass": line.get("extraction_pass"),

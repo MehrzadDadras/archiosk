@@ -335,3 +335,104 @@ class NoEgress(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MutualNearestAssociation(unittest.TestCase):
+    """CLAUDE-DATUM-ASSOCIATION-02: the rule that replaced a measured failure.
+
+    `names_beside` requires a label to be wholly left or wholly right of the
+    value. On a real architectural elevation the CORRECT name's box overlaps the
+    value's, so that test skipped it and took the next label along - which
+    belongs to the neighbouring datum. Measured 10/13 correct, with the three
+    errors being exactly the ones that matter.
+
+    `associate_page_datums` pairs by mutual nearest with claiming and measures
+    13/13 on the same real sheets.
+    """
+
+    #: THE REAL GEOMETRY, copied from the measured stored evidence of A401 rather
+    #: than invented. Note that `PARK. FTG` (0.0864..0.0925) OVERLAPS `188.22`
+    #: (0.0803..0.0899) - which is precisely why a wholly-left-or-right test
+    #: skipped it and took `PARK. SLAB` instead.
+    A401_BAND = [
+        ("(486.67", 0.0478, 0.0043), ("ELEV. FTG", 0.0514, 0.0054),
+        ("186.96", 0.0551, 0.0143), ("EXT. ST. FTG.", 0.0694, 0.0053),
+        ("188.22", 0.0803, 0.0096), ("PARK. FTG", 0.0864, 0.0061),
+        ("PARK. SLAB", 0.0912, 0.0064), ("188.62", 0.0951, 0.0075),
+    ]
+
+    def _band(self, items):
+        return [_line(text, x, 0.50, width=width, height=0.0216)
+                for text, x, width in items]
+
+    def test_the_real_inverted_pair_is_fixed(self):
+        """The exact failure from the real corpus, at its real coordinates."""
+        got = {p["value_mm"]: p["name_line"]["text"]
+               for p in dc.associate_page_datums(self._band(self.A401_BAND))}
+        self.assertEqual(got.get(188220), "PARK. FTG",
+                         "188.22 previously took PARK. SLAB")
+        self.assertEqual(got.get(188620), "PARK. SLAB",
+                         "188.62 previously took PARK. FTG")
+        self.assertEqual(got.get(186960), "EXT. ST. FTG.",
+                         "186.96 previously took ELEV. FTG from a mis-read "
+                         "neighbour")
+
+    def test_a_name_is_claimed_by_exactly_one_value(self):
+        pairs = dc.associate_page_datums(self._band(self.A401_BAND))
+        claimed = [p["name_line"]["text"] for p in pairs]
+        self.assertEqual(len(claimed), len(set(claimed)),
+                         "one label cannot name two datums")
+
+    def test_an_unreadable_value_keeps_its_own_label(self):
+        """The second half, and the one that took a second measurement.
+
+        `186.67` came back from OCR as `(486.67`. Under plain mutual nearest its
+        label fell free and the neighbour took it, whose own name was then
+        unreachable. The unreadable token holds its place instead.
+        """
+        got = {p["value_mm"]: p["name_line"]["text"]
+               for p in dc.associate_page_datums(self._band(self.A401_BAND[:4]))}
+        self.assertEqual(got.get(186960), "EXT. ST. FTG.",
+                         "a mis-read neighbour must not steal ELEV. FTG")
+        self.assertNotIn(186670, got, "an unreadable value yields no datum")
+
+    def test_a_qualifier_is_still_never_a_name(self):
+        lines = self._band([("191.50", 0.050, 0.007), ("U/S", 0.058, 0.003),
+                            ("PERIMETER BEAM", 0.062, 0.008)])
+        pairs = dc.associate_page_datums(lines)
+        self.assertEqual([p["name_line"]["text"] for p in pairs],
+                         ["PERIMETER BEAM"])
+
+    def test_a_value_on_another_line_cannot_be_paired(self):
+        lines = [_line("191.50", 0.05, 0.50, width=0.007),
+                 _line("PERIMETER BEAM", 0.06, 0.90, width=0.008)]
+        self.assertEqual(dc.associate_page_datums(lines), [])
+
+    def test_the_structural_layout_still_associates(self):
+        """Section 1: the correction must not weaken what already worked."""
+        lines = self._band([
+            ("F.F.", 0.4859, 0.0040), ("192610", 0.4900, 0.0037),
+            ("GR. FL. SLAB", 0.4949, 0.0090),
+        ])
+        got = {p["value_mm"]: p["name_line"]["text"]
+               for p in dc.associate_page_datums(lines)}
+        self.assertIn(192610, got)
+        self.assertIn(got[192610], ("F.F.", "GR. FL. SLAB"))
+
+    def test_no_discipline_or_sheet_id_is_hard_coded(self):
+        """Section 3: the rule is geometric, never a lookup by sheet."""
+        source = (_REPO_ROOT / "services" / "datum_corroboration.py").read_text(
+            encoding="utf-8")
+        tree = ast.parse(source)
+        target = next(n for n in ast.walk(tree)
+                      if isinstance(n, ast.FunctionDef)
+                      and n.name == "associate_page_datums")
+        # The docstring NAMES the sheets it was measured on, which is the point
+        # of it. What must contain no sheet id is the CODE.
+        body = [node for node in target.body
+                if not (isinstance(node, ast.Expr)
+                        and isinstance(node.value, ast.Constant)
+                        and isinstance(node.value.value, str))]
+        rendered = "".join(ast.dump(node) for node in body)
+        for banned in ("A401", "A402", "RS501", "architectural", "structural"):
+            self.assertNotIn(banned, rendered)
