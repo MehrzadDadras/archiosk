@@ -395,6 +395,23 @@ def corroborate(workspace, left_source_id: str, right_source_id: str) -> dict:
     return report
 
 
+def sources_with_datums(workspace, exclude_source_id: Optional[str] = None) -> list:
+    """Every ACTIVE Source in this project that states at least one named datum.
+
+    The counterpart set for a newly perceived sheet. Removed Sources are excluded
+    here rather than later, for the reason `view_reference.eligible_targets`
+    already encodes: a withdrawn drawing must not silently become the thing a
+    live one is corroborated against.
+    """
+    out = []
+    for source in (getattr(workspace, "sources", None) or []):
+        if source.get("removed_at") or source.get("id") == exclude_source_id:
+            continue
+        if datum_register(workspace, source["id"]):
+            out.append(source["id"])
+    return out
+
+
 def record_corroborations(store, workspace, left_source_id: str,
                           right_source_id: str, *, actor: str = "system",
                           governance_log=None, dry_run: bool = False) -> dict:

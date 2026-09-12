@@ -653,6 +653,97 @@ def _register_detail_callouts(store, job, governance_log, record):
     return report
 
 
+def _corroborate_datums(store, job, governance_log, record):
+    """Corroborate this sheet's declared datums against the sheets already read.
+
+    CLAUDE-DATUM-CORROBORATION-WIRING-01, and it closes an integration gap I
+    created: `record_corroborations` shipped implemented, deployed and proven on
+    the real corpus with NO application caller - every corroboration that
+    existed had been produced by a scratchpad script rather than by ARCHIOSK.
+    That is the exact pattern the master plan section 2 exists to catch, and it
+    is the second time this programme has produced it.
+
+    WHY HERE. A corroboration needs TWO sources, and the worker sees one job at
+    a time - so the moment a sheet's datum evidence lands is the first moment its
+    counterparts can be known. This runs after the job record is already
+    terminal, which is why failure isolation is structural rather than promised:
+    there is no job in flight left to fail.
+
+    BOUNDED BY THE CHEAPEST TEST FIRST. Most sheets state no datum at all, so
+    this asks THIS source's register before it asks anyone else's, and does
+    nothing at all when the answer is empty. Only a sheet that actually declares
+    a level pays for the pairwise comparison.
+
+    NOTHING NEW IS ASSERTED. The claim boundary is unchanged and is not restated
+    here because it lives in one place: an exact match may corroborate, a
+    mismatch stays UNRESOLVED and writes nothing. No claim, finding or
+    discrepancy writer is reachable from this path.
+    """
+    from services import datum_corroboration, perception_jobs
+
+    if not record or record.get("state") != perception_jobs.STATE_COMPLETED:
+        return None
+
+    try:
+        workspace = store.get(job["workspace_id"])
+        if workspace is None:
+            return None
+        mine = datum_corroboration.datum_register(workspace, job["source_id"])
+        if not mine:
+            # This sheet declares no datum. The commonest case, and the one that
+            # must cost nothing.
+            return None
+        counterparts = datum_corroboration.sources_with_datums(
+            workspace, exclude_source_id=job["source_id"])
+        reports = []
+        for other in counterparts:
+            workspace = store.get(job["workspace_id"])
+            if workspace is None:
+                break
+            reports.append(datum_corroboration.record_corroborations(
+                store, workspace, job["source_id"], other,
+                actor="perception-worker", governance_log=governance_log))
+    except Exception as exc:  # noqa: BLE001 - the examination is already complete
+        logger.warning("datum corroboration raised for source %s (%s: %s)",
+                       job["source_id"], type(exc).__name__, exc)
+        if governance_log is not None:
+            governance_log.append(
+                project_id=job["workspace_id"],
+                event_type="datum_corroboration_failed",
+                actor="perception-worker", role="system",
+                payload={"source_id": job["source_id"],
+                         "error_type": type(exc).__name__, "error": str(exc),
+                         "perception_state": record.get("state")},
+                correlation_id=job["source_id"])
+        return None
+
+    corroborated = sum(len(r.get("corroborated") or []) for r in reports)
+    unresolved = sum(len(r.get("unresolved") or []) for r in reports)
+    created = sum(r.get("relationships_created") or 0 for r in reports)
+    if governance_log is not None:
+        # Recorded even when nothing corroborated. "These two sheets state the
+        # same datum differently" is a real fact about a drawing set, and an
+        # abstention a reader cannot see is indistinguishable from not looking.
+        governance_log.append(
+            project_id=job["workspace_id"],
+            event_type="datum_corroboration_completed",
+            actor="perception-worker", role="system",
+            payload={
+                "source_id": job["source_id"],
+                "datums_declared": len(mine),
+                "counterpart_sources": len(counterparts),
+                "corroborated": corroborated,
+                "unresolved": unresolved,
+                "relationships_created": created,
+                "method": datum_corroboration.CORROBORATION_METHOD,
+                "version": datum_corroboration.CORROBORATION_VERSION,
+            },
+            correlation_id=job["source_id"])
+    return {"datums": len(mine), "counterparts": len(counterparts),
+            "corroborated": corroborated, "unresolved": unresolved,
+            "relationships_created": created, "reports": reports}
+
+
 def _run_pdf_job(app, jobs, store, job, raw, governance_log):
     """Perceive a PDF, page by page, binding page n to page n.
 
@@ -767,6 +858,9 @@ def _run_pdf_job(app, jobs, store, job, raw, governance_log):
     _register_sheet_index(store, job, governance_log, record)
     # CLAUDE-DETAIL-CALLOUT-01: and which sheets does it POINT AT?
     _register_detail_callouts(store, job, governance_log, record)
+    # CLAUDE-DATUM-CORROBORATION-WIRING-01: and do its declared levels agree
+    # with what the sheets already read say?
+    _corroborate_datums(store, job, governance_log, record)
     return record
 
 
@@ -915,6 +1009,7 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
         # to hold: this re-runs registration and must create nothing.
         _register_sheet_index(store, job, governance_log, record)
         _register_detail_callouts(store, job, governance_log, record)
+        _corroborate_datums(store, job, governance_log, record)
         return record
 
     outcome, error = _write_evidence_with_retry(
@@ -944,6 +1039,7 @@ def run_one(app, jobs, worker_id: str) -> Optional[dict]:
     # synthetic page unit for it - so the same page boundary applies here.
     _register_sheet_index(store, job, governance_log, record)
     _register_detail_callouts(store, job, governance_log, record)
+    _corroborate_datums(store, job, governance_log, record)
     return record
 
 
