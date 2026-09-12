@@ -1,5 +1,85 @@
 # Continuation checkpoint
 
+## 2026-09-12 — datum corroboration REACHABLE, live at `b68624c`; OBC lane stops at the authority boundary
+
+Appended above the entries below, none of which is altered.
+
+### Shipped and deployed
+
+| SHA | capability |
+|---|---|
+| `1316d2f` | **Datum corroboration wired** into the perception lifecycle |
+| `b68624c` | **Cost fix** — registers built once per job, not once per pair |
+
+Live `b68624c`; `/health` 200 internal and public; both services active;
+`NRestarts=0`; live AST confirms the worker calls `record_corroborations` and
+`registers_for`. Gate: **7,874 passed, 3 skipped, 4,010 subtests, 0 failed**.
+
+`op.datum-corroboration` moves from **IMPLEMENTED / UNREACHABLE** to
+**IMPLEMENTED / REACHABLE / DEPLOYED / REAL-CORPUS PROVEN**.
+
+### Real workflow proof (no scratchpad invocation)
+
+5 corroborations, 1 unresolved, 0 claims, 0 findings, idempotent, 0.800s of
+stage against 52.4s of perception; a datum-less sheet no-ops in 0.034s.
+
+**5, not the 6 an earlier pairwise script produced.** The difference is
+DIRECTION, not loss: `record_corroborations` iterates the LEFT source's datums,
+so a sheet stating one datum twice (A401 carries two elevations) yields a
+duplicate edge when it leads. The lifecycle puts the newly-perceived sheet on
+the left, so one edge is written per distinct fact.
+
+The stage also fires **Architecture-to-Architecture** where two elevations agree.
+Legitimate, and worth knowing before any UI labels this "cross-discipline".
+
+### A COST REGRESSION I INTRODUCED AND FIXED IN THE SAME TRANCHE
+
+Wiring the stage doubled the full gate (~11 min -> 22:22) and tripled Tier 0
+(31s -> 96.6s). `datum_register` walks the whole workspace evidence list and was
+called once per source to find counterparts, then twice more per pair - O(n^2)
+scans of unchanged evidence. `registers_for()` now builds each register once:
+**Tier 0 96.6s -> 26.6s**, at or below the pre-wiring baseline.
+
+### A WATCHDOG CORRECTION WORTH KEEPING
+
+The final gate showed 3:19:20 wall-clock and I raised a starvation alarm. TWO of
+my readings were wrong:
+
+- "two competing pytest controllers" — wrong; PID 10960 was 30272's CHILD. One
+  normal xdist session (wrapper -> controller -> 8 workers -> 8 gateways = 18
+  processes). Caught only because parentage was checked BEFORE killing anything.
+- "~2% CPU, starved" — wrong, and it is the exact mistake this file already
+  warns about. Cumulative CPU misleads on a long run. **Instantaneous rate was
+  46-68% per worker, 490% aggregate**, with the log growing 408 bytes/25s.
+
+The elapsed window spanned an overnight machine SLEEP: wall-clock includes sleep,
+CPU time does not. **A wall-clock watchdog cannot distinguish a slow gate from a
+sleeping machine; log GROWTH can.** Future watchdogs should watch growth.
+
+### OBC CODE MATRIX LANE — STOPPED AT SECTION 9
+
+Nipigon cover sheet carries an Ontario Building Code compliance matrix in exact
+native text: numbered rows, Code clause citations (Part 3 and Part 9 -
+`3.2.2.20-83`, `3.2.9`, `3.8`, `9.10.8.2`), and stated project values.
+
+**ARCHIOSK holds NO authoritative OBC corpus.** `external_research.py` exists but
+`governance/specified-unbuilt/external-intelligence-airlock.md` is NOT AUTHORIZED
+beyond Missions 01/02. The authority MODEL already exists - `Requirement` records
+are parsed from an uploaded Source with `original_requirement_identifier`
+preserving the source's own clause numbering - so an uploaded OBC would become
+governed Requirements through the path that already exists.
+
+**A SUBSET NEEDS NO EXTERNAL AUTHORITY AT ALL** - the declaration's own internal
+arithmetic and its Allowed-vs-Proposed pairs (Building Area Existing+New=Total,
+Height Allowed vs Height Proposed, Parking Required vs Parking Provided). That
+lane is deployable without acquiring the Code.
+
+### Current frontier
+
+**Claude application frontier:** `b68624c`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED.
+
+
 ## 2026-09-11 (charter run 4) — next-axis reconnaissance: no cross-discipline axis remains; an OBC Code Matrix appears
 
 Appended above the entries below, none of which is altered. **No code change in
