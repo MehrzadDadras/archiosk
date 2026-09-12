@@ -41,6 +41,28 @@ class BaseConfig:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
+    # CLAUDE-FEASIBILITY-MODEL-03: the GO-PDZ feasibility compiler's model,
+    # deliberately SEPARATE from GEMINI_MODEL above rather than sharing it.
+    #
+    # GEMINI_MODEL is not a neutral default: services/sheet_vision.py passes
+    # `model=None` into services/llm_gateway.py, whose Gemini path resolves
+    # `model or os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)`. So raising that
+    # value to move feasibility onto a newer model would silently move the
+    # governed sheet-vision path - a real production caller that transmits
+    # drawing bytes - onto it at the same time, with no test naming the change.
+    # Two capabilities with different evidence, different risk and different
+    # proof history should not be pinned to one string because they happen to
+    # share a provider.
+    #
+    # Read through this class rather than by a module-level os.getenv in the
+    # compiler: `load_dotenv` runs here at import, and a compiler imported
+    # before config would evaluate its own getenv too early and fall back to a
+    # hard-coded literal while an operator's .env value sat unread. That is the
+    # same class of defect as the STATIC_VERSION note further down, and here it
+    # would present as a SILENT MODEL DOWNGRADE.
+    FEASIBILITY_MODEL_PROVIDER = os.getenv("FEASIBILITY_MODEL_PROVIDER", "gemini")
+    FEASIBILITY_MODEL = os.getenv("FEASIBILITY_MODEL", "gemini-3.8-flash")
+
     # -- Storage ---------------------------------------------------------
     # `or` (not getenv's own default arg) so a blank .env value -- e.g.
     # "DATABASE_URL=" -- falls through too, not just a fully unset var:

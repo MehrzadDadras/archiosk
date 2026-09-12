@@ -157,7 +157,8 @@ class TheProviderVocabularyIsTheGatewaysOwn(unittest.TestCase):
                          llm_gateway.PROVIDER_GEMINI)
 
     def test_the_compilers_default_is_a_name_the_gateway_knows(self):
-        self.assertIn(compiler.DEFAULT_PROVIDER, llm_gateway.KNOWN_PROVIDERS)
+        self.assertIn(compiler.resolve_provider_name(),
+                      llm_gateway.KNOWN_PROVIDERS)
 
     def test_an_unmappable_provider_is_refused_not_guessed(self):
         for name in ("openai", "", None, "mistral"):
@@ -405,6 +406,94 @@ class TheCredentialStatusIsReportedNotWorkedAround(unittest.TestCase):
         source = inspect.getsource(compiler.resolve_credential)
         self.assertIn("GEMINI_API_KEY", source)
         self.assertIn("ANTHROPIC_API_KEY", source)
+
+
+class TheCurrentModelIsRequestedWithNoSilentFallback(unittest.TestCase):
+    """CLAUDE-FEASIBILITY-MODEL-03, section 1 and 2.
+
+    The gateway's Gemini path resolves `model or os.getenv("GEMINI_MODEL",
+    DEFAULT_GEMINI_MODEL)`. So handing it `model=None` is not neutral - it is a
+    silent downgrade to gemini-2.5-flash, which is exactly what section 1
+    forbids. These tests prove an explicit model always arrives.
+    """
+
+    def _compile(self, **kwargs):
+        from tests.test_feasibility_compiler_01 import _golden_payload
+        recorder = RecordingGateway([
+            _outcome(raw_text=json.dumps(_golden_payload()))])
+        runner = compiler.gateway_runner(caller=recorder, **kwargs)
+        evidence = compiler.FeasibilityEvidence(
+            investigation_id="INV-1", input_address="100 Example Avenue")
+        outcome = compiler.compile_feasibility(evidence, runner=runner)
+        return outcome, recorder
+
+    def test_the_gateway_receives_the_current_model_explicitly(self):
+        _outcome_, recorder = self._compile()
+        self.assertEqual(recorder.calls[0]["model"], "gemini-3.8-flash")
+
+    def test_the_gateway_is_never_handed_none(self):
+        _outcome_, recorder = self._compile()
+        self.assertIsNotNone(recorder.calls[0]["model"],
+                             "None would let the gateway resolve its own default")
+
+    def test_the_feasibility_model_is_not_the_gateways_default(self):
+        """Section 2: the two must be independently configurable."""
+        self.assertNotEqual(compiler.resolve_model(),
+                            llm_gateway.DEFAULT_GEMINI_MODEL)
+        self.assertEqual(llm_gateway.DEFAULT_GEMINI_MODEL, "gemini-2.5-flash")
+
+    def test_the_gateways_default_is_left_alone(self):
+        """A production caller (sheet_vision) passes model=None and relies on it."""
+        import config
+        self.assertEqual(config.BaseConfig.GEMINI_MODEL, "gemini-2.5-flash")
+        self.assertEqual(config.BaseConfig.FEASIBILITY_MODEL, "gemini-3.8-flash")
+
+    def test_no_configured_model_raises_rather_than_defaulting(self):
+        original = compiler.resolve_model
+        compiler.resolve_model = lambda: ""
+        try:
+            with self.assertRaises(RuntimeError):
+                compiler.gateway_runner(caller=RecordingGateway([_outcome()]))
+        finally:
+            compiler.resolve_model = original
+
+    def test_the_model_is_resolved_at_call_time_not_import_time(self):
+        """`.env` is read by config at ITS import; a module-level getenv in the
+        compiler could run first and silently use a stale literal."""
+        source = inspect.getsource(compiler.resolve_model)
+        self.assertIn("_config()", source)
+        module_source = code_only(compiler)
+        self.assertNotIn('os.getenv("FEASIBILITY_MODEL"', module_source.split(
+            "def resolve_model")[0])
+
+    def test_the_configuration_reports_where_each_value_came_from(self):
+        configuration = compiler.model_configuration()
+        self.assertEqual(configuration["model"], "gemini-3.8-flash")
+        self.assertEqual(configuration["provider"], "gemini")
+        self.assertIn("config.", configuration["model_source"])
+        self.assertEqual(configuration["gateway_default_model_not_used"],
+                         "gemini-2.5-flash")
+
+    def test_a_model_the_provider_rejects_is_its_own_named_stop(self):
+        """CURRENT_MODEL_UNAVAILABLE, distinct from a missing credential: 'we
+        have no key' and 'the key works and that model does not exist' call for
+        different actions."""
+        recorder = RecordingGateway([_outcome(
+            ran=False,
+            skipped_reason="models/gemini-3.8-flash is not found for API version")])
+        runner = compiler.gateway_runner(caller=recorder)
+        outcome = compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=runner)
+        self.assertEqual(outcome.failure_reason,
+                         compiler.CURRENT_MODEL_UNAVAILABLE)
+        self.assertIsNone(outcome.go_pdz_payload)
+
+    def test_the_credential_status_names_where_to_populate_it(self):
+        status = compiler.credential_status()
+        self.assertEqual(status["status"], compiler.PROVIDER_CREDENTIAL_REQUIRED
+                         if not status["credential_present"] else "READY")
+        self.assertIn("GEMINI_API_KEY", status["credential_location"])
 
 
 if __name__ == "__main__":

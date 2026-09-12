@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@2"
+COMPILER_VERSION = "feasibility-compiler@3"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -66,12 +66,87 @@ COMPILER_VERSION = "feasibility-compiler@2"
 #: `ValueError: 'google' is not a known provider`. `gateway_model` still accepts
 #: the alias, but the declared default is now the vocabulary of the boundary that
 #: actually performs the egress.
-DEFAULT_PROVIDER = os.getenv("FEASIBILITY_MODEL_PROVIDER", "gemini")
-DEFAULT_MODEL = os.getenv("FEASIBILITY_MODEL", "gemini-3.8-flash")
+#: The declared fallbacks, used only when `config` cannot be imported at all
+#: (a bare script outside the app). NOT read from the environment here - see
+#: `resolve_model` for why an import-time getenv is the wrong place.
+FALLBACK_PROVIDER = "gemini"
+FALLBACK_MODEL = "gemini-3.8-flash"
 
 #: Failure reason used when no authorized credential exists for the configured
 #: provider. A named STOP, never a bypass and never a fabricated answer.
 PROVIDER_CREDENTIAL_REQUIRED = "PROVIDER_CREDENTIAL_REQUIRED"
+
+#: The configured current model could not be resolved by the provider. A named
+#: STOP, distinct from a missing credential, because "we have no key" and "the
+#: key works and that model does not exist" call for different actions.
+CURRENT_MODEL_UNAVAILABLE = "CURRENT_MODEL_UNAVAILABLE"
+
+
+def _config():
+    """`config.BaseConfig`, or None outside the application.
+
+    Imported lazily and defensively: this module must stay usable from a bare
+    script, and must not make `config` a hard import-time dependency of the
+    compile path.
+    """
+    try:
+        import config as _module
+        return _module.BaseConfig
+    except Exception:  # noqa: BLE001 - absence is a supported state
+        return None
+
+
+def resolve_model() -> str:
+    """The configured feasibility model, resolved AT CALL TIME.
+
+    NOT a module-level `os.getenv`. `config.py` calls `load_dotenv()` at its own
+    import, and this module does not import `config`, so a getenv evaluated here
+    at import time can run BEFORE `.env` has been read - returning the literal
+    below while an operator's configured value sits unread. The two strings are
+    identical today, which is exactly what would have kept that invisible until
+    someone changed `.env` and it silently did not take effect.
+
+    A SILENT MODEL DOWNGRADE IS THE FAILURE THIS GUARDS. Section 1 forbids
+    falling back to an older Gemini quietly; a stale import-time default is
+    precisely how that would have happened, with nothing in the output to show it.
+    """
+    configured = getattr(_config(), "FEASIBILITY_MODEL", None)
+    return (configured or os.getenv("FEASIBILITY_MODEL") or FALLBACK_MODEL)
+
+
+def resolve_provider_name() -> str:
+    """The configured feasibility provider, resolved at call time."""
+    configured = getattr(_config(), "FEASIBILITY_MODEL_PROVIDER", None)
+    return (configured or os.getenv("FEASIBILITY_MODEL_PROVIDER")
+            or FALLBACK_PROVIDER)
+
+
+def model_configuration() -> dict:
+    """What will actually be requested, and where each value came from.
+
+    Reported rather than assumed: section 5 requires the exact model, and
+    "what the constant says" is not the same claim as "what the gateway was
+    asked for".
+    """
+    resolved_model, resolved_provider = resolve_model(), resolve_provider_name()
+    configuration = _config()
+    return {
+        "provider": resolved_provider,
+        "model": resolved_model,
+        "provider_source": ("config.FEASIBILITY_MODEL_PROVIDER" if getattr(
+            configuration, "FEASIBILITY_MODEL_PROVIDER", None)
+            else ("environment" if os.getenv("FEASIBILITY_MODEL_PROVIDER")
+                  else "module fallback")),
+        "model_source": ("config.FEASIBILITY_MODEL" if getattr(
+            configuration, "FEASIBILITY_MODEL", None)
+            else ("environment" if os.getenv("FEASIBILITY_MODEL")
+                  else "module fallback")),
+        # The gateway's own default, shown so a reader can see that feasibility
+        # is NOT sharing it - and that no silent downgrade to it is possible.
+        "gateway_default_model_not_used": getattr(
+            _config(), "GEMINI_MODEL", None),
+        "credential_variable": "GEMINI_API_KEY",
+    }
 
 #: Section 10. Small and explicit. Structural only.
 MAX_STRUCTURAL_ATTEMPTS = 2
@@ -331,6 +406,15 @@ def _classify_exception(exc) -> str:
         return PROVIDER_CREDENTIAL_REQUIRED
     if "disabled" in text:
         return FAILURE_PROVIDER_CONFIG
+    # THE CONFIGURED MODEL DOES NOT EXIST is its own answer, distinct from both a
+    # missing credential and a dead provider: it means the key worked, the
+    # service answered, and the model we are required to use was rejected. The
+    # correct response is to STOP and report, never to fall back to an older
+    # Gemini - so it must not be collapsed into the generic unavailable case.
+    if (("not found" in text or "does not exist" in text
+         or "unsupported model" in text or "invalid model" in text)
+            and ("model" in text or "gemini" in text)):
+        return CURRENT_MODEL_UNAVAILABLE
     if "not installed" in text or "unavailable" in text:
         return FAILURE_MODEL_UNAVAILABLE
     if "timeout" in name or "timeout" in text or "deadline" in text:
@@ -363,8 +447,8 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
     outside the loop, and its verdict is recorded rather than acted upon.
     """
     started = time.time()
-    provider = provider or DEFAULT_PROVIDER
-    model = model or DEFAULT_MODEL
+    provider = provider or resolve_provider_name()
+    model = model or resolve_model()
     outcome = CompilerOutcome(
         provider=provider, model=model,
         investigation_id=getattr(evidence, "investigation_id", None),
@@ -483,8 +567,14 @@ def gateway_runner(*, model_name=None, provider=None, api_key=None,
     """
     from services import gateway_model as gateway
 
-    model_name = model_name or DEFAULT_MODEL
-    provider = provider or DEFAULT_PROVIDER
+    model_name = model_name or resolve_model()
+    provider = provider or resolve_provider_name()
+    if not model_name:
+        # NEVER hand the gateway None: its Gemini path would then
+        # resolve `os.getenv('GEMINI_MODEL', DEFAULT_GEMINI_MODEL)`
+        # and quietly run on gemini-2.5-flash. An explicit model is
+        # what makes 'no silent fallback' true rather than intended.
+        raise RuntimeError('no feasibility model is configured')
 
     if agent is None:
         if not gateway.PYDANTIC_AI_AVAILABLE:
@@ -530,7 +620,7 @@ def resolve_credential(provider=None):
     credential is reported as `PROVIDER_CREDENTIAL_REQUIRED`, never worked around,
     and this function does not prompt, generate, or default one.
     """
-    provider = (provider or DEFAULT_PROVIDER).strip().lower()
+    provider = (provider or resolve_provider_name()).strip().lower()
     variable = ("GEMINI_API_KEY" if provider in ("gemini", "google", "google-genai")
                 else "ANTHROPIC_API_KEY")
     return os.getenv(variable) or None
@@ -538,11 +628,16 @@ def resolve_credential(provider=None):
 
 def credential_status(provider=None) -> dict:
     """Whether a live probe can run at all, without revealing anything."""
-    provider = provider or DEFAULT_PROVIDER
+    provider = provider or resolve_provider_name()
     key = resolve_credential(provider)
-    return {"provider": provider, "model": DEFAULT_MODEL,
-            "credential_present": bool(key),
-            "status": "READY" if key else PROVIDER_CREDENTIAL_REQUIRED}
+    status = dict(model_configuration())
+    status.update({"provider": provider,
+                   "credential_present": bool(key),
+                   "status": "READY" if key else PROVIDER_CREDENTIAL_REQUIRED,
+                   "credential_location": (
+                       ".env at the repository root, or the deploying host's "
+                       "environment: GEMINI_API_KEY")})
+    return status
 
 
 def _usage_of(result) -> Optional[dict]:

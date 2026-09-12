@@ -122,8 +122,8 @@ class TheGoldenSyntheticCase(unittest.TestCase):
         outcome = compiler.compile_feasibility(
             _evidence(), runner=CountingRunner([_golden_payload()]))
         self.assertEqual(outcome.compiler_version, compiler.COMPILER_VERSION)
-        self.assertEqual(outcome.provider, compiler.DEFAULT_PROVIDER)
-        self.assertEqual(outcome.model, compiler.DEFAULT_MODEL)
+        self.assertEqual(outcome.provider, compiler.resolve_provider_name())
+        self.assertEqual(outcome.model, compiler.resolve_model())
         self.assertEqual(outcome.schema_version, contract.SCHEMA_VERSION)
         self.assertTrue(outcome.validator_version)
         self.assertTrue(outcome.input_evidence_sha256.startswith("sha256:"))
@@ -346,9 +346,10 @@ class NothingReachesAProvider(unittest.TestCase):
         """The provider name is the GATEWAY's vocabulary, not the SDK's - version
         1 said "google", which llm_gateway would have rejected outright."""
         from services import llm_gateway
-        self.assertEqual(compiler.DEFAULT_PROVIDER, "gemini")
-        self.assertIn(compiler.DEFAULT_PROVIDER, llm_gateway.KNOWN_PROVIDERS)
-        self.assertEqual(compiler.DEFAULT_MODEL, "gemini-3.8-flash")
+        self.assertEqual(compiler.resolve_provider_name(), "gemini")
+        self.assertIn(compiler.resolve_provider_name(),
+                      llm_gateway.KNOWN_PROVIDERS)
+        self.assertEqual(compiler.resolve_model(), "gemini-3.8-flash")
         outcome = compiler.compile_feasibility(
             _evidence(), runner=CountingRunner([_golden_payload()]),
             provider="other", model="some-other-model")
@@ -356,7 +357,7 @@ class NothingReachesAProvider(unittest.TestCase):
         self.assertEqual(outcome.model, "some-other-model")
 
     def test_no_latest_alias_is_used(self):
-        self.assertNotIn("latest", compiler.DEFAULT_MODEL)
+        self.assertNotIn("latest", compiler.resolve_model())
 
 
 class NoCanonicalMutation(unittest.TestCase):
