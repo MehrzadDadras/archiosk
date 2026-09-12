@@ -693,8 +693,13 @@ def _corroborate_datums(store, job, governance_log, record):
             # This sheet declares no datum. The commonest case, and the one that
             # must cost nothing.
             return None
-        counterparts = datum_corroboration.sources_with_datums(
+        # EVERY REGISTER BUILT ONCE. Reading one back costs a walk of the whole
+        # workspace evidence list, and rebuilding it per pair is what took the
+        # full gate from ~11 minutes to 22:22 on the tranche that introduced
+        # this stage.
+        others = datum_corroboration.registers_for(
             workspace, exclude_source_id=job["source_id"])
+        counterparts = list(others)
         reports = []
         for other in counterparts:
             workspace = store.get(job["workspace_id"])
@@ -702,7 +707,8 @@ def _corroborate_datums(store, job, governance_log, record):
                 break
             reports.append(datum_corroboration.record_corroborations(
                 store, workspace, job["source_id"], other,
-                actor="perception-worker", governance_log=governance_log))
+                actor="perception-worker", governance_log=governance_log,
+                left_register=mine, right_register=others[other]))
     except Exception as exc:  # noqa: BLE001 - the examination is already complete
         logger.warning("datum corroboration raised for source %s (%s: %s)",
                        job["source_id"], type(exc).__name__, exc)

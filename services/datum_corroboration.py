@@ -337,10 +337,22 @@ def _match_names(left_tokensets, right_tokensets):
     return False, None
 
 
-def corroborate(workspace, left_source_id: str, right_source_id: str) -> dict:
-    """Compare two Sources' declared datums. Asserts only on an exact match."""
-    left = datum_register(workspace, left_source_id)
-    right = datum_register(workspace, right_source_id)
+def corroborate(workspace, left_source_id: str, right_source_id: str, *,
+                left_register=None, right_register=None) -> dict:
+    """Compare two Sources' declared datums. Asserts only on an exact match.
+
+    `left_register`/`right_register` let a caller that already built a register
+    pass it in. Not an optimisation looking for a problem: wiring this into the
+    perception lifecycle DOUBLED the full gate, from ~11 minutes to 22:22,
+    because `datum_register` walks the whole workspace evidence list and was
+    being called once per source to find counterparts and then twice more per
+    pair - O(n^2) scans of the same unchanged evidence. Building each register
+    once per job makes it O(n).
+    """
+    left = left_register if left_register is not None else datum_register(
+        workspace, left_source_id)
+    right = right_register if right_register is not None else datum_register(
+        workspace, right_source_id)
     report = {"method": CORROBORATION_METHOD, "version": CORROBORATION_VERSION,
               "left_source_id": left_source_id, "right_source_id": right_source_id,
               "left_datums": len(left), "right_datums": len(right),
@@ -395,26 +407,35 @@ def corroborate(workspace, left_source_id: str, right_source_id: str) -> dict:
     return report
 
 
-def sources_with_datums(workspace, exclude_source_id: Optional[str] = None) -> list:
-    """Every ACTIVE Source in this project that states at least one named datum.
+def registers_for(workspace, exclude_source_id: Optional[str] = None) -> dict:
+    """{source_id: register} for every ACTIVE Source that states a named datum.
 
-    The counterpart set for a newly perceived sheet. Removed Sources are excluded
-    here rather than later, for the reason `view_reference.eligible_targets`
-    already encodes: a withdrawn drawing must not silently become the thing a
-    live one is corroborated against.
+    Returns the registers rather than just the ids, so a caller never has to
+    rebuild what this already computed - see `corroborate` for what that cost.
+
+    Removed Sources are excluded here rather than later, for the reason
+    `view_reference.eligible_targets` already encodes: a withdrawn drawing must
+    not silently become the thing a live one is corroborated against.
     """
-    out = []
+    out = {}
     for source in (getattr(workspace, "sources", None) or []):
         if source.get("removed_at") or source.get("id") == exclude_source_id:
             continue
-        if datum_register(workspace, source["id"]):
-            out.append(source["id"])
+        register = datum_register(workspace, source["id"])
+        if register:
+            out[source["id"]] = register
     return out
+
+
+def sources_with_datums(workspace, exclude_source_id: Optional[str] = None) -> list:
+    """The counterpart source ids alone, for a caller that needs no registers."""
+    return list(registers_for(workspace, exclude_source_id))
 
 
 def record_corroborations(store, workspace, left_source_id: str,
                           right_source_id: str, *, actor: str = "system",
-                          governance_log=None, dry_run: bool = False) -> dict:
+                          governance_log=None, dry_run: bool = False,
+                          left_register=None, right_register=None) -> dict:
     """Write one CORRESPONDS_TO edge per corroborated datum. Never raises.
 
     PROVISIONAL, because a machine derived it. The edge says two Sources state
@@ -430,7 +451,8 @@ def record_corroborations(store, workspace, left_source_id: str,
         CaseWorkspaceError, RELATIONSHIP_TYPE_CORRESPONDS_TO,
     )
 
-    report = corroborate(workspace, left_source_id, right_source_id)
+    report = corroborate(workspace, left_source_id, right_source_id,
+                         left_register=left_register, right_register=right_register)
     report["relationships_created"] = 0
     if dry_run or not report["corroborated"]:
         return report
