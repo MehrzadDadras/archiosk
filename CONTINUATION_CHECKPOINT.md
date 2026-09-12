@@ -1,5 +1,72 @@
 # Continuation checkpoint
 
+## 2026-09-11 (charter run) — three tranches live; cross-discipline ANCHOR proven, DISCREPANCY not earned
+
+Appended above the entries below, none of which is altered.
+
+### Shipped, gated and deployed this run
+
+| SHA | capability | gate |
+|---|---|---|
+| `cff3259` | Sheet identity register **wired** into the perception lifecycle | 7,757 passed / 3,944 subtests |
+| `e9ff790` | **Declared detail callout family** — first relationship family the corpus earned | 7,792 passed / 3,957 subtests |
+| `d306f4b` | **PDF page orientation correction** | 7,810 passed / 3,966 subtests |
+
+Live: `d306f4b`, `/health` 200 internal and public, both services active,
+perception `NRestarts=0`. Rollback points `archiosk-backup-9a89f25`,
+`-cff3259`, `-e9ff790`.
+
+### The cross-discipline anchor IS real
+
+Architecture and Structure state the SAME named datums. Structural side is
+exact native text; architectural side needed the orientation fix to be readable
+at all.
+
+**Structural datum register (native, exact, 0 unlabelled, 0 conflicts):**
+`ELEV. FTG` 186670 · `EXT. ST. FTG` 186960 · `PARK. FTG` 188220 · `PARK. SLAB`
+188620 · `PERIMETER BEAM` 191500 · `F.F.` 192610 · `FL. SLAB` 196370 ·
+`ROOF DECK` 200120 · `TOP OF SKYLIGHT` 201520
+
+Name↔value association is POSITIONAL (a value belongs to the nearest label
+across the perpendicular axis, gap 0.24–3.16 pt). Text-proximity was tried
+first and was WRONG — it returned `PERIMETER BEAM` against five different values.
+
+**Architectural values vs that register: 7 EXACT matches, 3 near misses.**
+
+### WHY THE DISCREPANCY IS NOT EARNED — and this is the stop
+
+A near miss is **indistinguishable from a real coordination error by value alone**:
+
+- `192320` vs `192610`, delta −290 mm — but `192.32` is `C.L. OF RD.`, the road
+  centreline, a legitimately ARCHITECTURE-ONLY datum. The comparison forced it
+  to the nearest structural value and manufactured a discrepancy from nothing.
+- `186620` vs `186670` (−50) and `191700` vs `191500` (+200) — single-digit OCR
+  errors produce deltas of exactly the magnitude a genuine error has.
+
+**A discrepancy engine fed OCR-derived architectural values would emit roughly
+3 false findings for every 7 corroborations.**
+
+The asymmetry that matters: **an exact match is self-corroborating** (an OCR
+error destroys a match, it cannot create one). **A mismatch is ambiguous**
+between OCR error, architecture-only datum, and real conflict.
+
+Two of my own candidate "discrepancies" were traced to MY association errors,
+not to the drawings: I assigned `EXT ST → 186.67` and `FTG PARK → 186.96` where
+the sheet plainly reads `186.96 U/S EXT. ST. FTG` and `186.67 U/S ELEV. FTG`.
+
+### Current frontier
+
+**Claude application frontier:** `d306f4b`, deployed.
+**Codex safe frontier:** `6b37511` — UNCHANGED. Nothing from this run is handed
+over: all three tranches are one tranche old or newer.
+
+### Deferred, registered, not blocking
+
+Late-arrival `SourceReference` re-resolution; founding-PDF perception gap;
+49-page perception cost; region-bounding refinement; OSD wrong on A403
+(reports 90, 270 reads better); rollback trees above the keep-3 rule.
+
+
 ## 2026-09-11 — detail callout family live at `e9ff790`, and a MEASUREMENT CORRECTION that reopens the cross-discipline route
 
 Appended above the entries below, none of which is altered.
