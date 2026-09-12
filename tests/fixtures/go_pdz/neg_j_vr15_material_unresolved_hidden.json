@@ -1,0 +1,134 @@
+{
+  "contract": "GO-PDZ-1.0-ONEPAGE",
+  "schema_version": "1.0",
+  "gate": "GATE_01_ADDRESS_ONLY_ENVELOPE",
+  "next_authorized_gate": "GATE_02_OWNER_PROGRAM_ENTRY",
+  "subject": {
+    "subject_id": "SUBJ-100-EXAMPLE",
+    "address_as_given": "100 Example Avenue, Exampleton",
+    "normalized_address": "100 Example Avenue, Exampleton, Ontario",
+    "parcel_identifier": "PLAN 9999 LOT 1",
+    "municipality": "Town of Exampleton",
+    "identity_confidence": "HIGH"
+  },
+  "authorities": [
+    {
+      "authority_id": "AUTH-ZBL",
+      "name": "Exampleton Zoning By-law 2020-01",
+      "instrument": "Zoning By-law",
+      "citation": "By-law 2020-01, s.7.2",
+      "effective_date": "2020-03-01",
+      "authority_status": "IN_FORCE",
+      "retrieved_at": "2026-09-12",
+      "url": "https://example.invalid/zbl"
+    },
+    {
+      "authority_id": "AUTH-OP",
+      "name": "Exampleton Official Plan",
+      "instrument": "Official Plan",
+      "citation": "Schedule A, Land Use",
+      "effective_date": "2019-06-15",
+      "authority_status": "IN_FORCE",
+      "retrieved_at": "2026-09-12",
+      "url": "https://example.invalid/op"
+    },
+    {
+      "authority_id": "AUTH-GIS",
+      "name": "Exampleton Regulated Area Layer",
+      "instrument": "GIS layer",
+      "citation": "Regulated Area v2026.1",
+      "effective_date": "2026-01-31",
+      "authority_status": "IN_FORCE",
+      "retrieved_at": "2026-09-12",
+      "url": "https://example.invalid/gis"
+    }
+  ],
+  "statements": [
+    {
+      "statement_id": "ST-ZONE",
+      "kind": "AUTHORITY_SAYS",
+      "topic": "ZONING",
+      "text": "The parcel is zoned Community Commercial (CC).",
+      "authority_refs": [
+        "AUTH-ZBL"
+      ],
+      "statement_status": "ESTABLISHED",
+      "confidence": "HIGH",
+      "spatial_relation": "NOT_APPLICABLE",
+      "spatial_basis": "NONE",
+      "conflict_refs": [],
+      "derived_from": []
+    },
+    {
+      "statement_id": "ST-HEIGHT",
+      "kind": "AUTHORITY_SAYS",
+      "topic": "HEIGHT",
+      "text": "Maximum permitted building height in the CC zone is 14 metres.",
+      "authority_refs": [
+        "AUTH-ZBL"
+      ],
+      "statement_status": "ESTABLISHED",
+      "confidence": "HIGH",
+      "spatial_relation": "NOT_APPLICABLE",
+      "spatial_basis": "NONE",
+      "conflict_refs": [],
+      "derived_from": []
+    },
+    {
+      "statement_id": "ST-OP",
+      "kind": "AUTHORITY_SAYS",
+      "topic": "OFFICIAL_PLAN",
+      "text": "The parcel is designated Mixed Use Corridor on Schedule A.",
+      "authority_refs": [
+        "AUTH-OP"
+      ],
+      "statement_status": "ESTABLISHED",
+      "confidence": "HIGH",
+      "spatial_relation": "NOT_APPLICABLE",
+      "spatial_basis": "NONE",
+      "conflict_refs": [],
+      "derived_from": []
+    },
+    {
+      "statement_id": "ST-REG",
+      "kind": "PROPERTY_FACT",
+      "topic": "ENVIRONMENT",
+      "text": "The parcel lies wholly outside the mapped regulated area.",
+      "authority_refs": [
+        "AUTH-GIS"
+      ],
+      "statement_status": "ESTABLISHED",
+      "confidence": "HIGH",
+      "spatial_relation": "OUTSIDE",
+      "spatial_basis": "DETERMINISTIC_GIS",
+      "conflict_refs": [],
+      "derived_from": []
+    },
+    {
+      "statement_id": "ST-OPP",
+      "kind": "GO_INTERPRETS",
+      "topic": "OPPORTUNITY",
+      "text": "On the evidence gathered, a mixed-use redevelopment appears consistent with the Official Plan designation, subject to the zoning standards above and to a site plan approval pathway.",
+      "authority_refs": [],
+      "statement_status": "PROVISIONAL",
+      "confidence": "MEDIUM",
+      "spatial_relation": "NOT_APPLICABLE",
+      "spatial_basis": "NONE",
+      "conflict_refs": [],
+      "derived_from": [
+        "ST-ZONE",
+        "ST-OP"
+      ]
+    }
+  ],
+  "site_specific_exceptions": [],
+  "unresolved": [
+    {
+      "issue_id": "UNR-SURVEY",
+      "question": "Lot area and frontage are not published; a survey is required.",
+      "materiality": "MATERIAL",
+      "required_evidence": "Plan of survey"
+    }
+  ],
+  "result_status": "GOVERNED_RESULT"
+}
