@@ -251,7 +251,11 @@ class _GatewayModelBase:
             # provider and none is carried here.
             provider_details={"via": "services/llm_gateway.py",
                               "adapter": ADAPTER_VERSION,
-                              "stop_reason": outcome.stop_reason},
+                              "stop_reason": outcome.stop_reason,
+                              # What the PROVIDER reported, kept separate from
+                              # what we requested: those are different facts.
+                              "resolved_model": outcome.resolved_model,
+                              "usage": outcome.usage},
         )
 
 

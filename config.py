@@ -62,6 +62,14 @@ class BaseConfig:
     # would present as a SILENT MODEL DOWNGRADE.
     FEASIBILITY_MODEL_PROVIDER = os.getenv("FEASIBILITY_MODEL_PROVIDER", "gemini")
     FEASIBILITY_MODEL = os.getenv("FEASIBILITY_MODEL", "gemini-3.8-flash")
+    # A full Gate-01 envelope is a LONG document, and this was measured rather
+    # than chosen: at the gateway's 4000-token call budget the first live 35 Taber
+    # replay fit and reported promotable, and the SECOND run of the identical
+    # probe was truncated mid-statement. The gateway refuses to parse a truncated
+    # response - never a partial parse - so it failed honestly rather than
+    # returning a short document, but a budget that passes or fails on luck is a
+    # coin toss, not a budget. 35 Taber alone carries 15 statements.
+    FEASIBILITY_MAX_OUTPUT_TOKENS = os.getenv("FEASIBILITY_MAX_OUTPUT_TOKENS", "16000")
 
     # -- Storage ---------------------------------------------------------
     # `or` (not getenv's own default arg) so a blank .env value -- e.g.

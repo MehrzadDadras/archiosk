@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@3"
+COMPILER_VERSION = "feasibility-compiler@5"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -151,6 +151,27 @@ def model_configuration() -> dict:
 #: Section 10. Small and explicit. Structural only.
 MAX_STRUCTURAL_ATTEMPTS = 2
 
+#: A FULL GATE-01 ENVELOPE IS A LONG DOCUMENT, AND 4000 WAS NOT ENOUGH.
+#: Measured, and measured only because the same probe was run twice: the first
+#: live 35 Taber replay fit under 4000 output tokens and reported promotable; the
+#: SECOND was truncated mid-statement at the same setting. The gateway refused to
+#: parse the partial response - never a partial parse, which is why this surfaced
+#: as an honest failure rather than a silently short document - but a cap that
+#: passes or fails on luck is not a cap, it is a coin toss. 35 Taber alone carries
+#: 15 statements and 7 spatial tokens; a real envelope is simply large.
+DEFAULT_MAX_OUTPUT_TOKENS = 16000
+
+
+def resolve_max_output_tokens() -> int:
+    """Output budget, resolved at call time like the model itself."""
+    configured = getattr(_config(), "FEASIBILITY_MAX_OUTPUT_TOKENS", None)
+    raw = configured or os.getenv("FEASIBILITY_MAX_OUTPUT_TOKENS")
+    try:
+        value = int(raw) if raw else DEFAULT_MAX_OUTPUT_TOKENS
+    except (TypeError, ValueError):
+        value = DEFAULT_MAX_OUTPUT_TOKENS
+    return max(1000, value)
+
 #: Section 14. Every one of these is a RESULT, never an exception that escapes.
 FAILURE_MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
 FAILURE_MODEL_TIMEOUT = "MODEL_TIMEOUT"
@@ -160,6 +181,7 @@ FAILURE_SCHEMA = "GO_PDZ_SCHEMA_FAILURE"
 FAILURE_SEMANTIC = "SEMANTIC_VALIDATION_FAILURE"
 FAILURE_EVIDENCE = "EVIDENCE_CONTEXT_INVALID"
 FAILURE_PROVIDER_CONFIG = "PROVIDER_CONFIGURATION_ERROR"
+FAILURE_OUTPUT_TRUNCATED = "OUTPUT_TRUNCATED_AT_MAX_TOKENS"
 
 #: Section 8. Short and bounded. The machine validator is the enforcement layer,
 #: so this does not try to restate twenty rules in prose - a long prompt would
@@ -189,6 +211,42 @@ Stop at the legal envelope. Owner program, statement of requirements, budget,
 unit and room counts, massing and option selection belong to a later gate and
 must not appear.
 """
+
+
+def output_contract_prompt() -> str:
+    """The required output shape, taken FROM THE CANONICAL CONTRACT ITSELF.
+
+    The first live probe failed here and the failure was the harness's, not the
+    model's. gemini-3.8-flash produced a careful document - correct statement
+    kinds, the supplied authority_id cited, the deterministic spatial token
+    respected, nothing invented - using field names it had to guess
+    (`parcel_identity`, `statement_type`, `unresolved_ambiguities`) because the
+    instructions named NONE of the contract's own keys, and `output_type=str`
+    meant the framework enforced nothing either. It was asked to hit a target it
+    was never shown.
+
+    `go_pdz_contract.SCHEMA` is serialised here rather than restated, so there is
+    exactly ONE definition of the contract (section 7: do not create a competing
+    duplicate schema). If the contract changes, this prompt changes with it and
+    cannot drift out of step.
+    """
+    return (
+        "Return ONE JSON object and nothing else - no prose, no code fence.\n"
+        "It must validate against this JSON Schema exactly, including every\n"
+        "`required` key, every `const` value and every `enum` value. Keys not in\n"
+        "the schema are rejected (`additionalProperties: false`).\n\n"
+        + json.dumps(contract.SCHEMA, indent=1, sort_keys=True)
+        + "\n\nNotes that the schema states but which are easy to miss:\n"
+          "  - `contract` must be exactly %r and `schema_version` exactly %r.\n"
+          "  - `gate` must be exactly %r; `next_authorized_gate` exactly %r.\n"
+          "  - every statement needs `statement_id`, `kind`, `topic`, `text`,\n"
+          "    `statement_status` and `confidence`.\n"
+          "  - `result_status` is %s: use UNRESOLVED when any supplied unresolved\n"
+          "    issue is MATERIAL, or any site-specific exception was not retrieved.\n"
+          "  - copy `spatial_relation` and `spatial_basis` from the supplied\n"
+          "    deterministic spatial results. Do not mint a spatial predicate.\n"
+        % (contract.CONTRACT_ID, contract.SCHEMA_VERSION, contract.GATE_01,
+           contract.GATE_02, " or ".join(contract.RESULT_STATUSES)))
 
 
 def canonical_evidence(evidence) -> str:
@@ -415,6 +473,11 @@ def _classify_exception(exc) -> str:
          or "unsupported model" in text or "invalid model" in text)
             and ("model" in text or "gemini" in text)):
         return CURRENT_MODEL_UNAVAILABLE
+    if "max_tokens" in text or "cut off" in text or "truncat" in text:
+        # Its own reason: the model and credential are fine and the document was
+        # simply longer than the budget. Retrying without raising the budget
+        # would just burn another call on the same wall.
+        return FAILURE_OUTPUT_TRUNCATED
     if "not installed" in text or "unavailable" in text:
         return FAILURE_MODEL_UNAVAILABLE
     if "timeout" in name or "timeout" in text or "deadline" in text:
@@ -494,6 +557,7 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
             outcome.structural_errors.append(
                 "%s: %s" % (type(exc).__name__, str(exc)[:300]))
             if outcome.failure_reason in (FAILURE_PROVIDER_CONFIG,
+                                          FAILURE_OUTPUT_TRUNCATED,
                                           PROVIDER_CREDENTIAL_REQUIRED,
                                           FAILURE_MODEL_UNAVAILABLE,
                                           FAILURE_MODEL_RATE_LIMIT,
@@ -530,6 +594,10 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
 
     outcome.go_pdz_payload = payload
     outcome.output_payload_sha256 = payload_hash(payload)
+    # Section 5: the model that ACTUALLY answered, as the provider reported it -
+    # not the configured string restated back as if it were confirmation.
+    outcome.model_version = getattr(runner, "last_resolved_model", None)
+    outcome.usage_metadata = getattr(runner, "last_usage", None)
 
     # SEMANTIC VALIDATION RUNS ONCE, AND ITS RESULT IS EVIDENCE. There is no path
     # from here back into the loop above - that absence is the whole point of
@@ -546,7 +614,7 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
 
 
 def gateway_runner(*, model_name=None, provider=None, api_key=None,
-                   timeout=None, max_tokens=4000, output_model=None,
+                   timeout=None, max_tokens=None, output_model=None,
                    agent=None, caller=None, instructions=INSTRUCTIONS):
     """PydanticAI orchestration over the ONE governed egress boundary.
 
@@ -569,6 +637,7 @@ def gateway_runner(*, model_name=None, provider=None, api_key=None,
 
     model_name = model_name or resolve_model()
     provider = provider or resolve_provider_name()
+    max_tokens = max_tokens or resolve_max_output_tokens()
     if not model_name:
         # NEVER hand the gateway None: its Gemini path would then
         # resolve `os.getenv('GEMINI_MODEL', DEFAULT_GEMINI_MODEL)`
@@ -594,10 +663,25 @@ def gateway_runner(*, model_name=None, provider=None, api_key=None,
 
     def run(_instructions, evidence_dict, attempt):
         prompt = ("Compile this evidence package into a GO-PDZ Gate-01 envelope.\n"
-                  "Attempt %d. Return only the structured document as JSON.\n\n%s"
-                  % (attempt, canonical_evidence(evidence_dict)))
+                  "\n%s\n\nEVIDENCE PACKAGE:\n%s"
+                  % (output_contract_prompt(),
+                     canonical_evidence(evidence_dict)))
+        if attempt > 1:
+            # A STRUCTURAL retry only. It says the shape was wrong; it never
+            # carries a VR finding, because semantic validation happens after
+            # this runner has returned and is never fed back (section 6).
+            prompt += ("\n\nThe previous response did not match the schema. "
+                       "Return only a JSON object conforming to it exactly.")
         result = agent.run_sync(prompt, deps=evidence_dict)
         run.last_usage = _usage_of(result)
+        # The provider's OWN report, surfaced from the adapter rather than
+        # inferred from the configured string. `resolved_model` is what actually
+        # answered; `model` in the envelope stays what was asked for.
+        details = getattr(getattr(result, "response", None), "provider_details",
+                          None) or {}
+        run.last_resolved_model = details.get("resolved_model")
+        if details.get("usage"):
+            run.last_usage = dict(run.last_usage or {}, **details["usage"])
         output = getattr(result, "output", result)
         if hasattr(output, "model_dump"):
             return output.model_dump(mode="json")
@@ -609,6 +693,7 @@ def gateway_runner(*, model_name=None, provider=None, api_key=None,
         return output
 
     run.last_usage = None
+    run.last_resolved_model = None
     run.agent = agent
     return run
 

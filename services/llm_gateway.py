@@ -75,6 +75,21 @@ class LLMCallOutcome:
     provider: Optional[str] = None
     model: Optional[str] = None
     requested_at: Optional[str] = None
+    # CLAUDE-FEASIBILITY-MODEL-03: `model` above is the model the caller ASKED
+    # for. These two are what the provider actually reported back, and they were
+    # being dropped on the floor - the Gemini response carries both
+    # `model_version` and `usage_metadata`, and this boundary read neither. That
+    # turned an ARCHIOSK limitation into something that looked like a provider
+    # limitation, which is the worse of the two because it stops you looking.
+    #
+    # Requested and resolved are kept as SEPARATE fields rather than one being
+    # overwritten by the other: "we asked for gemini-3.8-flash and got
+    # gemini-3.8-flash" and "we asked and the provider answered as something
+    # else" are different facts, and a governed result has to be able to state
+    # which happened. Both default to None, so every existing caller and every
+    # existing construction of this dataclass is unaffected.
+    resolved_model: Optional[str] = None
+    usage: Optional[dict] = None
 
 
 def resolve_timeout_from_env(explicit: Optional[float], default_seconds: float) -> float:
@@ -256,6 +271,8 @@ def _finish_json_outcome(
     provider: str,
     model: str,
     requested_at: str,
+    resolved_model: Optional[str] = None,
+    usage: Optional[dict] = None,
 ) -> LLMCallOutcome:
     """
     CLAUDE-GEMINI-VISION-01: the fence-stripping / JSON-parsing /
@@ -288,6 +305,7 @@ def _finish_json_outcome(
     return LLMCallOutcome(
         ran=True, parsed=parsed, raw_text=text_out, stop_reason=stop_reason,
         provider=provider, model=model, requested_at=requested_at,
+        resolved_model=resolved_model, usage=usage,
     )
 
 
@@ -473,7 +491,31 @@ def call_gemini_json(
         truncated=(finish_reason == "MAX_TOKENS"),
         log_label=log_label, provider=PROVIDER_GEMINI, model=model,
         requested_at=requested_at,
+        resolved_model=getattr(response, "model_version", None),
+        usage=_gemini_usage(response),
     )
+
+
+def _gemini_usage(response) -> Optional[dict]:
+    """Token counts the provider reported. SAFE OPERATIONAL METADATA ONLY.
+
+    Named integer fields are copied out one at a time rather than the whole
+    object being serialised, so nothing about the prompt or the response content
+    can ride along in a field this boundary did not anticipate. No hidden
+    reasoning is requested of the provider and none is carried here.
+    """
+    usage = getattr(response, "usage_metadata", None)
+    if usage is None:
+        return None
+    wanted = ("prompt_token_count", "candidates_token_count",
+              "total_token_count", "cached_content_token_count",
+              "thoughts_token_count", "tool_use_prompt_token_count")
+    reported = {}
+    for name in wanted:
+        value = getattr(usage, name, None)
+        if isinstance(value, int):
+            reported[name] = value
+    return reported or None
 
 
 def _gemini_finish_reason(response) -> Optional[str]:

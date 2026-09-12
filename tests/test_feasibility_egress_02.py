@@ -26,6 +26,7 @@ import unittest
 
 from services import feasibility_compiler as compiler
 from services import gateway_model as gateway
+from services import go_pdz_contract as contract
 from services import llm_gateway
 
 
@@ -494,6 +495,169 @@ class TheCurrentModelIsRequestedWithNoSilentFallback(unittest.TestCase):
         self.assertEqual(status["status"], compiler.PROVIDER_CREDENTIAL_REQUIRED
                          if not status["credential_present"] else "READY")
         self.assertIn("GEMINI_API_KEY", status["credential_location"])
+
+
+class TheOutputBudgetWasMeasuredNotChosen(unittest.TestCase):
+    """CLAUDE-FEASIBILITY-MODEL-03, from the first live probe.
+
+    The gateway's 4000-token call budget let the first live 35 Taber replay fit
+    and report promotable; the SECOND run of the identical probe was truncated
+    mid-statement. Measured afterwards: that document costs 2,381 candidate plus
+    1,342 thought tokens - just under the old cap, which is exactly why it
+    passed once and failed once. A budget that turns on luck is a coin toss.
+    """
+
+    def test_the_budget_is_resolved_from_config_at_call_time(self):
+        import config
+        self.assertEqual(str(config.BaseConfig.FEASIBILITY_MAX_OUTPUT_TOKENS),
+                         "16000")
+        self.assertEqual(compiler.resolve_max_output_tokens(), 16000)
+
+    def test_the_budget_reaches_the_gateway(self):
+        from tests.test_feasibility_compiler_01 import _golden_payload
+        recorder = RecordingGateway([
+            _outcome(raw_text=json.dumps(_golden_payload()))])
+        runner = compiler.gateway_runner(caller=recorder)
+        compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=runner)
+        self.assertEqual(recorder.calls[0]["max_tokens"],
+                         compiler.resolve_max_output_tokens())
+
+    def test_a_nonsense_budget_falls_back_to_a_usable_floor(self):
+        import os
+        original = os.environ.get("FEASIBILITY_MAX_OUTPUT_TOKENS")
+        try:
+            os.environ["FEASIBILITY_MAX_OUTPUT_TOKENS"] = "not-a-number"
+            self.assertGreaterEqual(compiler.resolve_max_output_tokens(), 1000)
+        finally:
+            if original is None:
+                os.environ.pop("FEASIBILITY_MAX_OUTPUT_TOKENS", None)
+            else:
+                os.environ["FEASIBILITY_MAX_OUTPUT_TOKENS"] = original
+
+    def test_truncation_is_its_own_named_failure(self):
+        """Not MODEL_UNAVAILABLE: the model and key are fine and the document was
+        simply longer than the budget."""
+        recorder = RecordingGateway([_outcome(
+            ran=False,
+            skipped_reason="Model's response was cut off before it finished "
+                           "(max_tokens).")])
+        runner = compiler.gateway_runner(caller=recorder)
+        outcome = compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=runner)
+        self.assertEqual(outcome.failure_reason,
+                         compiler.FAILURE_OUTPUT_TRUNCATED)
+
+    def test_truncation_is_not_retried_against_the_same_wall(self):
+        recorder = RecordingGateway([_outcome(
+            ran=False, skipped_reason="cut off before it finished (max_tokens)")])
+        runner = compiler.gateway_runner(caller=recorder)
+        compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=runner)
+        self.assertEqual(len(recorder.calls), 1,
+                         "retrying without raising the budget burns a call on "
+                         "the same wall")
+
+    def test_a_truncated_response_never_becomes_a_partial_document(self):
+        recorder = RecordingGateway([_outcome(
+            ran=False, skipped_reason="max_tokens")])
+        runner = compiler.gateway_runner(caller=recorder)
+        outcome = compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=runner)
+        self.assertIsNone(outcome.go_pdz_payload)
+        self.assertFalse(outcome.promotable)
+
+
+class RequestedAndResolvedAreDifferentFacts(unittest.TestCase):
+    """Section 5. The provider reports both; this boundary used to drop one.
+
+    I reported "provider exposed no resolved model" after the first live probe.
+    That was wrong in ATTRIBUTION: the Gemini response carries `model_version`
+    and `usage_metadata`, and `llm_gateway` read neither - it echoed back the
+    model the caller ASKED for. An ARCHIOSK limitation presented as a provider
+    limitation is the worse of the two, because it stops you looking.
+    """
+
+    def test_the_outcome_can_carry_what_the_provider_reported(self):
+        fields = llm_gateway.LLMCallOutcome.__dataclass_fields__
+        self.assertIn("resolved_model", fields)
+        self.assertIn("usage", fields)
+
+    def test_both_new_fields_default_to_none_for_existing_callers(self):
+        outcome = llm_gateway.LLMCallOutcome(ran=True)
+        self.assertIsNone(outcome.resolved_model)
+        self.assertIsNone(outcome.usage)
+
+    def test_the_envelope_separates_requested_from_resolved(self):
+        from tests.test_feasibility_compiler_01 import _golden_payload
+        recorder = RecordingGateway([_outcome(
+            raw_text=json.dumps(_golden_payload()),
+            model="gemini-3.8-flash")])
+        recorder.outcomes[0].resolved_model = "gemini-3.8-flash-002"
+        recorder.outcomes[0].usage = {"total_token_count": 9476}
+        runner = compiler.gateway_runner(caller=recorder)
+        outcome = compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=runner)
+        self.assertEqual(outcome.model, "gemini-3.8-flash",
+                         "the envelope's `model` is what was REQUESTED")
+        self.assertEqual(outcome.model_version, "gemini-3.8-flash-002",
+                         "`model_version` is what the provider REPORTED")
+
+    def test_usage_carries_only_named_integer_counts(self):
+        """Safe operational metadata; never prompt or response content."""
+        source = inspect.getsource(llm_gateway._gemini_usage)
+        self.assertIn("prompt_token_count", source)
+        self.assertIn("isinstance(value, int)", source)
+        for banned in ("model_dump", "__dict__", "vars(usage)"):
+            self.assertNotIn(banned, source)
+
+
+class TheModelIsToldTheContractItMustSatisfy(unittest.TestCase):
+    """The first live probe failed here, and it was the harness's fault.
+
+    gemini-3.8-flash produced a careful document - right statement kinds, the
+    supplied authority cited, the deterministic token respected, nothing invented
+    - using field names it had to guess, because the instructions named none of
+    the contract's keys and `output_type=str` enforced nothing. It was asked to
+    hit a target it was never shown.
+    """
+
+    def test_the_prompt_is_generated_from_the_canonical_schema(self):
+        prompt = compiler.output_contract_prompt()
+        self.assertIn(json.dumps(contract.SCHEMA, indent=1, sort_keys=True),
+                      prompt, "the canonical schema itself, not a restatement")
+
+    def test_there_is_no_competing_duplicate_schema(self):
+        """Section 7: reuse go_pdz_contract, do not fork it."""
+        code = code_only(compiler)
+        self.assertNotIn('"required": [', code)
+        self.assertIn("contract.SCHEMA", code)
+
+    def test_the_prompt_names_the_keys_the_model_previously_guessed(self):
+        prompt = compiler.output_contract_prompt()
+        for key in ("contract", "schema_version", "next_authorized_gate",
+                    "subject", "authorities", "statements", "result_status",
+                    "site_specific_exceptions", "statement_id", "spatial_basis"):
+            self.assertIn(key, prompt, key)
+
+    def test_the_prompt_pins_the_const_values(self):
+        prompt = compiler.output_contract_prompt()
+        self.assertIn(contract.CONTRACT_ID, prompt)
+        self.assertIn(contract.GATE_01, prompt)
+        self.assertIn(contract.GATE_02, prompt)
+        self.assertIn("GOVERNED_RESULT", prompt)
+
+    def test_a_structural_retry_says_only_that_the_shape_was_wrong(self):
+        """It must never become a channel for VR findings."""
+        source = inspect.getsource(compiler.gateway_runner)
+        self.assertIn("did not match the schema", source)
+        for banned in ("VR-", "validator", "findings"):
+            self.assertNotIn(banned, source)
 
 
 if __name__ == "__main__":
