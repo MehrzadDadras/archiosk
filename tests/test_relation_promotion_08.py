@@ -15,8 +15,15 @@ importantly - the many ways it must REFUSE to connect them:
     a material dependency limiting the inputs      -> verified, NOT promoted
 
 That last one is the real Danforth outcome, and it is the reason this module is
-not a rubber stamp: the only live case arithmetically eligible for promotion is
-also one where an unretrieved exception displaces the figures being summed.
+not a rubber stamp: on Danforth the only arithmetically eligible relation is one
+where an unretrieved exception displaces the figures being summed.
+
+CLAUDE-PROMOTION-09 added the live positive: 573 Shuter Street is a real Toronto
+parcel that needs no surgery to qualify - `CR 2.0 (c1.0; r1.5) SS2`, ZN_EXCPTN
+'N', nothing unretrieved bearing on the figures - and the path ran end to end on
+it against gemini-3.8-flash. Its three values are DISTINCT, which the first
+candidate's 2.0 / 2.0 / 2.0 was not, so a binder matching on a single recurring
+number would pass there and fails here.
 """
 from __future__ import annotations
 
@@ -281,6 +288,91 @@ class TheCompilerWiresTheWholePath(unittest.TestCase):
         self.assertEqual(demoted["statements"][0]["governed"]["derivation"],
                          contract.DERIVATION_MODEL)
         self.assertTrue(demoted["statements"][0]["governed"]["ceiling_applied"])
+
+
+#: 573 Shuter Street exactly as the City publishes it. Unlike CLEAN_FACTS, which
+#: is Danforth with the exception condition removed so the positive path has
+#: something to run on, nothing here is constructed.
+SHUTER_FACTS = {"zoning": {"attributes": {
+    "ZN_STRING": "CR 2.0 (c1.0; r1.5) SS2", "ZN_EXCPTN": "N", "FSI_TOTAL": 2.0,
+    "FSI_COMMERCIAL_USE": 1.0, "FSI_RESIDENTIAL_USE": 1.5}}}
+
+#: What gemini-3.8-flash emitted on the two runs of five that discovered the
+#: relation, verbatim as far as each goes. Both END MID-CLAUSE because the probe
+#: capture sliced statement text at 230 characters - the truncation is the
+#: harness's, not the model's, and it is left visible rather than tidied into a
+#: full stop I would have written myself. A completed sentence here would be my
+#: wording masquerading as the model's, which is the failure this repository has
+#: already paid for once. The prefix is sufficient: the binder needs the values
+#: and the relational assertion, and both are inside the captured span.
+SHUTER_EMITTED = (
+    "The maximum combined gross floor area across all uses is capped at 2.0 "
+    "times the lot area; consequently, a development cannot simultaneously "
+    "maximize commercial floor space (1.0 FSI) and residential floor space "
+    "(1.5 FSI) without e",
+    "Because the sum of permitted commercial FSI (1.0) and residential FSI "
+    "(1.5) is 2.5, which exceeds the maximum total FSI of 2.0, a mixed-use "
+    "development cannot simultaneously achieve maximum commercial and "
+    "residential density allow",
+)
+
+
+class TheLiveSubjectPromotesAndDiscriminates(unittest.TestCase):
+    """CLAUDE-PROMOTION-09. A real parcel, and three values that differ."""
+
+    def test_the_real_unedited_parcel_supports_promotion(self):
+        candidate = relation_binding.fsi_candidate(SHUTER_FACTS["zoning"])
+        self.assertEqual(candidate["total"], 2.0)
+        self.assertEqual(sorted(candidate["components"]), [1.0, 1.5])
+        self.assertEqual(relation_binding.material_limits(SHUTER_FACTS), [])
+        attestation = derivation_check.check_components_exceed_total(
+            components=candidate["components"], total=candidate["total"],
+            labels=candidate["labels"], unresolved_affecting=[])
+        self.assertEqual(attestation["result"], derivation_check.VERIFIED)
+        self.assertTrue(attestation["supports_established"])
+
+    def test_both_sentences_the_model_really_emitted_bind(self):
+        for text in SHUTER_EMITTED:
+            bound = relation_binding.bind(_statement(text=text), SHUTER_FACTS)
+            self.assertTrue(bound["promoted"], text[:60])
+            self.assertIsNone(bound["reason"])
+
+    def test_the_values_are_distinct_so_the_match_must_discriminate(self):
+        candidate = relation_binding.fsi_candidate(SHUTER_FACTS["zoning"])
+        values = list(candidate["components"]) + [candidate["total"]]
+        self.assertEqual(len({str(v) for v in values}), 3,
+                         "a degenerate subject cannot test discrimination")
+
+    def test_a_wrong_component_does_not_bind(self):
+        """1.5 -> 1.8: relational language, a value the facts never admit."""
+        text = ("The sum of the commercial FSI of 1.0 and the residential FSI "
+                "of 1.8 is 2.8, which exceeds the total FSI of 2.0, so both "
+                "cannot be built in full.")
+        self.assertFalse(relation_binding.bind(
+            _statement(text=text), SHUTER_FACTS)["promoted"])
+
+    def test_another_parcels_figures_do_not_bind(self):
+        """The relation asserted correctly, about somebody else's numbers."""
+        text = ("The commercial FSI of 2.0 and the residential FSI of 2.0 sum "
+                "to 4.0, which exceeds the total FSI of 2.0, so they cannot "
+                "both be maximized.")
+        self.assertFalse(relation_binding.bind(
+            _statement(text=text), SHUTER_FACTS)["promoted"])
+
+    def test_the_total_swapped_for_a_component_does_not_bind(self):
+        """Every figure is admitted; the sentence assigns one the wrong role."""
+        text = ("Commercial FSI of 1.0 and residential FSI of 1.5 together "
+                "exceed the maximum total FSI of 1.0 and cannot both be "
+                "achieved.")
+        self.assertFalse(relation_binding.bind(
+            _statement(text=text), SHUTER_FACTS)["promoted"])
+
+    def test_recitation_of_the_same_figures_does_not_bind(self):
+        text = ("The zone permits a total FSI of 2.0, a commercial FSI of 1.0 "
+                "and a residential FSI of 1.5.")
+        bound = relation_binding.bind(_statement(text=text), SHUTER_FACTS)
+        self.assertFalse(bound["promoted"])
+        self.assertIn("relational", bound["reason"])
 
 
 if __name__ == "__main__":
