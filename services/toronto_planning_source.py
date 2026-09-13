@@ -427,7 +427,8 @@ def zoning_at(subject_geometry, point, *, reader, cache=None) -> dict:
             "geometry": geometry, "token": token}
 
 
-def overlay_finding(binding, subject_geometry, point, *, reader, cache=None) -> dict:
+def overlay_finding(binding, subject_geometry, point, *, reader, cache=None,
+                    subject_source=None, layer_version=None) -> dict:
     """What this overlay does to the parcel: applies, does not, or undetermined.
 
     PRESENCE IS MEASURED THE SAME WAY ABSENCE IS. Version 1 asked only whether a
@@ -455,9 +456,9 @@ def overlay_finding(binding, subject_geometry, point, *, reader, cache=None) -> 
         token = spatial.relate(
             {"crs": WKID_TO_CRS[102100], "geometry": subject_geometry},
             {"crs": WKID_TO_CRS[102100], "geometry": geometry},
-            subject_source="City of Toronto Property Boundary",
+            subject_source=subject_source or "City of Toronto Property Boundary",
             layer_source="City of Toronto %s" % binding[2],
-            layer_version="By-law 569-2013") if geometry else None
+            layer_version=layer_version or "By-law 569-2013") if geometry else None
         return {"layer_name": binding[2], "present": True,
                 "attributes": feature.get("attributes") or {},
                 "geometry": geometry, "token": token,
@@ -476,6 +477,7 @@ def overlay_finding(binding, subject_geometry, point, *, reader, cache=None) -> 
                             "inSR": QUERY_WKID})
     undecided, outside, overlapping = 0, 0, 0
     witness = None
+    witness_token = None
     for feature in nearby["features"]:
         geometry = esri_to_geojson(feature.get("geometry"))
         if geometry is None:
@@ -484,16 +486,24 @@ def overlay_finding(binding, subject_geometry, point, *, reader, cache=None) -> 
         token = spatial.relate(
             {"crs": WKID_TO_CRS[102100], "geometry": subject_geometry},
             {"crs": WKID_TO_CRS[102100], "geometry": geometry},
-            subject_source="City of Toronto Property Boundary",
-            layer_source="City of Toronto %s" % binding[2])
+            subject_source=subject_source or "City of Toronto Property Boundary",
+            layer_source="City of Toronto %s" % binding[2],
+            layer_version=layer_version or "By-law 569-2013")
         if token["spatial_relation"] == spatial.RELATION_OUTSIDE:
             outside += 1
             # Keep one polygon the refusal actually rests on, so the resulting
             # statement can carry a DETERMINISTIC OUTSIDE rather than asserting
             # absence with no geometry behind it. Absence proven against nothing
             # is not deterministic, however true it happens to be.
+            #
+            # CLAUDE-SPATIAL-DEDUPE-02A: and keep the TOKEN, not just the
+            # geometry. This answer was the single most expensive computation in
+            # the whole request - 31.7 s on a 281,023-vertex city-wide polygon -
+            # and it was discarded here, only for `go_pdz_lifecycle` to compute
+            # the identical answer again from the geometry alone.
             if witness is None:
                 witness = geometry
+                witness_token = token
         elif token["spatial_relation"] == spatial.RELATION_AMBIGUOUS:
             undecided += 1
         else:
@@ -507,6 +517,7 @@ def overlay_finding(binding, subject_geometry, point, *, reader, cache=None) -> 
         "polygons_in_envelope": len(nearby["features"]),
         "computed_outside": outside, "undecided": undecided,
         "overlapping": overlapping, "witness_geometry": witness,
+        "witness_token": witness_token,
         "envelope_metres": ABSENCE_ENVELOPE_METRES,
         "note": ("no polygon of this layer covers the subject, and every polygon "
                  "within %.0f m was computed OUTSIDE" % ABSENCE_ENVELOPE_METRES)

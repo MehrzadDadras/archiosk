@@ -107,14 +107,33 @@ def spatial_context(identity, layers) -> dict:
     tokens = {}
     for name, layer in (layers or {}).items():
         layer = layer or {}
+        subject = {"crs": identity.get("_crs"),
+                   "geometry": identity.get("_geometry")}
+        candidate = {"crs": layer.get("crs"), "geometry": layer.get("geometry")}
+        arguments = {
+            "subject_source": identity.get("_geometry_source"),
+            "layer_source": layer.get("source"),
+            "layer_version": layer.get("version"),
+            "subject_parcel_count": identity.get("_parcel_count") or 1,
+            "conflicting_layers": bool(layer.get("conflicting")),
+        }
+        # CLAUDE-SPATIAL-DEDUPE-02A. A caller that has ALREADY related these two
+        # geometries may offer the token it got. It is reused only when
+        # `token_matches` proves it is the answer to this exact question - same
+        # two geometry hashes, same CRS pair, same sources, same version, same
+        # operation, same engine - and otherwise this recomputes, unchanged.
+        #
+        # This removes ONE duplicate computation per layer. On 573 Shuter Street
+        # the duplicate was 31.7 s of a 66.8 s deterministic budget, spent
+        # re-deriving OUTSIDE for a 281,023-vertex polygon whose answer was
+        # already known. No geometry mathematics is altered by reusing it.
+        offered = layer.get("precomputed_token")
+        if spatial.token_matches(offered, subject=subject, layer=candidate,
+                                 **arguments):
+            tokens[name] = offered
+            continue
         tokens[name] = spatial.relate(
-            {"crs": identity.get("_crs"), "geometry": identity.get("_geometry")},
-            {"crs": layer.get("crs"), "geometry": layer.get("geometry")},
-            subject_source=identity.get("_geometry_source"),
-            layer_source=layer.get("source"),
-            layer_version=layer.get("version"),
-            subject_parcel_count=identity.get("_parcel_count") or 1,
-            conflicting_layers=bool(layer.get("conflicting")))
+            subject, candidate, **arguments)
     return tokens
 
 

@@ -121,6 +121,55 @@ def geometry_hash(geometry) -> Optional[str]:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
+def token_matches(token, *, subject, layer, subject_source=None,
+                  layer_source=None, layer_version=None,
+                  subject_parcel_count=1, conflicting_layers=False,
+                  upstream_transformation=None) -> bool:
+    """Is `token` ALREADY the answer `relate()` would produce for these inputs?
+
+    CLAUDE-SPATIAL-DEDUPE-02A. Identity, not resemblance. A token may be reused
+    only when every input that can change the answer is provably the same one,
+    so this compares the two GEOMETRY HASHES the token already carries plus the
+    CRS pair, the source labels, the version, the operation and the engine. No
+    reuse is ever decided by layer name, proximity or call order.
+
+    The two guard clauses at the end matter as much as the comparisons: a subject
+    that resolved to several parcels and a conflicting-layer condition both make
+    `relate` return AMBIGUOUS for reasons that have nothing to do with geometry,
+    so a token computed without them is not the answer to this question. Those
+    cases fall through and are recomputed.
+
+    This function performs NO geometry. It reads identifiers and compares them.
+    """
+    if not isinstance(token, dict) or token.get("engine") != ENGINE:
+        return False
+    if subject_parcel_count is not None and subject_parcel_count > 1:
+        return False
+    if conflicting_layers:
+        return False
+    provenance = token.get("provenance")
+    if not isinstance(provenance, dict):
+        return False
+    expected = {
+        "subject_geometry_source": subject_source,
+        "subject_geometry_id": geometry_hash((subject or {}).get("geometry")),
+        "layer_geometry_source": layer_source,
+        "layer_geometry_id": geometry_hash((layer or {}).get("geometry")),
+        "layer_version": layer_version,
+        "subject_crs": (subject or {}).get("crs"),
+        "layer_crs": (layer or {}).get("crs"),
+        "transformation": upstream_transformation,
+        "operation": "ring_containment_and_crossing",
+    }
+    for key, value in expected.items():
+        if provenance.get(key) != value:
+            return False
+    # A hash of None is None: two missing geometries are not "the same geometry",
+    # and reusing a token across them would be reuse by coincidence.
+    return (expected["subject_geometry_id"] is not None
+            and expected["layer_geometry_id"] is not None)
+
+
 def _parts(geometry):
     """Every (exterior, holes) pair of a GeoJSON Polygon or MultiPolygon, or None.
 

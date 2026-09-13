@@ -121,8 +121,15 @@ def gather(address, *, reader, retrieved_at=None):
                                           cache=cache)
     for binding in source.OVERLAY_LAYERS:
         try:
+            # CLAUDE-SPATIAL-DEDUPE-02A: the SAME labels `go_pdz_lifecycle`
+            # will use, so the token computed here is byte-identical to the one
+            # it would otherwise compute again. `resolved["source"]` names the
+            # actual parcel layer, which is also more accurate than the literal
+            # this previously passed.
             gathered["overlays"].append(source.overlay_finding(
-                binding, geometry, point, reader=reader, cache=cache))
+                binding, geometry, point, reader=reader, cache=cache,
+                subject_source=resolved.get("source"),
+                layer_version="By-law 569-2013"))
         except Exception as exc:  # noqa: BLE001 - a failed layer is a result
             logger.warning("overlay check failed for %s (%s: %s)",
                            binding[2], type(exc).__name__, exc)
@@ -416,12 +423,17 @@ def _layers(gathered):
             layers["overlay:%s" % name] = {
                 "crs": "EPSG:3857", "geometry": finding["geometry"],
                 "source": "City of Toronto %s" % name,
-                "version": "By-law 569-2013"}
+                "version": "By-law 569-2013",
+                # CLAUDE-SPATIAL-DEDUPE-02A: the answer, carried forward. It is
+                # OFFERED, not trusted - `spatial_context` verifies that it is
+                # the token these exact inputs produce before reusing it.
+                "precomputed_token": finding.get("token")}
         elif finding.get("absence_established") and finding.get("witness_geometry"):
             layers["absence:%s" % name] = {
                 "crs": "EPSG:3857", "geometry": finding["witness_geometry"],
                 "source": "City of Toronto %s" % name,
-                "version": "By-law 569-2013"}
+                "version": "By-law 569-2013",
+                "precomputed_token": finding.get("witness_token")}
     return layers
 
 
