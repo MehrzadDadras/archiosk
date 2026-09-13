@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@10"
+COMPILER_VERSION = "feasibility-compiler@11"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -204,6 +204,12 @@ approval outcome. Do not predict whether an application would be approved. Do no
 assert a definite spatial relationship that the supplied deterministic spatial
 results do not contain - copy their tokens; never mint one.
 
+Anything under `deterministic_findings` is ALREADY ESTABLISHED by verified code,
+not by a model. Do NOT recompute their arithmetic and do NOT restate them. Reason
+FROM them - cite the statement_id in `derived_from` - and say what such a
+constraint MEANS here: what it forecloses, what it leaves open. If one looks
+wrong, say so as its own statement.
+
 Where the supplied evidence together supports one or more conclusions that no
 single item states on its own, record EACH as its own GO_INTERPRETS statement and
 list the statement_ids it rests on in `derived_from`. There may be none, one, or
@@ -334,6 +340,11 @@ class FeasibilityEvidence:
     official_plan: dict = field(default_factory=dict)
     overlays: list = field(default_factory=list)
     unresolved: list = field(default_factory=list)
+    #: CLAUDE-PRODUCTION-HORIZON-01. Findings ARCHIOSK has already ESTABLISHED
+    #: deterministically, supplied as settled results the model reasons FROM -
+    #: never as a task list, and never carrying the attestation, which is
+    #: ARCHIOSK's business rather than context the model could check.
+    deterministic_findings: list = field(default_factory=list)
     provenance: dict = field(default_factory=dict)
 
     #: Fields a caller might reasonably think belong here and must not. Asserted
@@ -360,6 +371,7 @@ class FeasibilityEvidence:
             "official_plan": self.official_plan,
             "overlays": self.overlays,
             "unresolved": self.unresolved,
+            "deterministic_findings": self.deterministic_findings,
             "provenance": self.provenance,
         }
 
@@ -426,6 +438,41 @@ def evidence_from_gate01(outcome, *, investigation_id) -> FeasibilityEvidence:
             "gate": document.get("gate"),
         },
     )
+
+
+def evidence_with_deterministic_findings(outcome, *, investigation_id,
+                                         verified_at=None) -> tuple:
+    """Section 10. The same bounded evidence, plus what ARCHIOSK already proved.
+
+    Returns `(evidence, originated_statements, origination_report)`.
+
+    THE MODEL IS NO LONGER ASKED TO DISCOVER THIS RELATION. Probe 09 measured
+    gemini-3.8-flash finding the FSI relation on 573 Shuter in 2 runs out of 5
+    while ARCHIOSK verified it in 5 of 5. Promotion could only ever act on what
+    the model happened to say, so a fact ARCHIOSK can prove was reaching the
+    document 40% of the time. Here it is established BEFORE the model is called
+    and handed over as a settled input.
+
+    The attestation is NOT included in what the model sees. It is a proof object
+    for ARCHIOSK's own governance, the model cannot check it, and putting it in
+    the prompt would only invite the model to reason about its own claim
+    strength - the exact mistake `MODEL_WITHHELD_FIELDS` exists to prevent.
+
+    A SEPARATE FUNCTION FROM `evidence_from_gate01` on purpose: that one keeps
+    its behaviour exactly, so earlier probe replays still mean what they meant.
+    """
+    from services import deterministic_findings
+
+    evidence = evidence_from_gate01(outcome, investigation_id=investigation_id)
+    originated, report = deterministic_findings.originate(
+        evidence.for_model(), verified_at=verified_at)
+    evidence.deterministic_findings = [
+        {"statement_id": s["statement_id"], "topic": s["topic"],
+         "text": s["text"], "basis": s["derivation"],
+         "statement_status": s["statement_status"],
+         "confidence": s["confidence"]}
+        for s in originated]
+    return evidence, originated, report
 
 
 #: Attribute keys that carry no planning meaning and only cost tokens.
