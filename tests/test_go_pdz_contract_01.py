@@ -361,9 +361,30 @@ class GovernedOutput(unittest.TestCase):
                                      contract.SEVERITY_INFO))
             self.assertTrue(description)
 
-    def test_all_twenty_rules_are_declared(self):
-        self.assertEqual(sorted(validator.RULES),
-                         ["VR-%02d" % n for n in range(1, 21)])
+    def test_the_rule_namespace_is_contiguous_and_never_renumbered(self):
+        """SUPERSEDED DELIBERATELY (CLAUDE-DERIVED-STRENGTH-06).
+
+        This asserted exactly twenty rules, which pinned the COUNT AT THE TIME
+        rather than the property that matters. VR-21 was added because probe 05
+        measured a model derivation self-promoting to ESTABLISHED / HIGH, and the
+        authorizing direction was explicit that the next canonical identifier be
+        assigned and prior rules not renumbered.
+
+        So the invariant is stated as what it always meant: identifiers start at
+        VR-01, run contiguously with no gaps, and no existing number is reused
+        for a different rule. A gap would mean a rule was deleted and its id
+        orphaned; a duplicate would mean a renumbering.
+        """
+        ids = sorted(validator.RULES)
+        self.assertEqual(ids, ["VR-%02d" % n for n in range(1, len(ids) + 1)])
+        self.assertGreaterEqual(len(ids), 21)
+        self.assertEqual(len(set(ids)), len(ids))
+
+    def test_vr21_is_the_claim_strength_rule(self):
+        """The id is part of the record: a finding cites it by number."""
+        severity, description = validator.RULES["VR-21"]
+        self.assertEqual(severity, contract.SEVERITY_ERROR)
+        self.assertIn("claim strength", description)
 
 
 class NoAuthorityPromotion(unittest.TestCase):

@@ -628,9 +628,56 @@ class TheModelIsToldTheContractItMustSatisfy(unittest.TestCase):
     """
 
     def test_the_prompt_is_generated_from_the_canonical_schema(self):
+        """SUPERSEDED DELIBERATELY (CLAUDE-DERIVED-STRENGTH-06).
+
+        This asserted the prompt contained the canonical schema BYTE FOR BYTE.
+        The intent - derived from the contract, never restated beside it - still
+        holds and still matters. What changed is that two GOVERNANCE fields are
+        now withheld from the model: `derivation` and `derivation_check` decide
+        how strongly a claim may be stated, and the moment the full schema reached
+        the prompt the model began filling them, declaring four statements
+        DETERMINISTIC_DERIVATION / ESTABLISHED / HIGH with no attestation in one
+        run.
+
+        So the assertion becomes the property rather than the bytes: the
+        model-facing schema is the canonical one MINUS exactly the withheld
+        fields, and identical everywhere else. That is stronger than a substring
+        match - a hand-written divergence anywhere would now fail.
+        """
+        facing = compiler._model_facing_schema()
+        canonical = json.loads(json.dumps(contract.SCHEMA))
+        statement_properties = (canonical["properties"]["statements"]["items"]
+                                ["properties"])
+        for field in compiler.MODEL_WITHHELD_FIELDS:
+            self.assertIn(field, statement_properties,
+                          "%s must still exist in the CANONICAL contract" % field)
+            statement_properties.pop(field)
+        self.assertEqual(facing, canonical,
+                         "the model-facing schema is the canonical schema minus "
+                         "the withheld governance fields, and nothing else")
+        self.assertIn(json.dumps(facing, indent=1, sort_keys=True),
+                      compiler.output_contract_prompt())
+
+    def test_the_governance_fields_are_withheld_from_the_model(self):
         prompt = compiler.output_contract_prompt()
-        self.assertIn(json.dumps(contract.SCHEMA, indent=1, sort_keys=True),
-                      prompt, "the canonical schema itself, not a restatement")
+        for field in compiler.MODEL_WITHHELD_FIELDS:
+            self.assertNotIn('"%s"' % field, prompt,
+                             "offering a model the field that governs its own "
+                             "claim strength is an invitation")
+
+    def test_a_governance_field_returned_anyway_is_discarded(self):
+        """Even unshown, a model may emit a field it has seen in training."""
+        from tests.test_feasibility_compiler_01 import _golden_payload
+        payload = _golden_payload()
+        payload["statements"][0]["derivation"] = "DETERMINISTIC_DERIVATION"
+        payload["statements"][0]["derivation_check"] = {"result": "VERIFIED"}
+        recorder = RecordingGateway([_outcome(raw_text=json.dumps(payload))])
+        outcome = compiler.compile_feasibility(
+            compiler.FeasibilityEvidence(investigation_id="I", input_address="A"),
+            runner=compiler.gateway_runner(caller=recorder))
+        statement = outcome.go_pdz_payload["statements"][0]
+        self.assertNotIn("derivation", statement)
+        self.assertNotIn("derivation_check", statement)
 
     def test_there_is_no_competing_duplicate_schema(self):
         """Section 7: reuse go_pdz_contract, do not fork it."""

@@ -81,6 +81,93 @@ SPATIAL_BASES = ("DETERMINISTIC_GIS", "VISUAL_IMPRESSION", "NONE")
 #: The predicates that assert a definite geometric fact.
 ASSERTIVE_SPATIAL = ("INSIDE", "OUTSIDE", "INTERSECTS")
 
+#: CLAUDE-DERIVED-STRENGTH-06: HOW a statement came to be believed, which is a
+#: different axis from `kind` (WHO says it) and from `spatial_basis` (how a
+#: GEOMETRIC claim was obtained). `spatial_basis` is the precedent and the proof
+#: that this axis is real: DETERMINISTIC_GIS vs NONE already decides what a
+#: spatial predicate may assert. This is the same distinction for everything else.
+#:
+#: `kind` cannot carry it. GO_INTERPRETS covers a model's unverified reading, an
+#: arithmetic result recomputed outside the model, and a "cannot be determined
+#: until X is read" dependency finding - three things with three different
+#: entitlements to be stated strongly.
+DERIVATION_DIRECT_AUTHORITY = "DIRECT_AUTHORITY"
+DERIVATION_PROPERTY_FACT = "PROPERTY_FACT"
+DERIVATION_DETERMINISTIC = "DETERMINISTIC_DERIVATION"
+DERIVATION_MODEL = "MODEL_DERIVATION"
+DERIVATION_DEPENDENCY = "DEPENDENCY_FINDING"
+DERIVATION_UNRESOLVED = "UNRESOLVED"
+
+DERIVATION_CLASSES = (
+    DERIVATION_DIRECT_AUTHORITY, DERIVATION_PROPERTY_FACT,
+    DERIVATION_DETERMINISTIC, DERIVATION_MODEL, DERIVATION_DEPENDENCY,
+    DERIVATION_UNRESOLVED,
+)
+
+#: THE CEILING IS THE POINT. A model may DISCOVER a claim; the evidence and the
+#: derivation mechanism decide how strongly ARCHIOSK may state it. Each entry is
+#: (highest permitted status, highest permitted confidence) - a maximum, never a
+#: floor, and never an instruction to state something that strongly.
+#:
+#: MODEL_DERIVATION's ceiling is the reason this exists. Probe 05 measured a
+#: derived finding appearing in one run out of five and emitting ESTABLISHED /
+#: HIGH, while the finding that appeared in five out of five stayed PROVISIONAL:
+#: the model was most assertive exactly where it was least reproducible. Run
+#: frequency is a research signal and deliberately NOT encoded here - what is
+#: encoded is that an unverified model reading cannot promote itself, whatever
+#: it says about its own confidence.
+CLAIM_CEILINGS = {
+    DERIVATION_DIRECT_AUTHORITY: ("ESTABLISHED", "HIGH"),
+    DERIVATION_PROPERTY_FACT: ("ESTABLISHED", "HIGH"),
+    DERIVATION_DETERMINISTIC: ("ESTABLISHED", "HIGH"),
+    DERIVATION_MODEL: ("PROVISIONAL", "MEDIUM"),
+    DERIVATION_DEPENDENCY: ("PROVISIONAL", "HIGH"),
+    DERIVATION_UNRESOLVED: ("UNRESOLVED", "LOW"),
+}
+
+#: Ordered weakest-to-strongest so a ceiling can be compared rather than matched.
+STATUS_STRENGTH = ("UNRESOLVED", "PROVISIONAL", "ESTABLISHED")
+CONFIDENCE_STRENGTH = ("LOW", "MEDIUM", "HIGH")
+
+#: The contract's confidence vocabulary is HIGH / MEDIUM / LOW. "MODERATE" is not
+#: one of its values, so the MODEL_DERIVATION confidence ceiling is expressed as
+#: MEDIUM rather than a fourth value being invented for one rule - a duplicate
+#: vocabulary would be a second definition of the same idea.
+
+
+def default_derivation(statement) -> str:
+    """The class a statement has when it does not declare one.
+
+    DERIVED FROM `kind`, so existing documents keep working and no producer is
+    required to restate what `kind` already says. The default for GO_INTERPRETS
+    is MODEL_DERIVATION - the SAFE reading. A statement is an unverified model
+    reading until something proves otherwise, and the burden sits with the claim
+    to be stronger rather than with the reader to notice it is weaker.
+    """
+    kind = (statement or {}).get("kind")
+    if kind == "AUTHORITY_SAYS":
+        return DERIVATION_DIRECT_AUTHORITY
+    if kind == "PROPERTY_FACT":
+        return DERIVATION_PROPERTY_FACT
+    return DERIVATION_MODEL
+
+
+def derivation_of(statement) -> str:
+    declared = (statement or {}).get("derivation")
+    return declared if declared in DERIVATION_CLASSES else default_derivation(
+        statement)
+
+
+def ceiling_for(derivation) -> tuple:
+    return CLAIM_CEILINGS.get(derivation, CLAIM_CEILINGS[DERIVATION_MODEL])
+
+
+def exceeds_ceiling(value, ceiling, ordering) -> bool:
+    """True when `value` is strictly stronger than `ceiling`."""
+    if value not in ordering or ceiling not in ordering:
+        return False
+    return ordering.index(value) > ordering.index(ceiling)
+
 RESULT_STATUSES = ("GOVERNED_RESULT", "UNRESOLVED")
 
 SEVERITY_ERROR = "ERROR"
@@ -159,6 +246,16 @@ SCHEMA = {
                     "confidence": {"enum": list(CONFIDENCES)},
                     "spatial_relation": {"enum": list(SPATIAL_RELATIONS)},
                     "spatial_basis": {"enum": list(SPATIAL_BASES)},
+                    # How the statement came to be believed. Optional: absent
+                    # means "derive it from `kind`", so every existing document
+                    # stays valid and GO_INTERPRETS defaults to the safe class.
+                    "derivation": {"enum": list(DERIVATION_CLASSES)},
+                    # The attestation that a DETERMINISTIC_DERIVATION really was
+                    # recomputed outside the model. A model cannot mint one: it
+                    # carries the verifier's own version and a hash of the inputs
+                    # it actually read, and `services/derivation_check.py` is the
+                    # only thing that produces it.
+                    "derivation_check": {"type": ["object", "null"]},
                     "conflict_refs": {"type": "array",
                                       "items": {"type": "string"}},
                     "derived_from": {"type": "array",

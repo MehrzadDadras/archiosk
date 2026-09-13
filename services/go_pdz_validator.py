@@ -32,8 +32,12 @@ specification is an edit to that table, not to the checks.
 """
 from __future__ import annotations
 
+import json
+
 import re
 
+from services import derivation_check
+from services import go_pdz_contract as contract
 from services.go_pdz_contract import (
     ASSERTIVE_SPATIAL, CONTRACT_ID, GATE_01, GATE_01_FORBIDDEN_TOPICS,
     SCHEMA_VERSION, SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_WARNING,
@@ -65,6 +69,7 @@ RULES = {
     "VR-19": (SEVERITY_ERROR, "Every authority_ref resolves to a declared authority"),
     "VR-20": (SEVERITY_ERROR, "Parent-zone standards are not applied over an "
                               "unresolved exception"),
+    "VR-21": (SEVERITY_ERROR, "A model derivation cannot promote its own claim strength"),
 }
 
 #: Wording that only an authority may use. A GO interpretation that says "the
@@ -325,6 +330,91 @@ def validate_semantics(document) -> list:
             "a material unresolved issue must reach the result status",
             result_status, "UNRESOLVED"))
 
+    # VR-21 - MODEL_DERIVATION_CANNOT_SELF_PROMOTE.
+    #
+    # THE MODEL MAY DISCOVER A CLAIM; THE EVIDENCE AND THE DERIVATION MECHANISM
+    # DECIDE HOW STRONGLY IT MAY BE STATED. Probe 05 measured the failure this
+    # closes: a derived finding appearing in one run out of five emitted
+    # ESTABLISHED / HIGH, while the finding produced in five out of five stayed
+    # PROVISIONAL. The model was most assertive exactly where it was least
+    # reproducible, and nothing downstream could tell those apart.
+    #
+    # FAIL CLOSED, NOT REWRITE (section 7). A validator that silently demoted
+    # ESTABLISHED to PROVISIONAL would hide what the model actually emitted, and
+    # the stored result would no longer show that a self-promotion was attempted.
+    # `governed_projection()` exists for callers that need a bounded view, and it
+    # keeps BOTH values side by side.
+    #
+    # RUN FREQUENCY IS DELIBERATELY NOT ENCODED HERE. It is a research signal,
+    # measured in probes, and has no place in production validation - what is
+    # encoded is that an unverified model reading cannot promote itself whatever
+    # it says about its own confidence.
+    for index, statement in enumerate(document.get("statements") or []):
+        if not isinstance(statement, dict):
+            continue
+        path = "$.statements[%d]" % index
+        sid = statement.get("statement_id")
+        derivation = contract.derivation_of(statement)
+        status = statement.get("statement_status")
+        confidence = statement.get("confidence")
+        check = statement.get("derivation_check")
+
+        # A DETERMINISTIC_DERIVATION must carry an attestation this repository's
+        # own verifier produced. Without one it is a model saying "trust me",
+        # which is the whole thing being prevented - so it falls back to the
+        # MODEL_DERIVATION ceiling rather than being taken at its word.
+        if derivation == contract.DERIVATION_DETERMINISTIC:
+            if not derivation_check.is_valid_attestation(check):
+                findings.append(_finding(
+                    "VR-21", path + ".derivation", sid,
+                    "a DETERMINISTIC_DERIVATION carries no verifier attestation, "
+                    "so it is governed as a model derivation",
+                    "declared %s with derivation_check=%s"
+                    % (derivation, "absent" if check is None else "unrecognised"),
+                    "an attestation produced by services/derivation_check.py"))
+                derivation = contract.DERIVATION_MODEL
+            elif not check.get("supports_established"):
+                # The arithmetic may be exact and the conclusion still not
+                # established: a correct sum over a figure an unretrieved
+                # exception may displace is a correct sum about a provisional
+                # number.
+                derivation = contract.DERIVATION_MODEL
+
+        # A DEPENDENCY_FINDING must have a DEPENDENCY to point at. Found live:
+        # once the schema reached the prompt the model began declaring its own
+        # derivation class, and DEPENDENCY_FINDING carries a higher confidence
+        # ceiling than MODEL_DERIVATION - so self-declaring it was a route around
+        # the very rule this is. The class is now CORROBORATED from the document:
+        # an unretrieved site-specific exception, or a MATERIAL unresolved issue.
+        # No dependency in the evidence, no dependency ceiling.
+        if derivation == contract.DERIVATION_DEPENDENCY and not _has_dependency(
+                document):
+            findings.append(_finding(
+                "VR-21", path + ".derivation", sid,
+                "a DEPENDENCY_FINDING is declared but the result records no "
+                "unresolved dependency to depend on",
+                "declared %s" % derivation,
+                "an unretrieved site-specific exception or a MATERIAL "
+                "unresolved issue"))
+            derivation = contract.DERIVATION_MODEL
+
+        max_status, max_confidence = contract.ceiling_for(derivation)
+        if contract.exceeds_ceiling(status, max_status, contract.STATUS_STRENGTH):
+            findings.append(_finding(
+                "VR-21", path + ".statement_status", sid,
+                "a %s may not be stated more strongly than %s"
+                % (derivation, max_status),
+                "%s / %s" % (status, confidence),
+                "statement_status of at most %s" % max_status))
+        if contract.exceeds_ceiling(confidence, max_confidence,
+                                    contract.CONFIDENCE_STRENGTH):
+            findings.append(_finding(
+                "VR-21", path + ".confidence", sid,
+                "a %s may not carry confidence above %s"
+                % (derivation, max_confidence),
+                "%s / %s" % (status, confidence),
+                "confidence of at most %s" % max_confidence))
+
     # VR-16, evaluated ONCE PER AUTHORITY rather than once per citation of one.
     # It previously sat inside the statement loop, so a document citing one
     # by-law from six statements reported six identical warnings - noise that
@@ -343,6 +433,73 @@ def validate_semantics(document) -> list:
     order = list(RULES)
     findings.sort(key=lambda f: (order.index(f["rule_id"]), f["path"]))
     return findings
+
+
+def _has_dependency(document) -> bool:
+    """Is there actually an unresolved dependency in this result?
+
+    Read from the DOCUMENT, never from the statement claiming to be one. An
+    exception whose text was not retrieved, or a MATERIAL unresolved issue, is a
+    real dependency; a model asserting that its reading is dependency-shaped is
+    not.
+    """
+    for exception in document.get("site_specific_exceptions") or []:
+        if isinstance(exception, dict) and not exception.get("text_retrieved"):
+            return True
+    for issue in document.get("unresolved") or []:
+        if isinstance(issue, dict) and issue.get("materiality") == "MATERIAL":
+            return True
+    return False
+
+
+def governed_projection(document) -> dict:
+    """A bounded VIEW of a document, retaining what the model emitted.
+
+    Section 8: current state must not launder model behaviour. Nothing here
+    rewrites the stored payload - it returns a separate projection in which every
+    statement carries BOTH values with their provenance:
+
+        model_emitted   {status, confidence}   what the model actually said
+        governed        {status, confidence}   what the derivation class permits
+
+    A caller that needs a safe reader view uses this; the original remains
+    inspectable and a later reviewer can still see that a self-promotion was
+    attempted. `validate()` continues to REJECT rather than repair, so using this
+    projection is a deliberate act, not a silent default.
+    """
+    projected = json.loads(json.dumps(document, default=str))
+    for statement in projected.get("statements") or []:
+        if not isinstance(statement, dict):
+            continue
+        derivation = contract.derivation_of(statement)
+        check = statement.get("derivation_check")
+        if derivation == contract.DERIVATION_DEPENDENCY and not _has_dependency(
+                document):
+            derivation = contract.DERIVATION_MODEL
+        if derivation == contract.DERIVATION_DETERMINISTIC and not (
+                derivation_check.is_valid_attestation(check)
+                and check.get("supports_established")):
+            derivation = contract.DERIVATION_MODEL
+        max_status, max_confidence = contract.ceiling_for(derivation)
+        status = statement.get("statement_status")
+        confidence = statement.get("confidence")
+        statement["model_emitted"] = {"statement_status": status,
+                                      "confidence": confidence}
+        statement["governed"] = {
+            "derivation": derivation,
+            "statement_status": (max_status if contract.exceeds_ceiling(
+                status, max_status, contract.STATUS_STRENGTH) else status),
+            "confidence": (max_confidence if contract.exceeds_ceiling(
+                confidence, max_confidence, contract.CONFIDENCE_STRENGTH)
+                else confidence),
+            "ceiling_applied": (
+                contract.exceeds_ceiling(status, max_status,
+                                         contract.STATUS_STRENGTH)
+                or contract.exceeds_ceiling(confidence, max_confidence,
+                                            contract.CONFIDENCE_STRENGTH)),
+            "governed_by": "VR-21 claim-strength ceiling",
+        }
+    return projected
 
 
 def validate(document) -> dict:

@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@8"
+COMPILER_VERSION = "feasibility-compiler@9"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -224,6 +224,35 @@ must not appear.
 """
 
 
+#: Governance fields the model is NOT shown and may not set. ARCHIOSK assigns
+#: them; the model supplies planning content.
+MODEL_WITHHELD_FIELDS = ("derivation", "derivation_check")
+
+
+def _model_facing_schema() -> dict:
+    """The canonical schema MINUS the fields that decide claim strength.
+
+    FOUND LIVE, and the cleaner half of the VR-21 fix. The moment the full schema
+    reached the prompt the model began filling `derivation` - declaring four
+    statements DETERMINISTIC_DERIVATION with ESTABLISHED / HIGH and no
+    attestation in a single run. VR-21 caught every one, which is what a backstop
+    is for; but offering a model the field that governs how strongly its own
+    output may be stated is an invitation, and the honest fix is not to extend it.
+
+    The model is asked for planning content; ARCHIOSK classifies the derivation.
+    `derivation_of` then defaults GO_INTERPRETS to MODEL_DERIVATION - the safe
+    class - and VR-21 returns to being a backstop rather than a tripwire the
+    pipeline hits on most runs. DERIVED from the contract, never a copy, so a
+    schema change cannot leave this behind.
+    """
+    schema = json.loads(json.dumps(contract.SCHEMA))
+    properties = (schema.get("properties", {}).get("statements", {})
+                  .get("items", {}).get("properties", {}))
+    for field in MODEL_WITHHELD_FIELDS:
+        properties.pop(field, None)
+    return schema
+
+
 def output_contract_prompt() -> str:
     """The required output shape, taken FROM THE CANONICAL CONTRACT ITSELF.
 
@@ -246,7 +275,7 @@ def output_contract_prompt() -> str:
         "It must validate against this JSON Schema exactly, including every\n"
         "`required` key, every `const` value and every `enum` value. Keys not in\n"
         "the schema are rejected (`additionalProperties: false`).\n\n"
-        + json.dumps(contract.SCHEMA, indent=1, sort_keys=True)
+        + json.dumps(_model_facing_schema(), indent=1, sort_keys=True)
         + "\n\nNotes that the schema states but which are easy to miss:\n"
           "  - `contract` must be exactly %r and `schema_version` exactly %r.\n"
           "  - `gate` must be exactly %r; `next_authorized_gate` exactly %r.\n"
@@ -669,6 +698,14 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
 
         # `validate_structure` returns a LIST of (path, problem) pairs and is
         # empty when the shape is right - it does not return a verdict object.
+        # Belt and braces: even unshown, a model may emit a field it has seen
+        # in training. A governance field arriving from the model is DISCARDED
+        # rather than trusted - ARCHIOSK assigns claim strength.
+        for statement in candidate.get("statements") or []:
+            if isinstance(statement, dict):
+                for field in MODEL_WITHHELD_FIELDS:
+                    statement.pop(field, None)
+
         problems_found = contract.validate_structure(candidate)
         if not problems_found:
             payload = candidate
