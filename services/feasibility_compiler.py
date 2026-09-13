@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@9"
+COMPILER_VERSION = "feasibility-compiler@10"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -558,6 +558,12 @@ class CompilerOutcome:
     failure_reason: Optional[str] = None
     executed_at: Optional[str] = None
     structural_errors: list = field(default_factory=list)
+    #: The model's payload is `go_pdz_payload` and is never rewritten. This is
+    #: the copy carrying ARCHIOSK's own derivation classification and any
+    #: attestation that bound - what validation actually runs on.
+    governed_payload: Optional[dict] = None
+    bindings: list = field(default_factory=list)
+    promoted_statements: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return dict(self.__dict__)
@@ -723,6 +729,21 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
 
     outcome.go_pdz_payload = payload
     outcome.output_payload_sha256 = payload_hash(payload)
+
+    # DISCOVERY -> VERIFICATION -> PROMOTION. The model's payload above is kept
+    # exactly as it arrived. What ARCHIOSK is prepared to stand behind is the
+    # ANNOTATED copy: every statement re-classified here, and an attestation
+    # attached only where a candidate relation was extracted deterministically,
+    # verified, and bound to that exact statement. Validation then runs on the
+    # annotated document, because that is the one carrying ARCHIOSK's own
+    # classification rather than the model's silence.
+    from services import relation_binding
+    governed, bindings = relation_binding.annotate(
+        payload, serialised, verified_at=outcome.executed_at)
+    outcome.governed_payload = governed
+    outcome.bindings = bindings
+    outcome.promoted_statements = [b["statement_id"] for b in bindings
+                                   if b.get("promoted")]
     # Section 5: the model that ACTUALLY answered, as the provider reported it -
     # not the configured string restated back as if it were confirmation.
     outcome.model_version = getattr(runner, "last_resolved_model", None)
@@ -731,7 +752,7 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
     # SEMANTIC VALIDATION RUNS ONCE, AND ITS RESULT IS EVIDENCE. There is no path
     # from here back into the loop above - that absence is the whole point of
     # section 10, and it is asserted by the tests rather than left to discipline.
-    verdict = validator.validate(payload)
+    verdict = validator.validate(governed)
     outcome.validation_result = verdict
     outcome.semantic_validation_valid = bool(verdict.get("valid"))
     outcome.semantic_error_count = int(verdict.get("error_count") or 0)

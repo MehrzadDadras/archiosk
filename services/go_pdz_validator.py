@@ -452,7 +452,7 @@ def _has_dependency(document) -> bool:
     return False
 
 
-def governed_projection(document) -> dict:
+def governed_projection(document, evidence_facts=None) -> dict:
     """A bounded VIEW of a document, retaining what the model emitted.
 
     Section 8: current state must not launder model behaviour. Nothing here
@@ -476,10 +476,18 @@ def governed_projection(document) -> dict:
         if derivation == contract.DERIVATION_DEPENDENCY and not _has_dependency(
                 document):
             derivation = contract.DERIVATION_MODEL
-        if derivation == contract.DERIVATION_DETERMINISTIC and not (
-                derivation_check.is_valid_attestation(check)
-                and check.get("supports_established")):
-            derivation = contract.DERIVATION_MODEL
+        if derivation == contract.DERIVATION_DETERMINISTIC:
+            ok = (derivation_check.is_valid_attestation(check)
+                  and check.get("supports_established"))
+            if ok and evidence_facts is not None:
+                # RE-CHECK THE BINDING against the admitted facts, so a valid
+                # attestation cannot be copied onto another statement or kept
+                # after its inputs changed. Without this an attestation would be
+                # a transferable token rather than a proof about one claim.
+                from services import relation_binding
+                ok = relation_binding.verify_binding(statement, evidence_facts)
+            if not ok:
+                derivation = contract.DERIVATION_MODEL
         max_status, max_confidence = contract.ceiling_for(derivation)
         status = statement.get("statement_status")
         confidence = statement.get("confidence")
