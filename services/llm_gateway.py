@@ -57,15 +57,31 @@ KNOWN_PROVIDERS = (PROVIDER_ANTHROPIC, PROVIDER_GEMINI)
 DEFAULT_GEMINI_TIMEOUT_SECONDS = 60.0
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
+#: CLAUDE-GATEWAY-OBSERVABILITY-01. What the parse attempt did, recorded
+#: rather than inferred from which fields happen to be None.
+PARSE_OK = "PARSED"
+PARSE_MALFORMED = "MALFORMED"
+PARSE_TRUNCATED = "TRUNCATED"
+
 
 @dataclass
 class LLMCallOutcome:
     """`ran=False` means no real model call completed - a skipped_reason
-    is always set in that case, and `parsed`/`raw_text` are always None.
-    Never a fabricated result. Callers parse their own domain-specific
-    fields out of `parsed` (a plain dict from json.loads) into their own
-    Result dataclass, exactly as they already did with the model's raw
-    response before this extraction."""
+    is always set in that case, and `parsed` is always None. Never a
+    fabricated result. Callers parse their own domain-specific fields out
+    of `parsed` (a plain dict from json.loads) into their own Result
+    dataclass, exactly as they already did with the model's raw response
+    before this extraction.
+
+    CLAUDE-GATEWAY-OBSERVABILITY-01: `raw_text` and the diagnostic fields
+    below are now populated on FAILURE paths too. They previously were not,
+    and that was the observability gap: a malformed or truncated response
+    discarded the provider's own telemetry at the exact moment it was most
+    needed, which made a model's misbehaviour indistinguishable from ours.
+
+    These fields are DIAGNOSTIC EVIDENCE ONLY. `ran` and `parsed` remain the
+    sole basis on which any caller may act; nothing here relaxes what counts
+    as a usable response, and `ran=False` still means unusable."""
 
     ran: bool
     parsed: Optional[dict] = None
@@ -75,6 +91,20 @@ class LLMCallOutcome:
     provider: Optional[str] = None
     model: Optional[str] = None
     requested_at: Optional[str] = None
+    # CLAUDE-GATEWAY-OBSERVABILITY-01. What was actually handed to json.loads,
+    # kept beside `raw_text` because the fence-stripping below is PARSER
+    # RECOVERY and qualification has to be able to judge STRICT EMISSION
+    # separately from it. With only one of the two, "the provider returned
+    # clean JSON" and "the provider returned a fenced block we salvaged" are
+    # the same observation - which is precisely what could not be proven.
+    normalized_text: Optional[str] = None
+    #: DERIVED, not provider data: whether normalization changed anything.
+    normalization_applied: Optional[bool] = None
+    #: The provider's own termination condition, already computed by each
+    #: caller and previously thrown away on the failure paths.
+    truncated: Optional[bool] = None
+    parse_status: Optional[str] = None
+    parse_error: Optional[str] = None
     # CLAUDE-FEASIBILITY-MODEL-03: `model` above is the model the caller ASKED
     # for. These two are what the provider actually reported back, and they were
     # being dropped on the floor - the Gemini response carries both
@@ -289,24 +319,44 @@ def _finish_json_outcome(
     finish_reason enum), so the CALLER decides what truncation means
     for its own API and this function only decides what to do about it.
     """
-    cleaned = re.sub(r"^```(json)?|```$", "", (text_out or "").strip(), flags=re.MULTILINE).strip()
+    raw = (text_out or "").strip()
+    cleaned = re.sub(r"^```(json)?|```$", "", raw, flags=re.MULTILINE).strip()
+
+    # CLAUDE-GATEWAY-OBSERVABILITY-01. Assembled ONCE, before the parse is
+    # attempted, so that every exit below carries the same evidence. The old
+    # code built its failure outcomes from nothing, which is how a truncated
+    # response came back with no usage, no resolved model and no raw text -
+    # the three things needed to tell a provider problem from ours.
+    telemetry = {
+        "raw_text": text_out,
+        "normalized_text": cleaned,
+        "normalization_applied": cleaned != raw,
+        "stop_reason": stop_reason,
+        "truncated": truncated,
+        "provider": provider,
+        "model": model,
+        "requested_at": requested_at,
+        "resolved_model": resolved_model,
+        "usage": usage,
+    }
+
     try:
         parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        # NOTHING IS SALVAGED HERE. Both branches still return ran=False with
+        # parsed=None; all that changed is that they now say what was seen.
         if truncated:
             logger.warning("%s was truncated at max_tokens: %r", log_label, (text_out or "")[-200:])
             return LLMCallOutcome(
                 ran=False, skipped_reason="Model's response was cut off before it finished (max_tokens).",
-                stop_reason=stop_reason,
-            )
+                parse_status=PARSE_TRUNCATED, parse_error=str(exc), **telemetry)
         logger.warning("%s returned non-JSON output: %r", log_label, (text_out or "")[:200])
-        return LLMCallOutcome(ran=False, skipped_reason="Model returned malformed output.")
+        return LLMCallOutcome(
+            ran=False, skipped_reason="Model returned malformed output.",
+            parse_status=PARSE_MALFORMED, parse_error=str(exc), **telemetry)
 
-    return LLMCallOutcome(
-        ran=True, parsed=parsed, raw_text=text_out, stop_reason=stop_reason,
-        provider=provider, model=model, requested_at=requested_at,
-        resolved_model=resolved_model, usage=usage,
-    )
+    return LLMCallOutcome(ran=True, parsed=parsed, parse_status=PARSE_OK,
+                          **telemetry)
 
 
 def _import_google_genai():

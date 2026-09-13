@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@11"
+COMPILER_VERSION = "feasibility-compiler@12"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -605,6 +605,15 @@ class CompilerOutcome:
     failure_reason: Optional[str] = None
     executed_at: Optional[str] = None
     structural_errors: list = field(default_factory=list)
+    #: CLAUDE-GATEWAY-OBSERVABILITY-01. What the provider actually did, as
+    #: opposed to what we asked it for. Populated on SUCCESS AND FAILURE - the
+    #: failure case is the whole point, because a malformed or truncated
+    #: response used to arrive here as a reason string and nothing else.
+    #:
+    #: DIAGNOSTIC EVIDENCE ONLY (section 7). Nothing in this dict may create a
+    #: finding, become canonical, bypass structured parsing or VR-01..VR-21, or
+    #: alter claim strength. `go_pdz_payload` remains the only thing acted upon.
+    diagnostics: dict = field(default_factory=dict)
     #: The model's payload is `go_pdz_payload` and is never rewritten. This is
     #: the copy carrying ARCHIOSK's own derivation classification and any
     #: attestation that bound - what validation actually runs on.
@@ -618,6 +627,42 @@ class CompilerOutcome:
 
 def _now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+#: Section 4's envelope, in the order a reader would want it. Absent values stay
+#: absent: a provider that reports no usage produces None here, never a zero,
+#: because "it reported nothing" and "it reported none" are different facts.
+def _diagnostics(*, requested_provider, requested_model, telemetry, parsed=None):
+    telemetry = telemetry or {}
+    usage = telemetry.get("usage") or {}
+
+    def token(*names):
+        for name in names:
+            if usage.get(name) is not None:
+                return usage.get(name)
+        return None
+
+    return {
+        "REQUESTED_PROVIDER": requested_provider,
+        "REQUESTED_MODEL": requested_model,
+        "RESOLVED_PROVIDER": telemetry.get("provider"),
+        "RESOLVED_MODEL": telemetry.get("resolved_model"),
+        # The provider's own answer to "which model replied", kept distinct from
+        # the string we configured. Equal values are a PROOF; assuming they are
+        # equal is what this whole tranche exists to stop.
+        "MODEL_VERSION": telemetry.get("resolved_model"),
+        "RAW_PROVIDER_TEXT": telemetry.get("raw_text"),
+        "NORMALIZED_PARSE_INPUT": telemetry.get("normalized_text"),
+        "NORMALIZATION_APPLIED": telemetry.get("normalization_applied"),
+        "STOP_REASON": telemetry.get("stop_reason"),
+        "TRUNCATED": telemetry.get("truncated"),
+        "INPUT_TOKENS": token("prompt_token_count", "input_tokens"),
+        "OUTPUT_TOKENS": token("candidates_token_count", "output_tokens"),
+        "TOTAL_TOKENS": token("total_token_count", "total_tokens"),
+        "PARSE_STATUS": telemetry.get("parse_status"),
+        "PARSE_ERROR": telemetry.get("parse_error"),
+        "PARSED_PAYLOAD": parsed,
+    }
 
 
 def _classify_exception(exc) -> str:
@@ -727,6 +772,14 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
         except Exception as exc:  # noqa: BLE001 - a provider failure is a result
             logger.warning("feasibility compile failed on attempt %d (%s: %s)",
                            attempt, type(exc).__name__, exc)
+            # THE FAILURE CASE IS THE ONE QUALIFICATION NEEDED. `GatewayUnavailable`
+            # now carries the provider's telemetry, so a truncation or a malformed
+            # emission arrives with its raw text, finish reason and token usage
+            # attached instead of as a bare reason string.
+            outcome.diagnostics = _diagnostics(
+                requested_provider=provider, requested_model=model,
+                telemetry=getattr(exc, "telemetry", None) or
+                getattr(runner, "last_telemetry", None))
             outcome.failure_reason = _classify_exception(exc)
             outcome.structural_errors.append(
                 "%s: %s" % (type(exc).__name__, str(exc)[:300]))
@@ -795,6 +848,9 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
     # not the configured string restated back as if it were confirmation.
     outcome.model_version = getattr(runner, "last_resolved_model", None)
     outcome.usage_metadata = getattr(runner, "last_usage", None)
+    outcome.diagnostics = _diagnostics(
+        requested_provider=provider, requested_model=model,
+        telemetry=getattr(runner, "last_telemetry", None), parsed=payload)
 
     # SEMANTIC VALIDATION RUNS ONCE, AND ITS RESULT IS EVIDENCE. There is no path
     # from here back into the loop above - that absence is the whole point of
@@ -876,6 +932,10 @@ def gateway_runner(*, model_name=None, provider=None, api_key=None,
         # answered; `model` in the envelope stays what was asked for.
         details = getattr(getattr(result, "response", None), "provider_details",
                           None) or {}
+        # Everything the adapter passed through, kept whole. Reading named keys
+        # one at a time is how `normalized_text` and `parse_status` would have
+        # been silently dropped the next time the gateway learned something new.
+        run.last_telemetry = dict(details)
         run.last_resolved_model = details.get("resolved_model")
         if details.get("usage"):
             run.last_usage = dict(run.last_usage or {}, **details["usage"])
@@ -891,6 +951,7 @@ def gateway_runner(*, model_name=None, provider=None, api_key=None,
 
     run.last_usage = None
     run.last_resolved_model = None
+    run.last_telemetry = None
     run.agent = agent
     return run
 

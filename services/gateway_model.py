@@ -46,7 +46,28 @@ from services import llm_gateway
 
 logger = logging.getLogger(__name__)
 
-ADAPTER_VERSION = "gateway-model@1"
+ADAPTER_VERSION = "gateway-model@2"   # +observability passthrough
+
+
+#: CLAUDE-GATEWAY-OBSERVABILITY-01. The gateway's diagnostic fields, read off
+#: whatever outcome object arrives. `getattr` with a default rather than
+#: attribute access, because this adapter is also handed test doubles, and a
+#: double written before these fields existed must degrade to None rather than
+#: explode - an instrumentation change may not break a caller's tests.
+TELEMETRY_FIELDS = ("raw_text", "normalized_text", "normalization_applied",
+                    "truncated", "parse_status", "parse_error", "stop_reason",
+                    "resolved_model", "usage", "provider", "model",
+                    "requested_at")
+
+
+def _telemetry_of(outcome) -> dict:
+    """Diagnostic evidence about one provider call. NEVER a result.
+
+    Section 7's trust boundary in one sentence: what this returns may be read,
+    logged and asserted on, and may not create a finding, become canonical,
+    bypass parsing or validation, or alter claim strength.
+    """
+    return {name: getattr(outcome, name, None) for name in TELEMETRY_FIELDS}
 
 #: The gateway's own provider vocabulary, which is NOT the provider SDK's.
 #: `llm_gateway.KNOWN_PROVIDERS` is ("anthropic", "gemini"); PydanticAI and the
@@ -68,9 +89,14 @@ class GatewayUnavailable(RuntimeError):
     from a timeout apart from the kill switch.
     """
 
-    def __init__(self, skipped_reason, *, provider=None, model=None):
+    def __init__(self, skipped_reason, *, provider=None, model=None,
+                 telemetry=None):
         super().__init__(skipped_reason or "gateway declined without a reason")
         self.skipped_reason = skipped_reason
+        #: CLAUDE-GATEWAY-OBSERVABILITY-01. Diagnostic evidence about a call
+        #: that did NOT produce a usable response - which is exactly when it
+        #: used to be discarded. Never a substitute for one.
+        self.telemetry = dict(telemetry or {})
         self.provider = provider
         self.model = model
 
@@ -214,9 +240,13 @@ class _GatewayModelBase:
                            "ran": getattr(outcome, "ran", None)})
 
         if not getattr(outcome, "ran", False):
+            # CLAUDE-GATEWAY-OBSERVABILITY-01: the telemetry rides on the
+            # exception. A raise carrying only a reason string is why a failed
+            # call used to reach the compiler with nothing attached to it.
             raise GatewayUnavailable(getattr(outcome, "skipped_reason", None),
                                      provider=getattr(outcome, "provider", None),
-                                     model=getattr(outcome, "model", None))
+                                     model=getattr(outcome, "model", None),
+                                     telemetry=_telemetry_of(outcome))
 
         text = outcome.raw_text
         if not text and outcome.parsed is not None:
@@ -249,13 +279,10 @@ class _GatewayModelBase:
             provider_name=outcome.provider or self._gateway_provider,
             # Operational metadata only. No hidden reasoning is requested of the
             # provider and none is carried here.
-            provider_details={"via": "services/llm_gateway.py",
-                              "adapter": ADAPTER_VERSION,
-                              "stop_reason": outcome.stop_reason,
-                              # What the PROVIDER reported, kept separate from
-                              # what we requested: those are different facts.
-                              "resolved_model": outcome.resolved_model,
-                              "usage": outcome.usage},
+            provider_details=dict(
+                _telemetry_of(outcome),
+                **{"via": "services/llm_gateway.py",
+                   "adapter": ADAPTER_VERSION}),
         )
 
 
