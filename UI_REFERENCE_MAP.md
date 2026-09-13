@@ -1201,6 +1201,50 @@ read into them, and every statement is labelled `from record` or `GO reading`.
 | `planning-zoning.result.timings` (new, CLAUDE-PLANNING-LIVE-01) | `<p class="mono">` | Measured wait | Section 10's phase breakdown - municipality check, address resolution, zoning and overlay GIS, authority retrieval, deterministic work, view build, total - plus the count of municipal reads per phase. Measured, not optimised: the first live request took 77 s, of which 67 s was deterministic work and 10 s was network across 37 reads, and that distinction decides what would be worth changing | When a live request supplies timings | active |
 | `planning-zoning.result.actions` | `<nav>` | Section 13 | The two actions at the foot of the result | Always | active |
 | `planning-zoning.result.back` | `<a class="btn btn-primary">` | "Back to address" | Returns to the intake surface | Always | active |
+| `planning-zoning.result.workspace` | `<div class="pz-workspace">` | Section 5 | Responsive two-column workspace; collapses to one column at 1100px | Always | active |
+| `planning-zoning.result.main` | `<div class="pz-main">` | Section 5 | The governed result column - host-owned content only | Always | active |
+| `planning-zoning.result.layer.governed` | `<p class="mono field-note">` | GOVERNED RESULT badge | Names the layer, so the municipal record is never read as the column beside it | Always | active |
+| `planning-zoning.result.aside` | `<aside class="pz-aside">` | Section 5 | Secondary column: visual evidence, contribution, follow-up | Always | active |
+| `planning-zoning.result.visual` | `<section class="pz-group">` | Section 9 | Official visual evidence panels | Always | active |
+| `planning-zoning.result.visual.title` | `<h2 class="field-label">` | "Official visual evidence" | Section heading | Always | active |
+| `planning-zoning.result.visual.panel` | `<figure class="pz-panel">` | One panel | SVG drawn from the retrieved municipal geometry | When geometry was retrieved | active |
+| `planning-zoning.result.visual.caption` | `<figcaption>` | Panel provenance | Source authority, layer, retrieval, parcel, extent, evidence ref, limitation | With each panel | active |
+| `planning-zoning.result.visual.declined` | `<p class="mono field-note">` | Not drawn | Names why a panel was declined rather than showing an empty frame | When a panel declines | active |
+| `planning-zoning.result.visual.none` | `<p class="mono field-note">` | No geometry | States that nothing was retrieved to draw - not that nothing applies | When no geometry is carried | active |
+| `planning-zoning.result.visual.user-title` | `<h3 class="field-label">` | USER-SUPPLIED visuals | Separates supplied visuals from official evidence | When a visual was supplied | active |
+| `planning-zoning.result.visual.user-item` | `<p class="mono field-note">` | One supplied visual | Identity and limitation of a user-supplied visual; never its pixels | When a visual was supplied | active |
+| `planning-zoning.result.contribute` | `<section class="pz-group pz-layer">` | Section 10 | ADD INFORMATION / EXPLORE FURTHER | Always | active |
+| `planning-zoning.result.contribute.title` | `<h2 class="field-label">` | "Add information / explore further" | Section heading | Always | active |
+| `planning-zoning.result.contribute.note` | `<p class="mono field-note">` | Contribution boundary | States that what a person adds stays theirs and is bound before admission | Always | active |
+| `planning-zoning.result.contribute.form` | `<form method="post">` | Contribution form | Posts to /planning-zoning/analyze; carries no store handle | Always | active |
+| `planning-zoning.result.contribute.class` | `<select>` | Classification | Section 11 - the visible classification, host classes absent from the options | Always | active |
+| `planning-zoning.result.contribute.text` | `<textarea>` | Contribution text | What the person wants to add | Always | active |
+| `planning-zoning.result.contribute.object` | `<input type="text">` | Supporting object | Section 12 - describes a supplied object; provenance recorded, contents unverified | Always | active |
+| `planning-zoning.result.contribute.address` | `<input type="text">` | Property | The address the contribution relates to; re-read because nothing is stored | Always | active |
+| `planning-zoning.result.contribute.submit` | `<button class="btn btn-primary">` | "Ask GO to review" | Section 16 - runs the deterministic follow-up | Always | active |
+| `planning-zoning.result.contribute.rerun-note` | `<span class="mono field-note">` | Re-read notice | Section 22 - states honestly that reviewing re-reads the City's records | Always | active |
+| `planning-zoning.result.contributions` | `<section class="pz-group pz-layer">` | USER CONTRIBUTION layer | What the person added, labelled as not host-owned | When a contribution was made | active |
+| `planning-zoning.result.contributions.item` | `<div>` | One contribution | A single classified contribution | When a contribution was made | active |
+| `planning-zoning.result.contributions.classification` | `<span class="pz-badge pz-badge-user">` | Classification badge | Section 11 - the classification the contributor can SEE | When a contribution was made | active |
+| `planning-zoning.result.contributions.text` | `<p>` | Contribution text | The contribution as given, never reworded | When a contribution was made | active |
+| `planning-zoning.result.contributions.provenance` | `<p class="mono field-note">` | Provenance | Section 12 - supplied-by, timestamp, authority status, object label | When a contribution was made | active |
+| `planning-zoning.result.followup` | `<section class="pz-group pz-layer">` | GO FOLLOW-UP layer | Section 16 - deterministic review of the contribution | When a contribution was made | active |
+| `planning-zoning.result.followup.basis` | `<p class="mono field-note">` | Review basis | States that no model authored the review and it decides nothing | When a contribution was made | active |
+| `planning-zoning.result.followup.item` | `<div>` | One review | The follow-up for a single contribution | When a contribution was made | active |
+| `planning-zoning.result.followup.contradictions` | `<ul>` | Contradictions | Role mismatches, unsupported figures, unknown exceptions, effect overreach | When contradictions exist | active |
+| `planning-zoning.result.followup.effect` | `<p class="mono field-note">` | Statutory effect | Section 15 - the effect the contribution is entitled to, and its basis | When an effect is typed | active |
+| `planning-zoning.result.followup.posture` | `<p class="mono field-note">` | Implied posture | Section 19 - what anything derived from this contribution inherits | When a contribution was made | active |
+| `planning-zoning.result.followup.confirm` | `<ul>` | Needs confirmation | What a municipality or authority would have to confirm | When confirmation is needed | active |
+| `planning-zoning.result.admission` | `<section class="pz-group pz-layer">` | ADMISSION DECISION layer | Section 18 - admitted or quarantined, per the 64ddd93 discipline | When a contribution was made | active |
+| `planning-zoning.result.admission.counts` | `<p>` | Admitted / quarantined | How many contributions were admitted and how many quarantined | When a contribution was made | active |
+| `planning-zoning.result.admission.note` | `<p class="mono field-note">` | Quarantine note | States that quarantine is exclusion, not admission at lower confidence | When a contribution was made | active |
+| `planning-zoning.result.admission.posture` | `<p class="mono field-note">` | Derived posture | Section 19 - the posture derived work inherits, and on what basis | When a contribution was made | active |
+| `planning-zoning.result.admission.retains` | `<p class="mono field-note">` | Host retains | Section 14 - what stays host-owned whatever the contribution said | When a contribution was made | active |
+| `planning-zoning.result.export.docx` | `<form method="post">` | Export to Word | Sections 6/8 - posts format=docx to /planning-zoning/export | When exportable | active |
+| `planning-zoning.result.export.docx-submit` | `<button class="btn btn-ghost">` | "Export to Word" | Submits the Word export | When exportable | active |
+| `planning-zoning.result.export.pdf` | `<form method="post">` | Export to PDF | Sections 7/8 - posts format=pdf to /planning-zoning/export | When exportable | active |
+| `planning-zoning.result.export.pdf-submit` | `<button class="btn btn-ghost">` | "Export to PDF" | Submits the PDF export | When exportable | active |
+| `planning-zoning.result.export.note` | `<span class="mono field-note">` | Export scope note | States the scope and that neither file is the canonical record | When exportable | active |
 | `planning-zoning.result.conclusion` | `<section>` | Section 9 | Pre-Design Conclusion | Always | active |
 | `planning-zoning.result.conclusion.status` | `<p class="mono">` | Result status | The document's own status, stated plainly | Always | active |
 | `planning-zoning.result.conclusion.text` | `<p>` | Conclusion | Rendered only when the result carries one | Always | active |

@@ -40,10 +40,17 @@
    architect reading top to bottom. The contract's own vocabulary throughout -
    no second report structure, and no section invented for presentation.
 
-   NO NEW STYLESHEET. The `pz-*` classes carry no rules of their own; they exist
-   as stable hooks for the reference registry and for tests. Everything visible
-   is the existing system: np-page-title, np-group, field-label, field-note,
-   mono, btn / btn-primary / btn-ghost, form-error. #}
+   CLAUDE-PLANNING-WORKSPACE-02A CHANGED ONE THING HERE AND IT IS WORTH STATING,
+   because the previous note said the opposite. The `pz-*` classes used to carry
+   no rules and the page was built out of `.np-group` - which sets
+   `max-width: 480px` because it was designed for New Project's FORM FIELDS. That
+   is why the page text expanded on a laptop while every result section stayed
+   narrow. `.pz-*` now has real rules in main.css and `.np-group` is no longer
+   used on this page; it is untouched elsewhere, because `upload.html` and
+   `document_shop_intake.html` are forms where 480px is right.
+
+   Everything else visible is still the existing system: np-page-title,
+   field-label, field-note, mono, btn / btn-primary / btn-ghost, form-error. #}
 <h1 class="np-page-title" data-ui-ref="planning-zoning.result.page-title">Pre-Design Planning &amp; Zoning Result</h1>
 
 {# Section 14. First thing on the page, before any finding, because a reader who
@@ -64,9 +71,23 @@
 </p>
 {% endif %}
 
+{# CLAUDE-PLANNING-WORKSPACE-02A, section 5. Governed result on the left,
+   everything that is NOT the governed result on the right. The split is a
+   governance statement before it is a layout: nothing a person typed and nothing
+   ARCHIOSK inferred from it shares a column with the municipal record.
+
+   The grid collapses to one column at 1100px and the aside moves BELOW, so the
+   result is never dependent on a two-column viewport. #}
+<div class="pz-workspace" data-ui-ref="planning-zoning.result.workspace">
+<div class="pz-main pz-layer pz-layer-governed" data-ui-ref="planning-zoning.result.main">
+<p class="mono field-note" data-ui-ref="planning-zoning.result.layer.governed">
+    <span class="pz-badge">GOVERNED RESULT</span>
+    Host-owned, and unchanged by anything in the column beside it.
+</p>
+
 {# 1 ------------------------------------------------------------------ #}
 {{ section_heading('PROPERTY_IDENTITY', 'Property Identity') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.identity">
+<section class="pz-group" data-ui-ref="planning-zoning.result.identity">
     <p class="pz-identity-address" data-ui-ref="planning-zoning.result.identity.address">
         <strong>{{ view.identity.address }}</strong>
     </p>
@@ -83,7 +104,7 @@
 
 {# 2 ------------------------------------------------------------------ #}
 {{ section_heading('GOVERNING_PLANNING_FRAMEWORK', 'Governing Planning Framework') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.framework">
+<section class="pz-group" data-ui-ref="planning-zoning.result.framework">
     {{ statement_list(view.framework.statements, 'planning-zoning.result.framework.statements') }}
     {% if view.framework.exceptions %}
     <ul class="pz-exceptions" data-ui-ref="planning-zoning.result.framework.exceptions">
@@ -100,25 +121,25 @@
 
 {# 3 ------------------------------------------------------------------ #}
 {{ section_heading('PERMITTED_DEVELOPMENT_CONTEXT', 'Permitted Development Context') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.permitted">
+<section class="pz-group" data-ui-ref="planning-zoning.result.permitted">
     {{ statement_list(view.permitted.statements, 'planning-zoning.result.permitted.statements') }}
 </section>
 
 {# 4 ------------------------------------------------------------------ #}
 {{ section_heading('DEVELOPMENT_ENVELOPE', 'Development Envelope') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.envelope">
+<section class="pz-group" data-ui-ref="planning-zoning.result.envelope">
     {{ statement_list(view.envelope.statements, 'planning-zoning.result.envelope.statements') }}
 </section>
 
 {# 5 ------------------------------------------------------------------ #}
 {{ section_heading('MOBILITY_ACCESS_CONTEXT', 'Mobility / Access Context') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.mobility">
+<section class="pz-group" data-ui-ref="planning-zoning.result.mobility">
     {{ statement_list(view.mobility.statements, 'planning-zoning.result.mobility.statements') }}
 </section>
 
 {# 6 ------------------------------------------------------------------ #}
 {{ section_heading('CONSTRAINTS_AND_OPPORTUNITIES', 'Constraints & Opportunities') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.interpretation">
+<section class="pz-group" data-ui-ref="planning-zoning.result.interpretation">
     <h3 class="field-label" data-ui-ref="planning-zoning.result.constraints.title">Constraints</h3>
     {{ statement_list(view.interpretation.constraints, 'planning-zoning.result.constraints') }}
     <h3 class="field-label" data-ui-ref="planning-zoning.result.opportunities.title">Opportunities</h3>
@@ -131,9 +152,9 @@
 
 {# 7 ------------------------------------------------------------------ #}
 {{ section_heading('PLANNING_LEVEL_DEVELOPMENT_OPTIONS', 'Planning-Level Development Options') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.options">
+<section class="pz-group" data-ui-ref="planning-zoning.result.options">
     {% for option in view.options %}
-    <article class="pz-option np-group" data-ui-ref="planning-zoning.result.option">
+    <article class="pz-option pz-group" data-ui-ref="planning-zoning.result.option">
         <h3 data-ui-ref="planning-zoning.result.option.title">
             Option {{ option.key }} &mdash; {{ option.posture }}
         </h3>
@@ -160,7 +181,7 @@
 
 {# 8 ------------------------------------------------------------------ #}
 {{ section_heading('UNRESOLVED_MUNICIPAL_CONFIRMATION', 'Unresolved / Municipal Confirmation') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.unresolved">
+<section class="pz-group" data-ui-ref="planning-zoning.result.unresolved">
     {# Section 11: prominent, specific, and never a generic disclaimer. Each item
        says what is open, what it bears on, what would settle it, and whether it
        blocks a planning conclusion - MATERIAL is the contract's own word for
@@ -209,7 +230,7 @@
 
 {# 9 ------------------------------------------------------------------ #}
 {{ section_heading('PRE_DESIGN_CONCLUSION', 'Pre-Design Conclusion') }}
-<section class="np-group" data-ui-ref="planning-zoning.result.conclusion">
+<section class="pz-group" data-ui-ref="planning-zoning.result.conclusion">
     <p class="mono" data-ui-ref="planning-zoning.result.conclusion.status">
         Result status: <strong>{{ view.result_status }}</strong>
     </p>
@@ -220,7 +241,7 @@
 
 {# 10 ----------------------------------------------------------------- #}
 {{ section_heading('EVIDENCE_FOOTER', 'Evidence Footer') }}
-<details class="np-group" data-ui-ref="planning-zoning.result.evidence">
+<details class="pz-group" data-ui-ref="planning-zoning.result.evidence">
     <summary data-ui-ref="planning-zoning.result.evidence.summary">
         Evidence and sources ({{ view.evidence | length }})
     </summary>
@@ -259,10 +280,218 @@
     </p>
 </details>
 
+</div>{# /pz-main #}
+
+{# ---- SECONDARY COLUMN ------------------------------------------------
+   Visual evidence, what a person added, and the follow-up over it. Every block
+   here is labelled with WHOSE it is, because a workspace that lets a person type
+   beside municipal authority is exactly where the two get confused by accident. #}
+<aside class="pz-aside" data-ui-ref="planning-zoning.result.aside" aria-label="Evidence and contributions">
+
+{# 9 ---- OFFICIAL VISUAL EVIDENCE ---- #}
+<section class="pz-group" data-ui-ref="planning-zoning.result.visual">
+    <h2 class="field-label" data-ui-ref="planning-zoning.result.visual.title">Official visual evidence</h2>
+    {% if panels %}
+    <div class="pz-panels">
+        {% for panel in panels %}
+        <figure class="pz-panel" data-ui-ref="planning-zoning.result.visual.panel">
+            {% if panel.drawn %}
+            {{ panel.svg | safe }}
+            {% else %}
+            <p class="mono field-note" data-ui-ref="planning-zoning.result.visual.declined">
+                Not drawn: {{ panel.declined_reason }}
+            </p>
+            {% endif %}
+            <figcaption class="pz-panel-caption" data-ui-ref="planning-zoning.result.visual.caption">
+                <strong>{{ panel.title }}</strong><br>
+                {{ panel.source }}{% if panel.layer %} &middot; {{ panel.layer }}{% endif %}<br>
+                {% if panel.retrieved_at %}retrieved {{ panel.retrieved_at }}<br>{% endif %}
+                {% if panel.parcel_identifier %}parcel {{ panel.parcel_identifier }}<br>{% endif %}
+                {% if panel.extent_metres %}extent {{ panel.extent_metres[0] }} &times; {{ panel.extent_metres[1] }} m &middot; {{ panel.crs }}<br>{% endif %}
+                {{ panel.limitation }}
+            </figcaption>
+        </figure>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.visual.none">
+        No municipal geometry was carried with this result, so there is nothing to
+        draw. An empty frame would read as &ldquo;nothing here&rdquo; rather than
+        &ldquo;not retrieved&rdquo;, which are opposite findings.
+    </p>
+    {% endif %}
+    {% if user_panels %}
+    <h3 class="field-label" data-ui-ref="planning-zoning.result.visual.user-title">
+        <span class="pz-badge pz-badge-user">USER-SUPPLIED</span> Supplied visuals
+    </h3>
+    {% for panel in user_panels %}
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.visual.user-item">
+        {{ panel.title }}{% if panel.layer %} &middot; {{ panel.layer }}{% endif %}<br>
+        {{ panel.limitation }}
+    </p>
+    {% endfor %}
+    {% endif %}
+</section>
+
+{# 10 ---- HUMAN CONTRIBUTION ---- #}
+<section class="pz-group pz-layer pz-layer-contribution" data-ui-ref="planning-zoning.result.contribute">
+    <h2 class="field-label" data-ui-ref="planning-zoning.result.contribute.title">Add information / explore further</h2>
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.contribute.note">
+        What you add is recorded as YOURS. It is classified before it is read,
+        never becomes a municipal record or a property fact, and its figures are
+        checked against the result beside it before anything is admitted.
+    </p>
+    <form class="pz-contribution-form" method="post"
+          action="{{ url_for('planning_zoning.analyze_property') }}"
+          data-ui-ref="planning-zoning.result.contribute.form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="mode" value="single">
+        <label for="pz-contribution-class">Classification</label>
+        <select id="pz-contribution-class" name="contribution_class"
+                data-ui-ref="planning-zoning.result.contribute.class">
+            {% for value in classifications %}
+            <option value="{{ value }}">{{ classification_labels[value] }} &mdash; {{ value }}</option>
+            {% endfor %}
+        </select>
+        <label for="pz-contribution">What would you like to add?</label>
+        <textarea id="pz-contribution" name="contribution" rows="5"
+                  data-ui-ref="planning-zoning.result.contribute.text"
+                  placeholder="e.g. Owner wants to test six units."></textarea>
+        <label for="pz-contribution-object">Supporting object (describe it)</label>
+        <input type="text" id="pz-contribution-object" name="contribution_object"
+               data-ui-ref="planning-zoning.result.contribute.object"
+               placeholder="e.g. municipal email, 2026-09-02">
+        <label for="pz-contribution-address">Property this relates to</label>
+        <input type="text" id="pz-contribution-address" name="address"
+               value="{{ address or view.identity.address_as_given or '' }}"
+               data-ui-ref="planning-zoning.result.contribute.address">
+        <button type="submit" class="btn btn-primary"
+                data-ui-ref="planning-zoning.result.contribute.submit">Ask GO to review</button>
+        <span class="mono field-note" data-ui-ref="planning-zoning.result.contribute.rerun-note">
+            Nothing on this page is stored, so reviewing re-reads the City's
+            records for this property. The result will carry its own retrieval time.
+        </span>
+    </form>
+</section>
+
+{# 11 ---- FOLLOW-UP AND ADMISSION ---- #}
+{% if has_contributions %}
+<section class="pz-group pz-layer pz-layer-contribution" data-ui-ref="planning-zoning.result.contributions">
+    <h2 class="field-label"><span class="pz-badge pz-badge-user">USER CONTRIBUTION</span> What you added</h2>
+    {% for item in contributions %}
+    <div data-ui-ref="planning-zoning.result.contributions.item">
+        <p><span class="mono pz-badge pz-badge-user"
+                 data-ui-ref="planning-zoning.result.contributions.classification">{{ item.record.classification }}</span>
+           {{ item.record.classification_label }}</p>
+        <p data-ui-ref="planning-zoning.result.contributions.text">{{ item.record.text }}</p>
+        <p class="mono field-note" data-ui-ref="planning-zoning.result.contributions.provenance">
+            {{ item.record.provenance }} &middot; {{ item.record.authority_status }}
+            {% if item.record.supplied_by %} &middot; {{ item.record.supplied_by }}{% endif %}
+            {% if item.record.submitted_at %} &middot; {{ item.record.submitted_at }}{% endif %}
+            {% if item.record.supplied_object %}<br>
+            <span class="pz-badge pz-badge-user">USER-SUPPLIED</span>
+            {{ item.record.supplied_object.name }}{% endif %}
+        </p>
+    </div>
+    {% endfor %}
+</section>
+
+<section class="pz-group pz-layer pz-layer-followup" data-ui-ref="planning-zoning.result.followup">
+    <h2 class="field-label"><span class="pz-badge">GO FOLLOW-UP</span> Deterministic review</h2>
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.followup.basis">
+        Compared against the governed result by deterministic check. No model
+        authored this, and it decides nothing an authority decides.
+    </p>
+    {% for item in follow_up %}
+    <div data-ui-ref="planning-zoning.result.followup.item">
+        {% if item.review.contradictions %}
+        <ul data-ui-ref="planning-zoning.result.followup.contradictions">
+            {% for contradiction in item.review.contradictions %}
+            <li><span class="mono">{{ contradiction.kind }}</span> &mdash; {{ contradiction.detail }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="mono field-note">Nothing in this contribution contradicts the governed result.</p>
+        {% endif %}
+        {% if item.review.statutory_effect %}
+        <p class="mono field-note" data-ui-ref="planning-zoning.result.followup.effect">
+            Statutory effect: {{ item.review.statutory_effect }} on
+            {{ item.review.effect_basis }}{% if item.review.effect_overreach %} &mdash;
+            a stronger effect was asserted than the basis supports{% endif %}
+        </p>
+        {% endif %}
+        <p class="mono field-note" data-ui-ref="planning-zoning.result.followup.posture">
+            Posture carried into anything derived from this:
+            <strong>{{ item.review.implied_posture }}</strong>
+        </p>
+        {% if item.review.needs_confirmation %}
+        <p class="field-label">Needs confirmation</p>
+        <ul data-ui-ref="planning-zoning.result.followup.confirm">
+            {% for confirm in item.review.needs_confirmation %}<li>{{ confirm }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+
+<section class="pz-group pz-layer pz-layer-admission" data-ui-ref="planning-zoning.result.admission">
+    <h2 class="field-label"><span class="pz-badge">ADMISSION DECISION</span> What was admitted</h2>
+    <p data-ui-ref="planning-zoning.result.admission.counts">
+        <span class="pz-badge pz-badge-admitted">{{ admission.admitted }} admitted</span>
+        <span class="pz-badge pz-badge-quarantined">{{ admission.quarantined }} quarantined</span>
+    </p>
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.admission.note">
+        A quarantined contribution is excluded from any governed follow-up and kept
+        here as evidence that it was offered. It is not admitted at a lower
+        confidence.
+    </p>
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.admission.posture">
+        Derived work inherits: <strong>{{ derived_posture.posture }}</strong>
+        ({{ derived_posture.posture_basis }})
+    </p>
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.admission.retains">
+        Host retains regardless: {{ admission.host_retains | join(', ') }}
+    </p>
+</section>
+{% endif %}
+</aside>
+</div>{# /pz-workspace #}
+
 {# Section 13 --------------------------------------------------------- #}
-<nav class="np-group" data-ui-ref="planning-zoning.result.actions" aria-label="Result actions">
+<nav class="pz-group" data-ui-ref="planning-zoning.result.actions" aria-label="Result actions">
     <a class="btn btn-primary" href="{{ url_for('planning_zoning.planning_zoning') }}"
        data-ui-ref="planning-zoning.result.back">Back to address</a>
+    {# CLAUDE-PLANNING-WORKSPACE-02A, sections 6-8. Word is an EDITABLE
+       DERIVATIVE and PDF a record copy; neither is the canonical record, and both
+       say so on their own first page. Each posts the address because nothing is
+       stored - the export re-reads the City's records and carries its own
+       retrieval timestamp. #}
+    {% if exportable %}
+    <form method="post" action="{{ url_for('planning_zoning.export_result') }}"
+          data-ui-ref="planning-zoning.result.export.docx">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="format" value="docx">
+        <input type="hidden" name="scope" value="{{ 'GOVERNED_RESULT_WITH_FOLLOW_UP' if has_contributions else 'GOVERNED_RESULT_ONLY' }}">
+        <input type="hidden" name="address" value="{{ address or view.identity.address_as_given or '' }}">
+        <button type="submit" class="btn btn-ghost"
+                data-ui-ref="planning-zoning.result.export.docx-submit">Export to Word</button>
+    </form>
+    <form method="post" action="{{ url_for('planning_zoning.export_result') }}"
+          data-ui-ref="planning-zoning.result.export.pdf">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="format" value="pdf">
+        <input type="hidden" name="scope" value="{{ 'GOVERNED_RESULT_WITH_FOLLOW_UP' if has_contributions else 'GOVERNED_RESULT_ONLY' }}">
+        <input type="hidden" name="address" value="{{ address or view.identity.address_as_given or '' }}">
+        <button type="submit" class="btn btn-ghost"
+                data-ui-ref="planning-zoning.result.export.pdf-submit">Export to PDF</button>
+    </form>
+    <span class="mono field-note" data-ui-ref="planning-zoning.result.export.note">
+        {% if has_contributions %}Both exports keep the governed result, what you
+        supplied, the follow-up and the admission decision as four separate,
+        labelled blocks.{% else %}Exports carry the governed result only.{% endif %}
+        Neither file is the canonical record.
+    </span>
+    {% endif %}
     {# Gate 01 holds here. Developing options further is where owner programme
        legitimately begins, and this tranche may not cross into it - so the
        control is present and DISABLED rather than absent, because a reader is

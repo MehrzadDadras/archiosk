@@ -10460,3 +10460,151 @@ dl.plain-list dd {
     max-width: 100%;
     overflow-wrap: anywhere;
 }
+
+/* ============================================================
+   CLAUDE-PLANNING-WORKSPACE-02A — the Pre-Design Planning workspace.
+
+   WHY THESE CLASSES EXIST AT ALL, which is the whole diagnosis of the
+   reported defect. The result page was built out of `.np-group`, and
+   `.np-group` carries `max-width: 480px` because it was designed for New
+   Project's narrow FORM FIELDS. So on a laptop the page text expanded to
+   the shell's width while every one of the result's ten sections stayed
+   pinned at 480px — exactly the symptom reported: "outer page text
+   expands, but result cards remain too narrow."
+
+   The fix is NOT to widen `.np-group`. It is still used by
+   `upload.html` (2) and `document_shop_intake.html` (1), where 480px is
+   correct for a form, and widening it would silently restyle two
+   unrelated surfaces to fix one. A result is not a form, so the result
+   page gets its own container and stops borrowing a form's.
+
+   FLUID, WITH A READING BOUND RATHER THAN A FIXED ONE. The workspace
+   grows with the viewport up to a limit set by legibility, not by a
+   round number: `ch` units tie the bound to the text itself, so the
+   measure stays readable at any root size the viewer has chosen.
+   ============================================================ */
+.pz-workspace {
+    display: grid;
+    /* MAIN GETS THE SPACE, and `minmax(0, …)` on both tracks is what
+       stops a long unbroken token (a URL, a hash, a geometry id) from
+       forcing the grid wider than the viewport — the usual cause of a
+       horizontal scrollbar on a page whose CSS looks correct. */
+    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
+    gap: var(--space-10);
+    align-items: start;
+    width: 100%;
+    max-width: 150ch;
+}
+.pz-main, .pz-aside {
+    min-width: 0;                 /* the other half of the overflow guard */
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+}
+/* The result's own section container. Same border-only treatment as
+   `.np-group` so the page still reads as one series, WITHOUT the form
+   width that caused the defect. */
+.pz-group {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: var(--space-5) var(--space-6);
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+}
+.pz-statements { list-style: none; margin: 0; padding: 0; }
+.pz-statement {
+    padding: var(--space-4) 0;
+    border-top: 1px solid var(--border);
+    /* Text wraps LESS aggressively now that the card is wide, but a long
+       statement still has to wrap somewhere sensible rather than push
+       the grid. */
+    overflow-wrap: break-word;
+}
+.pz-statement:first-child { border-top: 0; }
+.pz-statement-status, .pz-statement-basis {
+    font-size: var(--text-xs);
+    color: var(--text-metadata);
+}
+
+/* Option cards use the width instead of stacking in a narrow column. */
+.pz-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(30ch, 100%), 1fr));
+    gap: var(--space-8);
+}
+.pz-option { min-width: 0; }
+
+/* ---- visual evidence (official) ---- */
+.pz-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(26ch, 100%), 1fr));
+    gap: var(--space-8);
+}
+.pz-panel { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.pz-panel-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    background: var(--surface-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+/* MACHINE-DERIVED GEOMETRY, so it takes the machine colour the grammar
+   already assigns to machine-produced content rather than a new one. */
+.pz-panel-layer { fill: var(--machine-blue-tint); stroke: var(--machine-blue); stroke-width: 1.25; }
+.pz-panel-subject { fill: none; stroke: var(--highlight-orange); stroke-width: 2; }
+.pz-panel-caption { font-size: var(--text-xs); color: var(--text-metadata); }
+
+/* ---- the four layers (section 17). Each one visibly not the others. ---- */
+.pz-layer { border-left: 3px solid var(--border); padding-left: var(--space-6); }
+.pz-layer-governed { border-left-color: var(--machine-blue); }
+.pz-layer-contribution { border-left-color: var(--highlight-orange); }
+.pz-layer-followup { border-left-color: var(--attention-amber); }
+.pz-layer-admission { border-left-color: var(--border-strong); }
+.pz-badge {
+    /* NO `font-family: var(--font-mono)` HERE, deliberately. tokens.css reserves
+       the mono face for the technical register and main.css carries exactly
+       three such exceptions; a fourth declaration would have been a duplicate of
+       the `.mono` utility this template already uses on every other identifier
+       it renders. The badges that show a contract enum carry `class="mono
+       pz-badge"` instead - extend the existing mechanism, do not add a rule
+       beside it. Caught by the FULL gate, which Tier 0 and the targeted lane both
+       passed: exactly the markup-shaped defect CLAUDE.md predicts for this. */
+    display: inline-block;
+    font-size: var(--text-xs);
+    padding: var(--space-1) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-metadata);
+}
+.pz-badge-user { border-color: var(--highlight-orange); color: var(--highlight-orange); }
+.pz-badge-quarantined { border-color: var(--seal-red); color: var(--seal-red); }
+.pz-badge-admitted { border-color: var(--accepted-green); color: var(--accepted-green); }
+
+.pz-contribution-form { display: flex; flex-direction: column; gap: var(--space-5); }
+.pz-contribution-form textarea { width: 100%; min-height: 6rem; resize: vertical; }
+.pz-export-actions { display: flex; flex-wrap: wrap; gap: var(--space-5); align-items: center; }
+
+/* TABLET — the secondary column stops earning its width before it stops
+   fitting, so it moves under the result rather than being squeezed. */
+@media (max-width: 1100px) {
+    .pz-workspace { grid-template-columns: minmax(0, 1fr); }
+    .pz-aside { border-top: 1px solid var(--border); padding-top: var(--space-9); }
+}
+@media (max-width: 820px) {
+    .pz-options, .pz-panels { grid-template-columns: minmax(0, 1fr); }
+}
+/* MOBILE — single column, everything reachable, nothing off-screen. */
+@media (max-width: 640px) {
+    .pz-workspace { gap: var(--space-8); }
+    .pz-group { padding: var(--space-5) var(--space-5); }
+    .pz-export-actions { flex-direction: column; align-items: stretch; }
+    .pz-export-actions form, .pz-export-actions button { width: 100%; }
+    /* A table or a long id is the one thing allowed to scroll, and only
+       inside its own box — never the page. */
+    .pz-scroll-x { overflow-x: auto; max-width: 100%; }
+}

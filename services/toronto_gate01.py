@@ -47,6 +47,7 @@ import logging
 from concurrent import futures
 from datetime import datetime, timezone
 
+from services import deterministic_spatial as spatial
 from services import go_pdz_lifecycle as lifecycle
 from services import planning_authority as authority
 from services import toronto_planning_source as source
@@ -605,5 +606,33 @@ def run(address, *, reader, retrieved_at=None) -> dict:
             "acquired", False),
         "exception": gathered.get("exception"),
         "heritage_register": gathered.get("heritage_register"),
+        # CLAUDE-PLANNING-WORKSPACE-02A. The TWO small geometries a visual
+        # evidence panel can honestly be drawn from, carried forward so the
+        # picture and the finding cite the same bytes.
+        #
+        # PARCEL AND ZONE ONLY, and that restriction is the whole design. The
+        # overlay layers are deliberately excluded: the Natural Heritage geometry
+        # alone is 281,023 vertices and municipality-wide, so surfacing it would
+        # put megabytes into a response to draw a shape nobody can read. A parcel
+        # ring is tens of vertices and a zone polygon hundreds.
+        #
+        # `services/planning_visual.py` renders these and never fetches anything.
+        "visual_geometry": {
+            "parcel": {
+                "geometry": resolved.get("geometry"),
+                "source": resolved.get("source"),
+                "layer": "Property Boundary",
+                "parcel_identifier": resolved.get("parcel_identifier"),
+                "geometry_id": spatial.geometry_hash(resolved.get("geometry")),
+            },
+            "zoning": {
+                "geometry": (gathered.get("zoning") or {}).get("geometry"),
+                "source": "City of Toronto Zoning Area (cot_geospatial11/3)",
+                "layer": ((gathered.get("zoning") or {}).get("layer") or {}).get(
+                    "name") or "Zoning Area",
+                "geometry_id": spatial.geometry_hash(
+                    (gathered.get("zoning") or {}).get("geometry")),
+            },
+        },
     }
     return outcome

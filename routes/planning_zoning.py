@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 import re
 
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, abort, current_app, render_template, request, send_file
 
 from services.auth import login_required
 
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 planning_bp = Blueprint("planning_zoning", __name__)
 
-DOOR_VERSION = "planning-zoning-door@2"   # +flag-gated live Toronto path
+DOOR_VERSION = "planning-zoning-door@3"   # +workspace: export, visuals, contribution
 
 #: Section 18's classification, stated by the code rather than by a comment so a
 #: test can assert it and a reader cannot be misled by a stale note.
@@ -302,11 +302,189 @@ def planning_result():
 
     The page says DEVELOPMENT PREVIEW because it is one.
     """
+    from services import planning_contribution
     from services import planning_result_view
 
-    return render_template("planning_zoning_result.html",
-                           view=planning_result_view.development_view(),
-                           backend=planning_analysis_state())
+    return render_template(
+        "planning_zoning_result.html",
+        view=planning_result_view.development_view(),
+        backend=planning_analysis_state(),
+        # The fixture carries no municipal geometry, so there are no official
+        # panels to draw and the surface says so rather than showing empty frames.
+        panels=[], user_panels=[], has_contributions=False,
+        # EXPORT IS OFFERED ON THE FIXTURE TOO, and it exports AS a fixture: the
+        # document leads with "DEVELOPMENT FIXTURE ... NOT an analysis of any real
+        # property", driven by the view's own `preview` flag rather than by which
+        # route asked. A preview that exported as though it were analysis would be
+        # the worst artifact this tranche could produce.
+        exportable=True,
+        classifications=planning_contribution.CLASSIFICATIONS,
+        classification_labels=planning_contribution.CLASSIFICATION_LABELS)
+
+
+@planning_bp.route("/planning-zoning/export", methods=["POST"])
+@login_required
+def export_result():
+    """CLAUDE-PLANNING-WORKSPACE-02A - the governed result as .docx or .pdf.
+
+    RE-RUNS THE ANALYSIS RATHER THAN RECALLING IT, and the honesty of that is the
+    whole design. Live planning results are not persisted (Product Owner, section
+    1-A of the live-route direction, and section 22 here), so there is no stored
+    result to export. The two alternatives were both worse: accepting the rendered
+    result back from the browser would mean the host treating client-supplied
+    bytes as host-owned facts, which is the exact boundary the anti-laundering
+    invariants draw; and inventing a store to hold it would be the persistence
+    model section 22 forbids.
+
+    So an export is a FRESH retrieval, and the file says so - it carries its own
+    municipal retrieval timestamp, which may differ from the page the person was
+    looking at. A document claiming to be the earlier result would be lying about
+    a timestamp; one that states its own is merely later.
+
+    THE FIXTURE PATH NEEDS NO RETRIEVAL and exports the fixture, labelled as one.
+    """
+    from services import planning_export
+    from services import planning_result_view
+
+    export_format = (request.form.get("format") or "").strip().lower()
+    if export_format not in planning_export.FORMATS:
+        logger.info("planning export refused: unsupported format %r",
+                    export_format)
+        abort(400)
+    scope = request.form.get("scope") or planning_export.SCOPE_GOVERNED_ONLY
+    if scope not in planning_export.SCOPES:
+        abort(400)
+
+    address, error = validate_address(request.form.get("address"))
+    live_result, layered, panels = None, None, []
+
+    if live_enabled() and not error:
+        from services import planning_live
+        from services import planning_visual
+
+        live_result = planning_live.run_live(address)
+        if live_result["outcome"] != planning_live.OUTCOME_OK:
+            # A SOURCE FAILURE MUST NOT PRODUCE A FILE. A .docx of nothing is
+            # worse than an error page, because it outlives the error.
+            logger.info("planning export refused: %s", live_result["outcome"])
+            abort(502)
+        view = live_result["view"]
+        panels = planning_visual.panels_for(view.get("retrieval") or {})
+        if scope == planning_export.SCOPE_WITH_FOLLOW_UP:
+            layered = _workspace_layers(live_result, request.form)["layered"]
+    else:
+        # Section 22 again: with the live flag off there is nothing retrievable,
+        # so the only thing this may export is the development fixture.
+        view = planning_result_view.development_view()
+        scope = planning_export.SCOPE_GOVERNED_ONLY
+
+    stream, filename, mimetype = planning_export.export(
+        view, export_format, scope=scope, layered=layered, panels=panels,
+        generated_at=_now_iso())
+    logger.info("planning export served (%s, %s, %d bytes)",
+                export_format, scope, len(stream.getvalue()))
+    stream.seek(0)
+    return send_file(stream, mimetype=mimetype, as_attachment=True,
+                     download_name=filename)
+
+
+#: CLAUDE-PLANNING-WORKSPACE-02A. What a person may attach to one request.
+#:
+#: SIZE IS BOUNDED HERE AND NOT FURTHER DOWN. A contribution travels through a
+#: synchronous request that also runs a municipal retrieval, so an unbounded
+#: textarea is a way to make that request fail slowly.
+MAX_CONTRIBUTION_LENGTH = 4000
+MAX_CONTRIBUTIONS = 6
+
+
+def _contributions_from(form) -> list:
+    """Every human contribution in this submission, classified and provenanced.
+
+    ONE REQUEST, ONE SET. Nothing is read from a session, a store or a prior
+    request, because nothing is written to any of them - see the persistence note
+    in this tranche's return. A contribution belongs to the submission that
+    carried it and to nothing else.
+    """
+    from services import planning_contribution
+
+    records = []
+    for index in range(MAX_CONTRIBUTIONS):
+        suffix = "" if index == 0 else "_%d" % index
+        text = (form.get("contribution%s" % suffix) or "").strip()
+        if not text:
+            continue
+        records.append(planning_contribution.contribution(
+            text[:MAX_CONTRIBUTION_LENGTH],
+            # The CLASSIFICATION IS REQUESTED, NEVER TRUSTED. `classify` falls
+            # back to USER_INPUT for anything outside the permitted vocabulary,
+            # so a posted `AUTHORITY_SAYS` becomes the weakest value rather than
+            # the strongest one.
+            classification=form.get("contribution_class%s" % suffix),
+            supplied_by=_current_actor(),
+            submitted_at=_now_iso(),
+            object_name=(form.get("contribution_object%s" % suffix) or "").strip()
+            or None,
+            object_kind=(form.get("contribution_object_kind%s" % suffix)
+                         or "").strip() or None,
+            relates_to=form.get("contribution_relates_to%s" % suffix) or None))
+    return records
+
+
+def _current_actor():
+    """Who supplied it, for the record. Never an entitlement - just attribution."""
+    try:
+        from flask_login import current_user
+        return getattr(current_user, "username", None) or getattr(
+            current_user, "email", None)
+    except Exception:      # noqa: BLE001 - attribution must never break a request
+        return None
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _workspace_layers(live, form) -> dict:
+    """Section 17's four layers plus the visual panels, for one live result.
+
+    THE GOVERNED RESULT GOES IN AND COMES OUT UNCHANGED. Everything added here
+    sits beside it in separate keys; nothing writes into `live["view"]` or the
+    document it projects.
+    """
+    from services import planning_contribution
+    from services import planning_visual
+
+    view = live.get("view") or {}
+    document = live.get("document") or {}
+    retrieval = view.get("retrieval") or {}
+    panels = planning_visual.panels_for(retrieval)
+
+    records = _contributions_from(form)
+    facts = {"zoning": {"attributes": retrieval.get("zoning_attributes") or {}}}
+    reviews = [planning_contribution.review(record, document, facts)
+               for record in records]
+    user_panels = [
+        planning_visual.user_supplied_panel(
+            name=record["supplied_object"].get("name"),
+            kind=record["supplied_object"].get("kind"),
+            byte_count=record["supplied_object"].get("byte_count"),
+            digest=record["supplied_object"].get("sha256"))
+        for record in records if record.get("supplied_object")]
+
+    layered = planning_contribution.layered(document, view, records, reviews)
+    return {
+        "panels": panels,
+        "user_panels": user_panels,
+        "layered": layered,
+        "contributions": layered["contributions"],
+        "follow_up": layered["follow_up"],
+        "admission": layered["admission"],
+        "derived_posture": layered["derived_posture"],
+        "classifications": planning_contribution.CLASSIFICATIONS,
+        "classification_labels": planning_contribution.CLASSIFICATION_LABELS,
+        "has_contributions": bool(records),
+    }
 
 
 @planning_bp.route("/planning-zoning/analyze", methods=["POST"])
@@ -369,12 +547,16 @@ def analyze_property():
                 **intent))
         logger.info("live planning request served in %.0f ms (%s)",
                     live["timings"].get("total_ms") or 0.0, address)
+        workspace = _workspace_layers(live, request.form)
         return render_template("planning_zoning_result.html",
                                view=live["view"],
                                backend=planning_analysis_state(),
                                timings=live["timings"],
                                source_failures=live["source_failures"],
-                               intent=intent)
+                               intent=intent,
+                               address=address,
+                               exportable=True,
+                               **workspace)
 
     # VALID INTAKE, NO ANALYSIS. The one thing this must not do is manufacture a
     # result, so the address is echoed with the development-state boundary and

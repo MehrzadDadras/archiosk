@@ -693,18 +693,61 @@ class TheDoctrineIsRecorded(unittest.TestCase):
             self.assertIn(domain, self.text)
         self.assertIn("NOT YET IMPLEMENTED", self.text)
 
+    #: The Planning / GO-PDZ family, by module-name prefix. Planning is the
+    #: authorized proving ground, so a NEW Planning consumer is the doctrine
+    #: working rather than a violation of it.
+    PLANNING_FAMILY = ("planning_", "go_pdz_", "toronto_", "mississauga_",
+                       "feasibility_", "entity_binding", "derivation_check",
+                       "relation_binding", "deterministic_")
+
     def test_no_production_code_was_created_in_the_other_domains(self):
-        """Section 12 forbids placeholder code, so nothing may import these."""
+        """Section 12 forbids placeholder code OUTSIDE Planning.
+
+        SUPERSEDED DELIBERATELY (CLAUDE-PLANNING-WORKSPACE-02A). This test used
+        to name three files and assert the consumer was one of them. That pinned
+        THE FILE LIST AT THE TIME rather than the property section 12 protects,
+        and it failed the moment Planning legitimately grew a fourth consumer -
+        `services/planning_contribution.py`, which is Planning, which is the
+        proving ground the doctrine names.
+
+        The property is a DOMAIN boundary, so it is asserted as one now. This
+        still fails loudly the day `sheet_vision.py` or a procurement module
+        imports the posture ladder - the thing actually worth preventing - and it
+        stops going stale every time Planning adds a file.
+        """
         import os
-        for name in os.listdir("services"):
+
+        consumers = []
+        for name in sorted(os.listdir("services")):
             if not name.endswith(".py"):
                 continue
             body = open(os.path.join("services", name), encoding="utf-8").read()
             if "planning_posture" in body or "entity_binding" in body:
-                self.assertIn(name, ("feasibility_compiler.py",
-                                     "entity_binding.py",
-                                     "planning_posture.py"),
-                              "%s must not consume the invariants yet" % name)
+                consumers.append(name)
+
+        self.assertTrue(consumers, "the invariants must be consumed somewhere")
+        for name in consumers:
+            with self.subTest(module=name):
+                self.assertTrue(
+                    name.startswith(self.PLANNING_FAMILY),
+                    "%s is outside the Planning family and may not consume the "
+                    "invariants yet" % name)
+
+    def test_the_other_domains_still_have_no_implementation(self):
+        """The same boundary from the other side, named domain by domain."""
+        import os
+
+        for stem in ("sheet_vision", "drawing_segmentation", "drawing_intake",
+                     "drawing_analysis", "perception_worker",
+                     "procurement_publication", "document_examination",
+                     "rfi_export"):
+            path = os.path.join("services", "%s.py" % stem)
+            if not os.path.exists(path):
+                continue
+            body = open(path, encoding="utf-8").read()
+            with self.subTest(module=stem):
+                self.assertNotIn("planning_posture", body)
+                self.assertNotIn("entity_binding", body)
 
 
 if __name__ == "__main__":
