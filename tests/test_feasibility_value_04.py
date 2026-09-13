@@ -224,6 +224,32 @@ class TheInstructionsMakeBothOutcomesAvailable(unittest.TestCase):
                             "Stop at the legal envelope"):
             self.assertIn(prohibition, instructions, prohibition)
 
+    def test_more_than_one_derivation_is_permitted(self):
+        """CLAUDE-FEASIBILITY-VALUE-05, measured.
+
+        The instruction said the evidence "supports a conclusion ... record it",
+        and the singular phrasing capped output at one derivation per run. On the
+        Danforth package the exception dependency always won that single slot, so
+        the FSI cap - a real arithmetic constraint in the same evidence - never
+        appeared in five runs. Making cardinality explicit is content-neutral: it
+        says nothing about WHAT to conclude. Measured effect across 15 fresh runs:
+        split-zoning 3/5 -> 5/5, FSI cap 0/5 -> 1/5, base-zone-only 0/5 -> 1/5.
+        """
+        instructions = compiler.INSTRUCTIONS
+        self.assertIn("one or more conclusions", instructions)
+        self.assertIn("EACH", instructions)
+        self.assertNotIn("supports a conclusion that no single item", instructions)
+
+    def test_the_cardinality_hint_names_no_conclusion(self):
+        """Section 2: never instruct the model what to find."""
+        instructions = compiler.INSTRUCTIONS.lower()
+        for leading in ("fsi", "split", "parking", "transit", "heritage",
+                        "calculate", "add up", "exceeds"):
+            self.assertNotIn(leading, instructions, leading)
+
+    def test_none_is_still_an_allowed_count(self):
+        self.assertIn("none, one, or", compiler.INSTRUCTIONS)
+
     def test_the_instruction_stayed_short(self):
         """Section 8: governance is not buried in a massive prompt."""
         self.assertLess(len(compiler.INSTRUCTIONS), 2600)

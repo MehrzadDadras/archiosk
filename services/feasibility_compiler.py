@@ -55,7 +55,7 @@ from services import go_pdz_validator as validator
 
 logger = logging.getLogger(__name__)
 
-COMPILER_VERSION = "feasibility-compiler@7"
+COMPILER_VERSION = "feasibility-compiler@8"
 
 #: Configuration-driven, never hard-coded at the call site. Read from
 #: `FEASIBILITY_MODEL_PROVIDER` / `FEASIBILITY_MODEL` when set.
@@ -204,9 +204,10 @@ approval outcome. Do not predict whether an application would be approved. Do no
 assert a definite spatial relationship that the supplied deterministic spatial
 results do not contain - copy their tokens; never mint one.
 
-Where the supplied evidence together supports a conclusion that no single item
-states on its own, record it as GO_INTERPRETS and list the statement_ids it rests
-on in `derived_from`. Combining supplied controls is the point: if two figures
+Where the supplied evidence together supports one or more conclusions that no
+single item states on its own, record EACH as its own GO_INTERPRETS statement and
+list the statement_ids it rests on in `derived_from`. There may be none, one, or
+several; report every one the evidence earns, and no more. Combining supplied controls is the point: if two figures
 together bound the envelope more tightly than either does alone, or if one
 condition creates a dependency another does not mention, that is worth stating.
 
