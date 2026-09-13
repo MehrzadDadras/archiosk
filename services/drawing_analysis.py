@@ -1,4 +1,16 @@
-"""
+"""CLAUDE-ANALYZE-BOUNDARY-01 - THIS MODULE IS A PROTOTYPE. IT DOES NOT SEE.
+
+Everything exported here generates ILLUSTRATIVE output. It must never be
+presented, stored or relied upon as production perception. `analysis_capability()`
+is the boundary a caller is required to consult before using any of it, and
+`services/conversation_interpreter.py` is the one caller that does.
+
+WHAT MOVED OUT, AND WHY IT MATTERS. `compare_region` used to live here and is
+REAL production logic - it decides revision-awareness on a live path. It now
+lives in `services/region_comparison.py`, so that disabling the prototype can
+never disable a real capability by accident. The dependency runs one way only:
+this module imports the real geometry helper, never the reverse.
+
 Mock/heuristic drawing-analysis engine for the Case Workspace prototype.
 
 Honesty note: this is NOT a trained vision model. It does not "see" the
@@ -25,11 +37,48 @@ from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
+from services.region_comparison import region_to_pixel_box
+
+#: What kind of engine this is. Recorded beside ENGINE_NAME so the class of
+#: the engine is machine-readable and not merely implied by a product name.
+ENGINE_CLASS = "PROTOTYPE"
+
+#: The capability a caller may find here. There is deliberately no third
+#: value: no real drawing-analysis engine serves the Analyze intent today, and
+#: inventing a registry for one that does not exist would be scaffolding, not
+#: integration. When a real engine arrives, it is named here and the caller's
+#: existing branch order picks it up.
+CAPABILITY_PROTOTYPE = "PROTOTYPE"
+CAPABILITY_UNAVAILABLE = "UNAVAILABLE"
+
+#: Set to 0/false/no/off to withdraw the prototype entirely. DEFAULT ON,
+#: because switching it off by default would silently delete a working
+#: user-facing path - which this tranche is explicitly forbidden to do. What
+#: changes here is that the path is now unmistakably labelled, not that it
+#: disappears.
+PROTOTYPE_ENABLED_ENV = "ARCHIOSK_PROTOTYPE_DRAWING_ANALYSIS"
+
 ENGINE_NAME = "beehive-mock-vision"
 ENGINE_VERSION = "0.1.0-prototype"
 
 # (statement, base_confidence, (x, y, width, height) normalized 0-1,
 #  objective keywords that should surface this finding first)
+def analysis_capability() -> str:
+    """What kind of drawing analysis can actually serve a request right now.
+
+    Returns CAPABILITY_PROTOTYPE or CAPABILITY_UNAVAILABLE - never a value
+    implying real perception, because this module has none. A caller that does
+    not consult this is free to call the generators directly; what it may not
+    do is present the result as a reading of the drawing.
+    """
+    import os
+
+    raw = os.environ.get(PROTOTYPE_ENABLED_ENV)
+    if raw is not None and raw.strip().lower() in ("0", "false", "no", "off"):
+        return CAPABILITY_UNAVAILABLE
+    return CAPABILITY_PROTOTYPE
+
+
 _MOCK_FINDING_LIBRARY = [
     (
         "Elevation callout in this region may reference a datum inconsistent "
@@ -106,7 +155,7 @@ def analyze_drawing(
 
             results = []
             for statement, confidence, region, _keywords in ranked[:max_findings]:
-                crop_box, normalized = _region_to_pixel_box(region, width, height)
+                crop_box, normalized = region_to_pixel_box(region, width, height)
                 cropped = source_image.convert("RGB").crop(crop_box)
                 cropped = _annotate_crop(cropped)
 
@@ -127,67 +176,6 @@ def analyze_drawing(
             return results
     except OSError as exc:
         raise DrawingAnalysisError(f"Could not open the source image: {exc}") from exc
-
-
-def _region_to_pixel_box(
-    region: tuple[float, float, float, float],
-    width: int,
-    height: int,
-) -> tuple[tuple[int, int, int, int], dict]:
-    x, y, w, h = region
-    box = (
-        int(x * width),
-        int(y * height),
-        int((x + w) * width),
-        int((y + h) * height),
-    )
-    normalized = {"x": x, "y": y, "width": w, "height": h}
-    return box, normalized
-
-
-def compare_region(
-    old_image_path: Path,
-    new_image_path: Path,
-    crop_normalized: dict,
-) -> str:
-    """
-    Real (if simple) per-region pixel comparison between two revisions of
-    a drawing Source, used for revision-awareness (Prompt 4 #13). This is
-    a mean-pixel-difference threshold over the same normalized region in
-    both images - not a claim of semantic/content understanding, just an
-    honest, checkable "did the pixels here change" signal. Returns one of
-    "unchanged" / "changed" / "unable_to_determine" (matching
-    services.case_workspace's REGION_STATUS_* constants by value).
-    """
-    try:
-        with Image.open(old_image_path) as old_img, Image.open(new_image_path) as new_img:
-            region = (
-                crop_normalized["x"],
-                crop_normalized["y"],
-                crop_normalized["width"],
-                crop_normalized["height"],
-            )
-            old_box, _ = _region_to_pixel_box(region, old_img.width, old_img.height)
-            new_box, _ = _region_to_pixel_box(region, new_img.width, new_img.height)
-
-            old_crop = old_img.convert("L").crop(old_box)
-            new_crop = new_img.convert("L").crop(new_box)
-
-            if old_crop.size != new_crop.size:
-                if old_crop.size[0] == 0 or old_crop.size[1] == 0:
-                    return "unable_to_determine"
-                new_crop = new_crop.resize(old_crop.size)
-
-            old_pixels = list(old_crop.getdata())
-            new_pixels = list(new_crop.getdata())
-
-            if not old_pixels or len(old_pixels) != len(new_pixels):
-                return "unable_to_determine"
-
-            mean_diff = sum(abs(a - b) for a, b in zip(old_pixels, new_pixels)) / len(old_pixels)
-            return "unchanged" if mean_diff < 8 else "changed"
-    except Exception:  # noqa: BLE001 - a comparison failure is "unable to determine", not a crash
-        return "unable_to_determine"
 
 
 def _annotate_crop(cropped: Image.Image) -> Image.Image:

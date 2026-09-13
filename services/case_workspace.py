@@ -9301,7 +9301,9 @@ class CaseWorkspaceStore:
         workspace.sources.append(asdict(new_source))
         old_source["superseded_by_source_id"] = new_source.id
 
-        from services.drawing_analysis import compare_region
+        # CLAUDE-ANALYZE-BOUNDARY-01: real comparison logic, imported from its
+        # own module rather than from the prototype namespace it used to share.
+        from services.region_comparison import compare_region
 
         affected_artifacts = [
             a for a in workspace.artifacts if a["source_id"] == old_source_id and a.get("crop")
