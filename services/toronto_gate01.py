@@ -44,6 +44,7 @@ parameter that could carry one, and this module adds none.
 from __future__ import annotations
 
 import logging
+from concurrent import futures
 from datetime import datetime, timezone
 
 from services import go_pdz_lifecycle as lifecycle
@@ -52,7 +53,23 @@ from services import toronto_planning_source as source
 
 logger = logging.getLogger(__name__)
 
-RUNNER_VERSION = "toronto-gate01@2"
+RUNNER_VERSION = "toronto-gate01@3"   # @3 parallel independent reads
+
+#: CLAUDE-PARALLEL-SOURCES-02D. How many municipal reads may be in flight.
+#:
+#: SIX, and the number is a politeness decision as much as a performance one.
+#: There are eleven independent tasks (ten overlay layers plus the heritage
+#: register) and they issue 29 of the request's 37 reads, so the first few
+#: workers capture most of the available saving: the group cannot finish faster
+#: than its slowest member, and that member is the Natural Heritage layer whose
+#: own fetch alone measured 4.4 s. Raising the cap past six buys progressively
+#: less while asking more of a public service ARCHIOSK does not own and must not
+#: mistake for infrastructure.
+#:
+#: Bounded, never unlimited: a fan-out of every layer at once would be a burst
+#: this application has no right to send, and a rate-limited or throttled City
+#: service degrades the result for everyone using it.
+MAX_CONCURRENT_SOURCE_READS = 6
 
 #: Overlays reported every run, whether or not they apply, because a reader
 #: needs to know the question was ASKED. An unlisted overlay that returns
@@ -119,32 +136,71 @@ def gather(address, *, reader, retrieved_at=None):
 
     gathered["zoning"] = source.zoning_at(geometry, point, reader=reader,
                                           cache=cache)
-    for binding in source.OVERLAY_LAYERS:
+
+    # CLAUDE-PARALLEL-SOURCES-02D. THE ONLY READS RUN CONCURRENTLY ARE THE ONES
+    # WHOSE INDEPENDENCE IS A DATA FACT, not a coincidence of position in this
+    # function. Each overlay layer and the heritage register need the subject
+    # PARCEL and nothing else - not the zone, not each other, not any authority
+    # document - so once identity is established they are eleven separate
+    # questions that happen to be asked of the same City.
+    #
+    # WHAT IS DELIBERATELY LEFT SEQUENTIAL: address resolution, because property
+    # identity is the prerequisite for every spatial question and ordering
+    # semantics there are not proven; `zoning_at`, because the by-law and the
+    # exception are CHOSEN from its attributes; and authority retrieval, because
+    # fetching a source before applicability is established is exactly how the
+    # wrong by-law gets cited. Latency is never worth that.
+    #
+    # EACH TASK GETS ITS OWN CACHE. The shared one is keyed by
+    # (service, layer_id) and every overlay is a different layer, so it never
+    # shared anything across them - and a dict mutated from several threads is a
+    # race nobody needs for a benefit that does not exist.
+    overlay_results = {}
+
+    def read_overlay(position, binding):
         try:
-            # CLAUDE-SPATIAL-DEDUPE-02A: the SAME labels `go_pdz_lifecycle`
-            # will use, so the token computed here is byte-identical to the one
-            # it would otherwise compute again. `resolved["source"]` names the
-            # actual parcel layer, which is also more accurate than the literal
-            # this previously passed.
-            gathered["overlays"].append(source.overlay_finding(
-                binding, geometry, point, reader=reader, cache=cache,
+            return position, source.overlay_finding(
+                binding, geometry, point, reader=reader, cache={},
+                # CLAUDE-SPATIAL-DEDUPE-02A: the SAME labels
+                # `go_pdz_lifecycle` will use, so the token computed here is
+                # byte-identical to the one it would otherwise compute again.
                 subject_source=resolved.get("source"),
-                layer_version="By-law 569-2013"))
+                layer_version="By-law 569-2013")
         except Exception as exc:  # noqa: BLE001 - a failed layer is a result
             logger.warning("overlay check failed for %s (%s: %s)",
                            binding[2], type(exc).__name__, exc)
-            gathered["overlays"].append(
-                {"layer_name": binding[2], "present": None, "token": None,
-                 "absence_established": False,
-                 "note": "layer could not be read: %s" % type(exc).__name__})
+            # ONE SOURCE FAILING CANCELS NOTHING. The same finding this produced
+            # when the loop was sequential, produced in the same place.
+            return position, {
+                "layer_name": binding[2], "present": None, "token": None,
+                "absence_established": False,
+                "note": "layer could not be read: %s" % type(exc).__name__}
 
-    try:
-        gathered["heritage_register"] = source.heritage_register_near(
-            geometry, reader=reader, cache=cache)
-    except Exception as exc:  # noqa: BLE001
-        gathered["heritage_register"] = {
-            "checked": False, "properties": [],
-            "reason": "%s: %s" % (type(exc).__name__, exc)}
+    def read_heritage_register():
+        try:
+            return source.heritage_register_near(geometry, reader=reader,
+                                                 cache={})
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "properties": [],
+                    "reason": "%s: %s" % (type(exc).__name__, exc)}
+
+    with futures.ThreadPoolExecutor(
+            max_workers=MAX_CONCURRENT_SOURCE_READS,
+            thread_name_prefix="archiosk-toronto") as pool:
+        pending = [pool.submit(read_overlay, position, binding)
+                   for position, binding in enumerate(source.OVERLAY_LAYERS)]
+        heritage = pool.submit(read_heritage_register)
+        for completed in futures.as_completed(pending):
+            position, finding = completed.result()
+            overlay_results[position] = finding
+        gathered["heritage_register"] = heritage.result()
+
+    # ORDER IS RESTORED, NOT INHERITED. Results arrive in whatever order the City
+    # answers, and `OVERLAY_LAYERS` order reaches the governed document through
+    # the statement ids `_overlay_statements` derives from position - so the list
+    # is rebuilt by index rather than by completion.
+    gathered["overlays"] = [overlay_results[position]
+                            for position in range(len(source.OVERLAY_LAYERS))]
 
     attributes = (gathered["zoning"] or {}).get("attributes") or {}
     gathered["authority"] = source.acquire_zoning_bylaw(

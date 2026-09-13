@@ -209,7 +209,7 @@ class TheLiveOrchestrationIsBounded(unittest.TestCase):
             calls.append(url)
             return b"{}"
 
-        read, phases, counts = live.timing_reader(inner)
+        read, phases, counts, meter = live.timing_reader(inner)
         self.assertEqual(read("https://gis.toronto.ca/x/cot_geospatial11/3/query"),
                          b"{}")
         self.assertEqual(calls, ["https://gis.toronto.ca/x/cot_geospatial11/3/query"])
@@ -219,7 +219,7 @@ class TheLiveOrchestrationIsBounded(unittest.TestCase):
     def test_a_reader_failure_still_propagates_through_the_timer(self):
         def inner(url):
             raise TimeoutError("slow")
-        read, phases, _counts = live.timing_reader(inner)
+        read, phases, _counts, _meter = live.timing_reader(inner)
         with self.assertRaises(TimeoutError):
             read("https://gis.toronto.ca/x/cot_geospatial27/101/query")
         self.assertIn(live.PHASE_ADDRESS, phases,

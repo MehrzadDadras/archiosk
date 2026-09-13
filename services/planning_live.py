@@ -111,33 +111,108 @@ def _phase_for(url) -> str:
     return PHASE_OTHER
 
 
+def busy_millis(spans) -> float:
+    """Wall time during which AT LEAST ONE read was in flight.
+
+    CLAUDE-PARALLEL-SOURCES-02D. The union of the intervals, not their sum.
+    Once reads overlap the two diverge, and only the union can be subtracted
+    from elapsed time to leave our own arithmetic behind - a sum of overlapping
+    intervals can exceed the wall clock it is being subtracted from.
+    """
+    busy, open_until = 0.0, None
+    opened = None
+    for started, finished in sorted(spans):
+        if open_until is None:
+            opened, open_until = started, finished
+            continue
+        if started > open_until:            # a genuine gap: the network was idle
+            busy += open_until - opened
+            opened, open_until = started, finished
+        else:
+            open_until = max(open_until, finished)
+    if open_until is not None:
+        busy += open_until - opened
+    return busy * 1000.0
+
+
 def timing_reader(inner):
     """Wrap a reader so every municipal read is attributed to a phase.
 
     Instrumentation only: the same bytes come back, the same exceptions
     propagate, and the reader has no idea it is being timed. Returns
-    `(read, phases, calls)`.
+    `(read, phases, calls, meter)`.
+
+    `phases` sums the duration of the reads in each phase, which after 02D is
+    OCCUPANCY SUMMED ACROSS READS rather than elapsed time - eleven overlay
+    layers read six-at-a-time still cost what they cost, they just no longer
+    cost it one after another. `meter` carries what only the wall clock can say:
+    the union of the busy intervals, the peak number in flight, and the reads
+    that failed.
+
+    Thread-safe by construction, because after 02D the reader is called from
+    several worker threads at once: every mutation is under one lock, and
+    `defaultdict`/`Counter` increments are not atomic.
     """
     import collections
+    import threading
 
     phases = collections.defaultdict(float)
     calls = collections.Counter()
+    meter = {"spans": [], "max_concurrent": 0, "failed": 0, "reads": 0}
+    lock = threading.Lock()
+    inflight = [0]
 
     def read(url):
         phase = _phase_for(url)
+        with lock:
+            inflight[0] += 1
+            meter["max_concurrent"] = max(meter["max_concurrent"], inflight[0])
         started = time.perf_counter()
+        failed = False
         try:
             return inner(url)
+        except BaseException:
+            failed = True
+            raise
         finally:
-            phases[phase] += (time.perf_counter() - started) * 1000.0
-            calls[phase] += 1
+            finished = time.perf_counter()
+            with lock:
+                inflight[0] -= 1
+                phases[phase] += (finished - started) * 1000.0
+                calls[phase] += 1
+                meter["spans"].append((started, finished))
+                meter["reads"] += 1
+                meter["failed"] += 1 if failed else 0
 
-    return read, phases, calls
+    return read, phases, calls, meter
 
 
 def _timer():
     started = time.perf_counter()
     return lambda: round((time.perf_counter() - started) * 1000.0, 1)
+
+
+def _concurrency(meter, gate_ms) -> dict:
+    """What the wall clock says about the reads, beside what each read cost.
+
+    `network_busy_ms` is the only figure that may be subtracted from elapsed
+    time; `network_read_ms` is what the reads summed to, and the ratio between
+    them is the parallel speed-up actually obtained on this run rather than the
+    one the cap permits.
+    """
+    busy = round(busy_millis(meter["spans"]), 1)
+    summed = round(sum(finish - start for start, finish in meter["spans"])
+                   * 1000.0, 1)
+    return {"network_busy_ms": busy,
+            "network_read_ms": summed,
+            "network_reads": meter["reads"],
+            "failed_reads": meter["failed"],
+            "max_concurrent_reads": meter["max_concurrent"],
+            "read_overlap_factor": round(summed / busy, 2) if busy else 0.0,
+            # Sanity, reported rather than asserted: the union of the busy
+            # intervals cannot exceed the call that contained them.
+            "network_share_of_gate": (round(busy / gate_ms, 3)
+                                      if gate_ms else None)}
 
 
 def municipality_check(address) -> dict:
@@ -238,7 +313,7 @@ def run_live(address, *, reader=None, gate=None) -> dict:
     if reader is None:
         from services import toronto_planning_source
         reader = toronto_planning_source.live_reader()
-    reader, phases, calls = timing_reader(reader)
+    reader, phases, calls, meter = timing_reader(reader)
 
     # ONE CALL, ONE FAILURE CLASSIFICATION. `toronto_gate01.run` is documented
     # never to raise for a planning reason - an unresolvable address comes back
@@ -252,6 +327,7 @@ def run_live(address, *, reader=None, gate=None) -> dict:
         for phase, value in phases.items():
             timings[phase] = round(value, 1)
         timings["source_calls"] = dict(calls)
+        timings.update(_concurrency(meter, timings["gate01_ms"]))
         timings["total_ms"] = total()
         failure = classify_failure(exc)
         logger.warning("live planning request failed (%s): %s: %s",
@@ -271,8 +347,14 @@ def run_live(address, *, reader=None, gate=None) -> dict:
     for phase, value in phases.items():
         timings[phase] = round(value, 1)
     timings["source_calls"] = dict(calls)
+    timings.update(_concurrency(meter, timings["gate01_ms"]))
+    # CLAUDE-PARALLEL-SOURCES-02D: the UNION of the busy intervals, not the sum
+    # of the read durations. Before 02D the two were the same number because the
+    # reads were serial; now they are not, and subtracting the sum would have
+    # reported deterministic work as zero on every run - clamped by `max`, so it
+    # would have looked like an answer rather than like a broken measurement.
     timings["deterministic_ms"] = round(
-        max(0.0, timings["gate01_ms"] - sum(phases.values())), 1)
+        max(0.0, timings["gate01_ms"] - timings["network_busy_ms"]), 1)
 
     document = (outcome or {}).get("document") or {}
     subject = document.get("subject") or {}
