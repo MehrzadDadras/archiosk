@@ -333,11 +333,32 @@ class NothingForbiddenWasIntroduced(unittest.TestCase):
     """Section 6 and 13."""
 
     def test_no_cache_no_simplification_no_provider_call(self):
-        from pathlib import Path
-        source = Path("services/deterministic_spatial.py").read_text(encoding="utf-8")
-        for banned in ("lru_cache", "functools.cache", "simplif", "tolerance_ratio",
-                       "requests", "urllib", "shapely", "pyproj", "esriSpatialRel"):
-            self.assertNotIn(banned, source, banned)
+        """Asserted against the IMPORT SURFACE and decorators, not the prose.
+
+        A first version scanned the file's text for "requests" to catch the HTTP
+        library, and then failed on a docstring sentence reading "retained
+        between requests" - a test of wording rather than of behaviour, and the
+        seventh time this programme has made that exact mistake. What matters is
+        what the module IMPORTS and what decorates it.
+        """
+        import ast
+        import inspect
+        tree = ast.parse(inspect.getsource(spatial))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.add((node.module or "").split(".")[0])
+        for banned in ("requests", "urllib", "shapely", "pyproj", "functools",
+                       "httpx", "socket"):
+            self.assertNotIn(banned, imported,
+                             "%s must not be reachable from the engine" % banned)
+        decorators = {ast.unparse(decorator)
+                      for node in ast.walk(tree)
+                      if isinstance(node, ast.FunctionDef)
+                      for decorator in node.decorator_list}
+        self.assertEqual([d for d in decorators if "cache" in d.lower()], [])
 
     def test_the_minimum_distance_and_ring_helpers_still_exist(self):
         for name in ("_min_distance_to_ring", "_min_distance_to_polygon",

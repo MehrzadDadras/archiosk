@@ -316,13 +316,22 @@ def _point_in_ring(point, ring, box=None, band=None) -> bool:
     `box` and `band` are OPTIONAL PREFILTERS and change no arithmetic. With
     neither, this is the original function line for line.
 
-    THE BOX REJECTION IS NOT THE WHOLE BOX, and that is the part worth reading
-    twice. A point ABOVE or BELOW the ring cannot satisfy `(y1 > y) != (y2 > y)`
-    for any segment, and a point to the RIGHT of the ring cannot satisfy
-    `x < crossing`, since every crossing lies between two of the ring's own x
-    values. But a point to the LEFT is exactly the case ray casting exists for -
-    its ray enters the ring - so `x < xmin` must NOT reject. Using the full
-    bounding box here would report OUTSIDE for half the points that are inside.
+    THE BOX REJECTION HERE IS NOT THE WHOLE BOX, deliberately. A point ABOVE or
+    BELOW the ring cannot satisfy `(y1 > y) != (y2 > y)` for any segment, and a
+    point to the RIGHT cannot satisfy `x < crossing`, since every crossing lies
+    between two of the ring's own x values. Those three are rejected.
+
+    A CORRECTION, since this comment previously claimed more than it should
+    (CLAUDE-SPATIAL-CONVERGE-02C). `x < minx` WOULD also be a sound rejection - a
+    ring's interior lies within the ring, which lies within its own bounding box,
+    so a point outside the box in ANY direction is outside the ring. The earlier
+    note reasoned from the ray's mechanics (a ray from the left does cross the
+    ring's segments) and drew the wrong conclusion from it. This function is
+    therefore CONSERVATIVE rather than wrong: it rejects less than it safely
+    could. The full-box rejection is used by `point_in_ring_indexed`, where it is
+    stated as a property and tested in all four directions; this path is left as
+    it is because 02B's filters were frozen once proven, and a correctness-neutral
+    speed-up is not a reason to reopen them.
     """
     x, y = point[0], point[1]
     if box is not None:
@@ -342,6 +351,67 @@ def _point_in_ring(point, ring, box=None, band=None) -> bool:
     for index in range(count):
         x1, y1 = ring[index][0], ring[index][1]
         x2, y2 = ring[index + 1][0], ring[index + 1][1]
+        if (y1 > y) != (y2 > y):
+            if y2 != y1:
+                crossing = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+                if x < crossing:
+                    inside = not inside
+    return inside
+
+
+def ring_y_index(ring, buckets=512):
+    """A ring's segments bucketed by the y values their rays can reach.
+
+    CLAUDE-SPATIAL-CONVERGE-02C. EXACT, not approximate: a segment is placed in
+    every bucket its own y-range spans, so a ray at any y finds every segment
+    whose y-range contains that y - which is exactly the set `_point_in_ring`
+    would have examined, and nothing else.
+
+    WHY A BOUNDING BOX WAS NOT ENOUGH. Hole assignment probes each hole against
+    each candidate exterior, and a bounding box rejects a candidate only when the
+    probe falls outside it. One of the City's Natural Heritage exteriors spans the
+    whole municipality, so its box contains nearly every probe: 213 exact tests
+    survived the box filter and still walked 157,647 vertices each, 4.7 s in
+    total. The box answers "could this contain the probe"; the index answers
+    "which segments could the probe's ray cross", and only the second one shrinks
+    with the geometry's size.
+
+    Built ONCE per ring and reused by every probe against it, within a single
+    conversion. Nothing survives once that conversion returns - there is no cache
+    here and none across calls.
+    """
+    ys = [point[1] for point in ring]
+    low, high = min(ys), max(ys)
+    span = (high - low) or 1.0
+    last_bucket = buckets - 1
+    index = [[] for _ in range(buckets)]
+    for position in range(len(ring) - 1):
+        first, second = ring[position], ring[position + 1]
+        y1, y2 = first[1], second[1]
+        lower, upper = (y1, y2) if y1 <= y2 else (y2, y1)
+        start = int((lower - low) / span * last_bucket)
+        stop = int((upper - low) / span * last_bucket)
+        segment = (first[0], y1, second[0], y2)
+        for bucket in range(start, stop + 1):
+            index[bucket].append(segment)
+    return {"low": low, "span": span, "buckets": buckets,
+            "index": index, "box": _bbox(ring)}
+
+
+def point_in_ring_indexed(point, prepared_ring) -> bool:
+    """`_point_in_ring` over a `ring_y_index`. Same arithmetic, fewer segments."""
+    x, y = point[0], point[1]
+    minx, miny, maxx, maxy = prepared_ring["box"]
+    # A point outside the ring's own bounding box cannot be inside the ring: the
+    # ring's interior is bounded by the ring, which lies within that box.
+    if x < minx or x > maxx or y < miny or y > maxy:
+        return False
+    position = int((y - prepared_ring["low"]) / prepared_ring["span"]
+                   * (prepared_ring["buckets"] - 1))
+    if position < 0 or position >= prepared_ring["buckets"]:
+        return False
+    inside = False
+    for x1, y1, x2, y2 in prepared_ring["index"][position]:
         if (y1 > y) != (y2 > y):
             if y2 != y1:
                 crossing = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
