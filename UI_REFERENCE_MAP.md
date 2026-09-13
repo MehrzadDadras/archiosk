@@ -1105,6 +1105,7 @@ The full administrative Project-management page (`portal.projects_list`) — dis
 
 | Reference | Element | Label | Current behavior | Auth notes | Status |
 |---|---|---|---|---|---|
+| `projects-directory.planning-zoning` (new, CLAUDE-PLANNING-ZONING-DOOR-01) | `<a class="btn">` | "Planning & Zoning" | Navigates to `planning_zoning.planning_zoning`. The third real entrance on this page and the only one that requires neither a document nor a declared engagement first — an address is all a person has when a property question starts. Deliberately OUTSIDE the `{% if is_admin %}` block its two neighbours sit in: this door creates no durable storage, so the authority that gates project creation has nothing to say about it | Every signed-in session | active |
 | `projects-directory.removed-link` | `<a>` | "Removed Projects" | Navigates to `portal.removed_projects` | Every authenticated page | active |
 | `projects-directory.new-project` (new, CLAUDE-PROJECTS-NEW-ACTION-01) | `<a class="btn btn-primary">` | "+ New Project" | Navigates to `portal.upload`. **Admin only** (`{% if is_admin %}`), matching every other creation entry point — `index.resolved.new-project` and this page's own empty-state button are both gated the same way, so the control's absence for a `read_only` reviewer is consistent rather than a new rule. Closes a real gap: creation was reachable from this directory ONLY in its empty state, so an admin holding one project had no way to make a second from here. Named `projects-directory.*` rather than the originally-suggested `projects.*` because `projects` is not one of the surface prefixes `test_no_duplicate_data_ref_kind_definitions_across_templates` accepts — the suggested name would have failed the very contract it was meant to satisfy | Admin only | active |
 | `projects-directory.search` | `<form>` | project search | `?q=` filter | Every authenticated page | active |
@@ -1179,7 +1180,56 @@ Reached via `menu.account.removed-projects` (relocated from `lists.removed-proje
 | `drawing-understanding.summary-awaiting` (CLAUDE-ASREAD-SURFACE-01, new) | `<li>` | "N mark(s) awaiting you — N open proposition(s)" | Counts are **per mark**; the proposition-level figure is separate and labelled. Identity-confirmed with target open is NOT reviewed | Same as above | active |
 | `drawing-understanding.empty` | `<p>` | "Nothing has been proposed for this drawing yet." | Empty state, shown only when there are neither rows nor families | Same as above | active |
 
-## Document Shop (`templates/document_shop_intake.html` — CLAUDE-BLACK-BOX-DOOR-01, new surface)
+## Planning & Zoning (CLAUDE-PLANNING-ZONING-DOOR-01)
+
+`templates/planning_zoning.html`, served by `routes/planning_zoning.py`. The
+front door to the planning line: an address is the only thing a person has when
+a property question starts, so the address field is the first and largest control
+and everything else on the page is optional.
+
+**The submit button does not run a planning analysis.** `planning_analysis_state()`
+reports `BACKEND_NOT_ROUTABLE` — the GO-PDZ engine is built, tested and
+live-proven, and no authorized route connects a signed-in session to it. The page
+says so before the button and again after it, and produces no specimen result of
+any kind. The vocabulary is the GO-PDZ contract's own, so the page can name what
+a completed review contains without inventing a second set of words for it.
+
+| Reference | Kind | Label / content | What it does, and why it is here | Condition | Status |
+|---|---|---|---|---|---|
+| `planning-zoning.page-title` | `<h1>` | "Planning & Zoning" | The surface's own name, matching the dashboard entrance that leads here | Always | active |
+| `planning-zoning.lede` | `<p>` | "Start with an address…" | The one sentence answering "what will ARCHIOSK do". Says the thing that makes the line worth using: the municipality's own records are read, so zoning is not typed in by hand | Always | active |
+| `planning-zoning.modes` | `<nav>` | Intake mode strip | Holds the two mode links. A `<nav>` rather than a scripted tab strip, because a mode here is a URL | Always | active |
+| `planning-zoning.mode.single` | `<a class="btn">` | "Single property" | Server-rendered mode link, primary styling when current. Works with JavaScript off and survives the back button, which is why this page needed no stylesheet change | Always | active |
+| `planning-zoning.mode.batch` | `<a class="btn">` | "Batch" | The same, for batch intake. Secondary until selected: single property is the primary path | Always | active |
+| `planning-zoning.backend-state` | `<p>` | "BACKEND_NOT_ROUTABLE — Planning analysis is not yet enabled…" | The development-state boundary, stated BEFORE the button so nobody submits expecting a report. Deliberately not styled as an error: this is "not yet", not "you did something wrong" | Always | active |
+| `planning-zoning.error` | `<p class="mono form-error">` | Address validation message | Shown when the single-property address is missing or is not shaped like a street address. The typed value is preserved beside it | On a rejected single submission | active |
+| `planning-zoning.batch-error` | `<p class="mono form-error">` | Batch validation message | Names how many pasted lines are not addresses, and which, rather than rejecting the whole paste silently | On a rejected batch submission | active |
+| `planning-zoning.accepted` | `<section>` | "Entry checked — not analyzed" | The honest response to a valid submission. Echoes what was accepted and states that nothing ran. Contains NO planning content of any kind | After a valid submission | active |
+| `planning-zoning.accepted.title` | `<h2>` | "Entry checked — not analyzed" | Names the outcome in the first three words, so the state is readable without reading the paragraph | After a valid submission | active |
+| `planning-zoning.accepted.reason` | `<p class="mono">` | Why nothing ran | The routability reason, not an apology — the engine exists and is not connected, and a reader is entitled to the difference | After a valid submission | active |
+| `planning-zoning.accepted.detail` | `<p class="mono">` | The address, or the prepared count | What was actually accepted, echoed back | After a valid submission | active |
+| `planning-zoning.form` | `<form>` | Intake form | Posts to `planning_zoning.analyze_property`. Carries a server-rendered CSRF token for the same reason `document-shop` does: a token supplied only by client-side script turns a valid submission into "your session expired" | Always | active |
+| `planning-zoning.single` | `<fieldset>` | Single-property group | Holds the address field alone, so nothing competes with it | Single mode | active |
+| `planning-zoning.address` | `<input type="text" required>` | "Property address" | THE control this page exists for. First, full width, `autocomplete="street-address"`. Validated for SHAPE only — deciding whether an address is real needs the municipality's own data, and a regex that tried would reject real addresses and accept invented ones | Single mode | active |
+| `planning-zoning.address-note` | `<p class="mono">` | "What property would you like ARCHIOSK to review?" | The primary question, kept under the field rather than above it so the control is what the eye reaches first | Single mode | active |
+| `planning-zoning.batch` | `<fieldset>` | Batch group | Holds the paste area | Batch mode | active |
+| `planning-zoning.addresses` | `<textarea required>` | "Addresses" | One property per line, bounded at `MAX_BATCH_ADDRESSES`. Stops at validated intake preparation: nothing is queued, stored or orchestrated, because none of that exists yet | Batch mode | active |
+| `planning-zoning.batch-note` | `<p class="mono">` | Batch field guidance | Names the per-line shape and the bound. City and province are expected; postal code and property name are optional and may follow on the same line | Batch mode | active |
+| `planning-zoning.analysis-mode` | `<fieldset>` | "What would you like to check?" | The four analysis modes, single-select. Default is zoning + planning constraints: zoning alone is rarely the real question, and design options are a bigger ask than a first visit should default into | Always | active |
+| `planning-zoning.analysis-mode.option` | `<label>` | One analysis mode | Repeated per mode. All four visible rather than collapsed into a select, because this is the question the page is asking | Always | active |
+| `planning-zoning.intent` | `<fieldset>` | "Optional context" | Owner intent, grouped and placed after the analysis question so the address stays the subject of the page | Always | active |
+| `planning-zoning.direction` | `<select>` | "Development direction" | What the owner hopes to build. INTENT ONLY — it may shape which options are discussed and may never influence zoning, authority or evidence | Always | active |
+| `planning-zoning.strategy` | `<select>` | "Option strategy" | Decision posture, not authority status: asking to see relief-dependent options changes what is presented, never what is established | Always | active |
+| `planning-zoning.condition` | `<select>` | "Existing property condition" | Vacant, existing, addition, conversion, redevelopment or unknown. Defaults to unknown, which is usually true at this stage | Always | active |
+| `planning-zoning.question` | `<textarea>` | "What are you trying to find out?" | Free text. USER INTENT, bounded in length, never interpreted as evidence | Always | active |
+| `planning-zoning.question-note` | `<p class="mono">` | Intent disclaimer | Said once, plainly: the question and the choices above are treated as intent and do not change what the by-law or the Official Plan says. This is what makes the optional fields safe to offer at all | Always | active |
+| `planning-zoning.submit` | `<button class="btn btn-primary">` | "Analyze property" | The single primary action. Validates intake, then stops at the development-state boundary — it does not, and must not, manufacture a planning result | Always | active |
+| `planning-zoning.next` | `<section>` | "What a completed review will contain" | Answers "what happens next" without becoming the report | Always | active |
+| `planning-zoning.result-sections` | `<ul>` | The ten GO-PDZ result sections | Named in the contract's own terms rather than a second vocabulary invented for this page. A list of section NAMES, never filled content | Always | active |
+| `planning-zoning.gate-note` | `<p class="mono">` | Gate 01 boundary | States that a review stops at the legal development envelope, and that owner programme, unit and room counts, budget and layout come afterwards. The page therefore never asks for them | Always | active |
+
+
+## Document ShopDocument Shop (`templates/document_shop_intake.html` — CLAUDE-BLACK-BOX-DOOR-01, new surface)
 
 The authenticated door into a governed container that has no engagement
 programme. Every other creation entrance in this application asks a person to

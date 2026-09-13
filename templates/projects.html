@@ -45,6 +45,14 @@
        entrance, not a competing call to action. #}
     <a class="btn" href="{{ url_for('portal.document_shop_intake') }}" data-ui-ref="projects-directory.document-shop">Document Shop</a>
     {% endif %}
+    {# CLAUDE-PLANNING-ZONING-DOOR-01: the third real entrance, and the only one
+       that does not require a document or a declared engagement first - an
+       address is all a person has when a property question starts. Visible to
+       every signed-in session rather than admin-gated: this asks for no
+       durable storage and creates nothing, so the authority that gates project
+       creation has nothing to say about it. Placed before Removed Projects with
+       the other entrances, since recovering an archive is the exceptional act. #}
+    <a class="btn" href="{{ url_for('planning_zoning.planning_zoning') }}" data-ui-ref="projects-directory.planning-zoning">Planning &amp; Zoning</a>
     <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
 {% endcall %}
 

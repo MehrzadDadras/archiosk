@@ -503,6 +503,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.project_entry import project_entry_bp
     from routes.project_query import project_query_bp
     from routes.help_center import help_bp
+    from routes.planning_zoning import planning_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
@@ -538,6 +539,11 @@ def _register_blueprints(app: Flask) -> None:
     # CLAUDE-HELP-CENTER-01: where the long explanations live, so the
     # operational desks can carry controls and a [?] instead.
     app.register_blueprint(help_bp)
+    # CLAUDE-PLANNING-ZONING-DOOR-01: the front door to the planning line.
+    # A standalone operating surface, NOT a panel inside a project workspace -
+    # a person starting from an address does not have a project yet, which is
+    # the whole reason this entrance exists.
+    app.register_blueprint(planning_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:

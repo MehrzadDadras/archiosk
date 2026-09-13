@@ -115,6 +115,10 @@ _SPIN_PROTOTYPE_HTML_PATH = _REPO_ROOT / "templates" / "_spin_prototype.html"
 # above both record: a surface registered but never scanned produces rows
 # nothing checks.
 _DOCUMENT_SHOP_INTAKE_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_intake.html"
+# CLAUDE-PLANNING-ZONING-DOOR-01: the planning line's front door. A new
+# surface joins this scan by being added here - the list is explicit rather
+# than a glob, so adding a template to the registry stays a deliberate act.
+_PLANNING_ZONING_HTML_PATH = _REPO_ROOT / "templates" / "planning_zoning.html"
 _DOCUMENT_SHOP_JOBS_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_jobs.html"
 _DOCUMENT_SHOP_RESULT_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_result.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
@@ -290,6 +294,7 @@ def _all_template_refs() -> set[str]:
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
         _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
         _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH,
+        _PLANNING_ZONING_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -402,7 +407,12 @@ class RegistryConsistencyTests(unittest.TestCase):
                 r"security|operations|projects-directory|removed-projects|developer|"
                 r"developer-tools|"
                 r"landing|explore|start-trial|spin|pdm|index|tank|help|"
-                r"drawing-understanding|document-shop)\.[a-z0-9._\-]+$",
+                # CLAUDE-PLANNING-ZONING-DOOR-01 added "planning-zoning" - the
+                # front door to the planning line. A top-level family rather
+                # than a child of "projects-directory": that namespace belongs
+                # to the projects listing, and this is a standalone operating
+                # surface reached FROM it, not a control inside it.
+                r"drawing-understanding|document-shop|planning-zoning)\.[a-z0-9._\-]+$",
                 ref,
             )
 

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Planning &amp; Zoning &mdash; Archiosk{% endblock %}
+
+{% block content %}
+{# CLAUDE-PLANNING-ZONING-DOOR-01: the front door to the planning line.
+
+   FOUR QUESTIONS, ANSWERED BY THE PAGE ITSELF (section 14): where am I (the
+   title), what do I enter (one large address field, first, labelled), what will
+   ARCHIOSK do (one line under the heading), what happens next (the boundary
+   notice beside the button). Everything longer than that belongs in Help.
+
+   NO NEW CSS. Every class here already exists - np-page-title, np-group,
+   field-label, field-note, text-input, btn / btn-primary / btn-ghost, mono,
+   form-error. The SINGLE / BATCH tabs are server-rendered links rather than a
+   scripted tab strip, which is why this page needed no stylesheet change and
+   therefore no STATIC_VERSION bump: a mode is a URL, it works with JavaScript
+   off, and it survives a back button. #}
+<h1 class="np-page-title" data-ui-ref="planning-zoning.page-title">Planning &amp; Zoning</h1>
+
+<p class="field-note" data-ui-ref="planning-zoning.lede">
+    Start with an address. ARCHIOSK reads the municipality&rsquo;s own zoning and
+    planning records and reports what governs the property &mdash; you do not
+    enter zoning data yourself.
+</p>
+
+{# Section 9: SINGLE PROPERTY is primary and is what an arriving link shows. #}
+<nav class="np-group" data-ui-ref="planning-zoning.modes" aria-label="Intake mode">
+    <a class="btn {{ 'btn-primary' if mode == 'single' else 'btn-ghost' }}"
+       href="{{ url_for('planning_zoning.planning_zoning', mode='single') }}"
+       data-ui-ref="planning-zoning.mode.single"
+       {% if mode == 'single' %}aria-current="page"{% endif %}>Single property</a>
+    <a class="btn {{ 'btn-primary' if mode == 'batch' else 'btn-ghost' }}"
+       href="{{ url_for('planning_zoning.planning_zoning', mode='batch') }}"
+       data-ui-ref="planning-zoning.mode.batch"
+       {% if mode == 'batch' %}aria-current="page"{% endif %}>Batch</a>
+</nav>
+
+{# Section 8 / 18: the development-state boundary, stated BEFORE the button so
+   nobody submits expecting a report. It is not an error, so it is not styled as
+   one - a person should read it as "not yet", not as "you did something wrong". #}
+<p class="field-note" data-ui-ref="planning-zoning.backend-state">
+    <strong>{{ backend.classification }}</strong> &mdash; {{ backend.message }}
+</p>
+
+{% if error %}
+<p class="mono form-error" data-ui-ref="planning-zoning.error">{{ error }}</p>
+{% endif %}
+{% if batch_error %}
+<p class="mono form-error" data-ui-ref="planning-zoning.batch-error">{{ batch_error }}</p>
+{% endif %}
+
+{% if submitted %}
+{# The honest response. Echoes what was accepted and says plainly that nothing
+   ran. NO SAMPLE FINDINGS, no placeholder envelope, no "typical" zone - a
+   fabricated planning answer is indistinguishable from a real one to the person
+   reading it, and this is a surface where being wrong has consequences for them
+   rather than for us. #}
+<section class="np-group" data-ui-ref="planning-zoning.accepted">
+    <h2 data-ui-ref="planning-zoning.accepted.title">Entry checked &mdash; not analyzed</h2>
+    <p class="field-note">{{ backend.message }}</p>
+    <p class="mono field-note" data-ui-ref="planning-zoning.accepted.reason">{{ backend.reason }}</p>
+    <p class="mono" data-ui-ref="planning-zoning.accepted.detail">
+        {% if mode == 'batch' %}
+            {{ batch_prepared | length }} address(es) prepared.
+        {% else %}
+            {{ address }}
+        {% endif %}
+    </p>
+</section>
+{% endif %}
+
+<form method="post" action="{{ url_for('planning_zoning.analyze_property') }}"
+      class="upload-form" data-ui-ref="planning-zoning.form">
+    {# Rendered server-side for the same reason document_shop_intake does it:
+       when the token arrives only from client-side JavaScript, anything that
+       stops that script turns a valid submission into "your session expired"
+       and sends the person to re-authenticate over a problem that has nothing
+       to do with their session. base.html's injector skips a form that already
+       has this field, so there is no duplicate. #}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="mode" value="{{ mode }}">
+
+    {% if mode == 'batch' %}
+    <fieldset class="np-group" data-ui-ref="planning-zoning.batch">
+        <label class="field-label" for="planning-addresses">Addresses</label>
+        <textarea name="addresses" id="planning-addresses" rows="8" required
+                  class="text-input" data-ui-ref="planning-zoning.addresses"
+                  placeholder="{{ address_placeholder }}&#10;250 Front Street West, Toronto, ON">{{ raw_addresses }}</textarea>
+        <p class="mono field-note" data-ui-ref="planning-zoning.batch-note">
+            One property per line. Up to {{ max_batch_addresses }} at a time.
+            Include city and province. Postal code and a property name are
+            optional and may follow the address on the same line.
+        </p>
+    </fieldset>
+    {% else %}
+    <fieldset class="np-group" data-ui-ref="planning-zoning.single">
+        {# THE ONE THING THIS PAGE EXISTS FOR: an obvious place to put the
+           address. First field, full width, labelled in plain words. #}
+        <label class="field-label" for="planning-address">Property address</label>
+        <input type="text" name="address" id="planning-address" required
+               class="text-input text-input-wide" value="{{ address }}"
+               autocomplete="street-address"
+               data-ui-ref="planning-zoning.address"
+               placeholder="{{ address_placeholder }}">
+        <p class="mono field-note" data-ui-ref="planning-zoning.address-note">
+            What property would you like ARCHIOSK to review?
+        </p>
+    </fieldset>
+    {% endif %}
+
+    <fieldset class="np-group" data-ui-ref="planning-zoning.analysis-mode">
+        <legend class="field-label">What would you like to check?</legend>
+        {% for value, label in analysis_modes %}
+        <label data-ui-ref="planning-zoning.analysis-mode.option">
+            <input type="radio" name="analysis_mode" value="{{ value }}"
+                   {% if analysis_mode == value %}checked{% endif %}>
+            {{ label }}
+        </label>
+        {% endfor %}
+    </fieldset>
+
+    {# Sections 4-6: OWNER INTENT, all optional. Kept in one group and after the
+       question that actually matters, so the address stays the subject of the
+       page. Selects rather than radio banks - four more radio groups would push
+       the primary action off a phone screen. #}
+    <fieldset class="np-group" data-ui-ref="planning-zoning.intent">
+        <legend class="field-label">Optional context</legend>
+
+        <label class="field-label" for="planning-direction">Development direction</label>
+        <select name="development_direction" id="planning-direction"
+                class="text-input" data-ui-ref="planning-zoning.direction">
+            {% for value, label in development_directions %}
+            <option value="{{ value }}" {% if development_direction == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+
+        <label class="field-label" for="planning-strategy">Option strategy</label>
+        <select name="option_strategy" id="planning-strategy"
+                class="text-input" data-ui-ref="planning-zoning.strategy">
+            {% for value, label in option_strategies %}
+            <option value="{{ value }}" {% if option_strategy == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+
+        <label class="field-label" for="planning-condition">Existing property condition</label>
+        <select name="existing_condition" id="planning-condition"
+                class="text-input" data-ui-ref="planning-zoning.condition">
+            {% for value, label in existing_conditions %}
+            <option value="{{ value }}" {% if existing_condition == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+
+        <label class="field-label" for="planning-question">What are you trying to find out?</label>
+        <textarea name="question" id="planning-question" rows="3"
+                  class="text-input" data-ui-ref="planning-zoning.question"
+                  placeholder="e.g. What can I build here? Would relief likely be required?">{{ question }}</textarea>
+        <p class="mono field-note" data-ui-ref="planning-zoning.question-note">
+            {# Said once, plainly. This is why the field is safe to offer: it
+               shapes which options are discussed, never what is established. #}
+            Your question and the choices above are treated as your intent. They
+            do not change what the zoning by-law or the Official Plan says.
+        </p>
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary" data-ui-ref="planning-zoning.submit">
+        Analyze property
+    </button>
+</form>
+
+{# Section 11 / 13: what happens next, named in the GO-PDZ contract's own terms
+   rather than in a second vocabulary invented for this page. Kept as a short
+   list, not a specimen report - the page must not become the result. #}
+<section class="np-group" data-ui-ref="planning-zoning.next">
+    <h2>What a completed review will contain</h2>
+    <ul data-ui-ref="planning-zoning.result-sections">
+        {% for section in result_sections %}
+        <li>{{ section }}</li>
+        {% endfor %}
+    </ul>
+    <p class="mono field-note" data-ui-ref="planning-zoning.gate-note">
+        A review stops at the legal development envelope. Owner programme,
+        unit and room counts, budget and layout come afterwards, only once the
+        envelope is established.
+    </p>
+</section>
+{% endblock %}
