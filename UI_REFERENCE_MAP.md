@@ -1180,6 +1180,79 @@ Reached via `menu.account.removed-projects` (relocated from `lists.removed-proje
 | `drawing-understanding.summary-awaiting` (CLAUDE-ASREAD-SURFACE-01, new) | `<li>` | "N mark(s) awaiting you — N open proposition(s)" | Counts are **per mark**; the proposition-level figure is separate and labelled. Identity-confirmed with target open is NOT reviewed | Same as above | active |
 | `drawing-understanding.empty` | `<p>` | "Nothing has been proposed for this drawing yet." | Empty state, shown only when there are neither rows nor families | Same as above | active |
 
+## Pre-Design Planning & Zoning Result (CLAUDE-PLANNING-RESULT-SURFACE-01)
+
+`templates/planning_zoning_result.html`, served by
+`routes/planning_zoning.py::planning_result`. The ten GO-PDZ-1.0-ONEPAGE
+sections in contract order, arranged by `services/planning_result_view.py`.
+
+**It renders a development fixture, and says so first.** No municipal source,
+no model and no live GO-PDZ service is consulted, and the page is served on a
+synthetic address rather than on anything the visitor typed - rendering a
+specimen under someone's own address is how a specimen becomes mistakable for
+an analysis. Sections 1-5 are what the records establish; section 6 is what was
+read into them, and every statement is labelled `from record` or `GO reading`.
+
+| Reference | Kind | Label / content | What it does, and why it is here | Condition | Status |
+|---|---|---|---|---|---|
+| `planning-zoning.result.actions` | `<nav>` | Section 13 | The two actions at the foot of the result | Always | active |
+| `planning-zoning.result.back` | `<a class="btn btn-primary">` | "Back to address" | Returns to the intake surface | Always | active |
+| `planning-zoning.result.conclusion` | `<section>` | Section 9 | Pre-Design Conclusion | Always | active |
+| `planning-zoning.result.conclusion.status` | `<p class="mono">` | Result status | The document's own status, stated plainly | Always | active |
+| `planning-zoning.result.conclusion.text` | `<p>` | Conclusion | Rendered only when the result carries one | Always | active |
+| `planning-zoning.result.constraints.title` | `<h3>` | "Constraints" | Heading for the constraint column | Always | active |
+| `planning-zoning.result.develop-further` | `<button disabled>` | "Develop options further" | PRESENT AND DISABLED. This is where owner programme legitimately begins, and Gate 01 holds until an envelope is established - a reader is entitled to see what comes next without being able to walk through a door that is not built | Always | active |
+| `planning-zoning.result.envelope` | `<section>` | Section 4 | Development Envelope: density, height, setback, coverage | Always | active |
+| `planning-zoning.result.evidence` | `<details>` | Section 10 | Evidence Footer, collapsed by default - compact on a phone, complete when opened | Always | active |
+| `planning-zoning.result.evidence.item` | `<li>` | One source | Title, instrument, status, effective date, version and retrieval time - never a raw model prompt | Always | active |
+| `planning-zoning.result.evidence.items` | `<ul>` | Sources | One entry per admitted authority | Always | active |
+| `planning-zoning.result.evidence.provenance` | `<p class="mono">` | Contract and versions | Contract id, gate and view version, so a rendered page can be traced to what produced it | Always | active |
+| `planning-zoning.result.evidence.summary` | `<summary>` | "Evidence and sources (n)" | The count, so a reader knows whether opening it is worth it | Always | active |
+| `planning-zoning.result.framework` | `<section>` | Section 2 | Governing Planning Framework: zoning, exceptions, Official Plan and Secondary Plan context | Always | active |
+| `planning-zoning.result.framework.exceptions` | `<ul>` | Site-specific exceptions | Each with whether its text was retrieved - an unretrieved exception displaces the parent standard, so the distinction is the point | Always | active |
+| `planning-zoning.result.gate-note` | `<span class="mono">` | Gate note | Says why the control above is disabled, in terms of what it would ask for | Always | active |
+| `planning-zoning.result.identity` | `<section>` | Section 1 | Property Identity | Always | active |
+| `planning-zoning.result.identity.address` | `<p>` | Resolved address | The address as the record resolved it, not as it was typed | Always | active |
+| `planning-zoning.result.identity.confidence` | `<span>` | "Property match: HIGH" | The subject's identity confidence, carried from the document | Always | active |
+| `planning-zoning.result.identity.parcel` | `<span>` | Parcel identifier | Rendered only when the document carries one | Always | active |
+| `planning-zoning.result.identity.status` | `<span>` | Analysis status | The document's own `result_status` | Always | active |
+| `planning-zoning.result.interpretation` | `<section>` | Section 6 | Constraints & Opportunities - the interpretive layer, kept apart from sections 1-5 which are what the records establish | Always | active |
+| `planning-zoning.result.interpretation-note` | `<p class="mono">` | GO reading note | Says once that items marked GO reading are interpretations, not statements any authority made | Always | active |
+| `planning-zoning.result.mobility` | `<section>` | Section 5 | Mobility / Access Context, including the policy area that governs parking rates | Always | active |
+| `planning-zoning.result.opportunities.title` | `<h3>` | "Opportunities" | Heading for the opportunity column. Membership is DECLARED by the producer, never inferred from wording | Always | active |
+| `planning-zoning.result.option` | `<article>` | One option card | Repeated per option | Always | active |
+| `planning-zoning.result.option.conditions` | `<ul>` | Key enabling conditions | What would have to hold | Always | active |
+| `planning-zoning.result.option.constraint` | `<p class="mono">` | Key constraint | The single limit that shapes this posture | Always | active |
+| `planning-zoning.result.option.dependency` | `<p class="mono">` | Unresolved dependency | Rendered only when the option rests on something not yet established | Always | active |
+| `planning-zoning.result.option.rationale` | `<p>` | Short rationale | Why this posture exists, in a sentence | Always | active |
+| `planning-zoning.result.option.title` | `<h3>` | "Option A - AS-OF-RIGHT" | Key and posture | Always | active |
+| `planning-zoning.result.options` | `<section>` | Section 7 | Planning-Level Development Options. Renders only the postures the result actually carries | Always | active |
+| `planning-zoning.result.page-title` | `<h1>` | "Pre-Design Planning & Zoning Result" | The surface's own name, in the contract's words | Always | active |
+| `planning-zoning.result.permitted` | `<section>` | Section 3 | Permitted Development Context | Always | active |
+| `planning-zoning.result.preview-banner` | `<p class="mono form-error">` | "DEVELOPMENT PREVIEW" | Section 14. Rendered BEFORE any finding, because a reader who scrolls into the Development Envelope and sees a floor space index must already know this is a specimen. Carries the data class and the fixture note | Always | active |
+| `planning-zoning.result.unresolved` | `<section>` | Section 8 | Unresolved / Municipal Confirmation | Always | active |
+| `planning-zoning.result.unresolved.blocking` | `<span>` | Blocking statement | Whether this blocks a governed planning conclusion, derived from materiality alone | Always | active |
+| `planning-zoning.result.unresolved.evidence` | `<span>` | "Settled by: ..." | The evidence that would close it, taken from the document | Always | active |
+| `planning-zoning.result.unresolved.exception` | `<p class="mono">` | Unretrieved exception | An exception whose text was never read, shown where a reader looks for what still needs confirming | Always | active |
+| `planning-zoning.result.unresolved.item` | `<li>` | One open question | What is open, what settles it, and whether it blocks a conclusion | Always | active |
+| `planning-zoning.result.unresolved.items` | `<ul>` | Open questions | One entry per unresolved issue in the document | Always | active |
+| `planning-zoning.result.unresolved.materiality` | `<span class="mono">` | MATERIAL / MINOR | The contract's own severity word - no second vocabulary is invented for this surface | Always | active |
+| `planning-zoning.result.constraints` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.constraints.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+| `planning-zoning.result.envelope.statements` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.envelope.statements.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+| `planning-zoning.result.framework.statements` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.framework.statements.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+| `planning-zoning.result.identity.statements` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.identity.statements.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+| `planning-zoning.result.mobility.statements` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.mobility.statements.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+| `planning-zoning.result.opportunities` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.opportunities.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+| `planning-zoning.result.permitted.statements` | `<ul>` | A statement list | Rendered by the shared statement-list macro for this section. The reference is a macro ARGUMENT, so it never appears literally in the template | Always | active |
+| `planning-zoning.result.permitted.statements.item` | `<li>` | One statement | Carries the document's own status and whether it came from the record or is a GO reading | Always | active |
+
+
 ## Planning & Zoning (CLAUDE-PLANNING-ZONING-DOOR-01)
 
 `templates/planning_zoning.html`, served by `routes/planning_zoning.py`. The

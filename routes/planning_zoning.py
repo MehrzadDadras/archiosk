@@ -256,6 +256,31 @@ def planning_zoning():
         **_context(mode=mode if mode in MODES else MODE_SINGLE))
 
 
+@planning_bp.route("/planning-zoning/result", methods=["GET"])
+@login_required
+def planning_result():
+    """CLAUDE-PLANNING-RESULT-SURFACE-01 - the result surface, on a fixture.
+
+    RENDERING IS WHAT THIS PROVES, NOT ANALYSIS. The page is served from
+    `planning_result_view.DEVELOPMENT_FIXTURE` - a real GO-PDZ-1.0-ONEPAGE
+    document over a synthetic address, validated by the contract and by
+    VR-01..VR-21 with zero errors, so the surface is exercised against something
+    that could actually exist rather than against convenient shapes.
+
+    NOTHING IS CONSULTED TO PRODUCE IT. No municipal source, no model, no live
+    GO-PDZ service, and deliberately NOT the address the visitor typed on the
+    intake page: rendering a fixture under someone's own address is precisely how
+    a specimen becomes mistakable for an analysis.
+
+    The page says DEVELOPMENT PREVIEW because it is one.
+    """
+    from services import planning_result_view
+
+    return render_template("planning_zoning_result.html",
+                           view=planning_result_view.development_view(),
+                           backend=planning_analysis_state())
+
+
 @planning_bp.route("/planning-zoning/analyze", methods=["POST"])
 @login_required
 def analyze_property():

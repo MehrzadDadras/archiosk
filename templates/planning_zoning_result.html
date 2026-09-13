@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Pre-Design Planning &amp; Zoning Result &mdash; Archiosk{% endblock %}
+
+{% macro statement_list(items, ref) %}
+{# One statement, shown with what the DOCUMENT already says about it - status,
+   and whether ARCHIOSK established it or GO read it into the evidence. Nothing
+   is computed here and no absence is filled in. #}
+<ul class="pz-statements" data-ui-ref="{{ ref }}">
+    {% for item in items %}
+    <li class="pz-statement" data-ui-ref="{{ ref }}.item">
+        <span class="mono pz-statement-status">{{ item.status }}</span>
+        {# TWO DIFFERENT AXES, and the badge must not borrow the other's word.
+           `statement_status` beside it is already ESTABLISHED / PROVISIONAL /
+           UNRESOLVED; a badge also reading "established" produced the line
+           "UNRESOLVED established" on the Official Plan statement, which reads
+           as a contradiction rather than as two facts. "from record" says what
+           this axis actually means: the municipality's own records said it,
+           as opposed to GO having read it into them. #}
+        {% if item.established %}
+        <span class="mono pz-statement-basis" title="Taken from the municipality's own records">from record</span>
+        {% else %}
+        <span class="mono pz-statement-basis" title="A reading of the evidence, not an authority's own words">GO reading</span>
+        {% endif %}
+        {{ item.text }}
+        {% if item.authority_names %}
+        <span class="mono field-note pz-statement-authority">{{ item.authority_names | join(', ') }}</span>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro section_heading(key, label) %}
+<h2 class="pz-section-title" data-ui-ref="planning-zoning.result.section.{{ key | lower | replace('_', '-') }}">{{ label }}</h2>
+{% endmacro %}
+
+{% block content %}
+{# CLAUDE-PLANNING-RESULT-SURFACE-01: the ten GO-PDZ sections, in order, for an
+   architect reading top to bottom. The contract's own vocabulary throughout -
+   no second report structure, and no section invented for presentation.
+
+   NO NEW STYLESHEET. The `pz-*` classes carry no rules of their own; they exist
+   as stable hooks for the reference registry and for tests. Everything visible
+   is the existing system: np-page-title, np-group, field-label, field-note,
+   mono, btn / btn-primary / btn-ghost, form-error. #}
+<h1 class="np-page-title" data-ui-ref="planning-zoning.result.page-title">Pre-Design Planning &amp; Zoning Result</h1>
+
+{# Section 14. First thing on the page, before any finding, because a reader who
+   scrolls into section 4 and sees a floor space index must already know what
+   they are looking at. #}
+<p class="mono form-error" data-ui-ref="planning-zoning.result.preview-banner">
+    <strong>DEVELOPMENT PREVIEW &mdash; {{ view.data_class }}</strong><br>
+    {{ view.fixture_note }}
+</p>
+
+{# 1 ------------------------------------------------------------------ #}
+{{ section_heading('PROPERTY_IDENTITY', 'Property Identity') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.identity">
+    <p class="pz-identity-address" data-ui-ref="planning-zoning.result.identity.address">
+        <strong>{{ view.identity.address }}</strong>
+    </p>
+    <p class="mono field-note">
+        {% if view.identity.municipality %}{{ view.identity.municipality }} &middot; {% endif %}
+        <span data-ui-ref="planning-zoning.result.identity.confidence">Property match: {{ view.identity.identity_confidence }}</span>
+        {% if view.identity.parcel_identifier %}
+        &middot; <span data-ui-ref="planning-zoning.result.identity.parcel">Parcel {{ view.identity.parcel_identifier }}</span>
+        {% endif %}
+        &middot; <span data-ui-ref="planning-zoning.result.identity.status">Analysis status: {{ view.result_status }}</span>
+    </p>
+    {{ statement_list(view.identity.statements, 'planning-zoning.result.identity.statements') }}
+</section>
+
+{# 2 ------------------------------------------------------------------ #}
+{{ section_heading('GOVERNING_PLANNING_FRAMEWORK', 'Governing Planning Framework') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.framework">
+    {{ statement_list(view.framework.statements, 'planning-zoning.result.framework.statements') }}
+    {% if view.framework.exceptions %}
+    <ul class="pz-exceptions" data-ui-ref="planning-zoning.result.framework.exceptions">
+        {% for exception in view.framework.exceptions %}
+        <li>
+            <span class="mono">{{ exception.exception_id }}</span>
+            {% if exception.text_retrieved %}text retrieved{% else %}<strong>text not retrieved</strong>{% endif %}
+            {% if exception.development_effect %} &mdash; {{ exception.development_effect }}{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
+{# 3 ------------------------------------------------------------------ #}
+{{ section_heading('PERMITTED_DEVELOPMENT_CONTEXT', 'Permitted Development Context') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.permitted">
+    {{ statement_list(view.permitted.statements, 'planning-zoning.result.permitted.statements') }}
+</section>
+
+{# 4 ------------------------------------------------------------------ #}
+{{ section_heading('DEVELOPMENT_ENVELOPE', 'Development Envelope') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.envelope">
+    {{ statement_list(view.envelope.statements, 'planning-zoning.result.envelope.statements') }}
+</section>
+
+{# 5 ------------------------------------------------------------------ #}
+{{ section_heading('MOBILITY_ACCESS_CONTEXT', 'Mobility / Access Context') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.mobility">
+    {{ statement_list(view.mobility.statements, 'planning-zoning.result.mobility.statements') }}
+</section>
+
+{# 6 ------------------------------------------------------------------ #}
+{{ section_heading('CONSTRAINTS_AND_OPPORTUNITIES', 'Constraints & Opportunities') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.interpretation">
+    <h3 class="field-label" data-ui-ref="planning-zoning.result.constraints.title">Constraints</h3>
+    {{ statement_list(view.interpretation.constraints, 'planning-zoning.result.constraints') }}
+    <h3 class="field-label" data-ui-ref="planning-zoning.result.opportunities.title">Opportunities</h3>
+    {{ statement_list(view.interpretation.opportunities, 'planning-zoning.result.opportunities') }}
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.interpretation-note">
+        Items marked <em>GO reading</em> are interpretations of the evidence
+        above, not statements any authority made.
+    </p>
+</section>
+
+{# 7 ------------------------------------------------------------------ #}
+{{ section_heading('PLANNING_LEVEL_DEVELOPMENT_OPTIONS', 'Planning-Level Development Options') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.options">
+    {% for option in view.options %}
+    <article class="pz-option np-group" data-ui-ref="planning-zoning.result.option">
+        <h3 data-ui-ref="planning-zoning.result.option.title">
+            Option {{ option.key }} &mdash; {{ option.posture }}
+        </h3>
+        <p data-ui-ref="planning-zoning.result.option.rationale">{{ option.rationale }}</p>
+        {% if option.enabling_conditions %}
+        <p class="field-label">Key enabling conditions</p>
+        <ul data-ui-ref="planning-zoning.result.option.conditions">
+            {% for condition in option.enabling_conditions %}<li>{{ condition }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if option.key_constraint %}
+        <p class="mono field-note" data-ui-ref="planning-zoning.result.option.constraint">
+            Key constraint: {{ option.key_constraint }}
+        </p>
+        {% endif %}
+        {% if option.unresolved_dependency %}
+        <p class="mono field-note" data-ui-ref="planning-zoning.result.option.dependency">
+            Unresolved dependency: {{ option.unresolved_dependency }}
+        </p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+
+{# 8 ------------------------------------------------------------------ #}
+{{ section_heading('UNRESOLVED_MUNICIPAL_CONFIRMATION', 'Unresolved / Municipal Confirmation') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.unresolved">
+    {# Section 11: prominent, specific, and never a generic disclaimer. Each item
+       says what is open, what it bears on, what would settle it, and whether it
+       blocks a planning conclusion - MATERIAL is the contract's own word for
+       that last one, so no new severity vocabulary is invented here. #}
+    <ul data-ui-ref="planning-zoning.result.unresolved.items">
+        {% for issue in view.unresolved %}
+        <li class="pz-unresolved" data-ui-ref="planning-zoning.result.unresolved.item">
+            <span class="mono" data-ui-ref="planning-zoning.result.unresolved.materiality">{{ issue.materiality }}</span>
+            {{ issue.question }}
+            {% if issue.required_evidence %}
+            <span class="field-note" data-ui-ref="planning-zoning.result.unresolved.evidence">
+                Settled by: {{ issue.required_evidence }}
+            </span>
+            {% endif %}
+            <span class="field-note" data-ui-ref="planning-zoning.result.unresolved.blocking">
+                {% if issue.materiality == 'MATERIAL' %}
+                    Blocks a governed planning conclusion.
+                {% else %}
+                    Does not block a planning conclusion.
+                {% endif %}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% for exception in view.unretrieved_exceptions %}
+    <p class="mono" data-ui-ref="planning-zoning.result.unresolved.exception">
+        Exception {{ exception.exception_id }} applies and its text was not
+        retrieved. An exception displaces the parent zone standards, so the
+        figures above are provisional until it is read.
+    </p>
+    {% endfor %}
+</section>
+
+{# 9 ------------------------------------------------------------------ #}
+{{ section_heading('PRE_DESIGN_CONCLUSION', 'Pre-Design Conclusion') }}
+<section class="np-group" data-ui-ref="planning-zoning.result.conclusion">
+    <p class="mono" data-ui-ref="planning-zoning.result.conclusion.status">
+        Result status: <strong>{{ view.result_status }}</strong>
+    </p>
+    {% if view.conclusion %}
+    <p data-ui-ref="planning-zoning.result.conclusion.text">{{ view.conclusion }}</p>
+    {% endif %}
+</section>
+
+{# 10 ----------------------------------------------------------------- #}
+{{ section_heading('EVIDENCE_FOOTER', 'Evidence Footer') }}
+<details class="np-group" data-ui-ref="planning-zoning.result.evidence">
+    <summary data-ui-ref="planning-zoning.result.evidence.summary">
+        Evidence and sources ({{ view.evidence | length }})
+    </summary>
+    <ul data-ui-ref="planning-zoning.result.evidence.items">
+        {% for authority in view.evidence %}
+        <li data-ui-ref="planning-zoning.result.evidence.item">
+            <strong>{{ authority.name }}</strong>
+            {% if authority.instrument %} &middot; {{ authority.instrument }}{% endif %}
+            <span class="mono field-note">
+                {{ authority.authority_status }}
+                {% if authority.effective_date %} &middot; effective {{ authority.effective_date }}{% endif %}
+                {% if authority.version_identifier %} &middot; {{ authority.version_identifier }}{% endif %}
+                {% if authority.citation %} &middot; {{ authority.citation }}{% endif %}
+                {% if authority.retrieved_at %} &middot; retrieved {{ authority.retrieved_at }}{% endif %}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.evidence.provenance">
+        {{ view.contract }} &middot; {{ view.gate }} &middot; {{ view.view_version }}
+        {% if view.retrieval.runner_version %} &middot; {{ view.retrieval.runner_version }}{% endif %}
+    </p>
+</details>
+
+{# Section 13 --------------------------------------------------------- #}
+<nav class="np-group" data-ui-ref="planning-zoning.result.actions" aria-label="Result actions">
+    <a class="btn btn-primary" href="{{ url_for('planning_zoning.planning_zoning') }}"
+       data-ui-ref="planning-zoning.result.back">Back to address</a>
+    {# Gate 01 holds here. Developing options further is where owner programme
+       legitimately begins, and this tranche may not cross into it - so the
+       control is present and DISABLED rather than absent, because a reader is
+       entitled to see what comes next without being able to walk through a door
+       that is not built. #}
+    <button type="button" class="btn btn-ghost" disabled
+            aria-disabled="true"
+            data-ui-ref="planning-zoning.result.develop-further">Develop options further</button>
+    <span class="mono field-note" data-ui-ref="planning-zoning.result.gate-note">
+        Developing options further asks for owner programme, which belongs after
+        the envelope is established. It is not enabled in this preview.
+    </span>
+</nav>
+{% endblock %}

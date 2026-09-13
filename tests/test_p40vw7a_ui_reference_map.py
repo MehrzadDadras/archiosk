@@ -119,6 +119,8 @@ _DOCUMENT_SHOP_INTAKE_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_inta
 # surface joins this scan by being added here - the list is explicit rather
 # than a glob, so adding a template to the registry stays a deliberate act.
 _PLANNING_ZONING_HTML_PATH = _REPO_ROOT / "templates" / "planning_zoning.html"
+_PLANNING_ZONING_RESULT_HTML_PATH = (
+    _REPO_ROOT / "templates" / "planning_zoning_result.html")
 _DOCUMENT_SHOP_JOBS_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_jobs.html"
 _DOCUMENT_SHOP_RESULT_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_result.html"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
@@ -165,6 +167,27 @@ _REF_TOKEN_RE = re.compile(r"`([a-z0-9._\-]+)`")
 # own comment); "deep-ocean" is the one genuinely new suffix this stage
 # adds.
 _APPEARANCE_MODES = ("light", "dark", "tinted", "deep-forest", "deep-ocean")
+#: CLAUDE-PLANNING-RESULT-SURFACE-01: the result surface renders its
+#: statement lists through one macro that takes the reference as an
+#: ARGUMENT, so these never appear literally in the template - the same
+#: shape as the appearance modes and security_department.html above.
+_PLANNING_RESULT_DYNAMIC_REFS = {
+    "planning-zoning.result.constraints",
+    "planning-zoning.result.constraints.item",
+    "planning-zoning.result.envelope.statements",
+    "planning-zoning.result.envelope.statements.item",
+    "planning-zoning.result.framework.statements",
+    "planning-zoning.result.framework.statements.item",
+    "planning-zoning.result.identity.statements",
+    "planning-zoning.result.identity.statements.item",
+    "planning-zoning.result.mobility.statements",
+    "planning-zoning.result.mobility.statements.item",
+    "planning-zoning.result.opportunities",
+    "planning-zoning.result.opportunities.item",
+    "planning-zoning.result.permitted.statements",
+    "planning-zoning.result.permitted.statements.item",
+}
+
 _APPEARANCE_DYNAMIC_REFS = {f"menu.appearance.{mode}" for mode in _APPEARANCE_MODES}
 
 # CLAUDE-P40-VW8-QA (Project-Creation Upload-Capacity Correction):
@@ -294,11 +317,12 @@ def _all_template_refs() -> set[str]:
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
         _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
         _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH,
-        _PLANNING_ZONING_HTML_PATH,
+        _PLANNING_ZONING_HTML_PATH, _PLANNING_ZONING_RESULT_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
         refs |= set(_MACRO_UI_REF_RE.findall(text))
+    refs |= _PLANNING_RESULT_DYNAMIC_REFS
     refs |= _APPEARANCE_DYNAMIC_REFS
     refs |= _ERROR_PAGE_DYNAMIC_REFS
     refs |= _UPLOAD_CONFIRM_DYNAMIC_REFS
