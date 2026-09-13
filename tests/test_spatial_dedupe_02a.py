@@ -17,8 +17,11 @@ that can change the answer is provably identical; a subject that resolved to
 several parcels, or a conflicting-layer condition, falls through and recomputes,
 because those make `relate` answer AMBIGUOUS for reasons geometry cannot see.
 
-NO GEOMETRY MATHEMATICS CHANGED. Not one line of the ring, crossing, distance or
-containment code was touched. The saving comes entirely from not asking twice.
+NO GEOMETRY MATHEMATICS CHANGED BY THIS TRANCHE. Not one line of the ring,
+crossing, distance or containment code was touched here; the saving comes entirely
+from not asking twice. CLAUDE-SPATIAL-PREFILTER-02B later changed that code
+deliberately, under its own differential equivalence proof - so read this sentence
+as a statement about 02A, not as a current claim about the engine.
 """
 from __future__ import annotations
 
@@ -229,19 +232,38 @@ class TheWitnessAnswerIsCarriedForward(unittest.TestCase):
                            "shelve", "pickle"):
                 self.assertNotIn(banned, source, "%s in %s" % (banned, name))
 
-    def test_no_geometry_mathematics_was_changed(self):
-        """The engine's arithmetic is untouched; only a comparator was added."""
-        import subprocess
-        diff = subprocess.run(
-            ["git", "diff", "-U0", "--", "services/deterministic_spatial.py"],
-            capture_output=True, text=True, cwd=".").stdout
-        for hot in ("_point_in_ring", "_segments_cross", "_distance_point_to_segment",
-                    "_rings_cross", "_any_crossing", "_min_distance_to_ring",
-                    "_point_in_polygon"):
-            for line in diff.splitlines():
-                if line.startswith(("+", "-")) and not line.startswith(("+++", "---")):
-                    self.assertNotIn("def %s" % hot, line,
-                                     "%s must not be redefined in this tranche" % hot)
+    def test_the_deduplication_is_independent_of_the_geometry_code(self):
+        """SUPERSEDES "no geometry mathematics was changed".
+
+        That assertion was correct for 02A, whose whole discipline was to remove
+        duplicate work without touching the ruler - and it read the git diff to
+        prove no hot function had been redefined. CLAUDE-SPATIAL-PREFILTER-02B is
+        authorized to change exactly that, so the old form would now fail for the
+        right reason, which makes it a test defending a constraint that has been
+        deliberately lifted rather than an invariant.
+
+        What survives is the invariant that actually matters to 02A: reuse is
+        decided by comparing IDENTIFIERS, never by computing geometry, so the
+        deduplication cannot be affected by how the arithmetic is implemented.
+        The prohibition on changing answers now lives where it belongs - in
+        `tests/test_spatial_prefilter_02b.py`, which proves equivalence
+        differentially against the pre-change implementation.
+        """
+        import ast
+        import inspect
+        source = inspect.getsource(spatial.token_matches)
+        tree = ast.parse(source)
+        called = {node.func.id for node in ast.walk(tree)
+                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+        self.assertEqual(called & {"_point_in_ring", "_segments_cross",
+                                   "_distance_point_to_segment", "_rings_cross",
+                                   "_any_crossing", "_min_distance_to_ring",
+                                   "_min_distance_to_polygon", "_point_in_polygon",
+                                   "_point_in_parts", "relate", "prepare_parts",
+                                   "ring_band"}, set(),
+                         "reuse must be decided without any geometry")
+        self.assertIn("geometry_hash", called,
+                      "identity is proven by hashing, which is the whole point")
 
 
 if __name__ == "__main__":
