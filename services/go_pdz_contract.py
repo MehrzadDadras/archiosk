@@ -41,6 +41,8 @@ not a rewrite.
 """
 from __future__ import annotations
 
+from typing import Optional
+
 CONTRACT_ID = "GO-PDZ-1.0-ONEPAGE"
 SCHEMA_VERSION = "1.0"
 
@@ -168,6 +170,113 @@ def exceeds_ceiling(value, ceiling, ordering) -> bool:
         return False
     return ordering.index(value) > ordering.index(ceiling)
 
+
+# ----------------------------------------------------------------------------
+# CLAUDE-ANTI-LAUNDERING-01, INVARIANT A - EFFECT TYPING
+#
+#     SILENCE IS EVIDENCE ABOUT WHAT WAS FOUND.
+#     PERMISSION IS A STATUTORY CONCLUSION THAT REQUIRES A GOVERNING BASIS.
+#
+# A THIRD AXIS, and the reason it cannot be folded into the two that exist.
+# `kind` says WHO says it and `derivation` says HOW it came to be believed;
+# neither says WHAT THE LAW DOES. "The by-law contains no express provision about
+# X" and "X is permitted" can both be AUTHORITY_SAYS / DIRECT_AUTHORITY with
+# identical provenance and opposite legal meaning, and today nothing in the
+# contract can tell them apart.
+#
+# THERE IS NO `SILENT_PERMITTED` AND THERE MUST NEVER BE ONE. A source that says
+# nothing licenses exactly one effect: NO_EXPRESS_PROVISION. See
+# `governance/current/anti-laundering-invariants.md`.
+EFFECT_EXPLICIT_PERMISSION = "EXPLICIT_PERMISSION"
+EFFECT_EXPLICIT_PROHIBITION = "EXPLICIT_PROHIBITION"
+EFFECT_REQUIREMENT_REMOVED = "REQUIREMENT_REMOVED"
+EFFECT_NOT_APPLICABLE = "NOT_APPLICABLE"
+EFFECT_NO_EXPRESS_PROVISION = "NO_EXPRESS_PROVISION"
+EFFECT_UNRESOLVED = "UNRESOLVED_EFFECT"
+
+STATUTORY_EFFECTS = (
+    EFFECT_EXPLICIT_PERMISSION, EFFECT_EXPLICIT_PROHIBITION,
+    EFFECT_REQUIREMENT_REMOVED, EFFECT_NOT_APPLICABLE,
+    EFFECT_NO_EXPRESS_PROVISION, EFFECT_UNRESOLVED,
+)
+
+#: WHAT MAKES THE EFFECT TRUE, which is a separate question from what the effect
+#: IS. Kept separate because the anti-laundering rule is precisely a statement
+#: about which bases may support which effects.
+BASIS_EXPRESS_TEXT = "EXPRESS_TEXT"
+BASIS_PARENT_REGIME = "PARENT_REGIME_RULE"
+BASIS_SITE_SPECIFIC = "SITE_SPECIFIC_EXCEPTION"
+BASIS_SUPERSESSION = "SUPERSESSION"
+BASIS_DETERMINISTIC = "DETERMINISTIC_APPLICATION"
+BASIS_UNRESOLVED = "UNRESOLVED"
+
+EFFECT_BASES = (
+    BASIS_EXPRESS_TEXT, BASIS_PARENT_REGIME, BASIS_SITE_SPECIFIC,
+    BASIS_SUPERSESSION, BASIS_DETERMINISTIC, BASIS_UNRESOLVED,
+)
+
+#: THE ANTI-LAUNDERING TABLE. Which bases can support which effect.
+#:
+#: The load-bearing rows are the two that DO NOT list what one might expect.
+#: EXPLICIT_PERMISSION and EXPLICIT_PROHIBITION cannot rest on
+#: DETERMINISTIC_APPLICATION or UNRESOLVED: no amount of correct computation over
+#: retrieved attributes turns into a statutory grant, and an unresolved basis
+#: establishes nothing at all. That is the whole invariant, expressed as a table
+#: rather than as a warning in a docstring.
+#:
+#: NO_EXPRESS_PROVISION accepts EXPRESS_TEXT (the instrument was read and is
+#: silent on the point), DETERMINISTIC_APPLICATION (ARCHIOSK's own absence proof
+#: over an official layer - the two-proof discipline in `deterministic_spatial`),
+#: and UNRESOLVED (the search itself was incomplete).
+EFFECT_ADMISSIBLE_BASES = {
+    EFFECT_EXPLICIT_PERMISSION: (BASIS_EXPRESS_TEXT, BASIS_PARENT_REGIME,
+                                 BASIS_SITE_SPECIFIC, BASIS_SUPERSESSION),
+    EFFECT_EXPLICIT_PROHIBITION: (BASIS_EXPRESS_TEXT, BASIS_PARENT_REGIME,
+                                  BASIS_SITE_SPECIFIC, BASIS_SUPERSESSION),
+    # A requirement is REMOVED by an instrument that removes it - an exception
+    # that displaces the parent standard, a superseding by-law, or express text.
+    # Never by nobody having mentioned it.
+    EFFECT_REQUIREMENT_REMOVED: (BASIS_EXPRESS_TEXT, BASIS_SITE_SPECIFIC,
+                                 BASIS_SUPERSESSION),
+    EFFECT_NOT_APPLICABLE: (BASIS_EXPRESS_TEXT, BASIS_PARENT_REGIME,
+                            BASIS_DETERMINISTIC),
+    EFFECT_NO_EXPRESS_PROVISION: (BASIS_EXPRESS_TEXT, BASIS_DETERMINISTIC,
+                                  BASIS_UNRESOLVED),
+    EFFECT_UNRESOLVED: (BASIS_UNRESOLVED,),
+}
+
+#: FAILS CLOSED, expressed in the vocabulary that already exists rather than a
+#: new one. Only UNRESOLVED_EFFECT is capped: an effect nobody has established
+#: cannot support an established statement.
+#:
+#: NO_EXPRESS_PROVISION is DELIBERATELY NOT CAPPED. "The by-law contains no
+#: express provision" is a finding about the record, and ARCHIOSK already proves
+#: absences deterministically and states them as ESTABLISHED - see the absence
+#: findings in `toronto_gate01`. Capping it would force real, proven absences to
+#: present as doubt. What it may never do is speak permissively, which is a
+#: constraint on the statement's VOICE and is enforced separately.
+EFFECT_CEILINGS = {
+    EFFECT_UNRESOLVED: ("UNRESOLVED", "LOW"),
+}
+
+
+def admissible_bases(effect) -> tuple:
+    """Which bases may support this effect. Unknown effect -> nothing may."""
+    return EFFECT_ADMISSIBLE_BASES.get(effect, ())
+
+
+def basis_supports_effect(effect, basis) -> bool:
+    """FAIL CLOSED: an unrecognised effect or basis supports nothing."""
+    if effect not in STATUTORY_EFFECTS or basis not in EFFECT_BASES:
+        return False
+    return basis in admissible_bases(effect)
+
+
+def effect_ceiling_for(effect) -> Optional[tuple]:
+    """The (status, confidence) maximum this effect imposes, or None."""
+    return EFFECT_CEILINGS.get(effect)
+
+
 RESULT_STATUSES = ("GOVERNED_RESULT", "UNRESOLVED")
 
 SEVERITY_ERROR = "ERROR"
@@ -256,6 +365,16 @@ SCHEMA = {
                     # it actually read, and `services/derivation_check.py` is the
                     # only thing that produces it.
                     "derivation_check": {"type": ["object", "null"]},
+                    # CLAUDE-ANTI-LAUNDERING-01, Invariant A. WHAT THE LAW DOES,
+                    # as distinct from who said it and how we came to believe it.
+                    # Both optional and both additive: absent means the document
+                    # makes no typed effect claim, so every document written
+                    # before this contract revision stays valid and no producer
+                    # is obliged to restate anything. The rules that enforce the
+                    # basis table fire ONLY when the field is present, which is
+                    # what keeps this a strengthening rather than a migration.
+                    "statutory_effect": {"enum": list(STATUTORY_EFFECTS)},
+                    "effect_basis": {"enum": list(EFFECT_BASES)},
                     "conflict_refs": {"type": "array",
                                       "items": {"type": "string"}},
                     "derived_from": {"type": "array",

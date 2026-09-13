@@ -620,6 +620,18 @@ class CompilerOutcome:
     governed_payload: Optional[dict] = None
     bindings: list = field(default_factory=list)
     promoted_statements: list = field(default_factory=list)
+    #: CLAUDE-ANTI-LAUNDERING-01, Invariant B. Every entity the model's
+    #: contributions asserted, with the role the text attached it to beside the
+    #: role the host's own facts give it - so a reader can see what was checked,
+    #: not only what failed. `binding_failures` carries the refusals and
+    #: `quarantined_statements` the ids that did not reach `governed_payload`.
+    #:
+    #: AUDITABLE BY CONSTRUCTION: the quarantined statements remain in
+    #: `go_pdz_payload`, so the pair of fields is enough to reconstruct exactly
+    #: what was excluded and why, without the excluded content being destroyed.
+    entity_bindings: list = field(default_factory=list)
+    binding_failures: list = field(default_factory=list)
+    quarantined_statements: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return dict(self.__dict__)
@@ -840,10 +852,36 @@ def compile_feasibility(evidence: FeasibilityEvidence, *, runner,
     from services import relation_binding
     governed, bindings = relation_binding.annotate(
         payload, serialised, verified_at=outcome.executed_at)
-    outcome.governed_payload = governed
     outcome.bindings = bindings
     outcome.promoted_statements = [b["statement_id"] for b in bindings
                                    if b.get("promoted")]
+
+    # CLAUDE-ANTI-LAUNDERING-01, Invariant B. THE ADMISSION BOUNDARY.
+    #
+    #     A VALUE MATCH WITHOUT ROLE FIDELITY IS NOT CORROBORATION.
+    #
+    # `relation_binding` above decides what may be PROMOTED. This decides what
+    # may be ADMITTED AT ALL, and the two are different questions: a statement
+    # can fail promotion and still belong in the document, but a statement
+    # asserting a host-owned number in the wrong semantic role does not, because
+    # its provenance is impeccable and its meaning is inverted.
+    #
+    # QUARANTINE, NOT DEMOTION. The raw payload above keeps every statement, so a
+    # quarantined contribution stays readable as diagnostic evidence; the governed
+    # document simply does not carry it. Confidence is NOT reduced to let it in -
+    # that would be the same laundering performed in the open, and section 7 of
+    # the authorizing direction forbids it.
+    #
+    # HOST FACTS ARE NOT TOUCHED. `serialised` is the evidence this reads FROM and
+    # is never written to, which the tests assert directly rather than trusting.
+    from services import entity_binding
+    governed, entity_bindings, binding_failures = entity_binding.admit(
+        governed, serialised)
+    outcome.governed_payload = governed
+    outcome.entity_bindings = entity_bindings
+    outcome.binding_failures = binding_failures
+    outcome.quarantined_statements = entity_binding.quarantined_ids(
+        binding_failures)
     # Section 5: the model that ACTUALLY answered, as the provider reported it -
     # not the configured string restated back as if it were confirmation.
     outcome.model_version = getattr(runner, "last_resolved_model", None)

@@ -70,6 +70,13 @@ RULES = {
     "VR-20": (SEVERITY_ERROR, "Parent-zone standards are not applied over an "
                               "unresolved exception"),
     "VR-21": (SEVERITY_ERROR, "A model derivation cannot promote its own claim strength"),
+    # CLAUDE-ANTI-LAUNDERING-01, Invariant A. Each fires only where
+    # `statutory_effect` is declared - see the block that implements them.
+    "VR-22": (SEVERITY_ERROR, "A statutory effect rests on a basis that can "
+                              "establish it"),
+    "VR-23": (SEVERITY_ERROR, "An unresolved statutory effect fails closed"),
+    "VR-24": (SEVERITY_ERROR, "Silence and non-applicability are not stated as "
+                              "permission"),
 }
 
 #: Wording that only an authority may use. A GO interpretation that says "the
@@ -77,6 +84,18 @@ RULES = {
 _AUTHORITY_VOICE = re.compile(
     r"\b(?:shall|must|is required|are required|requires|is permitted|are permitted|"
     r"is prohibited|are prohibited|mandates)\b", re.IGNORECASE)
+
+#: CLAUDE-ANTI-LAUNDERING-01, VR-24. Wording that asserts a GRANT.
+#:
+#: A NARROWER SET THAN `_AUTHORITY_VOICE`, deliberately. That expression also
+#: catches "shall", "must" and "requires" - obligation language, which a statement
+#: about silence may legitimately use ("no provision requires a setback here").
+#: What silence may never do is confer, so only the conferring half is listed.
+_PERMISSIVE_VOICE = re.compile(
+    r"\b(?:is permitted|are permitted|is allowed|are allowed|permits|allows|"
+    r"may be (?:built|constructed|erected|developed)|as[- ]of[- ]right|"
+    r"is therefore permitted|no restriction applies|unrestricted|"
+    r"there is no limit)\b", re.IGNORECASE)
 
 #: Wording that predicts what a decision-maker will do.
 _PREDICTIVE_APPROVAL = re.compile(
@@ -414,6 +433,84 @@ def validate_semantics(document) -> list:
                 % (derivation, max_confidence),
                 "%s / %s" % (status, confidence),
                 "confidence of at most %s" % max_confidence))
+
+    # VR-22 / VR-23 / VR-24 - CLAUDE-ANTI-LAUNDERING-01, Invariant A.
+    #
+    #     SILENCE IS EVIDENCE ABOUT WHAT WAS FOUND. PERMISSION IS A STATUTORY
+    #     CONCLUSION THAT REQUIRES A GOVERNING BASIS.
+    #
+    # EVERY ONE OF THESE FIRES ONLY WHEN `statutory_effect` IS PRESENT, which is
+    # what makes this a strengthening rather than a migration: a document written
+    # before the field existed declares no typed effect, so it cannot violate a
+    # rule about typed effects, and every stored result stays exactly as valid as
+    # it was. The cost of that choice is honest and worth stating - an untyped
+    # document is not protected by these rules at all. They protect what declares
+    # itself, and the producers are expected to declare.
+    for index, statement in enumerate(document.get("statements") or []):
+        if not isinstance(statement, dict):
+            continue
+        effect = statement.get("statutory_effect")
+        if effect is None:
+            continue
+        path = "$.statements[%d]" % index
+        sid = statement.get("statement_id")
+        basis = statement.get("effect_basis")
+        status = statement.get("statement_status")
+        confidence = statement.get("confidence")
+        text = statement.get("text") or ""
+
+        # VR-22 - the basis must be one that can actually produce this effect.
+        # The rows that matter are the ones that REFUSE: no amount of correct
+        # computation over retrieved attributes becomes a statutory grant.
+        if not contract.basis_supports_effect(effect, basis):
+            findings.append(_finding(
+                "VR-22", path + ".effect_basis", sid,
+                "the declared basis cannot establish the declared statutory effect",
+                "%s on %s" % (effect, basis if basis is not None else "no basis"),
+                "one of: %s" % (", ".join(contract.admissible_bases(effect))
+                                or "no basis can establish this effect")))
+
+        # VR-23 - UNRESOLVED_EFFECT fails closed. An effect nobody has
+        # established cannot support an established statement.
+        ceiling = contract.effect_ceiling_for(effect)
+        if ceiling:
+            max_status, max_confidence = ceiling
+            if contract.exceeds_ceiling(status, max_status,
+                                        contract.STATUS_STRENGTH):
+                findings.append(_finding(
+                    "VR-23", path + ".statement_status", sid,
+                    "a statement whose statutory effect is %s may not be stated "
+                    "more strongly than %s" % (effect, max_status),
+                    "%s / %s" % (status, confidence),
+                    "statement_status of at most %s" % max_status))
+            if contract.exceeds_ceiling(confidence, max_confidence,
+                                        contract.CONFIDENCE_STRENGTH):
+                findings.append(_finding(
+                    "VR-23", path + ".confidence", sid,
+                    "a statement whose statutory effect is %s may not carry "
+                    "confidence above %s" % (effect, max_confidence),
+                    "%s / %s" % (status, confidence),
+                    "confidence of at most %s" % max_confidence))
+
+        # VR-24 - THE ONE THAT NAMES THE LAUNDERING DIRECTLY. A statement whose
+        # effect is "the instrument says nothing about this" may not then use
+        # permissive language. "No express provision, so it is permitted" is two
+        # claims, and the second does not follow from the first.
+        #
+        # NOT_APPLICABLE is included for the same reason: a requirement that does
+        # not apply has not granted anything either.
+        if effect in (contract.EFFECT_NO_EXPRESS_PROVISION,
+                      contract.EFFECT_NOT_APPLICABLE):
+            permissive = _PERMISSIVE_VOICE.search(text)
+            if permissive:
+                findings.append(_finding(
+                    "VR-24", path + ".text", sid,
+                    "a statement declaring %s speaks permissively; silence and "
+                    "non-applicability are findings about the record, not grants"
+                    % effect,
+                    permissive.group(0),
+                    "what the instrument does not say, without stating what "
+                    "that permits"))
 
     # VR-16, evaluated ONCE PER AUTHORITY rather than once per citation of one.
     # It previously sat inside the statement loop, so a document citing one
