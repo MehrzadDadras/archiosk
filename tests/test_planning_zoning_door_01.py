@@ -185,9 +185,20 @@ class PlanningZoningDoorTests(unittest.TestCase):
         self.assertIn("not yet enabled on this environment", body)
         self.assertIn("Entry checked", body)
 
-    def test_no_planning_engine_is_reachable_from_this_route(self):
-        """THE LOAD-BEARING TEST. The engine works and is not wired, and this
-        asserts the second half by the import surface rather than by hoping."""
+    def test_the_engine_is_reachable_only_through_the_flag_gated_live_module(self):
+        """SUPERSEDES "no planning engine is reachable from this route".
+
+        That assertion was correct when the engine was unwired, and
+        CLAUDE-PLANNING-LIVE-01 deliberately wired one bounded Toronto path. It
+        would still have PASSED - the route imports `planning_live`, not the
+        engine - which is worse than failing: a test that passes for a reason
+        nobody intended stops describing the system.
+
+        The property that actually matters now: this module reaches no municipal
+        source, no model and no second municipality DIRECTLY. Exactly one seam
+        exists, `services/planning_live.py`, and it is entered only from the
+        flag-gated branch.
+        """
         import ast
         import inspect
         tree = ast.parse(inspect.getsource(planning_zoning))
@@ -197,11 +208,36 @@ class PlanningZoningDoorTests(unittest.TestCase):
                 imported.update(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 imported.add(node.module or "")
-        for engine in ("toronto_gate01", "mississauga_gate01", "go_pdz",
-                       "feasibility_compiler", "deterministic_findings",
-                       "relation_binding", "llm_gateway"):
-            self.assertFalse(any(engine in name for name in imported),
-                             "%s must not be reachable from the door" % engine)
+                imported.update("%s.%s" % (node.module or "", alias.name)
+                                for alias in node.names)
+        for forbidden in ("toronto_gate01", "toronto_planning_source",
+                          "mississauga_gate01", "mississauga_planning_source",
+                          "feasibility_compiler", "llm_gateway",
+                          "gateway_model", "requests"):
+            self.assertFalse(any(forbidden in name for name in imported),
+                             "%s must not be reached directly from the door"
+                             % forbidden)
+        self.assertTrue(
+            any("planning_live" in name for name in imported),
+            "the one authorized seam must be the one that is imported")
+
+    def test_the_live_seam_is_entered_only_when_the_flag_is_on(self):
+        """The flag is not advisory: the import itself sits inside the branch."""
+        import ast
+        import inspect
+        tree = ast.parse(inspect.getsource(planning_zoning))
+        live_imports = [node for node in ast.walk(tree)
+                        if isinstance(node, ast.ImportFrom)
+                        and "planning_live" in " ".join(
+                            alias.name for alias in node.names)]
+        self.assertTrue(live_imports, "planning_live is imported somewhere")
+        for node in live_imports:
+            # An indented import is inside a block. At module scope the engine
+            # would load on every request whether the flag is set or not, which
+            # makes the flag a formality rather than a gate.
+            self.assertGreater(node.col_offset, 0,
+                               "the live seam must be imported inside the "
+                               "flag-gated branch, not at module scope")
 
     def test_no_fabricated_planning_content_appears_anywhere(self):
         """No sample zone, no invented figures, no specimen findings."""
@@ -346,9 +382,17 @@ class PlanningZoningDoorTests(unittest.TestCase):
             self.assertIn('for="%s"' % control, body)
 
     def test_the_primary_action_is_a_single_obvious_button(self):
+        """Counts BUTTON ELEMENTS, not string occurrences.
+
+        The working-state script added in CLAUDE-PLANNING-LIVE-01 selects the
+        submit control by its reference, so the string appears twice while there
+        is still exactly one button. Counting the raw string measured the wrong
+        thing.
+        """
         _response, body = self._page()
-        self.assertIn('data-ui-ref="planning-zoning.submit"', body)
-        self.assertEqual(body.count('data-ui-ref="planning-zoning.submit"'), 1)
+        buttons = re.findall(
+            r'<button[^>]*data-ui-ref="planning-zoning\.submit"[^>]*>', body)
+        self.assertEqual(len(buttons), 1, buttons)
         self.assertIn("Analyze property", body)
 
 

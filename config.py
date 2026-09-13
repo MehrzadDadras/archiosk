@@ -60,6 +60,19 @@ class BaseConfig:
     # hard-coded literal while an operator's .env value sat unread. That is the
     # same class of defect as the STATIC_VERSION note further down, and here it
     # would present as a SILENT MODEL DOWNGRADE.
+    # CLAUDE-PLANNING-LIVE-01: the ONE switch that lets a signed-in request
+    # reach the live Toronto planning path. DEFAULT OFF, and off means the
+    # development-state behaviour that shipped in 4b9afb8 - an intake that
+    # validates and stops. A route is a deployment, so this is the deployment
+    # decision, made once and in the open rather than implied by an environment.
+    #
+    # Deliberately NOT inferred from DEBUG, FLASK_ENV, hostname or anything else
+    # ambient: "live" is a governance state, and guessing it from the
+    # surroundings is how a preview becomes production without anyone deciding.
+    PLANNING_ZONING_LIVE_ENABLED = (
+        os.getenv("PLANNING_ZONING_LIVE_ENABLED", "false").strip().lower()
+        == "true")
+
     FEASIBILITY_MODEL_PROVIDER = os.getenv("FEASIBILITY_MODEL_PROVIDER", "gemini")
     FEASIBILITY_MODEL = os.getenv("FEASIBILITY_MODEL", "gemini-3.8-flash")
     # A full Gate-01 envelope is a LONG document, and this was measured rather

@@ -163,10 +163,43 @@
         </p>
     </fieldset>
 
-    <button type="submit" class="btn btn-primary" data-ui-ref="planning-zoning.submit">
+    <button type="submit" class="btn btn-primary" data-ui-ref="planning-zoning.submit"
+            data-working-label="Checking property and planning sources&hellip;">
         Analyze property
     </button>
+    {# Section 9: a live Toronto request is one synchronous round trip against
+       municipal sources, and a person must not be left looking at a page that
+       appears to have ignored them. The button states what is happening and
+       stops a second submission. No job system, no polling, no progress bar
+       that would be lying about progress it cannot observe - the honest
+       minimum, and it degrades to the browser's own loading state if this
+       script does not run. #}
+    <p class="mono field-note" data-ui-ref="planning-zoning.working" hidden>
+        Checking property and planning sources&hellip;
+    </p>
 </form>
+
+<script nonce="{{ csp_nonce }}">
+    // Section 9, and nothing more than section 9. Reveals the working line and
+    // disables the button on submit, so a live Toronto round trip does not look
+    // like a page that ignored the click. `hidden` is toggled via el.hidden per
+    // this repository's own convention. If this script never runs the form still
+    // submits and the browser's own loading state is what the person sees.
+    (function () {
+        var form = document.querySelector('[data-ui-ref="planning-zoning.form"]');
+        if (!form) { return; }
+        form.addEventListener('submit', function () {
+            var working = form.querySelector('[data-ui-ref="planning-zoning.working"]');
+            var button = form.querySelector('[data-ui-ref="planning-zoning.submit"]');
+            if (working) { working.hidden = false; }
+            if (button) {
+                var label = button.getAttribute('data-working-label');
+                if (label) { button.textContent = label; }
+                button.disabled = true;
+            }
+        });
+    })();
+</script>
 
 {# Section 11 / 13: what happens next, named in the GO-PDZ contract's own terms
    rather than in a second vocabulary invented for this page. Kept as a short

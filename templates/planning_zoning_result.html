@@ -49,10 +49,20 @@
 {# Section 14. First thing on the page, before any finding, because a reader who
    scrolls into section 4 and sees a floor space index must already know what
    they are looking at. #}
+{% if view.preview %}
 <p class="mono form-error" data-ui-ref="planning-zoning.result.preview-banner">
     <strong>DEVELOPMENT PREVIEW &mdash; {{ view.data_class }}</strong><br>
     {{ view.fixture_note }}
 </p>
+{% else %}
+{# CLAUDE-PLANNING-LIVE-01: only DATA_CLASS_LIVE reaches here, and only the code
+   that actually ran the live path may set it. The banner's absence is therefore
+   a statement about the DATA, never about the route or the environment. #}
+<p class="mono field-note" data-ui-ref="planning-zoning.result.live-marker">
+    <strong>{{ view.data_class }}</strong> &mdash; City of Toronto planning
+    records read for this property. Nothing on this page is stored.
+</p>
+{% endif %}
 
 {# 1 ------------------------------------------------------------------ #}
 {{ section_heading('PROPERTY_IDENTITY', 'Property Identity') }}
@@ -175,6 +185,19 @@
         </li>
         {% endfor %}
     </ul>
+    {% if source_failures %}
+    {# Section 8: a source that failed is named, beside the things that DID
+       establish. Collapsing a partial result into a generic failure would throw
+       away evidence that is perfectly good. #}
+    <ul data-ui-ref="planning-zoning.result.source-failures">
+        {% for failure in source_failures %}
+        <li data-ui-ref="planning-zoning.result.source-failure">
+            <span class="mono">{{ failure.outcome }}</span>
+            {{ failure.source }}{% if failure.note %} &mdash; {{ failure.note }}{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
     {% for exception in view.unretrieved_exceptions %}
     <p class="mono" data-ui-ref="planning-zoning.result.unresolved.exception">
         Exception {{ exception.exception_id }} applies and its text was not
@@ -216,6 +239,20 @@
         </li>
         {% endfor %}
     </ul>
+    {% if timings %}
+    <p class="mono field-note" data-ui-ref="planning-zoning.result.timings">
+        {# Only the `*_ms` measurements carry a unit. `source_calls` is a count
+           per phase and was rendering as "source_calls {...}ms", which is the
+           kind of small wrongness that makes a reader distrust the numbers
+           beside it. #}
+        Measured wait:
+        {% for phase, value in timings.items() if phase.endswith('_ms') %}{{ phase[:-3] }} {{ value }}ms{% if not loop.last %} &middot; {% endif %}{% endfor %}
+        {% if timings.source_calls %}
+        <br>Municipal reads:
+        {% for phase, count in timings.source_calls.items() %}{{ phase[:-3] }} &times;{{ count }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+        {% endif %}
+    </p>
+    {% endif %}
     <p class="mono field-note" data-ui-ref="planning-zoning.result.evidence.provenance">
         {{ view.contract }} &middot; {{ view.gate }} &middot; {{ view.view_version }}
         {% if view.retrieval.runner_version %} &middot; {{ view.retrieval.runner_version }}{% endif %}

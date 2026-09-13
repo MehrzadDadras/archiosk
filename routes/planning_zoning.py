@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 import re
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, current_app, render_template, request
 
 from services.auth import login_required
 
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 planning_bp = Blueprint("planning_zoning", __name__)
 
-DOOR_VERSION = "planning-zoning-door@1"
+DOOR_VERSION = "planning-zoning-door@2"   # +flag-gated live Toronto path
 
 #: Section 18's classification, stated by the code rather than by a comment so a
 #: test can assert it and a reader cannot be misled by a stale note.
@@ -137,6 +137,20 @@ MAX_QUESTION_LENGTH = 2000
 MAX_BATCH_ADDRESSES = 50
 
 
+def live_enabled() -> bool:
+    """Is the live Toronto path switched on for this environment?
+
+    Read from configuration ONLY. Never from DEBUG, the hostname, the presence of
+    a credential or anything else ambient: "live" is a governance state, and
+    inferring it from the surroundings is how a preview becomes production
+    without anyone deciding.
+    """
+    try:
+        return bool(current_app.config.get("PLANNING_ZONING_LIVE_ENABLED", False))
+    except RuntimeError:        # outside an application context
+        return False
+
+
 def planning_analysis_state() -> dict:
     """Can this environment actually run a planning analysis right now?
 
@@ -150,13 +164,25 @@ def planning_analysis_state() -> dict:
     Returned as data rather than raised, so the page can be honest about the
     state instead of erroring, and so a test can assert the classification.
     """
+    if live_enabled():
+        return {
+            "classification": BACKEND_READY_TO_WIRE,
+            "live": True,
+            "message": ("Live City of Toronto planning analysis is enabled on "
+                        "this environment. One property per request."),
+            "reason": ("PLANNING_ZONING_LIVE_ENABLED is set: a signed-in "
+                       "single-property Toronto request reaches the live "
+                       "Gate-01 path"),
+            "door_version": DOOR_VERSION,
+        }
     return {
         "classification": BACKEND_NOT_ROUTABLE,
+        "live": False,
         "message": UNAVAILABLE_MESSAGE,
         "reason": (
             "the GO-PDZ planning engine is implemented and live-proven but is "
-            "not routable from the application: no authorized route connects a "
-            "signed-in session to it"
+            "not routable from the application: PLANNING_ZONING_LIVE_ENABLED is "
+            "not set, so no route connects a signed-in session to it"
         ),
         "door_version": DOOR_VERSION,
     }
@@ -234,6 +260,8 @@ def _context(**overrides) -> dict:
         "batch_error": None,
         "batch_prepared": None,
         "max_batch_addresses": MAX_BATCH_ADDRESSES,
+        "live_outcome": None,
+        "live_timings": None,
         # Deliberately NOT the reserved benchmark address. It is under a
         # standing seal in this programme, and section 2 permits it as
         # placeholder copy only if governance allows - so a neutral example is
@@ -319,6 +347,34 @@ def analyze_property():
         return render_template("planning_zoning.html", **_context(
             mode=MODE_SINGLE, error=error,
             address=request.form.get("address") or "", **intent))
+
+    if live_enabled():
+        # CLAUDE-PLANNING-LIVE-01. ONE municipality, ONE property, ONE
+        # synchronous request, nothing persisted. The orchestration lives in
+        # `services/planning_live.py` so that the only code in this application
+        # permitted to reach a municipal source on a signed-in person's behalf
+        # is one auditable file rather than a branch inside a view.
+        from services import planning_live
+
+        live = planning_live.run_live(address)
+        if live["outcome"] != planning_live.OUTCOME_OK:
+            # A NAMED failure, rendered on the intake page beside the address
+            # that caused it. No result-shaped nothing, and no substitute
+            # authority - the person is told which source could not be
+            # established and that nothing was produced.
+            logger.info("live planning request refused: %s", live["outcome"])
+            return render_template("planning_zoning.html", **_context(
+                mode=MODE_SINGLE, address=address, error=live["message"],
+                live_outcome=live["outcome"], live_timings=live["timings"],
+                **intent))
+        logger.info("live planning request served in %.0f ms (%s)",
+                    live["timings"].get("total_ms") or 0.0, address)
+        return render_template("planning_zoning_result.html",
+                               view=live["view"],
+                               backend=planning_analysis_state(),
+                               timings=live["timings"],
+                               source_failures=live["source_failures"],
+                               intent=intent)
 
     # VALID INTAKE, NO ANALYSIS. The one thing this must not do is manufacture a
     # result, so the address is echoed with the development-state boundary and
