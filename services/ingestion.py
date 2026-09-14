@@ -13,6 +13,7 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -45,6 +46,15 @@ from services.security_governance import SecurityGovernanceStore
 from services.security_policy import ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE, evaluate_action
 
 logger = logging.getLogger(__name__)
+
+#: CLAUDE-SPREADSHEET-FOUNDING-01. Founding documents whose structure is
+#: sheets/rows/cells rather than prose, and which are therefore inspected by
+#: `spreadsheet_intelligence.inspect_workbook` instead of parsed by BHiveParser.
+#:
+#: `.csv` is deliberately NOT here. It was always permitted as a founding
+#: document and BHiveParser reads it as prose today; moving it would change
+#: behaviour nobody asked to change, and a CSV genuinely is line-oriented text.
+_WORKBOOK_FOUNDING_EXTENSIONS = frozenset({".xlsx"})
 
 # This app has no authentication system, so there's no real identity to
 # fall back on. These are honest placeholders, not a claim that anyone
@@ -327,6 +337,10 @@ def ingest_upload(
     project_code: str | None = None,
     source_domain: str = SOURCE_DOMAIN_UNKNOWN,
     container_state: str | None = None,
+    assembled_path: "Path | None" = None,
+    assembled_sha256: str | None = None,
+    assembled_filename: str | None = None,
+    defer_classification: bool = False,
 ) -> ParsedDocument:
     """
     Validate, parse, and persist an uploaded RFP/RFQ. Raises UploadError
@@ -399,10 +413,20 @@ def ingest_upload(
     if not owner or not owner.strip():
         raise UploadError("An authenticated owner is required.")
 
-    if file_storage is None or not file_storage.filename:
+    # CLAUDE-FOUNDING-ASYNC-01: a STAGED upload has no FileStorage - its bytes
+    # were streamed to disk by `ChunkedUploadStore.assemble` before this function
+    # was called - but it still has a filename, because the filename is the
+    # source's own identity and provenance hangs off it. Both paths therefore
+    # still require one; only where it comes from differs.
+    staged_filename = (assembled_filename or "").strip()
+    if assembled_path is not None:
+        if not staged_filename:
+            raise UploadError("No file was provided.")
+        filename = staged_filename
+    elif file_storage is None or not file_storage.filename:
         raise UploadError("No file was provided.")
-
-    filename = file_storage.filename
+    else:
+        filename = file_storage.filename
     ext = Path(filename).suffix.lower()
     allowed = app.config["ALLOWED_UPLOAD_EXTENSIONS"]
 
@@ -423,22 +447,35 @@ def ingest_upload(
         raise UploadError(
             f"Unsupported file type '{ext}'. Allowed types: {', '.join(offered)}."
         )
-    # CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01: .xlsx is a genuinely
-    # eligible Source (see ALLOWED_UPLOAD_EXTENSIONS above), but never as
-    # the FOUNDING document specifically - this path calls classify()/
-    # _check_consistency() below, which expect prose-shaped extracted
-    # text, and a spreadsheet's real structure (sheets/rows/cells) has no
-    # honest prose rendering (Section 4's own "do not flatten a workbook
-    # into misleading prose", extended here to founding-document
-    # classification, not just display). Refused explicitly, with a
-    # constructive alternative, rather than left to fail opaquely inside
-    # BHiveParser's own extraction.
-    if ext == ".xlsx":
-        raise UploadError(
-            "A spreadsheet (.xlsx) cannot be used as a founding document - its structure "
-            "isn't prose suitable for classification. Upload a PDF/DOCX/TXT/MD first, then "
-            "add this workbook via folder upload or Data Room Reconcile."
-        )
+    # CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner, superseding
+    # CLAUDE-SPREADSHEET-SOURCE-ELIGIBILITY-01's founding refusal).
+    #
+    #     FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT.
+    #     EVIDENCE SUFFICIENCY DOES.
+    #
+    # The refusal that stood here said a workbook "cannot be used as a founding
+    # document - its structure isn't prose suitable for classification". That
+    # reasoning was accurate about the CLASSIFIER and wrong about the DOCUMENT: a
+    # project program, area schedule, zoning matrix or cost plan is frequently
+    # the first and most informative thing a project has, and the restriction was
+    # compensating for the founding path being prose-shaped rather than for any
+    # property of the file.
+    #
+    # WHAT REPLACES IT IS NOT A WEAKER PATH. A founding workbook is routed
+    # through the same hardened pipeline every NON-founding workbook already
+    # used - `_register_source_content`, which calls
+    # `spreadsheet_intelligence.inspect_workbook` (macro, zip-bomb, OLE2 and
+    # malformed detection already built in) and never BHiveParser, "which has no
+    # .xlsx branch and would otherwise either raise or (worse) silently misread
+    # binary zip bytes as prose".
+    #
+    # PROJECT CREATION IS NOT SUFFICIENT PROJECT UNDERSTANDING. A workbook founds
+    # the project, the Source, the provenance and the lifecycle state; it does not
+    # pretend to have produced requirements it did not contain. No project facts
+    # are invented to fill the gap - `requirements` stays empty and
+    # `consistency_checked` stays False, which is this codebase's own recorded
+    # difference between "checked, found nothing" and "didn't actually check".
+    workbook_founding = ext in _WORKBOOK_FOUNDING_EXTENSIONS
 
     project_name = (project_name or "").strip() or None
     # CLAUDE-DOCUMENT-SHOP-FLOW-01: uniqueness applies to a name the person
@@ -466,7 +503,39 @@ def ingest_upload(
     # created and then rejected for its acronym.
     resolved_project_code = _resolve_project_code(app, project_name or filename, project_code)
 
-    raw_bytes = file_storage.read()
+    # CLAUDE-FOUNDING-ASYNC-01. THREE PARAMETERS, ALL DEFAULTING TO WHAT THIS
+    # FUNCTION ALREADY DID, so every one of its five callers is unchanged.
+    #
+    # `assembled_path` says "the bytes are ALREADY on disk, streamed there by
+    # ChunkedUploadStore.assemble, with `assembled_sha256` computed while they
+    # were written". That matters for one reason: the line below reads the whole
+    # upload into this worker's heap. At 60 MB that is the cost of doing
+    # business; at 500 MB, times a 13-worker tier, it is how the host falls over.
+    # A staged upload therefore never re-reads and never re-writes its own file.
+    #
+    # `defer_classification` skips the parse. It exists because the parse is
+    # where the OTHER ceiling lives - `bhive_parser`'s classify stage scales with
+    # chunk count under a 90-second in-request budget - so a large document can
+    # only be founded honestly if classification happens somewhere else. What
+    # replaces it is NOT a fabricated result: an empty ParsedDocument with
+    # `consistency_checked=False`, which is the field's own documented meaning of
+    # "didn't actually check" rather than "checked, found nothing".
+    staged = assembled_path is not None
+    if staged and not defer_classification:
+        # Refused rather than supported: streaming a 500 MB file to disk and then
+        # reading it all back to parse it in-request would reintroduce both
+        # ceilings one line after avoiding them.
+        raise UploadError("A staged upload must defer classification.")
+
+    if staged:
+        # AN IMAGE IS STILL READ, and that is not an exception to the rule above
+        # so much as the rule not applying: `image_intake.MAX_IMAGE_BYTES` already
+        # caps an image at 40 MB, and its signature/structure/geometry checks need
+        # the actual bytes. Refusing to verify an image because it arrived in
+        # chunks would be the weaker large-file path section 7 forbids.
+        raw_bytes = assembled_path.read_bytes() if image_founding else b""
+    else:
+        raw_bytes = file_storage.read()
 
     # CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: the NAME is the least trustworthy thing
     # about an upload, so the bytes are checked before anything decodes them in
@@ -507,10 +576,34 @@ def ingest_upload(
     if ai_decision.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
         parser.ai_calls_disabled = True
 
-    try:
-        document = parser.parse(raw_bytes, filename)
-    except ParserError as exc:
-        raise UploadError(str(exc)) from exc
+    if workbook_founding and not defer_classification:
+        # Inspected rather than parsed. `inspect_workbook` NEVER raises - an
+        # unreadable or refused workbook is an honest classification value - so a
+        # malformed spreadsheet fails as a FILE problem below, never because it
+        # was the first document.
+        document = ParsedDocument(
+            project_id=str(uuid.uuid4()),
+            filename=filename,
+            ingested_at=datetime.now(timezone.utc).isoformat(),
+        )
+    elif defer_classification:
+        # NOT A FABRICATED RESULT. An empty ParsedDocument whose
+        # `consistency_checked` is False is this codebase's own established way
+        # of saying "didn't actually check", as distinct from "checked, found
+        # nothing" - see the field's docstring. `parser_version` stays None for
+        # the same reason it does on a pre-versioning record: an honest gap,
+        # never invented. `services/founding_classification.py` replaces this
+        # record with the real one when its job completes.
+        document = ParsedDocument(
+            project_id=str(uuid.uuid4()),
+            filename=filename,
+            ingested_at=datetime.now(timezone.utc).isoformat(),
+        )
+    else:
+        try:
+            document = parser.parse(raw_bytes, filename)
+        except ParserError as exc:
+            raise UploadError(str(exc)) from exc
 
     # Persist the ORIGINAL uploaded bytes, not just what the parser
     # extracted from them - the same "a Source is not its filename"
@@ -524,10 +617,25 @@ def ingest_upload(
     sources_dir = Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / document.project_id
     sources_dir.mkdir(parents=True, exist_ok=True)
     safe_name = secure_filename(filename)
-    stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
-    stored_path.write_bytes(raw_bytes)
-    document.original_file_path = str(stored_path)
-    document.original_file_hash = hashlib.sha256(raw_bytes).hexdigest()
+    if staged:
+        # MOVED, NEVER RE-WRITTEN. The bytes were streamed to disk once by
+        # `ChunkedUploadStore.assemble`, which computed `assembled_sha256` over
+        # exactly what it wrote - so re-reading them here to hash them would
+        # prove only that the file can be read twice, and re-writing them would
+        # double the disk cost of every large upload for no evidence gained.
+        #
+        # `replace` rather than copy: one atomic rename inside the same store
+        # root, so there is never a moment where two files hold the same bytes
+        # and a crash could leave the assembled one orphaned.
+        stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+        assembled_path.replace(stored_path)
+        document.original_file_path = str(stored_path)
+        document.original_file_hash = (assembled_sha256 or "").lower() or None
+    else:
+        stored_path = sources_dir / f"{uuid.uuid4().hex}_{safe_name}"
+        stored_path.write_bytes(raw_bytes)
+        document.original_file_path = str(stored_path)
+        document.original_file_hash = hashlib.sha256(raw_bytes).hexdigest()
 
     # Checked before this document is saved to the registry (so it can
     # never match itself) -- informational only, see _find_duplicate_content.
@@ -628,7 +736,41 @@ def ingest_upload(
         (source for source in workspace.sources if source.get("name") == document.filename),
         None,
     )
-    if founding_source is not None:
+    if founding_source is not None and workbook_founding and not defer_classification:
+        # THE SAME SEAM THE NON-FOUNDING PATH USES. Sheet/row/cell evidence is
+        # registered from the real workbook, so a founding spreadsheet is as
+        # thoroughly read as one added later - the difference the old refusal
+        # created is gone rather than moved.
+        status, reason = _register_source_content(
+            store, workspace, founding_source, raw_bytes, filename, parser,
+            actor or _DEFAULT_ACTOR, governance_log)
+        if status != "added":
+            logger.info("founding workbook %s registered no structure (%s)",
+                        filename, reason)
+    elif founding_source is not None and defer_classification:
+        # CLAUDE-FOUNDING-ASYNC-01. The one thing this path does that the
+        # synchronous one does not: hand the work to a job instead of doing it.
+        #
+        # ENQUEUED HERE, AFTER the Source exists and its bytes are final, because
+        # the job's identity is `sha256(workspace + source + sha256 + version)` -
+        # every part of which has to be real before an id can mean anything. A
+        # job queued earlier would name a Source that did not exist yet.
+        #
+        # The declared-reference extraction below is deliberately SKIPPED for a
+        # staged upload: it re-reads the whole document to find citations, which
+        # is the memory cost this path exists to avoid. The founding job does the
+        # reading, once.
+        from services import founding_classification
+
+        founding_classification.enqueue_for_source(
+            founding_classification.founding_store(
+                app.config["REGISTRY_STORE_PATH"]),
+            workspace_id=document.project_id,
+            source_id=founding_source["id"],
+            source_sha256=document.original_file_hash or "",
+            source_name=filename,
+            intake_order=0)
+    elif founding_source is not None:
         try:
             founding_text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - shared parser seam
         except Exception:  # noqa: BLE001 - a mocked/legacy parser may have accepted bytes the extractor cannot reread

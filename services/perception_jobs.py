@@ -88,8 +88,28 @@ class PerceptionJobStore:
     a crash mid-write cannot leave a job record that parses as half a truth.
     """
 
-    def __init__(self, registry_store_path):
-        self.root = Path(registry_store_path) / "perception_jobs"
+    def __init__(self, registry_store_path, subdir: str = "perception_jobs"):
+        """`subdir` (CLAUDE-FOUNDING-ASYNC-01) gives a DIFFERENT KIND of work its
+        own queue directory while reusing this store's identity, state, lease and
+        retry model verbatim.
+
+        NAMESPACED RATHER THAN FILTERED, and the reason is a governance one. The
+        first design added a `versions=` filter to `claim_next` and taught the
+        deployed perception worker to dispatch by kind - which meant editing
+        `services/perception_worker.py`, whose sha256 is PINNED by
+        `docs/records/datum-lifecycle-transition-01.json` as part of a live
+        verification of `op.datum-corroboration`. `operational_frontier`
+        correctly raised "Lifecycle implementation changed since verified
+        transition", and the honest options were to re-perform that verification
+        or to not change the file. Re-pinning the digest would have re-asserted a
+        verification nobody repeated.
+
+        So founding work lives in its own directory, the perception worker is
+        byte-identical to the verified state, and a worker still cannot claim work
+        it cannot execute - now because it never sees it rather than because it
+        filters it out.
+        """
+        self.root = Path(registry_store_path) / subdir
         self._lock = threading.Lock()
 
     # -- paths ---------------------------------------------------------------
@@ -187,18 +207,42 @@ class PerceptionJobStore:
                 "egress": EGRESS_NONE,
             })
 
-    def claim_next(self, *, worker_id: str) -> Optional[dict]:
+    def claim_next(self, *, worker_id: str, versions=None) -> Optional[dict]:
         """Take the oldest claimable job, or None.
 
         Claimable means QUEUED, or RUNNING with an expired lease - a worker
         that was killed mid-job must not wedge that Source forever. Reclaiming
         increments attempt_count, so a job that reliably kills its worker
         reaches FAILED rather than looping.
+
+        `versions` (CLAUDE-FOUNDING-ASYNC-01) restricts a claim to the
+        processing versions a caller can actually EXECUTE. It exists because
+        this store now carries two kinds of work: perception, and founding
+        classification. A worker that claimed a founding job and ran OCR on a
+        specification would not fail loudly - it would produce confident
+        nonsense and mark the job complete.
+
+        `None` means "anything", so every existing caller is unchanged. That
+        default is deliberately the permissive one: the alternative would have
+        silently stopped the deployed perception worker from claiming anything
+        the moment this parameter shipped.
         """
+        allowed = None if versions is None else frozenset(versions)
+
+        def claimable_kind(job) -> bool:
+            if allowed is None:
+                return True
+            # A record written before `processing_version` existed can only be
+            # perception - it is the only kind that existed - so it is offered
+            # to whoever accepts PROCESSING_VERSION rather than to nobody.
+            return (job.get("processing_version") or PROCESSING_VERSION) in allowed
+
         with self._lock:
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=LEASE_SECONDS)
             candidates = []
             for job in self.list_all():
+                if not claimable_kind(job):
+                    continue
                 if job.get("state") == STATE_QUEUED:
                     candidates.append(job)
                 elif job.get("state") == STATE_RUNNING:

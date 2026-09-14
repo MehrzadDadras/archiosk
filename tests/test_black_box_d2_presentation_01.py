@@ -193,14 +193,21 @@ class PresentationTests(unittest.TestCase):
 
     # -- neutral upload wording ----------------------------------------------
 
-    def test_founding_refusal_is_context_neutral(self):
-        with self.assertRaises(UploadError) as caught:
-            self._ingest("schedule.xlsx", operating_environment=None,
-                         container_state=CONTAINER_STATE_BLACK_BOX,
-                         project_name="BB xlsx")
-        message = str(caught.exception)
-        self.assertNotIn("project", message.lower())
-        self.assertIn("founding document", message)
+    def test_the_founding_refusal_no_longer_exists_to_be_neutral_about(self):
+        """SUPERSEDED DELIBERATELY. CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES.
+
+        D2's claim was that a refusal must read the same on both intake paths,
+        and the spreadsheet refusal was one of three examples carrying it. The
+        other two - duplicate name and missing owner, directly below - still
+        stand and still carry the claim. This one is inverted rather than
+        deleted because the wording D2 fixed is gone WITH THE RULE, and a test
+        asserting a message that no longer exists would be a test defending an
+        abandoned requirement.
+        """
+        document = self._ingest("schedule.xlsx", operating_environment=None,
+                                container_state=CONTAINER_STATE_BLACK_BOX,
+                                project_name="BB xlsx")
+        self.assertIsNotNone(document)
 
     def test_duplicate_name_refusal_is_context_neutral(self):
         with self.assertRaises(UploadError) as caught:
@@ -218,7 +225,11 @@ class PresentationTests(unittest.TestCase):
         """No route-specific duplicate error strings were introduced."""
         source = (_REPO_ROOT / "services" / "ingestion.py").read_text(encoding="utf-8")
         self.assertEqual(source.count("That name is already in use."), 1)
-        self.assertEqual(source.count("cannot be used as a founding document"), 1)
+        # CLAUDE-SPREADSHEET-FOUNDING-01: the founding-document message is now
+        # absent rather than singular. The property D2 was protecting - ONE
+        # message per condition, no route-specific duplicates - is unchanged
+        # and still enforced by the count above.
+        self.assertEqual(source.count("cannot be used as a founding document"), 0)
 
     # -- what D2 deliberately did NOT do -------------------------------------
 

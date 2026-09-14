@@ -120,11 +120,19 @@ class DocumentShopResultTests(unittest.TestCase):
         self.assertIn(".png", body)
         self.assertIn(".jpg", body)
 
-    def test_intake_still_refuses_spreadsheets_in_copy(self):
+    def test_intake_no_longer_refuses_spreadsheets_in_copy(self):
+        """SUPERSEDED DELIBERATELY. CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES.
+
+        This asserted the inverse of both halves: that `.xlsx` was absent from
+        the accepted formats and that the page said so in prose. The extension
+        list is no longer filtered and the sentence was removed by direction, so
+        the page now tells the truth about what it accepts - which is the same
+        property this test existed to protect, pointed the other way.
+        """
         self._login()
         body = self.client.get("/document-shop").get_data(as_text=True)
-        self.assertNotIn(".xlsx", body)
-        self.assertIn("spreadsheet cannot be the first document", body)
+        self.assertIn(".xlsx", body)
+        self.assertNotIn("spreadsheet cannot be the first document", body)
 
     # -- D. CSRF token is rendered server-side ------------------------------
     def test_upload_form_carries_a_server_rendered_csrf_field(self):

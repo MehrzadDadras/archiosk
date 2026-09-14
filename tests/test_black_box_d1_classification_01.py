@@ -219,12 +219,12 @@ class FoundingSourceKindTests(unittest.TestCase):
             self.assertNotIn(inference, window,
                              "founding kind must not be inferred from a filename")
 
-    def test_spreadsheet_founding_refusal_is_unchanged(self):
-        with self.assertRaises(UploadError) as caught:
-            self._ingest("schedule.xlsx", operating_environment=None,
-                         container_state=CONTAINER_STATE_BLACK_BOX,
-                         project_name="BB xlsx")
-        self.assertIn("spreadsheet", str(caught.exception).lower())
+    def test_spreadsheet_founding_is_now_permitted(self):
+        """SUPERSEDED DELIBERATELY. CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES."""
+        document = self._ingest("schedule.xlsx", operating_environment=None,
+                                container_state=CONTAINER_STATE_BLACK_BOX,
+                                project_name="BB xlsx")
+        self.assertIsNotNone(document)
 
     def test_no_upload_format_was_widened(self):
         allowed = self.app.config["ALLOWED_UPLOAD_EXTENSIONS"]
@@ -242,7 +242,11 @@ class FoundingSourceKindTests(unittest.TestCase):
         """
         source = (_REPO_ROOT / "services" / "ingestion.py").read_text(encoding="utf-8")
         self.assertNotIn("cannot be a project's founding document", source)
-        self.assertIn("cannot be used as a founding document", source)
+        # CLAUDE-SPREADSHEET-FOUNDING-01: the corrected wording this test used
+        # to require is now gone WITH THE RULE ITSELF. The handoff this test
+        # exists to record - that D1 left the leak and D2 fixed it - is
+        # unaffected, and the project-vocabulary guard above still stands.
+        self.assertNotIn("cannot be used as a founding document", source)
 
     def test_no_second_decision_model_for_classification(self):
         """The progressive-classification SEAM only - nothing implemented.

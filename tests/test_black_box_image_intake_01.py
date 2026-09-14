@@ -280,10 +280,17 @@ class ImageFoundingTests(unittest.TestCase):
             with self.subTest(ext=image):
                 self.assertNotIn(image, allowed)
 
-    def test_xlsx_behaviour_is_unchanged(self):
-        with self.assertRaises(UploadError) as caught:
-            self._black_box("book.xlsx", b"PK\x03\x04 not really")
-        self.assertIn("founding document", str(caught.exception))
+    def test_xlsx_is_no_longer_refused_as_a_founding_document(self):
+        """SUPERSEDED DELIBERATELY. CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES.
+
+        This asserted that a workbook founding a Black Box raised UploadError.
+        A malformed workbook is now a FILE problem handled by
+        `inspect_workbook` - which never raises - rather than a refusal to be
+        founded at all.
+        """
+        document = self._black_box("book.xlsx", b"PK\x03\x04 not really")
+        self.assertIsNotNone(document)
+        self.assertEqual(document.filename, "book.xlsx")
 
     def test_ocr_text_is_derived_evidence_never_source_authority(self):
         """Registered under the ENGINE, never the parser."""

@@ -31,6 +31,8 @@ Finding. Apply requires a Disposition of "Confirmed" already on record.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import hashlib
 import json
 import re
@@ -16377,10 +16379,13 @@ class CaseWorkspaceStore:
         section_context = (
             find_preceding_heading(raw_lines, parsed_table["start_line"]) if raw_lines else None
         )
+        if section_context is None:
+            section_context = parsed_table.get("section_context")
         table = Table(
             id=_new_id(), project_id=workspace.project_id, source_id=source_id,
             headers=list(parsed_table["headers"]),
-            source_location={"start_line": parsed_table["start_line"], "end_line": parsed_table["end_line"]},
+            source_location=deepcopy(parsed_table["source_location"]) if "source_location" in parsed_table else
+                {"start_line": parsed_table["start_line"], "end_line": parsed_table["end_line"]},
             created_at=_now(), created_by=actor,
             section_context=section_context,
             extraction_engine=extraction_engine, extraction_version=extraction_version,
@@ -16389,7 +16394,7 @@ class CaseWorkspaceStore:
 
         units_by_header = {h: extract_unit_from_header(h) for h in parsed_table["headers"]}
         row_dicts: list[dict] = []
-        data_row_start_line = parsed_table["start_line"] + 2  # + header line, + separator line
+        data_row_start_line = parsed_table.get("start_line", 0) + 2  # text tables only
 
         # Generic row-identifier column: only the table's OWN first column,
         # and only if its header looks like a conventional row-number/id
@@ -16408,6 +16413,8 @@ class CaseWorkspaceStore:
                     "parsed_value": parsed_value, "qualifier": qualifier,
                     "unit": units_by_header.get(header),
                 })
+                if "cell_locations" in parsed_table:
+                    cells[-1]["source_location"] = deepcopy(parsed_table["cell_locations"][row_index][col_index])
             row = TableRow(
                 id=_new_id(), table_id=table.id, project_id=workspace.project_id,
                 row_index=row_index, cells=cells, created_at=_now(),
@@ -16415,7 +16422,8 @@ class CaseWorkspaceStore:
                     raw_row[id_col_index].strip()
                     if id_col_index is not None and id_col_index < len(raw_row) else None
                 ),
-                source_location={"line": data_row_start_line + row_index},
+                source_location=deepcopy(parsed_table["row_locations"][row_index]) if "row_locations" in parsed_table else
+                    {"line": data_row_start_line + row_index},
             )
             workspace.table_rows.append(asdict(row))
             row_dicts.append(asdict(row))

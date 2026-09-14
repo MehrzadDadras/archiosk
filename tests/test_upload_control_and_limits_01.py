@@ -259,24 +259,59 @@ class TheSizeCopyMatchesTheConfiguration(unittest.TestCase):
 # SECTION 15 - THE SPREADSHEET RULE
 # ============================================================================
 
-class TheSpreadsheetRuleIsCurrent(unittest.TestCase):
-    """Section 15: verify before preserving, and preserve because it verified."""
+class TheSpreadsheetRuleWasRemovedByDecision(unittest.TestCase):
+    """SUPERSEDED DELIBERATELY (CLAUDE-SPREADSHEET-FOUNDING-01).
 
-    def test_the_rule_is_still_enforced_in_ingestion(self):
+    This class verified that "A spreadsheet cannot be the first document" was a
+    real, enforced rule - and it was, which is why the previous tranche preserved
+    the sentence rather than deleting it. The Product Owner has since decided the
+    rule itself is wrong:
+
+        FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT.
+        EVIDENCE SUFFICIENCY DOES.
+
+    So the tests invert. They now prove the prohibition is gone from all four
+    places it lived - service, route, copy, and the offered-format list - and
+    that nothing replaced it with a softer permanent warning.
+    """
+
+    def test_the_founding_refusal_is_gone_from_ingestion(self):
         ingestion = Path("services/ingestion.py").read_text(encoding="utf-8")
-        self.assertIn('if ext == ".xlsx":', ingestion)
-        self.assertIn("cannot be used as a founding document", ingestion)
+        self.assertNotIn('if ext == ".xlsx":', ingestion)
+        self.assertNotIn("cannot be used as a founding document", ingestion)
 
-    def test_the_page_still_states_it(self):
-        self.assertIn("A spreadsheet cannot be the first document",
-                      _markup(INTAKE_HTML))
+    def test_the_page_no_longer_states_it(self):
+        self.assertNotIn("A spreadsheet cannot be the first document",
+                         _markup(INTAKE_HTML))
 
-    def test_xlsx_is_absent_from_the_offered_formats(self):
-        """The list is derived from the same rules the upload enforces, so the
-        page cannot offer a format the next click refuses."""
+    def test_no_other_permanent_warning_replaced_it(self):
+        """Whether a file carries enough project context is a conclusion about
+        THAT FILE, reached after examining it - not a caution shown to everyone
+        in advance."""
+        markup = _markup(INTAKE_HTML).lower()
+        for banned in ("cannot be the first", "not suitable", "may not be used",
+                       "spreadsheet"):
+            self.assertNotIn(banned, markup, banned)
+
+    def test_xlsx_is_now_offered_because_it_is_now_accepted(self):
+        """The list stays DERIVED, which is the part that mattered all along: a
+        page that types its own format list drifts from what the upload does."""
         route_source = Path("routes/portal.py").read_text(encoding="utf-8")
         handler = route_source.split("def document_shop_intake()")[1].split("\ndef ")[0]
-        self.assertIn("if ext != '.xlsx'", handler.replace('"', "'"))
+        self.assertNotIn("!= '.xlsx'", handler.replace('"', "'"))
+        self.assertIn("ALLOWED_UPLOAD_EXTENSIONS", handler)
+
+    def test_the_helper_sentence_under_the_name_field_is_gone(self):
+        markup = _markup(INTAKE_HTML)
+        self.assertNotIn("What you call this work", markup)
+        self.assertNotIn("Your files keep their own names", markup)
+
+    def test_the_behaviour_that_sentence_described_is_unchanged(self):
+        """Removing copy must not remove the property it described."""
+        ingestion = Path("services/ingestion.py").read_text(encoding="utf-8")
+        self.assertIn("secure_filename(filename)", ingestion)
+        case = Path("services/case_workspace.py").read_text(encoding="utf-8")
+        self.assertIn("IT DOES NOT TOUCH THE STORED FILE", case)
 
 
 if __name__ == "__main__":

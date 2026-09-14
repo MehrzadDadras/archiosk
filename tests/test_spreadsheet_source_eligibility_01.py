@@ -222,26 +222,42 @@ class FolderUploadSpreadsheetTests(_BaseSpreadsheetEligibilityTestCase):
 
 
 class FoundingDocumentSpreadsheetGuardTests(_BaseSpreadsheetEligibilityTestCase):
-    def test_xlsx_refused_as_a_single_file_founding_document(self):
+    def test_xlsx_is_now_accepted_as_a_single_file_founding_document(self):
+        """SUPERSEDED DELIBERATELY. CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES.
+
+        A project program, area schedule, zoning matrix or cost plan is
+        frequently the first and most informative thing a project has. The
+        workbook is inspected by the same hardened pipeline a non-founding
+        workbook already used, so nothing about safety was traded for this.
+        """
         workbook = _fake_file(_real_xlsx_bytes(), "owner-reference.xlsx")
         with self.flask_app.app_context():
-            with self.assertRaises(UploadError) as ctx:
-                ingest_upload(
-                    workbook, self.flask_app, operating_environment=CLIENT_OWNER,
-                    owner="xlsx_owner", project_name="Bad Founding Doc Project",
-                )
-        self.assertIn("founding document", str(ctx.exception))
+            document = ingest_upload(
+                workbook, self.flask_app, operating_environment=CLIENT_OWNER,
+                owner="xlsx_owner", project_name="Area Schedule Project",
+            )
+        self.assertIsNotNone(document)
+        self.assertEqual(document.filename, "owner-reference.xlsx")
 
-    def test_xlsx_refused_as_the_founding_file_within_a_folder_upload(self):
+    def test_xlsx_is_now_accepted_as_the_founding_file_of_a_folder_upload(self):
+        """SUPERSEDED DELIBERATELY. CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES.
+
+        Worth recording that the refusal reached here too: it lived in
+        `ingest_upload`, which `ingest_folder_upload` calls for its founding
+        file, so lifting it lifted both. That was not a side effect to discover
+        later - a folder whose principal document is a schedule is the same
+        legitimate case as a single one.
+        """
         workbook = _fake_file(_real_xlsx_bytes(), "owner-reference.xlsx")
         other = _fake_file(b"some other text", "notes.txt")
         with self.flask_app.app_context():
-            with self.assertRaises(UploadError):
-                ingest_folder_upload(
-                    files=[workbook, other], relative_paths=["owner-reference.xlsx", "notes.txt"],
-                    founding_index=0, app=self.flask_app,
-                    operating_environment=CLIENT_OWNER, owner="xlsx_owner",
-                )
+            document = ingest_folder_upload(
+                files=[workbook, other],
+                relative_paths=["owner-reference.xlsx", "notes.txt"],
+                founding_index=0, app=self.flask_app,
+                operating_environment=CLIENT_OWNER, owner="xlsx_owner",
+            )
+        self.assertIsNotNone(document)
 
 
 class ReconcileSpreadsheetTests(_BaseSpreadsheetEligibilityTestCase):

@@ -98,12 +98,16 @@
                (500 MB) exists only for adding a source to an EXISTING project,
                not for this front door.
 
-               The spreadsheet sentence also stays: `services/ingestion.py`
-               refuses .xlsx as a founding document today, verified rather than
-               assumed. #}
+               CLAUDE-SPREADSHEET-FOUNDING-01 REMOVED THE SPREADSHEET SENTENCE.
+               "A spreadsheet cannot be the first document" described a real rule
+               that no longer exists: a project program, area schedule, zoning
+               matrix or cost plan is frequently the first and most informative
+               thing a project has. It is deliberately NOT replaced by another
+               permanent warning - whether a particular file carries enough
+               project context is a conclusion about THAT FILE, reached after
+               examining it, not a caution shown to everyone in advance. #}
             Accepted: {{ allowed_extensions | join(', ') }}.
             Up to {{ max_upload_mb }} MB per file.
-            A spreadsheet cannot be the first document.
         </p>
 
         {# CLAUDE-DOCUMENT-UPLOAD-01, section 3. REQUIRED, and with no example.
@@ -121,12 +125,14 @@
             Name of project <span aria-hidden="true">*</span>
             <span class="visually-hidden">(required)</span>
         </label>
+        {# CLAUDE-SPREADSHEET-FOUNDING-01 removed the helper sentence that stood
+           here ("What you call this work. Your files keep their own names."):
+           the label and its required marker say enough, and the BEHAVIOUR it
+           described is unchanged and asserted by test - uploaded files keep
+           their own filenames, and the project name never touches them. #}
         <input type="text" name="name" id="document-shop-name" class="text-input"
                required aria-required="true"
                data-ui-ref="document-shop.name">
-        <p class="mono field-note" data-ui-ref="document-shop.name-note">
-            What you call this work. Your files keep their own names.
-        </p>
     </fieldset>
 
     <button type="submit" class="btn btn-primary" data-ui-ref="document-shop.submit">

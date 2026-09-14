@@ -69,6 +69,20 @@ def _fake_parse(_parser, _raw, filename):
         ingested_at=datetime.now(timezone.utc).isoformat(), parser_version="test")
 
 
+def _real_xlsx_bytes() -> bytes:
+    """A genuine .xlsx, built with the openpyxl this project already pins."""
+    import io as _io
+
+    from openpyxl import Workbook
+
+    buffer = _io.BytesIO()
+    book = Workbook()
+    book.active.append(["Room", "Area m2"])
+    book.active.append(["Lobby", 48])
+    book.save(buffer)
+    return buffer.getvalue()
+
+
 class BlackBoxDoorTests(unittest.TestCase):
 
     def setUp(self):
@@ -245,20 +259,25 @@ class BlackBoxDoorTests(unittest.TestCase):
                 response = self._post(filename=filename)
                 self.assertEqual(response.status_code, 302)
 
-    def test_a_spreadsheet_cannot_be_the_founding_document(self):
-        """A PRE-EXISTING ingest_upload rule, pinned here rather than assumed.
+    def test_a_spreadsheet_may_now_be_the_founding_document(self):
+        """SUPERSEDED DELIBERATELY, AND IT PREDICTED ITS OWN SUPERSESSION.
 
-        `.xlsx` is in ALLOWED_UPLOAD_EXTENSIONS but cannot found a container:
-        ingest_upload refuses it because a workbook is not prose suitable for
-        classification. That rule predates this door and is not changed by it.
+        CLAUDE-SPREADSHEET-FOUNDING-01 (Product Owner): FILE FORMAT DOES NOT DETERMINE WHETHER A SOURCE MAY FOUND A PROJECT. EVIDENCE SUFFICIENCY DOES.
 
-        It is recorded because the door inherits it: someone arriving with a
-        schedule as their only document is refused, and that is a real limit
-        on "bring us your difficult material". A future tranche that wants
-        spreadsheet-first intake changes ingest_upload, not this test.
+        The original text named the real limit - "someone arriving with a
+        schedule as their only document is refused, and that is a real limit on
+        'bring us your difficult material'" - and named the right mechanism for
+        lifting it: "A future tranche that wants spreadsheet-first intake
+        changes ingest_upload, not this test." That is exactly what happened,
+        so the assertion is inverted rather than deleted.
         """
-        response = self._post(filename="schedule.xlsx")
-        self.assertEqual(response.status_code, 400)
+        response = self._post(filename="schedule.xlsx",
+                              content=_real_xlsx_bytes())
+        self.assertEqual(response.status_code, 302,
+                         response.get_data(as_text=True)[:300])
+        workspace = self._container_from(response)
+        self.assertEqual(
+            len([s for s in workspace.sources if not s.get("removed_at")]), 1)
 
     def test_image_formats_remain_refused_at_the_door(self):
         """The gap is REAL and stays closed in this tranche.

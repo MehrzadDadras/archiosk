@@ -3277,12 +3277,13 @@ def document_shop_intake():
         abort(403)
 
     max_upload_mb = current_app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
-    # What this door can actually accept as the FIRST document, which is not
-    # the same set as ALLOWED_UPLOAD_EXTENSIONS. ingest_upload refuses .xlsx as
-    # a founding document (a workbook is not prose suitable for
-    # classification), a rule that predates this door and is unchanged by it.
-    # Listing the raw config set would advertise a format the next click
-    # rejects, so the page states what is true rather than what is configured.
+    # What this door can actually accept as the FIRST document. It used to be a
+    # NARROWER set than ALLOWED_UPLOAD_EXTENSIONS because `ingest_upload` refused
+    # .xlsx as a founding document; that refusal is gone
+    # (CLAUDE-SPREADSHEET-FOUNDING-01), so the two are the same set again plus
+    # images. The principle behind the old filter still holds and is why this is
+    # derived rather than typed: listing a format the next click rejects is how
+    # copy drifts from behaviour.
     # CLAUDE-DOCUMENT-SHOP-DOOR-01: images belong in this list. PNG/JPEG have
     # founded a Black Box since the image-intake tranche and upload succeeds
     # today, while this page still told the customer scans were "not accepted
@@ -3290,9 +3291,14 @@ def document_shop_intake():
     # same two rules ingest_upload enforces (config set, less .xlsx, plus the
     # image formats a Black Box admits) so the sentence cannot drift from the
     # behaviour again.
+    # CLAUDE-SPREADSHEET-FOUNDING-01: `.xlsx` is no longer excluded. It was
+    # filtered out because `ingest_upload` refused a workbook as a founding
+    # document, so offering it would have advertised a format the next click
+    # rejected. That refusal is gone - a workbook is now inspected by
+    # `spreadsheet_intelligence.inspect_workbook` rather than parsed as prose -
+    # so the offered list is once again exactly what the upload accepts.
     allowed_extensions = sorted(
-        set(ext for ext in current_app.config['ALLOWED_UPLOAD_EXTENSIONS']
-            if ext != '.xlsx')
+        set(current_app.config['ALLOWED_UPLOAD_EXTENSIONS'])
         | set(image_intake.IMAGE_EXTENSIONS))
 
     def _page(error=None, status=200):
