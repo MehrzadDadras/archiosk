@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-VISUAL_VERSION = "planning-visual@1"
+VISUAL_VERSION = "planning-visual@2"
 
 #: A panel is a drawing, and a drawing of 280,000 vertices is not a drawing. The
 #: cap is a RENDERING bound and never a geometry bound: exceeding it declines the
@@ -105,7 +105,8 @@ def _path(ring, extent, size, pad) -> str:
 
 def panel(kind, geometry, *, title, source, layer, retrieved_at=None,
           evidence_ref=None, parcel_identifier=None, subject_geometry=None,
-          size=320, pad=12) -> dict:
+          source_crs=None, zone_label=None, exception_status=None,
+          exception_identifier=None, size=320, pad=12) -> dict:
     """One visual panel, or an honest refusal to draw one.
 
     Returns `{kind, title, drawn, svg, provenance, declined_reason, ...}`.
@@ -130,7 +131,24 @@ def panel(kind, geometry, *, title, source, layer, retrieved_at=None,
         "retrieved_at": retrieved_at,
         "evidence_ref": evidence_ref,
         "parcel_identifier": parcel_identifier,
-        "crs": "EPSG:3857",
+        # SECTION 2. THE SOURCE CRS IS EVIDENCE AND IS CARRIED, NOT ASSERTED.
+        # This previously read `"crs": "EPSG:3857"` - a constant the renderer
+        # stated on its own authority. It was correct, which is precisely what
+        # made it unauditable: nothing tied it to what the City answered in, so
+        # a service that changed its output SR would have been misdescribed by a
+        # panel that still looked right.
+        "source_crs": source_crs,
+        # The panel projects source coordinates into a fixed viewport box. That
+        # is a SCALING, not a reprojection - no datum or projection changes - so
+        # the display reference is the source reference, and the transform is
+        # named rather than implied.
+        "display_crs": source_crs,
+        "display_transform": "linear scale to a %dpx viewport; no reprojection" % size,
+        # SECTION 4. Designation, exception presence, exception identity and
+        # exception TEXT STATE are four separate facts and stay four.
+        "zone_label": zone_label,
+        "exception_status": exception_status,
+        "exception_identifier": exception_identifier,
         "vertex_count": vertices,
         "limitation": LIMITATION,
         "drawn": False,
@@ -187,6 +205,12 @@ def panels_for(retrieval, *, tokens=None) -> list:
     surfaced produces no panel and no claim - never a placeholder, because an
     empty frame beside nine real ones reads as "nothing here" rather than as
     "not retrieved".
+
+    SECTION 5. When more than one qualified zone intersects the parcel, EVERY
+    one is drawn, each with its own label and its own exception status. A single
+    panel in that situation would visually assert that one regime covers the
+    whole property - the same substitution section 15 forbids, committed with
+    zoning geometry instead of parcel geometry.
     """
     retrieval = retrieval or {}
     tokens = tokens or {}
@@ -195,6 +219,7 @@ def panels_for(retrieval, *, tokens=None) -> list:
     zoning = geometry.get("zoning") or {}
     retrieved_at = retrieval.get("retrieved_at")
     parcel_id = parcel.get("parcel_identifier")
+    source_crs = parcel.get("spatial_reference") or zoning.get("spatial_reference")
 
     built = []
     if parcel.get("geometry"):
@@ -204,16 +229,51 @@ def panels_for(retrieval, *, tokens=None) -> list:
             source=parcel.get("source") or "City of Toronto property boundary",
             layer=parcel.get("layer") or "Property Boundary",
             retrieved_at=retrieved_at, parcel_identifier=parcel_id,
+            source_crs=parcel.get("spatial_reference"),
             evidence_ref=(tokens.get("zoning_area") or {}).get(
                 "provenance", {}).get("subject_geometry_id")
             or parcel.get("geometry_id")))
+
+    qualified = [f for f in retrieval.get("zone_features") or []
+                 if f.get("qualified") and f.get("geometry")]
+
+    if len(qualified) > 1:
+        # Each regime gets its own frame. The parcel is drawn over every one of
+        # them, because what a reader needs to see is which PART of the property
+        # each zone reaches.
+        for index, feature in enumerate(qualified, start=1):
+            built.append(panel(
+                PANEL_ZONING, feature["geometry"],
+                title="Applicable zoning %d of %d - %s" % (
+                    index, len(qualified),
+                    feature.get("zone_label") or feature.get("zone_code")
+                    or "unlabelled"),
+                source=feature.get("source")
+                or "City of Toronto Zoning Area",
+                layer=feature.get("layer") or "Zoning Area",
+                retrieved_at=retrieved_at, parcel_identifier=parcel_id,
+                source_crs=feature.get("source_crs") or source_crs,
+                zone_label=feature.get("zone_label"),
+                exception_status=feature.get("exception_status"),
+                exception_identifier=feature.get("exception_identifier"),
+                evidence_ref=feature.get("geometry_id"),
+                subject_geometry=parcel.get("geometry")))
+        return built
+
     if zoning.get("geometry"):
+        only = qualified[0] if qualified else {}
         built.append(panel(
             PANEL_ZONING, zoning["geometry"],
             title="Zoning context and subject parcel",
             source=zoning.get("source") or "City of Toronto Zoning Area",
             layer=zoning.get("layer") or "Zoning Area",
             retrieved_at=retrieved_at, parcel_identifier=parcel_id,
+            source_crs=zoning.get("spatial_reference") or source_crs,
+            zone_label=zoning.get("zone_label") or only.get("zone_label"),
+            exception_status=zoning.get("exception_status")
+            or only.get("exception_status"),
+            exception_identifier=zoning.get("exception_identifier")
+            or only.get("exception_identifier"),
             evidence_ref=(tokens.get("zoning_area") or {}).get(
                 "provenance", {}).get("layer_geometry_id")
             or zoning.get("geometry_id"),

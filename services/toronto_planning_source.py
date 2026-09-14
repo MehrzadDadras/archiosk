@@ -464,6 +464,132 @@ def zoning_at(subject_geometry, point, *, reader, cache=None) -> dict:
             "geometry": geometry, "token": token}
 
 
+#: Section 1. The zone features found by asking about the PARCEL rather than a
+#: point on it. A parcel is an area; the question "which zones apply" is an area
+#: question, and a point can only ever answer it for one spot.
+ZONE_QUALIFIED_RELATIONS = (spatial.RELATION_INSIDE, spatial.RELATION_INTERSECTS)
+
+
+def _parcel_envelope(subject_geometry):
+    """The parcel's bounding box, as an Esri envelope parameter.
+
+    A SUPERSET QUERY ON PURPOSE. Any polygon intersecting the parcel must also
+    intersect the parcel's bounding box, so an envelope cannot miss a zone - and
+    the exactness is supplied afterwards by `deterministic_spatial.relate`, which
+    is the governed engine and the only thing here allowed to decide a spatial
+    relationship. Querying by envelope instead of by ring also means no GeoJSON
+    to Esri polygon conversion had to be written: a second, reversed copy of
+    `esri_to_geojson`'s winding rules is exactly the kind of duplicate whose
+    first disagreement would be undebuggable.
+    """
+    parts = spatial._parts(subject_geometry)          # noqa: SLF001
+    if not parts:
+        return None
+    rings = spatial._all_rings(parts)                 # noqa: SLF001
+    if not rings:
+        return None
+    boxes = [spatial._bbox(ring) for ring in rings]   # noqa: SLF001
+    return json.dumps({
+        "xmin": min(b[0] for b in boxes), "ymin": min(b[1] for b in boxes),
+        "xmax": max(b[2] for b in boxes), "ymax": max(b[3] for b in boxes),
+        "spatialReference": {"wkid": 102100}})
+
+
+def _feature_identifier(attributes):
+    """The City's own identifier for the feature, never one we mint.
+
+    Tried in the order ArcGIS actually uses. Returns None rather than a
+    substitute: section 2 asks for the identifier "where available", and an
+    invented id in a provenance record is worse than an absent one.
+    """
+    for key in ("OBJECTID", "objectid", "OBJECTID_1", "FID", "GLOBALID"):
+        value = (attributes or {}).get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def zones_intersecting_parcel(subject_geometry, *, reader, cache=None) -> dict:
+    """Section 1. EVERY zoning polygon that intersects the subject parcel.
+
+        SPATIAL INTERSECTION ESTABLISHES WHERE ZONING APPLIES. IT DOES NOT, BY
+        ITSELF, DECIDE HOW COMPETING OR MULTIPLE ZONING REGIMES GOVERN THE
+        PROPOSAL.
+
+    That is section 1's governing rule and it is why this function returns a
+    LIST and stops. It does not rank the features, does not pick a controlling
+    zone, and deliberately does not look at polygon area - "which zone controls
+    the proposed building" is later regulatory reasoning and section 8 forbids
+    solving it inside retrieval.
+
+    ADDITIVE. `zoning_at` is untouched and still supplies the attributes the
+    by-law and exception are chosen from, so nothing about which authority is
+    cited changes here. What changes is that the result can now SAY there were
+    others.
+
+    Each returned feature carries its own geometry, attributes, relation token,
+    feature identifier and CRS, because section 2 asks provenance to be
+    auditable per feature rather than per result.
+    """
+    envelope = _parcel_envelope(subject_geometry)
+    if envelope is None:
+        return {"examined": False, "features": [],
+                "reason": "the subject parcel has no usable geometry"}
+
+    found = query_layer(LAYER_ZONING_AREA, reader=reader, cache=cache,
+                        with_geometry=True,
+                        **{"geometry": envelope,
+                           "geometryType": "esriGeometryEnvelope",
+                           "spatialRel": "esriSpatialRelIntersects",
+                           "inSR": QUERY_WKID})
+    source_crs = found.get("crs") or WKID_TO_CRS[102100]
+
+    features = []
+    for feature in found["features"]:
+        geometry = esri_to_geojson(feature.get("geometry"))
+        if not geometry:
+            continue
+        attributes = feature.get("attributes") or {}
+        token = spatial.relate(
+            {"crs": source_crs, "geometry": subject_geometry},
+            {"crs": source_crs, "geometry": geometry},
+            subject_source="City of Toronto Property Boundary",
+            layer_source="City of Toronto Zoning Area (By-law 569-2013)",
+            layer_version="By-law 569-2013")
+        relation = token.get("spatial_relation")
+        if relation == spatial.RELATION_OUTSIDE:
+            # Inside the bounding box, outside the parcel. The envelope is a
+            # candidate generator; this is where it stops being one.
+            continue
+        features.append({
+            "geometry": geometry,
+            "attributes": attributes,
+            "zone_label": attributes.get("ZN_STRING"),
+            "zone_code": attributes.get("ZN_ZONE"),
+            "exception_flagged": attributes.get("ZN_EXCPTN") == "Y",
+            "exception_identifier": attributes.get("ZN_EXCPTN_NO"),
+            "feature_identifier": _feature_identifier(attributes),
+            "geometry_id": spatial.geometry_hash(geometry),
+            "source": "City of Toronto Zoning Area (cot_geospatial11/3)",
+            "layer": (found.get("layer") or {}).get("name") or "Zoning Area",
+            "source_crs": source_crs,
+            "url": found.get("url"),
+            "token": token,
+            # MATERIALLY, not merely. A polygon the engine calls AMBIGUOUS -
+            # a parcel vertex sitting within boundary tolerance, say - is
+            # retained as evidence but does not make the property multi-zone,
+            # because "touches the mapped edge" and "is split between two
+            # regimes" are different findings with different consequences.
+            "qualified": relation in ZONE_QUALIFIED_RELATIONS,
+            "spatial_relation": relation,
+        })
+
+    return {"examined": True, "features": features,
+            "source_crs": source_crs, "url": found.get("url"),
+            "layer": found.get("layer"),
+            "qualified_count": len([f for f in features if f["qualified"]])}
+
+
 def overlay_finding(binding, subject_geometry, point, *, reader, cache=None,
                     subject_source=None, layer_version=None) -> dict:
     """What this overlay does to the parcel: applies, does not, or undetermined.

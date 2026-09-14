@@ -54,7 +54,7 @@ from services import toronto_planning_source as source
 
 logger = logging.getLogger(__name__)
 
-RUNNER_VERSION = "toronto-gate01@3"   # @3 parallel independent reads
+RUNNER_VERSION = "toronto-gate01@4"   # @3 parallel independent reads
 
 #: CLAUDE-PARALLEL-SOURCES-02D. How many municipal reads may be in flight.
 #:
@@ -126,7 +126,8 @@ def gather(address, *, reader, retrieved_at=None):
     gathered = {"address": address, "retrieved_at": retrieved_at,
                 "resolved": resolved, "zoning": None, "overlays": [],
                 "authority": None, "official_plan": None, "exception": None,
-                "heritage_register": None, "runner_version": RUNNER_VERSION,
+                "heritage_register": None, "zone_features": None,
+                "runner_version": RUNNER_VERSION,
                 "source_version": source.SOURCE_VERSION}
 
     geometry, point = resolved.get("geometry"), resolved.get("point")
@@ -177,6 +178,28 @@ def gather(address, *, reader, retrieved_at=None):
                 "absence_established": False,
                 "note": "layer could not be read: %s" % type(exc).__name__}
 
+    def read_zone_features():
+        """Section 1. WHICH zoning polygons intersect the PARCEL, not the point.
+
+        Belongs in this pool by the same test everything else here passes: it
+        needs the subject parcel and nothing else - not the zone chosen by
+        `zoning_at`, not an authority document, not another layer - so it is one
+        more independent question asked of the same City, and it costs no
+        additional wall-clock.
+        """
+        try:
+            return source.zones_intersecting_parcel(geometry, reader=reader,
+                                                    cache={})
+        except Exception as exc:  # noqa: BLE001 - a failed layer is a result
+            logger.warning("zone intersection read failed (%s: %s)",
+                           type(exc).__name__, exc)
+            # NOT an empty list. "We did not manage to ask" and "we asked and
+            # exactly one zone applies" are different findings, and only the
+            # second may ever suppress a multi-zone flag.
+            return {"examined": False, "features": [],
+                    "reason": "zone intersection could not be read: %s"
+                              % type(exc).__name__}
+
     def read_heritage_register():
         try:
             return source.heritage_register_near(geometry, reader=reader,
@@ -191,10 +214,12 @@ def gather(address, *, reader, retrieved_at=None):
         pending = [pool.submit(read_overlay, position, binding)
                    for position, binding in enumerate(source.OVERLAY_LAYERS)]
         heritage = pool.submit(read_heritage_register)
+        zone_features = pool.submit(read_zone_features)
         for completed in futures.as_completed(pending):
             position, finding = completed.result()
             overlay_results[position] = finding
         gathered["heritage_register"] = heritage.result()
+        gathered["zone_features"] = zone_features.result()
 
     # ORDER IS RESTORED, NOT INHERITED. Results arrive in whatever order the City
     # answers, and `OVERLAY_LAYERS` order reaches the governed document through
@@ -221,9 +246,150 @@ def gather(address, *, reader, retrieved_at=None):
     return gathered
 
 
+
+def _exception_status_for(gathered, exception_identifier, *, flagged):
+    """Section 4. The exception TEXT STATE for one zone feature.
+
+    Four facts stay four: the zone designation, whether an exception is present,
+    which exception it is, and whether its TEXT was retrieved. This answers only
+    the fourth, and only for the feature it is asked about.
+
+    RESOLVED IS THE NARROW CASE. Only the zone `zoning_at` selected had its
+    exception fetched, so a second intersecting zone carrying its own exception
+    is honestly UNRESOLVED rather than inheriting the first one's state. The
+    match is on the exception IDENTIFIER, not on position, because two features
+    can carry the same flag and different exceptions.
+
+    Nothing here interprets the exception. Section 4: do not interpret exception
+    5 merely from the identifier.
+    """
+    from services import planning_acceptance as acceptance
+
+    if not flagged:
+        return acceptance.EXCEPTION_NONE
+
+    fetched = gathered.get("exception") or {}
+    chosen = ((gathered.get("zoning") or {}).get("attributes") or {}).get(
+        "ZN_EXCPTN_NO")
+    same = (exception_identifier is not None and chosen is not None
+            and str(exception_identifier) == str(chosen))
+    if same and fetched.get("acquired") and (fetched.get("text")
+                                             or fetched.get("record")):
+        return acceptance.EXCEPTION_RESOLVED
+    return acceptance.EXCEPTION_TEXT_UNRESOLVED
+
+
+def _source_crs(gathered):
+    """The CRS the City answered in, preferred over any constant we hold.
+
+    Falls back to the query CRS only when the service did not state one - which
+    is a real case and is why this is a function rather than a literal. It is
+    the SOURCE reference; a renderer that transforms for display says so
+    separately.
+    """
+    features = gathered.get("zone_features") or {}
+    return (features.get("source_crs")
+            or source.WKID_TO_CRS.get(102100))
+
+
 def _bylaw_id(gathered):
     record = (gathered.get("authority") or {}).get("record") or {}
     return record.get("authority_id")
+
+
+
+#: Section 3. What the parcel-to-zone relationship licenses somebody to WRITE.
+#: Keyed by the acceptance projection rather than by the raw engine relation,
+#: so the prose, the visual and the acceptance state cannot drift apart: there
+#: is one classification and three consumers of it.
+def _zone_conclusion(gathered, *, label, zone, chapter, section):
+    """Generate the zoning conclusion from the deterministic spatial token.
+
+        DO NOT EMIT "the subject parcel lies within a zone labelled..." MERELY
+        BECAUSE A ZONING LAYER WAS RETRIEVED.
+
+    Only WITHIN_SINGLE_ZONE licenses a containment sentence. Everything else
+    gets prose that says what was actually established - and, in the multi-zone
+    case, explicitly declines to imply that either designation governs the whole
+    property, because section 8 reserves that question for authority analysis.
+    """
+    from services import planning_acceptance as acceptance
+
+    zoning = gathered.get("zoning") or {}
+    token = zoning.get("token") or {}
+    features = (gathered.get("zone_features") or {})
+    examined = bool(features.get("examined"))
+    qualified = [f for f in features.get("features") or [] if f.get("qualified")]
+
+    relationship = acceptance.zone_relationship(
+        token, zone_count=len(qualified) if examined else None)
+    mapping = "Chapter %s, Section %s" % (chapter, section)
+
+    if relationship == acceptance.WITHIN_SINGLE_ZONE:
+        return {
+            "relationship": relationship,
+            "relation": token.get("spatial_relation"),
+            "established": True,
+            "text": ("The subject parcel is contained within the zoning polygon "
+                     "labelled %r (zone code %r) on the City of Toronto zoning "
+                     "mapping, %s. Containment was computed from the City's own "
+                     "parcel and zoning geometry." % (label, zone, mapping)),
+        }
+
+    if relationship == acceptance.INTERSECTS_MULTIPLE_ZONES:
+        labels = [f.get("zone_label") or f.get("zone_code")
+                  for f in qualified] or [label]
+        listed = ", ".join(repr(name) for name in labels)
+        return {
+            "relationship": relationship,
+            "relation": token.get("spatial_relation"),
+            # NOT ESTABLISHED. The intersection is established; the DESIGNATION
+            # of the property is not, and this statement carries the latter.
+            "established": False,
+            "text": ("The subject parcel intersects more than one zoning "
+                     "polygon on the City of Toronto zoning mapping: %s. Which "
+                     "of these regimes governs any particular part of the "
+                     "property is not established by this spatial result and "
+                     "requires further regulatory analysis. No single "
+                     "designation is stated as governing the whole parcel."
+                     % listed),
+        }
+
+    if relationship == acceptance.BOUNDARY_TOUCH:
+        return {
+            "relationship": relationship,
+            "relation": token.get("spatial_relation"),
+            "established": False,
+            "text": ("The subject parcel lies at or near a mapped zoning "
+                     "boundary (nearest designation %r). Applicability requires "
+                     "further spatial verification and is not established here."
+                     % label),
+        }
+
+    if relationship == acceptance.NO_QUALIFIED_ZONE_GEOMETRY:
+        # Section 3: no spatial zoning conclusion is issued. The City's own
+        # textual designation is still reported, ATTRIBUTED rather than proven -
+        # which is section 8's bounded provisional form.
+        return {
+            "relationship": relationship,
+            "relation": token.get("spatial_relation"),
+            "established": False,
+            "text": ("City of Toronto zoning records identify the property with "
+                     "the designation %r (zone code %r), %s. The regulatory "
+                     "zoning geometry has not been bound to the subject parcel "
+                     "in this result, so no containment conclusion is drawn."
+                     % (label, zone, mapping)),
+        }
+
+    return {
+        "relationship": relationship,
+        "relation": token.get("spatial_relation"),
+        "established": False,
+        "text": ("The available zoning geometry does not support an "
+                 "unambiguous containment conclusion for the subject parcel. "
+                 "The City's mapped designation at this location is %r (zone "
+                 "code %r), %s." % (label, zone, mapping)),
+    }
 
 
 def _zoning_statements(gathered):
@@ -239,17 +405,26 @@ def _zoning_statements(gathered):
     label = attributes.get("ZN_STRING")
     chapter, section = attributes.get("ZBL_CHAPTER"), attributes.get("ZBL_SECTION")
 
+    conclusion = _zone_conclusion(gathered, label=label, zone=zone,
+                                  chapter=chapter, section=section)
     statements = [{
         "statement_id": "S-ZONE",
         "kind": "AUTHORITY_SAYS",
         "topic": "ZONING_DESIGNATION",
-        "text": ("The subject parcel lies within a zone labelled %r (zone code "
-                 "%r) on the City of Toronto zoning mapping, Chapter %s, "
-                 "Section %s." % (label, zone, chapter, section)),
+        "text": conclusion["text"],
         "authority_refs": refs,
-        "statement_status": "ESTABLISHED" if refs else "PROVISIONAL",
-        "confidence": "HIGH" if refs else "LOW",
+        # THE SPATIAL RELATION NOW GATES THE STATUS AS WELL AS THE WORDS. A
+        # by-law reference proves WHICH by-law governs the zone; it never proved
+        # that this parcel is inside that zone, and treating it as though it did
+        # is how an ESTABLISHED containment claim could rest on an AMBIGUOUS
+        # geometry.
+        "statement_status": ("ESTABLISHED"
+                             if refs and conclusion["established"]
+                             else "PROVISIONAL"),
+        "confidence": ("HIGH" if refs and conclusion["established"] else "LOW"),
         "spatial_layer": "zoning_area",
+        "spatial_relation": conclusion["relation"],
+        "zone_relationship": conclusion["relationship"],
     }]
 
     fsi = attributes.get("FSI_TOTAL")
@@ -617,6 +792,19 @@ def run(address, *, reader, retrieved_at=None) -> dict:
         # ring is tens of vertices and a zone polygon hundreds.
         #
         # `services/planning_visual.py` renders these and never fetches anything.
+        # CLAUDE-PLANNING-SPATIAL-SEMANTICS-01. EVERY ZONE THAT INTERSECTS THE
+        # PARCEL, each preserved independently with its own geometry,
+        # designation, exception flag, identifier and relation. The visual and
+        # the acceptance evaluator both read this; neither may reduce it.
+        "zone_features": [
+            dict({k: v for k, v in f.items() if k != "token"},
+                 exception_status=_exception_status_for(
+                     gathered, f.get("exception_identifier"),
+                     flagged=f.get("exception_flagged")))
+            for f in (gathered.get("zone_features") or {}).get("features") or []],
+        "zone_features_examined": bool(
+            (gathered.get("zone_features") or {}).get("examined")),
+        "zone_features_note": (gathered.get("zone_features") or {}).get("reason"),
         "visual_geometry": {
             "parcel": {
                 "geometry": resolved.get("geometry"),
@@ -624,6 +812,11 @@ def run(address, *, reader, retrieved_at=None) -> dict:
                 "layer": "Property Boundary",
                 "parcel_identifier": resolved.get("parcel_identifier"),
                 "geometry_id": spatial.geometry_hash(resolved.get("geometry")),
+                # SECTION 2. The CRS the City actually answered in, carried as
+                # evidence rather than assumed by whatever draws it. The
+                # renderer previously asserted EPSG:3857 on its own authority,
+                # which was correct and unverifiable at the same time.
+                "spatial_reference": _source_crs(gathered),
             },
             "zoning": {
                 "geometry": (gathered.get("zoning") or {}).get("geometry"),
@@ -632,6 +825,20 @@ def run(address, *, reader, retrieved_at=None) -> dict:
                     "name") or "Zoning Area",
                 "geometry_id": spatial.geometry_hash(
                     (gathered.get("zoning") or {}).get("geometry")),
+                "spatial_reference": _source_crs(gathered),
+                "feature_identifier": source._feature_identifier(      # noqa: SLF001
+                    (gathered.get("zoning") or {}).get("attributes")),
+                "zone_label": ((gathered.get("zoning") or {}).get("attributes")
+                               or {}).get("ZN_STRING"),
+                "exception_identifier": (
+                    (gathered.get("zoning") or {}).get("attributes")
+                    or {}).get("ZN_EXCPTN_NO"),
+                "exception_status": _exception_status_for(
+                    gathered,
+                    ((gathered.get("zoning") or {}).get("attributes")
+                     or {}).get("ZN_EXCPTN_NO"),
+                    flagged=(((gathered.get("zoning") or {}).get("attributes")
+                              or {}).get("ZN_EXCPTN") == "Y")),
             },
         },
     }

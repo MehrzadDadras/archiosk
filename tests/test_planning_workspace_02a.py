@@ -57,9 +57,14 @@ RETRIEVAL = {
         "parcel": {"geometry": PARCEL, "source": "cot_geospatial27/36",
                    "layer": "Property Boundary",
                    "parcel_identifier": "TOR-PARCEL-TEST",
-                   "geometry_id": "sha256:parcel"},
+                   "geometry_id": "sha256:parcel",
+                   # CLAUDE-PLANNING-SPATIAL-SEMANTICS-01 section 2: the CRS is
+                   # now EVIDENCE carried on the retrieval, not a constant the
+                   # renderer asserts.
+                   "spatial_reference": "EPSG:3857"},
         "zoning": {"geometry": ZONE, "source": "cot_geospatial11/3",
-                   "layer": "Zoning Area", "geometry_id": "sha256:zone"},
+                   "layer": "Zoning Area", "geometry_id": "sha256:zone",
+                   "feature_identifier": "77"},
     },
 }
 
@@ -795,7 +800,16 @@ class VisualEvidenceIsTheEvidence(unittest.TestCase):
         self.assertTrue(panel["layer"])
         self.assertEqual(panel["retrieved_at"], "2026-09-13T12:00:00Z")
         self.assertEqual(panel["parcel_identifier"], "TOR-PARCEL-TEST")
-        self.assertEqual(panel["crs"], "EPSG:3857")
+        # SUPERSEDED DELIBERATELY - CLAUDE-PLANNING-SPATIAL-SEMANTICS-01 section
+        # 2, Product Owner authorized. This asserted `panel["crs"]`, a constant
+        # the renderer stated on its own authority. It was CORRECT and
+        # UNVERIFIABLE at once: nothing tied it to what the City answered in, so
+        # a service changing its output SR would have been misdescribed by a
+        # panel that still looked right. The panel now carries the source
+        # reference it was GIVEN, and names the display transform separately.
+        self.assertEqual(panel["source_crs"], "EPSG:3857")
+        self.assertEqual(panel["display_crs"], "EPSG:3857")
+        self.assertIn("no reprojection", panel["display_transform"])
         self.assertTrue(panel["evidence_ref"])
 
     def test_the_panel_cites_the_same_geometry_the_engine_related(self):

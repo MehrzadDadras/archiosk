@@ -307,7 +307,7 @@
                 {{ panel.source }}{% if panel.layer %} &middot; {{ panel.layer }}{% endif %}<br>
                 {% if panel.retrieved_at %}retrieved {{ panel.retrieved_at }}<br>{% endif %}
                 {% if panel.parcel_identifier %}parcel {{ panel.parcel_identifier }}<br>{% endif %}
-                {% if panel.extent_metres %}extent {{ panel.extent_metres[0] }} &times; {{ panel.extent_metres[1] }} m &middot; {{ panel.crs }}<br>{% endif %}
+                {% if panel.extent_metres %}extent {{ panel.extent_metres[0] }} &times; {{ panel.extent_metres[1] }} m{% if panel.source_crs %} &middot; source {{ panel.source_crs }}{% endif %}<br>{% endif %}
                 {{ panel.limitation }}
             </figcaption>
         </figure>
