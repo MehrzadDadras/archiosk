@@ -894,6 +894,35 @@ def _register_declared_source_references(
     )
 
 
+def work_item_names(project_name: str, count: int) -> list[str]:
+    """The display names a batch of uploaded documents gets. Deterministic.
+
+    CLAUDE-DOCUMENT-UPLOAD-01, section 5. One document takes the project name
+    unchanged; more than one is numbered in the order the person selected them:
+
+        SRPC Drawing Review            (one document)
+        SRPC Drawing Review 1..N       (more than one)
+
+    NUMBERED BY POSITION, NEVER BY FILENAME. The direction is explicit that
+    numbering is not inferred from filenames, and there is a real reason beyond
+    preference: a phone's photo picker hands over `image.jpg` five times, so
+    filenames carry no order and frequently no distinction at all. Position is
+    the only thing that does, and `attach_document_shop_sources` already
+    preserves it through `intake_order`.
+
+    THIS RENAMES NOTHING ON DISK. It returns strings for the Source records'
+    display `name` field; the stored file, its hash and the original filename
+    are untouched, which is section 4's distinction between the work's identity
+    and the evidence's identity.
+    """
+    base = (project_name or "").strip()
+    if not base or count <= 0:
+        return []
+    if count == 1:
+        return [base]
+    return ["%s %d" % (base, position) for position in range(1, count + 1)]
+
+
 def attach_document_shop_sources(app, workspace, files, *, owner: str,
                                  actor: str | None = None, role: str | None = None,
                                  starting_order: int = 1) -> list[dict]:

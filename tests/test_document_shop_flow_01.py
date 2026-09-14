@@ -77,9 +77,15 @@ class PageCopyTests(unittest.TestCase):
             self.assertIn('data-ui-ref="%s"' % ref, INTAKE_HTML)
 
     def test_the_useful_part_was_preserved_in_help_not_deleted(self):
-        self.assertIn("Document Shop", HELP_HTML)
+        """The part that mattered - what happens to the document afterwards - is
+        still here. The naming sentence is superseded: it said "Naming the work
+        is optional", which stopped being true (CLAUDE-DOCUMENT-UPLOAD-01), and
+        copy that outlives the behaviour it describes is worse than no copy.
+        """
         self.assertIn("does not have to become anything else", HELP_HTML)
-        self.assertIn("Naming the work is optional", HELP_HTML)
+        self.assertIn("Uploading a document", HELP_HTML)
+        self.assertNotIn("Naming the work is optional", HELP_HTML)
+        self.assertIn("name of project", HELP_HTML.lower())
 
 
 class NameUniquenessTests(unittest.TestCase):
@@ -116,22 +122,45 @@ class NameUniquenessTests(unittest.TestCase):
         body = r.get_data(as_text=True)
         return r.status_code, ("already in use" in body)
 
-    def test_two_unnamed_uploads_of_the_same_filename_both_succeed(self):
-        """THE reported defect. iOS calls every photo image.jpg."""
-        first, err1 = self._upload("")
-        second, err2 = self._upload("")
+    def test_two_uploads_of_the_same_filename_both_succeed(self):
+        """THE reported defect, and its subject is UNCHANGED: iOS calls every
+        photo image.jpg, and A FILENAME IS NOT IDENTITY.
+
+        SUPERSEDED MECHANISM ONLY (CLAUDE-DOCUMENT-UPLOAD-01). This used to
+        upload twice with a BLANK name, because blank was allowed. Blank is now
+        refused - and the reason is this very defect: optional did not mean
+        unnamed, it meant `ingest_upload` fell back to
+        `_resolve_project_code(app, project_name or filename)` and derived the
+        project identity from `image.jpg`. The fallback this test was written to
+        defend against is now GONE rather than merely avoided.
+
+        So the same two photos still both succeed; they are distinguished by the
+        names the person gave them rather than by a name nobody typed.
+        """
+        first, err1 = self._upload("First photo")
+        second, err2 = self._upload("Second photo")
         self.assertEqual(first, 302)
         self.assertFalse(err1)
         self.assertEqual(second, 302,
-                         "a second unnamed photo was refused - the filename "
-                         "fallback is back")
+                         "a second photo with the same filename was refused - "
+                         "the filename is participating in identity again")
         self.assertFalse(err2, "told the customer a name they never typed is taken")
 
-    def test_a_blank_name_never_produces_a_name_message(self):
-        for _ in range(3):
-            status, err = self._upload("   ")
-            self.assertFalse(err)
-            self.assertEqual(status, 302)
+    def test_a_blank_name_is_now_refused_with_a_name_message(self):
+        """SUPERSEDED DELIBERATELY. This asserted that a blank name never
+        produced a name message, three times over, because blank was a
+        first-class answer. It is now refused - and refused BY NAME, so the
+        person is told what to do rather than shown a generic failure.
+        """
+        for blank in ("", "   ", "\t"):
+            with self.subTest(name=repr(blank)):
+                with patch.object(BHiveParser, "parse", _fake_parse):
+                    response = self.client.post("/document-shop", data={
+                        "file": (io.BytesIO(_jpeg()), "image.jpg"),
+                        "name": blank}, content_type="multipart/form-data")
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("Enter a name of project",
+                              response.get_data(as_text=True))
 
     def test_a_chosen_name_still_cannot_be_reused(self):
         """The rule itself is intact where it means something."""

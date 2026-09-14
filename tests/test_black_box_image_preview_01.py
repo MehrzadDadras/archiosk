@@ -116,16 +116,47 @@ class ImagePreviewTests(unittest.TestCase):
 
     def test_the_content_type_comes_from_the_bytes_not_the_name(self):
         """An inline image response is where trusting an extension turns into
-        stored XSS, so the header is built from what the decoder actually
-        found."""
+        stored XSS, so the header is built from what the decoder actually found.
+
+        MECHANISM SUPERSEDED, PROPERTY UNCHANGED (CLAUDE-DOCUMENT-UPLOAD-01).
+        This used to corrupt `source["name"]`, because `Source.name` WAS the
+        stored filename on every path that reached here. `name` is now a display
+        label that legitimately carries a work-item name with no extension at
+        all, so the extension claim lives on `file_path` - and that is also the
+        attacker-influenced one, since it derives from the uploaded filename.
+
+        The property being defended is identical: an extension and a magic
+        signature that disagree serve nothing.
+        """
         workspace = self.store.get(self.png_doc.project_id)
         source = workspace.sources[0]
-        # The governed record now claims a .jpg name over genuine PNG bytes.
-        source["name"] = "actually.jpg"
+        genuine_png = Path(source["file_path"]).read_bytes()
+        # Same PNG bytes, stored under a name claiming JPEG.
+        misnamed = Path(source["file_path"]).with_name("%s_actually.jpg"
+                                                       % uuid.uuid4().hex)
+        misnamed.write_bytes(genuine_png)
+        source["file_path"] = str(misnamed)
         self.store.save(workspace)
         response = self._client().get(self._url(self.png_doc))
         self.assertEqual(response.status_code, 404,
-                         "a record whose name and bytes disagree serves nothing")
+                         "a stored file whose extension and bytes disagree "
+                         "serves nothing")
+
+    def test_a_display_name_makes_no_claim_about_the_format(self):
+        """The other half of the rule above, and the reason it moved.
+
+        A work-item name is not a format claim, so renaming a source must not
+        make its own image unservable. Before CLAUDE-DOCUMENT-UPLOAD-01 this
+        returned 404 - the customer's photo disappeared behind a label they had
+        chosen - which is what moved the check onto the stored filename.
+        """
+        workspace = self.store.get(self.png_doc.project_id)
+        source = workspace.sources[0]
+        source["name"] = "SRPC Drawing Review 2"
+        self.store.save(workspace)
+        response = self._client().get(self._url(self.png_doc))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Type"], "image/png")
 
     def test_response_headers_refuse_sniffing(self):
         """nosniff here; the CSP is the application's own.

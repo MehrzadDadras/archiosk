@@ -91,10 +91,22 @@ class BlackBoxDoorTests(unittest.TestCase):
         return client
 
     def _post(self, client=None, filename="drawing.pdf", name=None, content=b"x"):
+        """CLAUDE-DOCUMENT-UPLOAD-01: a name of project is now REQUIRED, so the
+        helper supplies one. Every test below whose subject is a governance
+        event, a lock, owner isolation or provenance is unchanged in what it
+        asserts - it simply stopped omitting a field that stopped being
+        optional. `name=""` still reaches the route as a blank, which is what
+        the refusal test needs.
+
+        UNIQUE per call: `ingest_upload` refuses a project name the same owner
+        already used, so a fixed default would make the second upload in any
+        test fail for an unrelated reason.
+        """
         client = client or self._client()
         data = {"file": (io.BytesIO(content), filename)}
-        if name is not None:
-            data["name"] = name
+        if name is None:
+            name = "Door Test %s" % uuid.uuid4().hex[:8]
+        data["name"] = name
         with patch.object(BHiveParser, "parse", _fake_parse):
             return client.post(DOOR, data=data,
                                content_type="multipart/form-data")
@@ -153,7 +165,25 @@ class BlackBoxDoorTests(unittest.TestCase):
                                  "the door must not ask for a fact the person "
                                  "does not have yet")
 
-    def test_an_upload_with_nothing_but_a_file_succeeds(self):
+    def test_an_upload_with_nothing_but_a_file_is_now_refused(self):
+        """SUPERSEDED DELIBERATELY (CLAUDE-DOCUMENT-UPLOAD-01).
+
+        This asserted that a file alone was enough, which was true and was the
+        point of the door: "Nothing more is asked, because nothing more is
+        known." The Product Owner has since required a name of project, for a
+        reason this test's own premise could not see - optional did not mean
+        unnamed, it meant `ingest_upload` derived the project identity from the
+        FILENAME instead. A phone's photo named the work.
+
+        So the door still asks for as little as possible; the floor is now one
+        field rather than none.
+        """
+        response = self._post(name="")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Enter a name of project",
+                      response.get_data(as_text=True))
+
+    def _superseded_an_upload_with_nothing_but_a_file_succeeds(self):
         """No project selected, no environment chosen, no name given."""
         response = self._post()
         self.assertEqual(response.status_code, 302)

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Document Shop &mdash; Archiosk{% endblock %}
+{% block title %}Document Upload &mdash; Archiosk{% endblock %}
 
 {% block content %}
 {# CLAUDE-BLACK-BOX-DOOR-01: the authenticated door into a governed container
@@ -18,7 +18,7 @@
    "project", no "environment", no "pre-project", no "not assigned yet", no
    "black box" - a person arriving with a difficult document is not helped by
    learning what the container is called internally. #}
-<h1 class="np-page-title" data-ui-ref="document-shop.page-title">Document Shop</h1>
+<h1 class="np-page-title" data-ui-ref="document-shop.page-title">Document Upload</h1>
 
 {# CLAUDE-DOCUMENT-SHOP-FLOW-01: the explanatory paragraph that stood here is
    gone from the main surface. The controls already say it - a field labelled
@@ -67,10 +67,27 @@
             A spreadsheet cannot be the first document.
         </p>
 
-        <label class="field-label" for="document-shop-name">Name for this work (optional)</label>
+        {# CLAUDE-DOCUMENT-UPLOAD-01, section 3. REQUIRED, and with no example.
+           It was optional with a placeholder reading "e.g. Warehouse conversion
+           - drawing set", and a placeholder on a required identity field is a
+           small trap: it looks like a value, it is not submitted, and the
+           shape it suggests ("something - something") reads as a required
+           format. There is no hidden default and no "Untitled Project" - a
+           work with no name is refused rather than named by us.
+
+           `required` is the browser's help, never the rule. The route trims and
+           rejects blank-only input independently, because a required attribute
+           is absent the moment anything posts this form without a browser. #}
+        <label class="field-label" for="document-shop-name">
+            Name of project <span aria-hidden="true">*</span>
+            <span class="visually-hidden">(required)</span>
+        </label>
         <input type="text" name="name" id="document-shop-name" class="text-input"
-               data-ui-ref="document-shop.name"
-               placeholder="e.g. Warehouse conversion &mdash; drawing set">
+               required aria-required="true"
+               data-ui-ref="document-shop.name">
+        <p class="mono field-note" data-ui-ref="document-shop.name-note">
+            What you call this work. Your files keep their own names.
+        </p>
     </fieldset>
 
     <button type="submit" class="btn btn-primary" data-ui-ref="document-shop.submit">

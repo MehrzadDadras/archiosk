@@ -88,6 +88,22 @@ def _ext(filename: str) -> str:
     return Path(filename or "").suffix.lower()
 
 
+def _stored_filename(source: dict) -> str:
+    """The name of the file actually on disk, for questions about its FORMAT.
+
+    CLAUDE-DOCUMENT-UPLOAD-01. `ingestion` stores bytes as
+    `<uuid4hex>_<secure_filename>`, so the real extension is always on
+    `file_path` - which is the field provenance and evidence identity hang off,
+    and the one that never changes. `Source.name` is a display label and now
+    legitimately carries a work-item name with no extension at all.
+
+    Falls back to the display name so a record written before bytes were stored
+    (an external-connector source has `file_path is None` by design) behaves
+    exactly as it did before.
+    """
+    return source.get("file_path") or source.get("name") or ""
+
+
 def _live_sources(workspace) -> list[dict]:
     return [s for s in (getattr(workspace, "sources", None) or [])
             if not s.get("removed_at")]
@@ -458,7 +474,13 @@ def _source_rows(document, workspace, *, jobs=None) -> list[dict[str, Any]]:
             "order": index if order is None else order,
             "state": state,
             "state_label": STATE_LABELS[state],
-            "is_image": _ext(source.get("name") or "") in _IMAGE_EXTS,
+            # CLAUDE-DOCUMENT-UPLOAD-01: the STORED FILE's own name, not the
+            # display name. `Source.name` was the filename for every source
+            # this row has ever described, so reading a suffix off it worked by
+            # coincidence rather than by design - and the coincidence ended the
+            # moment a work-item name became the display name. A photo whose
+            # display name is "SRPC Drawing Review 2" is still a photo.
+            "is_image": _ext(_stored_filename(source)) in _IMAGE_EXTS,
             "passage_count": recovered["passage_count"],
             "character_count": recovered["character_count"],
             "read_by": recovered["read_by"],

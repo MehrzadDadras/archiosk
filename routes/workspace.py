@@ -3237,7 +3237,14 @@ def source_image(project_id, source_id):
         abort(404)
 
     raw_bytes = resolved.read_bytes()
-    verdict = image_intake.verify_image_bytes(raw_bytes, source.get("name") or path.name)
+    # CLAUDE-DOCUMENT-UPLOAD-01: verified against the STORED FILE's own name.
+    # This passed `source["name"]` first, which was the filename for every
+    # source that had ever reached here - so feeding a display label into a
+    # format check worked by coincidence. A work-item name ("SRPC Drawing
+    # Review 2") has no suffix, and the verdict became "not an image" for an
+    # image, which is a 404 on the customer's own photo. The governed path is
+    # the more correct input regardless: it is what the bytes were written as.
+    verdict = image_intake.verify_image_bytes(raw_bytes, path.name)
     if verdict["status"] != image_intake.VERIFIED:
         abort(404)
 
@@ -3247,7 +3254,12 @@ def source_image(project_id, source_id):
         # Inline, because looking at it is the entire point - but named from the
         # GOVERNED source, never from anything the caller supplied.
         as_attachment=False,
-        download_name=secure_filename(source.get("name") or path.name),
+        # The display name a person recognises, but with the real suffix kept -
+        # a download called "SRPC Drawing Review 2" with no extension is a file
+        # their operating system cannot open.
+        download_name=secure_filename(
+            "%s%s" % (source.get("name") or path.stem, Path(path.name).suffix)
+            if source.get("name") else path.name),
     )
     # This endpoint may only ever return one of two verified image types, so it
     # is not a general file server and must not be sniffed into behaving like

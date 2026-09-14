@@ -41,7 +41,9 @@ from services.environment_capabilities import (
 )
 from services.project_perspective import entry_choice_view, operating_environment_for
 from services.governance import GovernanceError
-from services.ingestion import UploadError, get_governance_log, get_registry, ingest_folder_upload, ingest_upload
+from services.ingestion import (UploadError, get_governance_log, get_registry,
+                                ingest_folder_upload, ingest_upload,
+                                work_item_names)
 from services.drawing_intake import (
     CANDIDATE_FIELDS, FIELD_LABELS, PendingUploadStore, STATUS_CONFIRMED, STATUS_CORRECTED, analyze_upload,
 )
@@ -3306,6 +3308,23 @@ def document_shop_intake():
     if not posted_files:
         return _page("No document was provided.", 400)
 
+    # CLAUDE-DOCUMENT-UPLOAD-01, section 3. The project name is REQUIRED, and it
+    # is validated HERE rather than trusted from the form's `required` attribute,
+    # which is absent the moment anything posts this form without a browser.
+    #
+    # NO DEFAULT AND NO FALLBACK. The previous behaviour passed None when the
+    # field was blank and `ingest_upload` derived a project code from the
+    # FILENAME instead (`_resolve_project_code(app, project_name or filename)`),
+    # so an unnamed upload silently took its identity from whatever the phone
+    # called the photo. That is the "hidden default" section 3 forbids, and it
+    # was already live.
+    #
+    # Checked BEFORE any ingestion: refusing after the first file is stored
+    # would mean a governed container existed for a work the person never named.
+    project_name = (request.form.get('name') or '').strip()
+    if not project_name:
+        return _page("Enter a name of project.", 400)
+
     # CLAUDE-GO-PERCEPTION-MULTISOURCE-01: a batch is now ordinary. The old
     # rule was "one document at a time", which made a customer photographing a
     # three-page document create three unrelated examinations with three
@@ -3328,7 +3347,7 @@ def document_shop_intake():
             # CLAUDE-P32: the real authenticated session identity, never a
             # form field - same rule as upload().
             owner=session.get('username', ''),
-            project_name=(request.form.get('name') or '').strip() or None,
+            project_name=project_name,
             # Left at the default: what kind of source this is, is exactly what
             # the person came here to find out.
             source_domain=SOURCE_DOMAIN_UNKNOWN,
@@ -3357,6 +3376,42 @@ def document_shop_intake():
                   % (len(rejected), len(posted_files),
                      "; ".join("%s - %s" % (r['filename'], r['reason'])
                                for r in rejected[:4])), 'error')
+
+    # CLAUDE-DOCUMENT-UPLOAD-01, sections 4-6. The WORK-ITEM names, assigned
+    # after the batch is complete because whether this is "SRPC Drawing Review"
+    # or "SRPC Drawing Review 1" depends on how many files actually arrived.
+    #
+    # ONLY THE DISPLAY NAME CHANGES. `file_path`, `file_hash`, the stored bytes
+    # and the original filename are untouched, which is the whole of section 4:
+    # the project name is the work's identity, the filename is the evidence's,
+    # and provenance hangs off the second one.
+    #
+    # ACCEPTED FILES ARE NUMBERED CONSECUTIVELY, in the order the person chose
+    # them. A rejected file consumes no number - four accepted out of five reads
+    # 1..4 rather than 1,2,4,5, because a gap implies a fifth work item that does
+    # not exist and that nobody can open. The customer has already been told
+    # separately which files were not taken.
+    # THE FOUNDING SOURCE IS NAMED FIRST AND IS FOUND BY ITS FILENAME, because
+    # `ingest_upload` carries `intake_order` only on the perception job it
+    # enqueues and leaves it None on the Source record itself. Ordering by
+    # `intake_order` alone would therefore have silently dropped the founding
+    # document out of the numbering and named the SECOND file "1".
+    founding_source = next(
+        (s for s in workspace.sources
+         if s.get('name') == document.filename and not s.get('removed_at')), None)
+    accepted_ids = [founding_source['id']] if founding_source else []
+    accepted_ids += [result['source_id'] for result in sorted(
+        (r for r in attach_results
+         if r.get('status') == 'accepted' and r.get('source_id')),
+        key=lambda r: r.get('intake_order') or 0)]
+    display_names = work_item_names(project_name, len(accepted_ids))
+    if display_names:
+        governance_log = get_governance_log(current_app)
+        for source_id, display_name in zip(accepted_ids, display_names):
+            store.update_source_identity(
+                workspace, source_id, actor=session.get('username', ''),
+                name=display_name, governance_log=governance_log)
+        workspace = store.get(document.project_id)
 
     founding = next((s for s in workspace.sources if not s.get('removed_at')), None)
     if founding is None:

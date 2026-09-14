@@ -9161,6 +9161,7 @@ class CaseWorkspaceStore:
         workspace: ProjectWorkspace,
         source_id: str,
         actor: str,
+        name: Optional[str] = None,
         document_id: Optional[str] = None,
         revision: Optional[str] = None,
         issue_date: Optional[str] = None,
@@ -9189,11 +9190,27 @@ class CaseWorkspaceStore:
         later (services/pdf_intelligence.py is this method's first real
         caller for these four, populating them once the actual PDF bytes
         have been read).
+
+        `name` (CLAUDE-DOCUMENT-UPLOAD-01) is the Source's DISPLAY name and
+        nothing else. `Source`'s own docstring already records that "folder
+        locations and filenames are external representations only", and this
+        method already carries `file_hash`/`origin_reference` - so a display
+        name is document-identity metadata exactly like those, arriving a
+        stage later for the same reason they do. A work-item name cannot be
+        known until the whole batch is, because whether it reads "Project" or
+        "Project 1" depends on how many files arrived.
+
+        IT DOES NOT TOUCH THE STORED FILE. `file_path`, `file_hash`, the bytes
+        on disk and the original filename are all untouched by this parameter,
+        and a test asserts it - provenance, evidence identity and source
+        traceability hang off those, never off the display name.
         """
         source = self._find(workspace.sources, source_id)
         if source is None:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
 
+        if name is not None:
+            source["name"] = name
         if document_id is not None:
             source["document_id"] = document_id
         if revision is not None:
