@@ -374,7 +374,16 @@ class NothingForbiddenWasIntroduced(unittest.TestCase):
         submissions = [node for node in ast.walk(gather)
                        if isinstance(node, ast.Call)
                        and ast.unparse(node.func).endswith("submit")]
-        self.assertEqual(len(submissions), 2, "overlays plus heritage, no more")
+        # SUPERSEDED DELIBERATELY - CLAUDE-PLANNING-SPATIAL-SEMANTICS-01 section
+        # 1, Product Owner authorized. This read "overlays plus heritage, no
+        # more" and was correct until a THIRD independent question existed: which
+        # zoning polygons intersect the parcel. The guard this test actually
+        # carries is untouched and still above - no `While` in `gather`, so a
+        # failed source stays a FINDING rather than something to ask the City
+        # again for. What changed is the number of questions, not the retry
+        # discipline.
+        self.assertEqual(len(submissions), 3,
+                         "overlays, heritage and the zone intersection")
 
 
 class TheMeasurementSurvivedTheConcurrency(unittest.TestCase):
@@ -613,8 +622,20 @@ class TheRealSubjectIsUnchanged(unittest.TestCase):
             [f["layer_name"] for f in outcome["retrieval"]["overlays"]],
             [binding[2] for binding in source.OVERLAY_LAYERS])
 
-    def test_the_read_count_did_not_change(self):
-        """Scheduling, not strategy: the same reads, differently ordered."""
+    def test_the_read_count_is_one_more_than_02d_measured(self):
+        """SUPERSEDED DELIBERATELY - CLAUDE-PLANNING-SPATIAL-SEMANTICS-01 s1.
+
+        02D's claim was "scheduling, not strategy: the same reads, differently
+        ordered", and 37 was the proof of it. Asking which zoning polygons
+        intersect the parcel IS a strategy change, authorized separately, so the
+        number had to move - and the point of keeping this test is that it moves
+        by exactly ONE.
+
+        The first implementation cost TWO, because it passed an empty cache and
+        re-verified a layer `zoning_at` had already verified. The gate caught it.
+        A count this test no longer pinned would have absorbed that silently,
+        which is the whole reason a read-count assertion exists.
+        """
         reads = []
 
         def counting(url):
@@ -622,7 +643,8 @@ class TheRealSubjectIsUnchanged(unittest.TestCase):
             return self._replay(url)
 
         toronto_gate01.run(ADDRESS, reader=counting)
-        self.assertEqual(len(reads), 37)
+        self.assertEqual(len(reads), 38,
+                         "one new question should cost exactly one new read")
 
 
 if __name__ == "__main__":

@@ -550,6 +550,36 @@ result you then cannot trust.
 The failure mode this prevents is not a slow gate but a **wasted** one, and the
 root cause it addresses is sequencing rather than over-verification.
 
+### Standing execution rule - the long-run watchdog
+
+**Product Owner, 2026-09-14.** For any test, build, deploy, migration, indexing
+job, replay or external retrieval expected to take **more than 2 minutes**:
+
+1. Record the expected runtime **before** starting.
+2. Define an anomaly threshold.
+3. **Monitor the process while it runs.**
+4. If runtime exceeds the threshold, inspect CPU and the process tree,
+   competing Python/pytest/`app.py` processes, I/O or lock contention, and
+   worker health - then **report the anomaly immediately**.
+5. Do not allow a command to continue unattended for hours merely because it
+   has not exited.
+6. Preserve logs and a checkpoint before terminating or restarting.
+7. **Never claim the cause retrospectively if the diagnostic window was
+   missed.**
+
+> **NO BACKGROUND FULL GATE WITHOUT ACTIVE MONITORING.**
+
+This rule was written because a full gate was launched in the background and ran
+**4:35:01** - 34x the parallel baseline - and was only examined on completion.
+By then the CPU, process-tree and contention data the section below prescribes
+had gone, so the cause could not be established at all. The cost was not the
+slow run; it was that the run taught nothing. That is also why rule 7 exists:
+the honest report there is "the diagnostic window was missed", never a
+plausible-sounding cause reconstructed afterwards.
+
+Monitoring a long run's HEALTH is not the same as polling a background task for
+its RESULT. Read the outcome from the log's own `PYTEST_EXIT` line as always.
+
 ### Anomaly and degradation thresholds
 
 - **Parallel (`-n 8`) anomaly threshold: 15 minutes.** Against an ~8 minute

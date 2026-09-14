@@ -188,8 +188,14 @@ def gather(address, *, reader, retrieved_at=None):
         additional wall-clock.
         """
         try:
+            # A SNAPSHOT, not the shared cache and not an empty one. `zoning_at`
+            # has already verified this exact layer before the pool started, so
+            # an empty cache would re-verify it - a second municipal read for a
+            # question already answered. Copying is what makes that safe: the
+            # other tasks hold their own caches and nothing mutates this one, so
+            # there is no dict shared across threads.
             return source.zones_intersecting_parcel(geometry, reader=reader,
-                                                    cache={})
+                                                    cache=dict(zone_cache))
         except Exception as exc:  # noqa: BLE001 - a failed layer is a result
             logger.warning("zone intersection read failed (%s: %s)",
                            type(exc).__name__, exc)
@@ -207,6 +213,9 @@ def gather(address, *, reader, retrieved_at=None):
         except Exception as exc:  # noqa: BLE001
             return {"checked": False, "properties": [],
                     "reason": "%s: %s" % (type(exc).__name__, exc)}
+
+    # Taken BEFORE the pool, while `cache` is still only this thread's.
+    zone_cache = dict(cache)
 
     with futures.ThreadPoolExecutor(
             max_workers=MAX_CONCURRENT_SOURCE_READS,
