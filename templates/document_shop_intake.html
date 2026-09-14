@@ -54,16 +54,55 @@
         {# CLAUDE-GO-PERCEPTION-MULTISOURCE-01: `multiple` so a phone's photo
            picker lets someone select every page of a document in one go. The
            customer's selection ORDER is preserved server-side; filenames are
-           not identity, so "image.jpg" five times over is safe. #}
-        <input type="file" name="file" id="document-shop-file" required multiple
-               class="text-input" data-ui-ref="document-shop.file">
+           not identity, so "image.jpg" five times over is safe.
+
+           CLAUDE-DOCUMENT-UPLOAD-PUBLIC-UX-01: the input is now VISUALLY
+           CLIPPED rather than rendered, so the browser's own "No file chosen"
+           status text is gone and ARCHIOSK owns what the state says.
+
+           `class="visually-hidden"` AND NOT `hidden`. `hidden`/`display:none`
+           would take the input out of the accessibility tree and the tab order,
+           which breaks keyboard use, screen-reader use, the `<label for>`
+           association and a phone's camera picker. Clipping leaves every one of
+           those working - the same choice `upload.html` already made for the
+           project-creation picker. #}
+        <div data-upload-control>
+            <input type="file" name="file" id="document-shop-file" required multiple
+                   class="visually-hidden" data-ui-ref="document-shop.file"
+                   data-upload-input>
+            <button type="button" class="btn btn-ghost" data-upload-choose
+                    data-ui-ref="document-shop.file.choose">Choose files</button>
+            {# EMPTY until something is chosen, deliberately. "No file chosen" is
+               the wording being removed; our own version of that sentence would
+               miss the point of removing it. #}
+            <p class="mono field-note" data-upload-status hidden
+               aria-live="polite" data-ui-ref="document-shop.file.status"></p>
+            <p class="mono field-note pz-scroll-x" data-upload-names hidden
+               data-ui-ref="document-shop.file.names"></p>
+        </div>
         <p class="mono field-note" data-ui-ref="document-shop.accepted-formats">
-            {# The list now comes from the same rules the upload enforces.
-               It previously said scans were not accepted, which stopped being
-               true when PNG/JPEG intake shipped - a customer was being talked
-               out of the one format this door most exists for. #}
+            {# The list comes from the same rules the upload enforces. It
+               previously said scans were not accepted, which stopped being true
+               when PNG/JPEG intake shipped - a customer was being talked out of
+               the one format this door most exists for.
+
+               CLAUDE-DOCUMENT-UPLOAD-PUBLIC-UX-01: "Up to {{ max_upload_mb }} MB"
+               STAYS, and the audit is the reason. It is not a stale parser
+               budget - it is `MAX_CONTENT_LENGTH`, set from `MAX_UPLOAD_MB=60`
+               in `.env` and matched by `client_max_body_size 60M` in nginx on
+               the live host. A request over it is refused by the transport
+               layer before any application code runs, so no amount of staged
+               processing changes it. Removing the sentence would hide a real
+               ceiling, and "large documents are processed in stages" would be
+               untrue on this page: the chunked path that would make it true
+               (500 MB) exists only for adding a source to an EXISTING project,
+               not for this front door.
+
+               The spreadsheet sentence also stays: `services/ingestion.py`
+               refuses .xlsx as a founding document today, verified rather than
+               assumed. #}
             Accepted: {{ allowed_extensions | join(', ') }}.
-            Up to {{ max_upload_mb }} MB.
+            Up to {{ max_upload_mb }} MB per file.
             A spreadsheet cannot be the first document.
         </p>
 
@@ -99,4 +138,11 @@
     <a href="{{ url_for('portal.document_shop_jobs') }}"
        data-ui-ref="document-shop.jobs-link">See documents you have already brought in</a>
 </p>
+{% endblock %}
+
+{% block extra_scripts %}
+{# CLAUDE-DOCUMENT-UPLOAD-PUBLIC-UX-01: one shared control, not a per-page
+   script. `?v={{ static_version }}` for the same cache-busting reason every
+   other static asset carries it. #}
+<script src="{{ url_for('static', filename='js/upload_control.js') }}?v={{ static_version }}" defer></script>
 {% endblock %}

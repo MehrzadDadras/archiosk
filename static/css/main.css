@@ -10608,3 +10608,17 @@ dl.plain-list dd {
        inside its own box — never the page. */
     .pz-scroll-x { overflow-x: auto; max-width: 100%; }
 }
+
+/* CLAUDE-DOCUMENT-UPLOAD-PUBLIC-UX-01 — the visible button shows the focus the
+   clipped input actually holds.
+
+   The real <input type="file"> is `.visually-hidden` so the browser's own "No
+   file chosen" text is gone while the input stays focusable, labelled and
+   activatable (see static/js/upload_control.js for why `hidden` would not do).
+   A focus ring on a 1px clipped box is invisible, so the input's focus/blur is
+   forwarded to the button the person can actually see — without this, a keyboard
+   user tabs onto a control that gives no sign of having focus. */
+.upload-choose-focused {
+    outline: 2px solid var(--machine-blue);
+    outline-offset: 2px;
+}
