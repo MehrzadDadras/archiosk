@@ -1,0 +1,99 @@
+# CLAUDE-SURVEY-REFERENCE-01 — the visual examination worker.
+#
+# Install to /etc/systemd/system/archiosk-visual.service, then
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now archiosk-visual.service
+#   systemctl status archiosk-visual.service
+#   journalctl -u archiosk-visual.service -f
+#
+# WHY A THIRD SERVICE, AND WHY NOT THREE LINES IN THE PERCEPTION WORKER.
+#
+# services/perception_worker.py is byte-pinned: its sha256 is recorded in
+# docs/records/datum-lifecycle-transition-01.json as part of a live verification
+# of op.datum-corroboration, and services/operational_frontier.py re-hashes it
+# on every projection. A first version of this work edited that file; the guard
+# fired, the conflict became a ui_blocker, and the Operational Flight Deck
+# returned 503 — caught by the full gate before anything shipped. Product Owner
+# ruling, 2026-09-15: leave the pinned file alone and follow the precedent
+# services/founding_worker.py already set for the identical conflict.
+#
+# WHAT IT DOES: claims jobs from instance/registry/visual_jobs/, defers each
+# until that source's OCR has settled, sends ONE bounded frame to the model
+# under the same ACTION_EXTERNAL_AI_REQUEST gate every other external call
+# resolves, stores the reading as ai_generated_proposal evidence, and composes a
+# Survey Reference where the reading justifies one.
+#
+# THIS SERVICE MAKES EGRESS. Unlike archiosk-perception (local OCR, zero image
+# egress), this worker transmits a downscaled render of a customer document to
+# the configured model provider. That is the whole of its purpose and it is
+# governed per-workspace at the point of use — a project whose security profile
+# denies external AI has nothing transmitted, and the refusal is audited.
+#
+# DEPLOYMENT ORDER: code, then web, then workers. Workers come LAST so they
+# never run newer code against a store an older web tier still expects.
+#
+#   sudo systemctl restart archiosk-go.service
+#   sudo systemctl restart archiosk-perception.service
+#   sudo systemctl restart archiosk-visual.service
+#
+# ROLLBACK: stop this unit first, then roll the code back. Stopping it is safe
+# at any moment — jobs stay QUEUED and drain when it returns.
+#
+#   sudo systemctl stop archiosk-visual.service
+#
+# STOPPING THIS SERVICE MUST NOT MAKE THE APPLICATION UNHEALTHY. /health knows
+# nothing about it, deliberately: uploads still succeed, OCR still runs, visual
+# jobs accumulate as QUEUED, and the result page reports the honest state. A
+# visual outage is a delayed reading, never a broken Document Shop and never a
+# fabricated one.
+
+[Unit]
+Description=ARCHIOSK GO visual examination worker (bounded model vision, governed egress)
+Documentation=file:///var/www/archiosk/services/visual_worker.py
+After=network.target
+# Deliberately NOT Requires= or BindsTo= the web service or the perception
+# worker. All three are independent on purpose; none should be able to take
+# another down. Ordering between OCR and vision is a readiness predicate in the
+# claim, not a systemd dependency.
+Wants=network.target
+
+[Service]
+Type=simple
+User=archiosk
+Group=archiosk
+WorkingDirectory=/var/www/archiosk
+
+# The same interpreter and the same .env the web service loads, so the worker
+# reads exactly the configuration the application does - one source of truth for
+# REGISTRY_STORE_PATH and ANTHROPIC_API_KEY, and no second place to drift.
+EnvironmentFile=/var/www/archiosk/.env
+ExecStart=/var/www/archiosk/.venv/bin/python -m services.visual_worker
+
+# All job state lives on disk, so a restart is always safe: a job interrupted
+# mid-flight is reclaimed after its lease expires and retried, bounded by
+# MAX_ATTEMPTS.
+Restart=always
+RestartSec=5
+
+# SIGTERM asks the loop to finish the job in hand and exit. The lease would
+# recover an abandoned job anyway; this simply avoids the wasted retry.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# One job at a time. The host is 6 vCPU / 11 GB with no GPU and thirteen
+# Gunicorn workers already resident; the web tier stays the primary workload.
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=archiosk-visual
+
+# Modest hardening, matching archiosk-perception. The worker reads customer
+# sources and writes evidence under the registry root and needs nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

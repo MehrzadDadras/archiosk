@@ -22,7 +22,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
-from services import image_intake, perception_jobs
+from services import image_intake, perception_jobs, visual_classification
 from services.case_workspace import (
     EVIDENCE_CLASS_EXTRACTED,
     FOLDER_ROOT_DATA_ROOM,
@@ -789,7 +789,23 @@ def ingest_upload(
         # unreadable image and a blank page are all honest outcomes here -
         # nothing is fabricated, and the Source itself is already durably
         # registered whatever this returns.
-        if image_founding:
+        # CLAUDE-SURVEY-REFERENCE-01: the FOUNDING document of a Document Shop
+        # job is perceived, whether it is an image or a PDF.
+        #
+        # This block was `if image_founding:` alone, and the asymmetry it
+        # created is a defect rather than a policy: `attach_document_shop_sources`
+        # enqueues perception for EVERY file it takes, so a customer who
+        # uploaded two scanned surveys had the second one examined and the first
+        # one not. The first is the one the result page is about.
+        #
+        # SCOPED TO THE BLACK BOX, deliberately. A conventional Project upload is
+        # a founding RFQ/RFP document whose text layer is read in the request and
+        # which has never had a perception job; widening that here would put OCR
+        # behind every project creation in the deployment to fix a Document Shop
+        # defect. `_run_pdf_job` is the established path this reaches, unchanged.
+        perceive_founding = image_founding or (
+            container_state == CONTAINER_STATE_BLACK_BOX and ext == ".pdf")
+        if perceive_founding:
             # CLAUDE-GO-PERCEPTION-WORKER-01: perception no longer runs here.
             #
             # This block used to call extract_image_text inline - orientation
@@ -809,6 +825,24 @@ def ingest_upload(
                     source_name=filename,
                     intake_order=0,
                 )
+            # CLAUDE-SURVEY-REFERENCE-01: and a VISUAL job, on its own queue.
+            #
+            # Two enqueues rather than one dispatch, because the two kinds of
+            # looking are genuinely different work with different failure
+            # modes, and because `services/perception_worker.py` is byte-pinned
+            # by a live verification and cannot be taught to dispatch. The
+            # visual worker defers until this source's OCR has settled, so the
+            # recovered text can travel with the image as context.
+            from services import visual_classification
+
+            visual_classification.enqueue_for_source(
+                visual_classification.visual_store(
+                    app.config["REGISTRY_STORE_PATH"]),
+                workspace_id=workspace.project_id,
+                source_id=founding_source["id"],
+                source_sha256=document.original_file_hash or "",
+                source_name=filename,
+                intake_order=0)
 
     # CLAUDE-BLACK-BOX-01: a Black Box locks its CONTAINER STATE here instead
     # of an engagement environment - the same "locked at the moment of
@@ -1178,6 +1212,15 @@ def attach_document_shop_sources(app, workspace, files, *, owner: str,
         jobs.enqueue(workspace_id=workspace.project_id, source_id=source["id"],
                      source_sha256=digest, source_name=filename,
                      intake_order=order)
+        # CLAUDE-SURVEY-REFERENCE-01: every accepted file is also queued to be
+        # LOOKED at, not only read. A source that is not a raster or a PDF
+        # terminates honestly in the visual worker rather than being filtered
+        # here, so one place decides what has a visual representation.
+        visual_classification.enqueue_for_source(
+            visual_classification.visual_store(
+                app.config["REGISTRY_STORE_PATH"]),
+            workspace_id=workspace.project_id, source_id=source["id"],
+            source_sha256=digest, source_name=filename, intake_order=order)
 
         results.append({"filename": filename, "status": "accepted",
                         "reason": None, "source_id": source["id"],

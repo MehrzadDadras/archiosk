@@ -1041,6 +1041,16 @@ SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP = "derivative_crop"
 # id>#page=<n>" when a page number is known - meaning-depends-on-origin-
 # type, same convention every other origin_type here already uses.
 SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT = "document_snapshot"
+# CLAUDE-SURVEY-REFERENCE-01: an artifact this application COMPOSED from what
+# it read in another Source - a Survey Reference sheet drawn from a survey
+# image, today. Distinct from derivative_crop, which is the parent's own pixels
+# with a boundary drawn around them, and from document_snapshot, which is a
+# rendered view of a document that already existed. Nothing in a derived
+# reference is the parent's bytes; it is a NEW document about them, which is
+# exactly why it must never be mistaken for the source it derives from.
+# origin_reference carries the parent Source id, the same convention every
+# other origin_type here uses.
+SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE = "derived_reference"
 
 KNOWN_SOURCE_ORIGIN_TYPES = (
     SOURCE_ORIGIN_TYPE_UPLOAD,
@@ -1050,7 +1060,13 @@ KNOWN_SOURCE_ORIGIN_TYPES = (
     SOURCE_ORIGIN_TYPE_EYE_CAPTURE,
     SOURCE_ORIGIN_TYPE_DERIVATIVE_CROP,
     SOURCE_ORIGIN_TYPE_DOCUMENT_SNAPSHOT,
+    SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE,
 )
+
+#: Origin types whose Source is something ARCHIOSK produced, not something a
+#: person submitted. A customer-facing "what you sent" list must exclude these,
+#: and so must any aggregate state derived from what was sent.
+GENERATED_SOURCE_ORIGIN_TYPES = frozenset({SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE})
 
 SOURCE_DOMAIN_CLIENT_ISSUED = "CLIENT_ISSUED"
 SOURCE_DOMAIN_TEAM_WORKSPACE = "TEAM_WORKSPACE"
@@ -5311,6 +5327,9 @@ class ProjectWorkspace:
     sources: list[dict] = field(default_factory=list)
     cases: list[dict] = field(default_factory=list)
     artifacts: list[dict] = field(default_factory=list)
+    # Immutable Planning & Zoning snapshot indexes; bytes live in the existing
+    # workspace_artifacts store. Saving is not approval/issue of a WorkProduct.
+    planning_studies: list[dict] = field(default_factory=list)
     findings: list[dict] = field(default_factory=list)
     reviewer_validations: list[dict] = field(default_factory=list)
     dispositions: list[dict] = field(default_factory=list)
@@ -16415,6 +16434,8 @@ class CaseWorkspaceStore:
                 })
                 if "cell_locations" in parsed_table:
                     cells[-1]["source_location"] = deepcopy(parsed_table["cell_locations"][row_index][col_index])
+                    if cells[-1]["unit"] is None:
+                        cells[-1]["unit"] = cells[-1]["source_location"].get("unit")
             row = TableRow(
                 id=_new_id(), table_id=table.id, project_id=workspace.project_id,
                 row_index=row_index, cells=cells, created_at=_now(),

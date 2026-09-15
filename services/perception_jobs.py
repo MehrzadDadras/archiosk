@@ -207,7 +207,8 @@ class PerceptionJobStore:
                 "egress": EGRESS_NONE,
             })
 
-    def claim_next(self, *, worker_id: str, versions=None) -> Optional[dict]:
+    def claim_next(self, *, worker_id: str, versions=None,
+                   ready=None) -> Optional[dict]:
         """Take the oldest claimable job, or None.
 
         Claimable means QUEUED, or RUNNING with an expired lease - a worker
@@ -226,16 +227,43 @@ class PerceptionJobStore:
         default is deliberately the permissive one: the alternative would have
         silently stopped the deployed perception worker from claiming anything
         the moment this parameter shipped.
+
+        `ready` (CLAUDE-SURVEY-REFERENCE-01) is the same idea applied to WHEN
+        rather than to WHAT: a predicate on the job record that answers "is
+        this one workable yet". A job it rejects is simply not claimed - it
+        stays QUEUED and is offered again on the next poll.
+
+            NOT A RETRY, AND DELIBERATELY NOT ONE.
+
+        Visual examination wants to run after a source's OCR has landed, so it
+        can carry that text as context. Expressing that with
+        `release_for_retry` would have spent the attempt budget on SCHEDULING -
+        `MAX_ATTEMPTS` is 3, and it exists so that a job which reliably kills
+        its worker reaches FAILED instead of looping. A job waiting its turn
+        has not failed once, and must not consume the allowance that exists for
+        jobs that have.
         """
         allowed = None if versions is None else frozenset(versions)
 
         def claimable_kind(job) -> bool:
-            if allowed is None:
-                return True
-            # A record written before `processing_version` existed can only be
-            # perception - it is the only kind that existed - so it is offered
-            # to whoever accepts PROCESSING_VERSION rather than to nobody.
-            return (job.get("processing_version") or PROCESSING_VERSION) in allowed
+            if allowed is not None:
+                # A record written before `processing_version` existed can only
+                # be perception - it is the only kind that existed - so it is
+                # offered to whoever accepts PROCESSING_VERSION rather than to
+                # nobody.
+                if (job.get("processing_version") or PROCESSING_VERSION) not in allowed:
+                    return False
+            if ready is not None:
+                try:
+                    return bool(ready(job))
+                except Exception:  # noqa: BLE001 - an unanswerable predicate defers
+                    # A predicate that cannot answer leaves the job QUEUED
+                    # rather than claiming it on a guess. The next poll asks
+                    # again; nothing is lost and nothing is half-run.
+                    logger.warning("readiness predicate raised for job %s - deferring",
+                                   (job.get("job_id") or "")[:12])
+                    return False
+            return True
 
         with self._lock:
             cutoff = datetime.now(timezone.utc) - timedelta(seconds=LEASE_SECONDS)

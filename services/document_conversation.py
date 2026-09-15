@@ -71,6 +71,25 @@ WHAT YOU CAN AND CANNOT DO
   Say plainly that you can read the text on this document but cannot yet see
   where things are on it. Do not guess. Do not hedge into a half-answer.
 
+WHEN A VISUAL EXAMINATION IS INCLUDED BELOW
+Everything above describes what the RECOVERED TEXT can support. Where the
+material below carries a VISUAL EXAMINATION, GO has already looked at this
+document once and recorded what it saw, and that record is yours to use.
+- Answer from it directly. "North" and "Lot dimensions" and "Existing building"
+  are things that were seen, not inferred from reading order.
+- It is a READING, not the document speaking. Say "GO read the north arrow as
+  pointing to the upper right", not "the survey states".
+- The examination's own certainty travels with each item and you must keep it.
+  Something listed as partially recovered is partially recovered when you
+  report it; something listed as unresolved has no value and you must not
+  supply one, however reasonable a guess would be.
+- The examination is a fixed record made earlier. You are not looking at the
+  picture now, so a question it does not cover is still unanswered - say so
+  rather than reasoning your way to an answer from the items it does cover.
+- Where a SURVEY REFERENCE exists, it is a derived working reference built from
+  that reading - never a certified or legal survey, and never authority. Say
+  what is on it and where it came from; do not upgrade what it is.
+
 HOW TO ANSWER
 - Ground every claim in what you were given. Quote the document's own words
   when they settle the question.
@@ -130,6 +149,8 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
     on this dict, so "what we send" is inspectable instead of buried in string
     concatenation.
     """
+    from services import document_examination as dx
+
     source_id = result.get("source_id")
     evidence, recovered = _evidence_text(workspace, source_id) if source_id else ("", {})
 
@@ -141,12 +162,36 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
         for t in conversation_for(workspace)[-MAX_HISTORY_TURNS:]
     ]
 
+    # CLAUDE-SURVEY-REFERENCE-01: what GO SAW travels with what GO READ.
+    #
+    # This function previously sent the failed text extraction and nothing else,
+    # so on a survey image the whole of GO's context was "No text was recovered
+    # from this document" - and GO answered accordingly, about a document whose
+    # address, north arrow and footprint were sitting in evidence.
+    #
+    # STILL NO IMAGE BYTES. The picture was looked at once, in the examination,
+    # under its own gate and with its own audit record. This box sends the
+    # RECORD of that looking, which is a short list of qualified statements -
+    # not a second transmission of the customer's survey.
+    visual = dx.visual_reading(workspace, source_id) if source_id else None
+    reference = dx.survey_reference_of(workspace, source_id) if source_id else None
+    visual_recovered, visual_partial, visual_unresolved = dx._visual_lines(visual)
+
     return {
         # identity of THIS document only - never the container id, never a path
         "document_name": result.get("name") or "",
         "file_name": result.get("filename") or "",
         "is_image": bool(result.get("is_image")),
         "state": result.get("state_label") or "",
+        # the visual examination, as a record of qualified statements
+        "visual_ran": bool(visual),
+        "visual_document": (visual or {}).get("label") or "",
+        "visual_classification": (visual or {}).get("classification") or "",
+        "visual_recovered": visual_recovered,
+        "visual_partially_recovered": visual_partial,
+        "visual_unresolved": visual_unresolved,
+        "survey_reference": bool(reference),
+        "survey_reference_note": (reference or {}).get("source_note") or "",
         # the examination result as the customer sees it
         "established": _lines("established"),
         "interpretation": _lines("interpretation"),
@@ -168,6 +213,33 @@ def render_prompt(context: dict[str, Any]) -> str:
                if context["read_by"] else "read off the image")
         parts.append("This document is an IMAGE. Any text below was %s. "
                      "You cannot see the image itself." % how)
+
+    # CLAUDE-SURVEY-REFERENCE-01. Placed BEFORE the recovered text, because on
+    # a survey image it is the substantive answer and the text is fragments.
+    if context.get("visual_ran"):
+        visual = ["VISUAL EXAMINATION - what GO saw when it looked at this "
+                  "document. This is GO's reading, not the document speaking."]
+        if context.get("visual_document"):
+            visual.append("Document: %s (classification: %s)"
+                          % (context["visual_document"],
+                             context.get("visual_classification") or "unstated"))
+        if context.get("visual_recovered"):
+            visual.append("Recovered:\n%s" % "\n".join(
+                "- " + item for item in context["visual_recovered"]))
+        if context.get("visual_partially_recovered"):
+            visual.append("Partially recovered - legible in part only:\n%s" % "\n".join(
+                "- " + item for item in context["visual_partially_recovered"]))
+        if context.get("visual_unresolved"):
+            visual.append("Unresolved - present but NOT readable. You have no "
+                          "value for these and must not supply one:\n%s" % "\n".join(
+                              "- " + item for item in context["visual_unresolved"]))
+        if context.get("survey_reference"):
+            visual.append("A SURVEY REFERENCE has been produced from this "
+                          "reading and is available to the person as a PDF. %s "
+                          "It is a derived working reference, never a certified "
+                          "or legal survey."
+                          % (context.get("survey_reference_note") or ""))
+        parts.append("\n".join(visual))
     parts.append("EXAMINATION RESULT (%s)" % context["state"])
     for label, key in (("Established from the file", "established"),
                        ("GO's reading", "interpretation"),

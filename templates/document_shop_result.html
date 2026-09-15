@@ -21,9 +21,21 @@
 
 <h1 class="np-page-title" data-ui-ref="document-shop.result.page-title">{{ result.name }}</h1>
 
+{# CLAUDE-SURVEY-REFERENCE-01: the state, and only the state.
+
+   "&middot; examined when it was uploaded" was hardcoded here, and it was true
+   when it was written: examination ran synchronously inside the upload request,
+   so by the time this page existed it had finished. CLAUDE-GO-PERCEPTION-WORKER-01
+   moved that work to a queue and this sentence outlived the behaviour it
+   described - so a source still waiting for a worker rendered
+
+       Waiting to be examined - examined when it was uploaded
+
+   which is the contradiction the Product Owner reported. A fixed sentence
+   cannot describe a variable lifecycle; the state label already does, and
+   "File received" below already carries the date. #}
 <p class="mono" data-ui-ref="document-shop.result.state">
     <strong data-ui-ref="document-shop.result.state-label">{{ result.state_label }}</strong>
-    &middot; examined when it was uploaded
 </p>
 
 {# ESTABLISHED FROM THE SOURCE. Facts the file itself supports. #}
@@ -99,6 +111,27 @@
 </ol>
 {% endif %}
 
+{# CLAUDE-SURVEY-REFERENCE-01: the derived artifact.
+
+   Three lines: what it is, what it came from, and how to open it. The sheet
+   itself carries the recovered items, the partial ones and the unresolved
+   ones, and those are already on this page above - repeating them here is how
+   a slim result page stops being slim. #}
+{% if result.survey_reference %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.reference-title">
+    {{ result.survey_reference.title }}
+</h2>
+<p class="mono" data-ui-ref="document-shop.result.reference-note">
+    {{ result.survey_reference.source_note }}
+</p>
+{% if result.survey_reference.source_id %}
+<p class="mono">
+    <a class="btn" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.survey_reference.source_id, download=1) }}"
+       data-ui-ref="document-shop.result.reference-download">Open the Survey Reference (PDF)</a>
+</p>
+{% endif %}
+{% endif %}
+
 <h2 class="np-section-title" data-ui-ref="document-shop.result.source-title">Your document</h2>
 {% if result.is_image and result.source_id %}
 <figure data-ui-ref="document-shop.result.image-figure">
@@ -157,10 +190,27 @@
 
 {# Plain-language disclosure. Named here rather than buried in a policy page,
    because this is the moment the person decides to send something. #}
+{# CLAUDE-SURVEY-REFERENCE-01: this sentence had to change, and saying why is
+   the point of the comment.
+
+   It read "The image or file itself is never sent", and that was true of this
+   conversation and is still true of it - `document_conversation` passes no
+   image bytes and a test asserts it at the call boundary. But the examination
+   that produced the findings above now DOES look at the picture, once, under
+   the same external-AI gate everything else resolves. A person reading this
+   box would have taken the old sentence to cover both.
+
+   So it says what is true of each: what this box sends, and what the
+   examination already did. #}
 <p class="mono ds-composer-note" data-ui-ref="document-shop.conversation.disclosure">
-    To answer, the text of this document is sent to the AI service that powers
-    GO. The image or file itself is never sent. Everything already found above
-    was worked out here and does not change.
+    To answer, what is on this page is sent to the AI service that powers GO:
+    the findings above and the text read from your document. The file itself is
+    never sent.
+    {% if result.visual_ran %}
+    Examining it did include looking at the picture once; that has already
+    happened and asking a question does not repeat it.
+    {% endif %}
+    Everything already found above was worked out then and does not change.
 </p>
 
 {# Section 7: there is always a way onward. #}

@@ -105,8 +105,21 @@ def _stored_filename(source: dict) -> str:
 
 
 def _live_sources(workspace) -> list[dict]:
+    """The sources the PERSON sent, which is not every Source on the record.
+
+    CLAUDE-SURVEY-REFERENCE-01: a Survey Reference is stored as a Source, so
+    that save, reopen, download and provenance are what a Source already does
+    rather than a second storage mechanism. It is not a thing anybody uploaded,
+    so it must not appear in "What you sent", must not be counted in
+    "Processing 2 of 5", and must not drag the aggregate state - an artifact
+    this application composed cannot be evidence about how the examination is
+    going.
+    """
+    from services.case_workspace import GENERATED_SOURCE_ORIGIN_TYPES
+
     return [s for s in (getattr(workspace, "sources", None) or [])
-            if not s.get("removed_at")]
+            if not s.get("removed_at")
+            and s.get("origin_type") not in GENERATED_SOURCE_ORIGIN_TYPES]
 
 
 def _page_units(workspace, source_id: str) -> list[dict]:
@@ -189,6 +202,77 @@ def _recovered(workspace, source_id: str) -> dict:
     }
 
 
+def _decoded_record(workspace, source_id: str, content_type: str):
+    """The most recent JSON record of one kind held against this Source.
+
+    Evidence is append-only, so a re-examination adds rather than replaces and
+    the LAST one is the current reading. A record that will not parse is
+    treated as absent rather than raising: a malformed evidence row must not be
+    able to take down the page that reports the examination.
+    """
+    import json
+
+    rows = [e for e in (getattr(workspace, "evidence_items", None) or [])
+            if e.get("source_id") == source_id
+            and e.get("content_type") == content_type]
+    for row in reversed(rows):
+        try:
+            decoded = json.loads(row.get("content") or "")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(decoded, dict):
+            decoded["evidence_item_id"] = row.get("id")
+            return decoded
+    return None
+
+
+def visual_reading(workspace, source_id: str):
+    """What GO SAW in this source, or None. The visual counterpart to
+    `_recovered`, and read the same way: off the record, never recomputed."""
+    from services import visual_examination as vx
+
+    return _decoded_record(workspace, source_id, vx.VISUAL_CONTENT_TYPE)
+
+
+def survey_reference_of(workspace, source_id: str):
+    """The Survey Reference derived from this source, or None."""
+    from services import survey_reference as sr
+
+    return _decoded_record(workspace, source_id, sr.REFERENCE_CONTENT_TYPE)
+
+
+def _visual_established_anything(visual) -> bool:
+    from services import visual_examination as vx
+
+    return any(o.get("certainty") in vx.VALUE_BEARING
+               for o in ((visual or {}).get("observations") or []))
+
+
+def _visual_lines(visual) -> tuple[list, list, list]:
+    """The three short lists a visually-read document is described by.
+
+    Returns (recovered, partially_recovered, unresolved) as plain phrases.
+    Values are joined to their labels here rather than in the template, so the
+    result page, the Survey Reference sheet and GO all describe one reading in
+    one vocabulary.
+    """
+    from services import visual_examination as vx
+
+    if not visual:
+        return [], [], []
+
+    def _phrase(observation):
+        return ("%s: %s" % (observation["label"], observation["value"])
+                if observation.get("value") else observation["label"])
+
+    observations = visual.get("observations") or []
+    recovered = [_phrase(o) for o in observations
+                 if o.get("certainty") == vx.RECOVERED]
+    partial = [_phrase(o) for o in observations
+               if o.get("certainty") == vx.PARTIALLY_RECOVERED]
+    return recovered, partial, list(visual.get("unresolved") or [])
+
+
 def _reached_an_interpretation(document) -> bool:
     """Did the examination conclude ANYTHING beyond "here are some characters"?
 
@@ -235,6 +319,18 @@ def source_state(document, workspace, source_id, *, jobs=None) -> str:
         return STATE_PROCESSING
     if job_state == pj.STATE_FAILED:
         return STATE_NEEDS_ATTENTION
+
+    # CLAUDE-SURVEY-REFERENCE-01: a VISUAL reading is an interpretation.
+    #
+    # Checked before the text tests, and that order is the repair. A survey
+    # image yields no text and no parsed requirements, so both tests below
+    # failed and the source landed on `needs_attention` - "we could not do
+    # anything with this" - while a completed visual reading of the same sheet
+    # sat in evidence naming the address, the north arrow and the footprint.
+    # Whether anything was READ and whether anything was CONCLUDED are
+    # different questions, and only the second one decides this state.
+    if _visual_established_anything(visual_reading(workspace, source_id)):
+        return STATE_RESULT_READY
 
     recovered = _recovered(workspace, source_id)
     if recovered["passage_count"]:
@@ -304,15 +400,36 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     the source, GO's reading of it, and what was not established - is built
     here rather than in markup, because it is a claim about evidence.
     """
+    from services import source_identity
+
     sources = _live_sources(workspace)
     source = sources[0] if sources else None
     filename = (source or {}).get("name") or getattr(document, "filename", "") or ""
-    ext = _ext(filename)
+    # CLAUDE-SURVEY-REFERENCE-01: THE FILE'S TYPE COMES FROM THE FILE.
+    #
+    # This read `_ext(filename)`, and `filename` is the DISPLAY name - which
+    # `document_shop_intake` sets to the work-item name ("226104 1 Castille")
+    # after the batch completes, deliberately and correctly. A display name has
+    # no suffix, so a JPEG survey reported "Kind of file: a file of type
+    # unknown", `is_image` was False so the picture was never shown, and the
+    # image branch below was skipped in favour of the "no text layer" sentence
+    # the Product Owner reported.
+    #
+    # `_source_rows` was repaired for exactly this in CLAUDE-DOCUMENT-UPLOAD-01
+    # and `build_result` was not - the same condition, in the same file, left
+    # live in the second place. That is the carry-through failure this
+    # repository's own operating notes describe, and it is why the fix here is
+    # the SHARED reader rather than a second copy of the suffix logic.
+    identity = source_identity.identify_path(_stored_filename(source or {}))
+    ext = identity["extension"] or _ext(filename)
+    is_image = source_identity.is_raster_image(identity)
     recovered = _recovered(workspace, source["id"]) if source else {
         "page_count": 0, "passage_count": 0, "character_count": 0,
         "preview": "", "was_recovered": False, "is_direct_source": False,
         "read_by": [],
     }
+    visual = visual_reading(workspace, source["id"]) if source else None
+    reference = survey_reference_of(workspace, source["id"]) if source else None
 
     established: list[dict[str, str]] = []
     interpretation: list[dict[str, str]] = []
@@ -324,8 +441,16 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     })
     established.append({
         "label": "Kind of file",
-        "value": _MATERIAL_BY_EXT.get(ext, "a file of type %s" % (ext or "unknown")),
+        # The bytes first, the extension second, and the word "unknown" only
+        # when neither says anything at all.
+        "value": identity["label"] if identity["media_type"]
+        else _MATERIAL_BY_EXT.get(ext, identity["label"]),
     })
+    if visual and (visual.get("label") or visual.get("classification")):
+        # WHAT THE DOCUMENT IS, as distinct from what the FILE is. "an image
+        # (JPEG)" and "Survey image" answer two different questions and a
+        # person needs both - the first is provenance, the second is the point.
+        established.append({"label": "Document", "value": visual["label"]})
     if getattr(document, "original_file_hash", None):
         established.append({
             "label": "Stored unchanged",
@@ -348,10 +473,18 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                 recovered["character_count"], how,
             ),
         })
-        if not _reached_an_interpretation(document):
+        if not _reached_an_interpretation(document) and not _visual_established_anything(visual):
             # Said HERE, beside the character count, because the count on its
             # own reads as success. 14,306 characters of nothing is still
             # nothing, and the customer should not have to infer that.
+            #
+            # CLAUDE-SURVEY-REFERENCE-01 added the second clause, and the real
+            # production record is why. The reported Castille survey carries
+            # 858 OCR characters AND a visual reading naming the address, the
+            # north arrow and the footprint. Without this clause the page would
+            # print "Nothing has been concluded" directly beneath a Recovered
+            # list - contradicting itself in adjacent sections, which is the
+            # same class of defect as the one being repaired.
             not_established.append({
                 "label": "Nothing has been concluded from the recovered text",
                 "value": (
@@ -383,6 +516,18 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                 len(tables), "" if len(tables) == 1 else "s"),
         })
 
+    # CLAUDE-SURVEY-REFERENCE-01: WHAT GO SAW. Slim and factual, in the order
+    # the Product Owner's own example gives - recovered, partly recovered,
+    # unresolved - and nothing else. No paragraph about how vision works, no
+    # explanation of what a certainty state is.
+    visual_recovered, visual_partial, visual_unresolved = _visual_lines(visual)
+    if visual_recovered:
+        interpretation.append({"label": "Recovered",
+                               "value": "; ".join(visual_recovered)})
+    if visual_partial:
+        interpretation.append({"label": "Partially recovered",
+                               "value": "; ".join(visual_partial)})
+
     flags = list(getattr(document, "consistency_flags", None) or [])
     if getattr(document, "consistency_checked", False):
         interpretation.append({
@@ -391,37 +536,57 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                 len(flags), "" if len(flags) == 1 else "s")) if flags
             else "Nothing inconsistent stood out.",
         })
-    else:
+    elif not visual_recovered and not visual_partial:
+        # Said only where there is nothing better to say. On a survey image
+        # this line used to sit under "What we could not establish" beside two
+        # more just like it, which is how a page that HAD read the document
+        # came to read as three kinds of failure.
         not_established.append({
             "label": "Internal consistency was not checked",
             "value": getattr(document, "consistency_note", None)
             or "This document was not compared against itself for contradictions.",
         })
 
-    if ext in _IMAGE_EXTS and not recovered["passage_count"]:
+    if visual_unresolved:
+        # The ONLY not-established line a visually-read document gets, and it
+        # names real items rather than describing a missing capability.
+        not_established.append({"label": "Unresolved",
+                                "value": "; ".join(visual_unresolved)})
+    elif visual and not _visual_established_anything(visual):
         not_established.append({
-            "label": "No text could be read from this image",
-            "value": "An image carries no text of its own, and the text-recognition "
-                     "step did not recover any. The picture itself is kept and can "
-                     "be viewed below.",
+            "label": "Nothing legible was found in this image",
+            "value": "GO looked at the picture and could not make out anything "
+                     "it would stand behind. Nothing has been guessed.",
         })
-    elif getattr(document, "text_extraction_status", "") == "no_native_text":
-        not_established.append({
-            "label": "This file has no text layer",
-            "value": "It appears to be a scan or picture rather than a document with "
-                     "selectable text, so there was nothing to read directly.",
-        })
-    elif not recovered["passage_count"] and not requirements:
-        not_established.append({
-            "label": "Nothing was recovered from this file",
-            "value": "The file was received and stored, but no readable content came "
-                     "out of it.",
-        })
+    elif not visual:
+        # THE OLD BRANCHES, unchanged, for everything that was NOT looked at.
+        # They were never wrong about a text document; they were wrong about an
+        # image, because an image had no other reading to report.
+        if is_image and not recovered["passage_count"]:
+            not_established.append({
+                "label": "No text could be read from this image",
+                "value": "An image carries no text of its own, and the text-recognition "
+                         "step did not recover any. The picture itself is kept and can "
+                         "be viewed below.",
+            })
+        elif getattr(document, "text_extraction_status", "") == "no_native_text":
+            not_established.append({
+                "label": "This file has no text layer",
+                "value": "It appears to be a scan or picture rather than a document with "
+                         "selectable text, so there was nothing to read directly.",
+            })
+        elif not recovered["passage_count"] and not requirements:
+            not_established.append({
+                "label": "Nothing was recovered from this file",
+                "value": "The file was received and stored, but no readable content came "
+                         "out of it.",
+            })
 
-    if not interpretation and not recovered["passage_count"]:
-        # Only when there is genuinely nothing. Where text DID come back, the
-        # sharper line above already says so and this one would repeat it in
-        # vaguer words.
+    if not interpretation and not recovered["passage_count"] and not visual:
+        # Only when there is genuinely nothing, which now includes "and nobody
+        # looked". A visually-examined source has already said what it found or
+        # that it found nothing, and this line would contradict the first and
+        # repeat the second.
         not_established.append({
             "label": "No interpretation was reached",
             "value": "There was not enough recovered content for GO to say what this "
@@ -434,7 +599,14 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     # must present them AS fragments - the old heading "Some of what was read"
     # framed pages of OCR noise as a reading, which is what made a working
     # examination read as gibberish.
-    fragmentary = state == STATE_READ_NOT_INTERPRETED
+    #
+    # CLAUDE-SURVEY-REFERENCE-01: asked of THE RECOVERED TEXT, not of the
+    # aggregate state, and the distinction is load-bearing. Reading it off the
+    # state meant a successful VISUAL reading flipped the state to
+    # `result_ready` and so re-framed the same 858 characters of OCR noise as
+    # "Some of what was read" - reintroducing the exact defect the line above
+    # describes. Seeing the north arrow concludes nothing about the characters.
+    fragmentary = bool(recovered["passage_count"]) and not _reached_an_interpretation(document)
     return {
         "name": display_name,
         "fragmentary": fragmentary,
@@ -443,7 +615,7 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         "filename": filename,
         "received_at": getattr(document, "ingested_at", "") or "",
         "source_id": (source or {}).get("id"),
-        "is_image": ext in _IMAGE_EXTS,
+        "is_image": is_image,
         "established": established,
         "interpretation": interpretation,
         "not_established": not_established,
@@ -453,6 +625,28 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         # the raw-text block or the "nothing was concluded" grammar: both are
         # statements about a completed reading.
         "pending": state in (STATE_QUEUED, STATE_PROCESSING),
+        # CLAUDE-SURVEY-REFERENCE-01: the derived artifact, if one was built.
+        # `reference_source_id` is what the download link needs; the rest is
+        # what the page says about it, which is deliberately three words.
+        "survey_reference": _reference_view(reference),
+        "visual_ran": bool(visual),
+    }
+
+
+def _reference_view(reference) -> Optional[dict[str, Any]]:
+    """What the result page shows about a Survey Reference: that there is one,
+    what it is, and how to open it. Not its contents - those are already the
+    Recovered / Partially recovered / Unresolved lines above, and printing them
+    twice is how a slim page stops being slim."""
+    if not reference:
+        return None
+    return {
+        "title": reference.get("title") or "Survey Reference",
+        "source_note": reference.get("source_note") or "",
+        "source_id": reference.get("derived_source_id"),
+        "filename": reference.get("artifact_filename") or "",
+        "sha256": reference.get("artifact_sha256") or "",
+        "generated_at": reference.get("generated_at") or "",
     }
 
 
@@ -481,6 +675,10 @@ def _source_rows(document, workspace, *, jobs=None) -> list[dict[str, Any]]:
             # moment a work-item name became the display name. A photo whose
             # display name is "SRPC Drawing Review 2" is still a photo.
             "is_image": _ext(_stored_filename(source)) in _IMAGE_EXTS,
+            # CLAUDE-SURVEY-REFERENCE-01: per-source, so a batch where one
+            # photo was looked at and one was not says so per row rather than
+            # taking the whole examination's word for it.
+            "visual_ran": bool(visual_reading(workspace, source["id"])),
             "passage_count": recovered["passage_count"],
             "character_count": recovered["character_count"],
             "read_by": recovered["read_by"],

@@ -261,6 +261,30 @@ def test_product_questions_visible_without_broad_mapping_blocker(tmp_path):
 
 
 def transition_fixture(tmp_path):
+    """The transition record and its evidence, in a tmp repo whose digests agree.
+
+    CLAUDE-SURVEY-REFERENCE-01. This used to copy the real `services/
+    perception_worker.py` and leave the record's pinned digests as-is, which
+    only agreed for as long as that file was never edited again. The moment it
+    was, `test_lifecycle_transition_preserves_unwired_history_and_training_hold`
+    - a test about what a lifecycle transition MEANS - started failing over a
+    digest, reporting a semantic regression that had not happened.
+
+    So the fixture now re-pins the copied record to the bytes it actually
+    copied. That keeps each test about its own subject:
+
+      - the semantic test asks what a transition does to a capability's state,
+        against a repo whose implementation matches its own proof;
+      - `test_changed_lifecycle_implementation_does_not_reuse_old_proof` then
+        MUTATES that file and asserts the conflict appears, which is the real
+        guard and is now proven by the mutation rather than by the accident of
+        the working tree being unmodified.
+
+    Nothing here weakens the guard, and nothing here re-pins the REAL record -
+    `docs/records/datum-lifecycle-transition-01.json` is untouched, so a genuine
+    change to the verified implementation still raises a conflict in the real
+    projection, which is exactly what it is for.
+    """
     clarification_fixture(tmp_path)
     repo = Path(__file__).resolve().parents[1]
     relative = "docs/records/datum-lifecycle-transition-01.json"
@@ -269,6 +293,13 @@ def transition_fixture(tmp_path):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes((repo / name).read_bytes())
+
+    # Re-pin to the copied bytes, normalised exactly as `reconcile` normalises
+    # them before hashing.
+    for name in list(transition["live_verification"]["files"]):
+        copied = (tmp_path / name).read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        transition["live_verification"]["files"][name] = hashlib.sha256(copied).hexdigest()
+    (tmp_path / relative).write_text(json.dumps(transition), encoding="utf-8")
 
 
 def test_lifecycle_transition_preserves_unwired_history_and_training_hold(tmp_path):
