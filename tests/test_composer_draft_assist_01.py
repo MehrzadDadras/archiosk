@@ -240,7 +240,9 @@ class TheAffordanceTests(unittest.TestCase):
         # to evaluate that against on the project-less Composer.
         block = self.macros[self.macros.index("dock-composer-pen") - 1200:]
         block = block[:block.index("dock-composer-pen") + 200]
-        self.assertIn("{% if project_id %}", block)
+        # The bounded Planning Composer deliberately excludes the project-wide
+        # draft-assist route; its context must not expand to other project files.
+        self.assertIn("{% if project_id and not study_scoped %}", block)
 
     def test_one_component_serves_phone_and_desktop(self):
         self.assertEqual(self.macros.count('id="dock-composer-pen-sheet"'), 1)

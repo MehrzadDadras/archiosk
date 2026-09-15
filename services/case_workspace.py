@@ -5311,6 +5311,9 @@ class ProjectWorkspace:
     sources: list[dict] = field(default_factory=list)
     cases: list[dict] = field(default_factory=list)
     artifacts: list[dict] = field(default_factory=list)
+    # Immutable Planning & Zoning snapshot indexes; bytes live in the existing
+    # workspace_artifacts store. Saving is not approval/issue of a WorkProduct.
+    planning_studies: list[dict] = field(default_factory=list)
     findings: list[dict] = field(default_factory=list)
     reviewer_validations: list[dict] = field(default_factory=list)
     dispositions: list[dict] = field(default_factory=list)

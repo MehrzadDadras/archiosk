@@ -426,6 +426,7 @@ class ContextEnvelope:
     # lives in here, every consumer of ContextEnvelope has to reason about
     # binary payloads it does not want.
     attached_image: Optional[dict] = None
+    planning_study: Optional[dict] = None
 
 
 def build_context_envelope(
@@ -726,6 +727,7 @@ class ConversationalTurnResult:
     provider: Optional[str] = None
     model: Optional[str] = None
     requested_at: Optional[str] = None
+    planning_action: Optional[dict] = None
 
 
 def _validate_candidate_referents(raw, workspace: ProjectWorkspace) -> list[dict]:
@@ -848,12 +850,18 @@ def run_conversational_turn(
         candidate_referents=candidate_referents,
         proposed_action=proposed_action,
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
+        planning_action=(parsed.get("planning_action")
+                         if envelope.planning_study is not None and isinstance(parsed.get("planning_action"), dict)
+                         else None),
     )
 
 
 def _build_conversational_turn_prompt(
     text: str, envelope: ContextEnvelope, recent_history: Optional[list[dict]],
 ) -> str:
+    if envelope.planning_study is not None:
+        from services.planning_composer import turn_prompt
+        return turn_prompt(text, envelope.planning_study, recent_history)
     evidence = envelope.project_evidence
     lines = [
         "You are assisting a construction/design professional in an ongoing "

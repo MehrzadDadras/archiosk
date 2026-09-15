@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Planning & Zoning — Archiosk{% endblock %}
+{% block content %}
+<h1 class="np-page-title" data-ui-ref="planning-zoning.page-title">Planning &amp; Zoning</h1>
+<p><a href="{{ url_for('planning_zoning.saved_studies') }}">Saved Planning &amp; Zoning studies</a></p>
+<form method="post" action="{{ url_for('planning_zoning.analyze_property') }}" data-ui-ref="planning-zoning.form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="composer" value="1">
+<div id="planning-properties">
+<label class="field-label" for="planning-address">Property address</label>
+<input class="text-input text-input-wide" id="planning-address" name="address" required autocomplete="street-address" data-ui-ref="planning-zoning.address" placeholder="{{ address_placeholder }}">
+</div>
+<button class="btn btn-ghost" id="planning-add-property" type="button">+ Add another property</button>
+<label class="field-label" for="planning-project">Project</label>
+<select id="planning-project" name="project_id" required><option value="">Choose project</option>
+{% for project in planning_projects %}<option value="{{ project.id }}" {% if project.id == project_id %}selected{% endif %}>{{ project.label }}</option>{% endfor %}</select>
+{% if not planning_projects %}<p>Create a project through the existing project workspace before starting a study.</p>{% endif %}
+<details><summary>Optional context</summary>
+{% for name, label, choices in [('development_direction','Development direction',development_directions),('option_strategy','Option strategy',option_strategies),('existing_condition','Existing property condition',existing_conditions)] %}
+<label class="field-label" for="planning-{{ name }}">{{ label }}</label><select id="planning-{{ name }}" name="{{ name }}">
+{% for value, caption in choices %}<option value="{{ value }}" {% if (name == 'development_direction' and value == development_direction) or (name == 'option_strategy' and value == option_strategy) or (name == 'existing_condition' and value == existing_condition) %}selected{% endif %}>{{ caption }}</option>{% endfor %}</select>
+{% endfor %}</details>
+<button class="btn btn-primary" type="submit" data-ui-ref="planning-zoning.submit">Analyze property</button>
+<p data-ui-ref="planning-zoning.working" hidden>Checking property and planning sources…</p>
+{% if not backend.live %}<p data-ui-ref="planning-zoning.backend-state">Planning analysis is not yet enabled on this environment.</p>{% endif %}
+</form>
+{% endblock %}
+{% block extra_scripts %}
+<script nonce="{{ csp_nonce }}">
+document.getElementById('planning-add-property').addEventListener('click', function () {
+ const container = document.getElementById('planning-properties');
+ const count = container.querySelectorAll('input').length;
+ if (count >= 10) return;
+ const row = document.createElement('div');
+ const label = document.createElement('label'); label.textContent = 'Property address ' + (count + 1);
+ const input = document.createElement('input'); input.name = 'address'; input.required = true; input.className = 'text-input text-input-wide';
+ label.appendChild(input); row.appendChild(label);
+ const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove property';
+ remove.addEventListener('click', () => { row.remove(); }); row.appendChild(remove);
+ container.appendChild(row); input.focus();
+});
+document.querySelector('[data-ui-ref="planning-zoning.form"]').addEventListener('submit', function () {
+ const button = this.querySelector('[type="submit"]'); button.disabled = true; button.textContent = 'Reading planning sources…';
+ this.querySelector('[data-ui-ref="planning-zoning.working"]').hidden = false;
+});
+</script>
+{% endblock %}

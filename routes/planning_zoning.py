@@ -37,13 +37,205 @@ from __future__ import annotations
 import logging
 import re
 
-from flask import Blueprint, abort, current_app, render_template, request, send_file
+from flask import Blueprint, abort, current_app, render_template, request, send_file, session, redirect, url_for
 
 from services.auth import login_required
 
 logger = logging.getLogger(__name__)
 
 planning_bp = Blueprint("planning_zoning", __name__)
+
+
+def _working_studies():
+    from services.planning_studies import WorkingResults
+    return WorkingResults(current_app.config['REGISTRY_STORE_PATH'])
+
+
+def _study_workspace(project_id):
+    from routes.workspace import _load_workspace_or_404
+    return _load_workspace_or_404(project_id)
+
+
+def _study_projects():
+    from services.ingestion import get_registry
+    from services.case_workspace import CaseWorkspaceStore
+    from routes.portal import _accessible_documents
+    store=CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    return [{'id':d.project_id,'label':getattr(d,'project_name',None) or getattr(d,'filename',None) or d.project_id}
+            for d in _accessible_documents(get_registry(current_app),store)]
+
+
+@planning_bp.route('/planning-zoning/studies')
+@login_required
+def saved_studies():
+    project_id=request.args.get('project_id')
+    studies=[]
+    if project_id:
+        _,store,workspace=_study_workspace(project_id)
+        studies=list(reversed(workspace.planning_studies))
+    return render_template('planning_studies.html', projects=_study_projects(),
+                           project_id=project_id, studies=studies)
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/studies', methods=['POST'])
+@login_required
+def save_study(project_id):
+    from services import planning_studies
+    from routes.workspace import _require_export_allowed
+    _,store,workspace=_study_workspace(project_id)
+    formats=request.form.getlist('formats')
+    if formats:
+        denied=_require_export_allowed(workspace,project_id)
+        if denied:return denied
+    key=request.form.get('study_token','')
+    try:
+        record=_working_studies().save_study(store,key,project_id,session.get('username'),formats=formats)
+    except (ValueError, FileExistsError) as exc:
+        abort(409,description=str(exc))
+    return redirect(url_for('planning_zoning.open_study',project_id=project_id,study_id=record['id']))
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/studies/<study_id>')
+@login_required
+def open_study(project_id,study_id):
+    from services import planning_studies, planning_result_view
+    _,store,workspace=_study_workspace(project_id)
+    try:result=planning_studies.reopen(store,workspace,study_id)
+    except (ValueError, OSError):abort(404)
+    record=next(s for s in workspace.planning_studies if s['id']==study_id)
+    if result.get('workspace_context'):
+        return _render_composer(result, project_id, saved_study=record)
+    return render_template('planning_zoning_result.html',view=planning_result_view.build_view(result),
+        backend=planning_analysis_state(),panels=[],user_panels=[],has_contributions=False,
+        exportable=False,saved_study=record,study_project_id=project_id,
+        address=record['address'],classifications=[],classification_labels={})
+
+
+def _render_composer(result, project_id, run_id=None, saved_study=None):
+    from services import planning_composer, planning_result_view, planning_report, planning_visual
+    sites = []
+    for index, item in enumerate(planning_composer.properties(result)):
+        view = planning_result_view.build_view(item)
+        sites.append({'index': index, 'view': view, 'report': planning_composer.report_view(view, item, result['workspace_context']),
+                      'panels': planning_visual.panels_for(item.get('retrieval') or {}, tokens=item.get('spatial_tokens'))})
+    return render_template('planning_composer.html', sites=sites, context=result['workspace_context'],
+                           project_id=project_id, run_id=run_id, saved_study=saved_study,
+                           planning_composer_active=True)
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/working/<run_id>')
+@login_required
+def working_study(project_id, run_id):
+    _study_workspace(project_id)
+    try:
+        result = _working_studies().get(run_id, project_id, session.get('username'))
+    except ValueError as exc:
+        abort(409, description=str(exc))
+    return _render_composer(result, project_id, run_id)
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/studies/<study_id>/continue', methods=['POST'])
+@login_required
+def continue_study(project_id, study_id):
+    from services import planning_studies, planning_composer
+    _, store, workspace = _study_workspace(project_id)
+    try:
+        result = planning_studies.reopen(store, workspace, study_id)
+        if not result.get('workspace_context'):
+            result = planning_composer.initialize([result])
+        result['workspace_context']['continued_from_study_id'] = study_id
+        key = _working_studies().put(project_id, session.get('username'), result)
+    except (ValueError, OSError) as exc:
+        abort(409, description=str(exc))
+    return redirect(url_for('planning_zoning.working_study', project_id=project_id, run_id=key))
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/working/<run_id>/conversation', methods=['POST'])
+@login_required
+def converse_study(project_id, run_id):
+    from services import planning_composer, conversational_turn
+    from services.conversation_interpreter import _evaluate_external_ai_policy
+    from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+    _, store, workspace = _study_workspace(project_id)
+    text = (request.form.get('text') or '').strip()
+    if not text or len(text) > 4000 or request.form.get('image_data_url'):
+        abort(400, description='Enter a text message of 1–4000 characters')
+    try:
+        result = _working_studies().get(run_id, project_id, session.get('username'))
+        bounded = planning_composer.envelope(result, project_id, run_id)
+    except ValueError as exc:
+        abort(409, description=str(exc))
+    policy = _evaluate_external_ai_policy(store, workspace)
+    if policy.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        abort(403, description='Project policy does not allow external AI requests')
+    turn = conversational_turn.run_conversational_turn(text=text, workspace=workspace, envelope=bounded,
+        recent_history=result['workspace_context']['messages'][-12:])
+    if not turn.ran:
+        abort(503, description='GO is unavailable; the retained study is unchanged')
+    try:
+        revised = planning_composer.revise(result, text, turn, run_id, actor=session.get('username'))
+        key = _working_studies().put(project_id, session.get('username'), revised)
+    except ValueError as exc:
+        abort(409, description=str(exc))
+    return redirect(url_for('planning_zoning.working_study', project_id=project_id, run_id=key))
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/working/<run_id>/investigate', methods=['POST'])
+@login_required
+def investigate_study(project_id, run_id):
+    from services import planning_composer, planning_live
+    _study_workspace(project_id)
+    if not live_enabled():
+        abort(409, description='Live planning retrieval is disabled')
+    try:
+        result = _working_studies().get(run_id, project_id, session.get('username'))
+        pending = result['workspace_context'].get('pending_action') or {}
+        if pending.get('kind') != 'investigate':
+            raise ValueError('No pending investigation for this revision')
+        index = pending['property_index']
+        item = planning_composer.properties(result)[index]
+        address = item['document']['subject']['normalized_address']
+    except (ValueError, KeyError, IndexError) as exc:
+        abort(409, description=str(exc))
+    # This is the existing governed retrieval/compiler path. Never accept URLs,
+    # facts or authority state from a Composer response.
+    live = planning_live.run_live(address)
+    if live['outcome'] != planning_live.OUTCOME_OK or not live.get('study_snapshot'):
+        abort(409, description=live.get('message') or 'Investigation remains unresolved')
+    replacement = live['study_snapshot']
+    if replacement['document']['subject'].get('parcel_identifier') != item['document']['subject'].get('parcel_identifier'):
+        abort(409, description='Parcel identity changed; start a new analysis')
+    sites = planning_composer.properties(result)
+    sites[index] = replacement
+    revised = planning_composer.initialize(sites)
+    revised['workspace_context'] = result['workspace_context']
+    revised['workspace_context'].pop('pending_action', None)
+    revised['workspace_context']['parent_run_id'] = run_id
+    # Proposal calculations refer to the former evidence version. Do not carry
+    # their assessments over a new authority read as if recomputed.
+    revised['workspace_context']['proposal'] = []
+    revised['workspace_context']['messages'].append({'role': 'system',
+        'content_class': 'deterministic_calculation',
+        'text': 'Planning sources refreshed for ' + address + '. Review remaining unresolved items. Prior comparisons remain in the preceding revision.'})
+    key = _working_studies().put(project_id, session.get('username'), revised)
+    return redirect(url_for('planning_zoning.working_study', project_id=project_id, run_id=key))
+
+
+@planning_bp.route('/planning-zoning/projects/<project_id>/studies/<study_id>/artifacts/<path:name>')
+@login_required
+def study_artifact(project_id,study_id,name):
+    import io
+    from services import planning_studies
+    from routes.workspace import _require_export_allowed
+    _,store,workspace=_study_workspace(project_id)
+    if name!='evidence/zoning-map.png':
+        denied=_require_export_allowed(workspace,project_id)
+        if denied:return denied
+    try:raw=planning_studies.artifact(store,workspace,study_id,name)
+    except (ValueError,OSError):abort(404)
+    return send_file(io.BytesIO(raw),download_name=name.rsplit('/',1)[-1],
+        mimetype='image/png' if name=='evidence/zoning-map.png' else None,
+        as_attachment=name!='evidence/zoning-map.png')
 
 DOOR_VERSION = "planning-zoning-door@3"   # +workspace: export, visuals, contribution
 
@@ -280,8 +472,9 @@ def planning_zoning():
     """The intake surface. Signed-in only; no parallel permission system."""
     mode = request.args.get("mode")
     return render_template(
-        "planning_zoning.html",
-        **_context(mode=mode if mode in MODES else MODE_SINGLE))
+        "planning_entry.html",
+        **_context(mode=mode if mode in MODES else MODE_SINGLE,
+                   planning_projects=_study_projects(), project_id=request.args.get('project_id', '')))
 
 
 @planning_bp.route("/planning-zoning/result", methods=["GET"])
@@ -322,67 +515,69 @@ def planning_result():
         classification_labels=planning_contribution.CLASSIFICATION_LABELS)
 
 
-@planning_bp.route("/planning-zoning/export", methods=["POST"])
-@login_required
+@planning_bp.route("/planning-zoning/export", methods=["GET", "POST"])
 def export_result():
-    """CLAUDE-PLANNING-WORKSPACE-02A - the governed result as .docx or .pdf.
+    """Read-only download from retained state. POST remains compatible.
 
-    RE-RUNS THE ANALYSIS RATHER THAN RECALLING IT, and the honesty of that is the
-    whole design. Live planning results are not persisted (Product Owner, section
-    1-A of the live-route direction, and section 22 here), so there is no stored
-    result to export. The two alternatives were both worse: accepting the rendered
-    result back from the browser would mean the host treating client-supplied
-    bytes as host-owned facts, which is the exact boundary the anti-laundering
-    invariants draw; and inventing a store to hold it would be the persistence
-    model section 22 forbids.
-
-    So an export is a FRESH retrieval, and the file says so - it carries its own
-    municipal retrieval timestamp, which may differ from the page the person was
-    looking at. A document claiming to be the earlier result would be lying about
-    a timestamp; one that states its own is merely later.
-
-    THE FIXTURE PATH NEEDS NO RETRIEVAL and exports the fixture, labelled as one.
+    GET permits ordinary downloads and login-return navigation. No address-only
+    request can reconstruct a live result. Saved artifacts use study_artifact.
     """
-    from services import planning_export
-    from services import planning_result_view
+    from services import planning_export, planning_result_view, planning_visual
+    from services import auth
+    from flask import jsonify
 
-    export_format = (request.form.get("format") or "").strip().lower()
+    if not auth.is_authenticated():
+        # Unlike a mutating form, a download can safely resume as GET. Preserve
+        # its bounded identity parameters through login; never replay a POST.
+        params = request.args if request.method == 'GET' else request.form
+        resume = url_for('planning_zoning.export_result', **{
+            k: params[k] for k in ('format','scope','project_id','study_token') if k in params})
+        login_url = url_for('portal.login', next=resume)
+        if auth.wants_json_response():
+            return jsonify(error='session_expired', redirect=login_url), 401
+        return redirect(login_url)
+
+    params = request.args if request.method == 'GET' else request.form
+    export_format = (params.get('format') or '').strip().lower()
     if export_format not in planning_export.FORMATS:
-        logger.info("planning export refused: unsupported format %r",
-                    export_format)
         abort(400)
-    scope = request.form.get("scope") or planning_export.SCOPE_GOVERNED_ONLY
+    scope = params.get('scope') or planning_export.SCOPE_GOVERNED_ONLY
     if scope not in planning_export.SCOPES:
         abort(400)
-
-    address, error = validate_address(request.form.get("address"))
-    live_result, layered, panels = None, None, []
-
-    if live_enabled() and not error:
-        from services import planning_live
-        from services import planning_visual
-
-        live_result = planning_live.run_live(address)
-        if live_result["outcome"] != planning_live.OUTCOME_OK:
-            # A SOURCE FAILURE MUST NOT PRODUCE A FILE. A .docx of nothing is
-            # worse than an error page, because it outlives the error.
-            logger.info("planning export refused: %s", live_result["outcome"])
-            abort(502)
-        view = live_result["view"]
-        panels = planning_visual.panels_for(view.get("retrieval") or {})
-        if scope == planning_export.SCOPE_WITH_FOLLOW_UP:
-            layered = _workspace_layers(live_result, request.form)["layered"]
+    project_id = params.get('project_id','')
+    key = params.get('study_token','')
+    panels = []
+    if key or project_id:
+        from routes.workspace import _require_export_allowed
+        _, store, workspace = _study_workspace(project_id)
+        denied = _require_export_allowed(workspace, project_id)
+        if denied: return denied
+        try:
+            result = _working_studies().get(key, project_id, session.get('username'))
+        except ValueError as exc:
+            abort(409, description=str(exc))
+        view = planning_result_view.build_view(result)
+        panels = planning_visual.panels_for(view.get('retrieval') or {})
+        # Browser prose is not retained host evidence. The qualified snapshot
+        # currently contains the governed result only.
+        if scope != planning_export.SCOPE_GOVERNED_ONLY:
+            abort(409, description='Follow-up is not part of this retained snapshot')
+        if result.get('workspace_context'):
+            from services import planning_composer, document_export
+            try:
+                stream = document_export.build(planning_composer.report_document(result), export_format)
+            except ValueError as exc:
+                abort(409, description=str(exc))
+            return send_file(stream, mimetype=document_export.MIMETYPES[export_format], as_attachment=True,
+                             download_name=planning_export.filename_for(view['identity'], export_format))
+    elif live_enabled() or params.get('address'):
+        abort(409, description='Retained study required; export does not rerun analysis')
     else:
-        # Section 22 again: with the live flag off there is nothing retrievable,
-        # so the only thing this may export is the development fixture.
         view = planning_result_view.development_view()
         scope = planning_export.SCOPE_GOVERNED_ONLY
 
     stream, filename, mimetype = planning_export.export(
-        view, export_format, scope=scope, layered=layered, panels=panels,
-        generated_at=_now_iso())
-    logger.info("planning export served (%s, %s, %d bytes)",
-                export_format, scope, len(stream.getvalue()))
+        view, export_format, scope=scope, panels=panels, generated_at=_now_iso())
     stream.seek(0)
     return send_file(stream, mimetype=mimetype, as_attachment=True,
                      download_name=filename)
@@ -496,6 +691,32 @@ def analyze_property():
     validation message is a small cruelty that intake forms commit constantly,
     and there is no reason for it.
     """
+    if request.form.get('composer') == '1':
+        from services import planning_live, planning_composer
+        project_id = (request.form.get('project_id') or '').strip()
+        if not project_id:
+            abort(400, description='Choose an existing project for this study')
+        _study_workspace(project_id)
+        addresses = request.form.getlist('address')
+        if not 1 <= len(addresses) <= planning_composer.MAX_PROPERTIES:
+            abort(400, description='Enter 1–10 property addresses')
+        checked = [validate_address(a) for a in addresses]
+        if any(error for _, error in checked):
+            abort(400, description=next(error for _, error in checked if error))
+        if not live_enabled():
+            abort(409, description='Live planning analysis is disabled')
+        results = []
+        for address, _ in checked:
+            live = planning_live.run_live(address)
+            if live['outcome'] != planning_live.OUTCOME_OK or not live.get('study_snapshot'):
+                abort(409, description=live.get('message') or 'Property analysis unavailable')
+            results.append(live['study_snapshot'])
+        result = planning_composer.initialize(results, {
+            'development_direction': _selected('development_direction', DEVELOPMENT_DIRECTIONS, DEFAULT_DEVELOPMENT_DIRECTION),
+            'option_strategy': _selected('option_strategy', OPTION_STRATEGIES, DEFAULT_OPTION_STRATEGY),
+            'existing_condition': _selected('existing_condition', EXISTING_CONDITIONS, DEFAULT_EXISTING_CONDITION)})
+        key = _working_studies().put(project_id, session.get('username'), result)
+        return redirect(url_for('planning_zoning.working_study', project_id=project_id, run_id=key))
     mode = request.form.get("mode")
     mode = mode if mode in MODES else MODE_SINGLE
     intent = {
@@ -534,6 +755,9 @@ def analyze_property():
         # is one auditable file rather than a branch inside a view.
         from services import planning_live
 
+        project_id = (request.form.get('project_id') or '').strip()
+        if project_id:
+            _study_workspace(project_id)  # access before any project-bound work
         live = planning_live.run_live(address)
         if live["outcome"] != planning_live.OUTCOME_OK:
             # A NAMED failure, rendered on the intake page beside the address
@@ -548,6 +772,9 @@ def analyze_property():
         logger.info("live planning request served in %.0f ms (%s)",
                     live["timings"].get("total_ms") or 0.0, address)
         workspace = _workspace_layers(live, request.form)
+        study_token = None
+        if project_id and live.get('study_snapshot'):
+            study_token = _working_studies().put(project_id, session.get('username'), live['study_snapshot'])
         return render_template("planning_zoning_result.html",
                                view=live["view"],
                                backend=planning_analysis_state(),
@@ -556,6 +783,7 @@ def analyze_property():
                                intent=intent,
                                address=address,
                                exportable=True,
+                               study_project_id=project_id, study_token=study_token,
                                **workspace)
 
     # VALID INTAKE, NO ANALYSIS. The one thing this must not do is manufacture a

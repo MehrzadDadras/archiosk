@@ -17,6 +17,7 @@
    therefore no STATIC_VERSION bump: a mode is a URL, it works with JavaScript
    off, and it survives a back button. #}
 <h1 class="np-page-title" data-ui-ref="planning-zoning.page-title">Planning &amp; Zoning</h1>
+<p><a href="{{ url_for('planning_zoning.saved_studies') }}">Saved Planning &amp; Zoning studies</a></p>
 
 <p class="field-note" data-ui-ref="planning-zoning.lede">
     Start with an address. ARCHIOSK reads the municipality&rsquo;s own zoning and
@@ -80,6 +81,16 @@
        has this field, so there is no duplicate. #}
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="mode" value="{{ mode }}">
+    {% if planning_projects %}
+    <label for="planning-project">Project for this analysis</label>
+    <select id="planning-project" name="project_id">
+        <option value="">Current analysis only — not saved</option>
+        {% for project in planning_projects %}
+        <option value="{{ project.id }}" {% if project.id == project_id %}selected{% endif %}>{{ project.label }}</option>
+        {% endfor %}
+    </select>
+    <p class="field-note">Choosing a project enables Save Study after analysis. Nothing is saved automatically.</p>
+    {% endif %}
 
     {% if mode == 'batch' %}
     <fieldset class="np-group" data-ui-ref="planning-zoning.batch">

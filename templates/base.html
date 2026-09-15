@@ -1049,7 +1049,7 @@
             </main>
         </div>
 
-        {% if project_id is defined and workspace is defined %}
+        {% if (project_id is defined and workspace is defined) or planning_composer_active | default(false) %}
         {# ---------------- The one Chat region (CLAUDE-P40-E3A, Section 9) ----------
            Full width of THIS column (Display - CLAUDE-P40-VW7A-QA2 moved
            this inside .workspace-main-column, a sibling of Lists rather
