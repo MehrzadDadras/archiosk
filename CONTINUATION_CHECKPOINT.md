@@ -14926,3 +14926,101 @@ region-bounding and revision/supersession.
 **CODEX SAFE:** `CLAUDE-GO-PERCEPTION-WORKING-FRAME-01` (`6b37511`) and prior,
 **unchanged**. Codex is paused on model-baseline unavailability; no Cognitive
 Gym state touched.
+
+---
+
+## CLAUDE-SURVEY-REFERENCE-01 — a survey with no text layer stops being unreadable
+
+**`1952ab3`, deployed to `https://archiosk.com` 2026-09-15, replacing `355a671`.**
+Live-verified against the Product Owner's own reported record — project
+`9c00eeec`, `1 Castille Ave -Survey.jpg`, a real 1956 plan of survey.
+
+### The defect was four faults, and the sharpest one was worse than reported
+
+`document_examination.build_result` read the file's type off the **display**
+name, which `document_shop_intake` deliberately sets to the work-item name
+("226104 1 Castille", no suffix). So `Kind of file` was "unknown", `is_image`
+was false so the picture was never shown, and the branch chain fell through to
+`text_extraction_status == "no_native_text"` — printing **"there was nothing to
+read directly" while 858 characters of that source's own OCR text sat in
+evidence**. The page contradicted the system's own record.
+
+`_source_rows`, in the same file, had already been repaired for this exact
+condition by `CLAUDE-DOCUMENT-UPLOAD-01`. `build_result` was not. A
+carry-through miss, found only because the real production record was read
+rather than a synthetic fixture: the local reproduction showed "unknown" but
+*not* the false sentence, because the synthetic image produced no OCR at all.
+
+The other three: nothing ever looked at the pixels (empty OCR terminated the
+examination); the page hardcoded "examined when it was uploaded", true when
+examination was synchronous and false since it became a queue; and
+`document_conversation` sent GO the failed text extraction and nothing else.
+
+### GO's visual capability was never missing — the survey never reached it
+
+`services/sheet_vision.py` — six structural properties, egress minimisation,
+prompt-injection containment, an audit invariant, a Product Owner
+authorization from 2026-08-29, sixteen test files — **had zero call sites.**
+`engine/pdf_extractor.PDFVectorExtractor` likewise had no production caller at
+all. Both are reachable now; `read_sheet` itself remains DORMANT.
+
+### The architecture is shaped by an invariant, not by preference
+
+A first version wired the visual stage into `services/perception_worker.py`.
+That file's sha256 is pinned by `docs/records/datum-lifecycle-transition-01.json`
+as part of a live verification of `op.datum-corroboration`;
+`operational_frontier` re-hashes it on every projection, the mismatch became a
+`ui_blocker`, and **the Operational Flight Deck returned 503** — caught by four
+failing tests in a full gate before anything deployed.
+
+Re-pinning would have re-asserted a verification nobody repeated. **Product
+Owner ruling, 2026-09-15: Option B** — leave the pinned file alone and follow
+the precedent `founding_classification` set for the identical conflict. Visual
+work therefore has its own queue directory, processing version, loop and
+systemd unit (`deploy/archiosk-visual.service`, the third service, authorized
+on condition it be isolated, documented and test-covered).
+
+`perception_jobs.claim_next` gained a `ready=` predicate so a visual job waits
+for its source's OCR **without spending the `MAX_ATTEMPTS=3` budget that exists
+for jobs which actually fail**. Ordering without coupling; a source with no
+perception job is never made to wait for text that is not coming.
+
+OCR read back from the registry carries `ocr_context` provenance — evidence
+item ids, extractors, character count, `read_back_from_registry` — because that
+is a different claim from a local variable in the same run.
+
+### Live proof, on the real record
+
+Original **byte-identical** (1,859,435 bytes, `3b2dd9dc…`). All 40 prior
+evidence items preserved; exactly 2 added. Classified `LIKELY_SURVEY`, 10
+recovered / 5 partial / 4 unresolved. Recovered `LOT 233, REGISTERED PLAN 4539,
+CITY OF TORONTO (TOWNSHIP OF SCARBOROUGH)`, `A. PHENIX & SONS (O.L.S.)`,
+`JANUARY 24, 1956` — the legal description **corroborating the pre-existing OCR
+fragment**. Survey Reference PDF: 2 pages, **22 + 9 native vector paths,
+`get_images() == []`** on both. Replay re-enqueued and correctly refused:
+"already carries a visual reading", no duplication, no re-transmission.
+
+### Known, recorded, not hidden
+
+- **Address read as "8 Castille Avenue"** against a project named "1 Castille",
+  and marked `PARTIALLY_RECOVERED`. The certainty system behaved correctly; the
+  discrepancy is real and unresolved, not smoothed over.
+- **Building labels overlap** at adjacent polygon centroids on the rendered
+  plan. Cosmetic, in `survey_reference.draw_plan`.
+- **Authenticated browser leg not driven.** The page and Composer were proven in
+  the production process against real data; no `manage_verification_access`
+  link was issued, and that tool is maintainer-run by its own contract.
+
+### Frontiers
+
+**CLAUDE:** the three DORMANT capabilities now declared in
+`tests/test_capability_activation_01.py` — `sheet_vision.read_sheet`,
+`drawing_segmentation.segment_sheet`, `derived_view` — each built and tested
+and reachable from no workflow. That ledger asserts the `ast.Call` rather than
+the import, and requires every capability to be ACTIVE-with-its-chain or
+DORMANT-with-a-reason, because sixteen unit tests never noticed `read_sheet`
+was dead: each constructs its own caller.
+
+**CODEX SAFE:** `CLAUDE-GO-PERCEPTION-WORKING-FRAME-01` (`6b37511`) and prior,
+**unchanged**. **DO NOT TRAIN AGAINST YET** — visual examination is one day old,
+live-verified on exactly one real document, and its prompt/schema will move.
