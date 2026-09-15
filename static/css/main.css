@@ -10656,3 +10656,21 @@ dl.plain-list dd {
 @media (max-width: 720px) {
     .sr-review { grid-template-columns: 1fr; }
 }
+
+/* CLAUDE-SURVEY-REFERENCE-03 — the per-document actions disclosure.
+   A <details> rather than a popup menu: works without JavaScript, keyboard
+   reachable by construction, and keeps a destructive action one deliberate
+   click away rather than one stray click away. */
+.ds-actions { margin: 10px 0 14px; }
+.ds-actions summary { cursor: pointer; }
+.ds-actions-form { display: inline; margin-left: 8px; }
+.ds-actions .plain-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+}
+.ds-actions-note { margin-top: 8px; opacity: 0.85; }

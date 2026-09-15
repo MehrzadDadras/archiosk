@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Delete {{ source_name }}? &mdash; Document Shop{% endblock %}
+
+{% block content %}
+{# CLAUDE-SURVEY-REFERENCE-03: the confirmation step for deleting an uploaded
+   document.
+
+   A rendered page rather than a JavaScript confirm(), for the same reason the
+   upload form renders its CSRF token server-side: a guard that exists only in
+   the browser is absent whenever the browser is. It also lets the page say
+   what ELSE goes, which a one-line dialog cannot.
+
+   Deliberately plain. Nothing here argues the person out of it; they asked to
+   delete a document and the page's job is to tell them exactly what that does
+   and let them proceed or stop. #}
+<h1 class="np-page-title" data-ui-ref="document-shop.remove.page-title">Delete this document?</h1>
+
+<p class="mono" data-ui-ref="document-shop.remove.name"><strong>{{ source_name }}</strong></p>
+
+{% if derived_names %}
+<p class="mono" data-ui-ref="document-shop.remove.derived">
+    This will also delete what GO made from it:
+</p>
+<ul class="mono" data-ui-ref="document-shop.remove.derived-list">
+    {% for name in derived_names %}<li>{{ name }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<p class="mono" data-ui-ref="document-shop.remove.explanation">
+    It will no longer appear in your documents. The record of the deletion is
+    kept, so this can be undone by an administrator if it was a mistake.
+</p>
+
+<form method="post"
+      action="{{ url_for('portal.document_shop_remove_source', project_id=project_id, source_id=source_id) }}"
+      data-ui-ref="document-shop.remove.form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="confirm" value="yes">
+    <button type="submit" class="btn btn-primary"
+            data-ui-ref="document-shop.remove.confirm">Delete it</button>
+    <a class="btn" href="{{ back_url }}"
+       data-ui-ref="document-shop.remove.cancel">Keep it</a>
+</form>
+{% endblock %}

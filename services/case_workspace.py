@@ -1068,6 +1068,25 @@ KNOWN_SOURCE_ORIGIN_TYPES = (
 #: and so must any aggregate state derived from what was sent.
 GENERATED_SOURCE_ORIGIN_TYPES = frozenset({SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE})
 
+#: How a cascaded removal marks itself, so a later restore can bring back
+#: exactly what this removal took and nothing else. A sentinel in
+#: `removal_reason` rather than a new field: the field already exists, already
+#: persists, and already appears in the audit record - a parallel
+#: `removed_because_of` column would be a second source of truth for the same
+#: fact, and the two would drift the first time one was written without the
+#: other.
+_CASCADE_REASON_PREFIX = "removed with its source "
+
+
+def _cascade_reason(source_id: str) -> str:
+    return "%s%s" % (_CASCADE_REASON_PREFIX, source_id)
+
+
+def is_cascaded_removal(source: dict) -> bool:
+    """Was this Source removed because its parent was?"""
+    return str((source or {}).get("removal_reason") or "").startswith(
+        _CASCADE_REASON_PREFIX)
+
 SOURCE_DOMAIN_CLIENT_ISSUED = "CLIENT_ISSUED"
 SOURCE_DOMAIN_TEAM_WORKSPACE = "TEAM_WORKSPACE"
 SOURCE_DOMAIN_EXTERNAL_REFERENCE = "EXTERNAL_REFERENCE"
@@ -9457,13 +9476,46 @@ class CaseWorkspaceStore:
         source["removed_at"] = removed_at
         source["removed_by"] = actor
         source["removal_reason"] = reason
+
+        # CLAUDE-SURVEY-REFERENCE-03: A DERIVATIVE DOES NOT OUTLIVE ITS SOURCE.
+        #
+        # A Survey Reference is a Source with `origin_type="derived_reference"`
+        # and `origin_reference` naming the survey it was composed from. Remove
+        # the survey and leave the derivative active, and the project keeps a
+        # drawing whose own provenance block cites a document that is no longer
+        # there - an orphaned active artifact, and one that still answers
+        # "Survey Reference available" on a page whose source has gone.
+        #
+        # Cascaded here rather than in a route, because "what depends on this
+        # Source" is a property of the domain model and every caller needs the
+        # same answer. `_cascade_reason` marks them so `restore_source` can
+        # bring back exactly the ones this removal took, and no others: a
+        # derivative removed on its own earlier must stay removed.
+        cascaded = []
+        for candidate in workspace.sources:
+            if candidate.get("removed_at"):
+                continue
+            if candidate.get("origin_type") not in GENERATED_SOURCE_ORIGIN_TYPES:
+                continue
+            if candidate.get("origin_reference") != source_id:
+                continue
+            candidate["removed_at"] = removed_at
+            candidate["removed_by"] = actor
+            candidate["removal_reason"] = _cascade_reason(source_id)
+            cascaded.append(candidate["id"])
+
         self.save(workspace)
 
         if governance_log is not None:
             governance_log.append(
                 project_id=workspace.project_id, event_type="document_removed",
                 actor=actor, role="human",
-                payload={"source_id": source_id, "name": source.get("name"), "reason": reason, "removed_at": removed_at},
+                payload={"source_id": source_id, "name": source.get("name"),
+                         "reason": reason, "removed_at": removed_at,
+                         # Named in the audit record, because a cascade that
+                         # only shows up as two rows changing is a cascade
+                         # nobody can reconstruct later.
+                         "derived_sources_removed": cascaded},
                 correlation_id=source_id,
             )
         return source
@@ -9486,13 +9538,29 @@ class CaseWorkspaceStore:
         source["removed_at"] = None
         source["removed_by"] = None
         source["removal_reason"] = None
+
+        # The symmetric half of the cascade, and deliberately NARROW: only
+        # derivatives this source's own removal took down come back. A
+        # derivative removed separately, before or after, stays removed -
+        # restoring a survey must not silently resurrect a drawing somebody
+        # deleted on purpose.
+        restored = []
+        for candidate in workspace.sources:
+            if candidate.get("removal_reason") != _cascade_reason(source_id):
+                continue
+            candidate["removed_at"] = None
+            candidate["removed_by"] = None
+            candidate["removal_reason"] = None
+            restored.append(candidate["id"])
+
         self.save(workspace)
 
         if governance_log is not None:
             governance_log.append(
                 project_id=workspace.project_id, event_type="document_restored",
                 actor=actor, role="human",
-                payload={"source_id": source_id, "name": source.get("name")},
+                payload={"source_id": source_id, "name": source.get("name"),
+                         "derived_sources_restored": restored},
                 correlation_id=source_id,
             )
         return source

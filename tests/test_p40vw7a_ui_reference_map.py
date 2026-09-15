@@ -123,6 +123,12 @@ _PLANNING_ZONING_RESULT_HTML_PATH = (
     _REPO_ROOT / "templates" / "planning_zoning_result.html")
 _DOCUMENT_SHOP_JOBS_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_jobs.html"
 _DOCUMENT_SHOP_RESULT_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_result.html"
+# CLAUDE-SURVEY-REFERENCE-03: the delete confirmation. Joining the scan in the
+# same commit that introduces it, which is the discipline the comments above
+# record - and which caught this exact omission: thirteen registry rows were
+# added for a surface no test looked at, and the scan said so.
+_DOCUMENT_SHOP_CONFIRM_REMOVE_HTML_PATH = (
+    _REPO_ROOT / "templates" / "document_shop_confirm_remove.html")
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 _REFERENCE_MAP_PATH = _REPO_ROOT / "UI_REFERENCE_MAP.md"
 
@@ -317,6 +323,7 @@ def _all_template_refs() -> set[str]:
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
         _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
         _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH,
+        _DOCUMENT_SHOP_CONFIRM_REMOVE_HTML_PATH,
         _PLANNING_ZONING_HTML_PATH, _PLANNING_ZONING_RESULT_HTML_PATH,
     ):
         text = path.read_text(encoding="utf-8")

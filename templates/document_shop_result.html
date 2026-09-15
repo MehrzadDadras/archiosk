@@ -207,6 +207,40 @@
 </p>
 {% endif %}
 
+{# CLAUDE-SURVEY-REFERENCE-03: the actions menu for each uploaded document.
+
+   `CaseWorkspaceStore.remove_source` has existed since CLAUDE-P40-E2 and
+   routes/workspace.py has routed to it all along - but only from the analyst
+   bench, which is the dead-end CLAUDE-DOCUMENT-SHOP-DOOR-01 removed a customer
+   from. The capability was governed, recoverable and tested, and simply had no
+   door on the surface the person who uploaded the document is standing on.
+
+   A <details> disclosure rather than a JS popup menu: it works without
+   JavaScript, it is keyboard-reachable by construction, and the destructive
+   action stays one deliberate click away rather than one stray click away. #}
+{% if result.sources %}
+<details class="ds-actions" data-ui-ref="document-shop.result.actions">
+    <summary class="mono" data-ui-ref="document-shop.result.actions-toggle">Manage these documents</summary>
+    <ul class="plain-list" data-ui-ref="document-shop.result.actions-list">
+        {% for item in result.sources %}
+        <li class="plain-list-item" data-ui-ref="document-shop.result.actions-item">
+            <span class="mono">{{ item.name }}</span>
+            <form method="post" class="ds-actions-form"
+                  action="{{ url_for('portal.document_shop_remove_source', project_id=project_id, source_id=item.source_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn"
+                        data-ui-ref="document-shop.result.delete">Delete</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="mono ds-actions-note" data-ui-ref="document-shop.result.actions-note">
+        Deleting asks you to confirm first, and removes anything GO made from
+        that document along with it.
+    </p>
+</details>
+{% endif %}
+
 {# CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: the continuation.
 
    Placed BELOW the result and above the way onward, because it is a

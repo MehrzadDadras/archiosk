@@ -3238,6 +3238,102 @@ def document_shop_result(project_id):
         can_create=user_can_create_document_shop_container())
 
 
+def _document_shop_workspace_or_404(project_id):
+    """The SAME three gates `document_shop_result` applies, in one place.
+
+    CLAUDE-SURVEY-REFERENCE-03. A second customer-facing route over the same
+    container has to resolve identity the same way, and re-typing the checks is
+    how two surfaces come to disagree about who may see what. Every failure is
+    the SAME generic 404 as an unknown id, so none of them confirms that
+    anything exists - including, deliberately, an attempt to reach another
+    person's container or a real Project through the customer door.
+    """
+    from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
+
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    document = registry.get(project_id)
+    workspace = _safe_workspace(store, project_id)
+    if document is None or workspace is None:
+        abort(404)
+    ensure_owner_backfilled(store, workspace, get_governance_log(current_app),
+                            known_usernames())
+    if not can_access_project(workspace, session.get('username'), is_admin()):
+        abort(404)
+    if not _matches_listing_scope(workspace, LISTING_SCOPE_DOCUMENT_SHOP):
+        abort(404)
+    if workspace.removed_at:
+        abort(404)
+    return document, store, workspace
+
+
+@portal_bp.route('/document-shop/jobs/<project_id>/sources/<source_id>/remove',
+                 methods=['POST'])
+@login_required
+@limiter.limit("30 per hour")
+def document_shop_remove_source(project_id, source_id):
+    """Delete an uploaded document from the customer's own examination.
+
+    CLAUDE-SURVEY-REFERENCE-03. `CaseWorkspaceStore.remove_source` has existed
+    since CLAUDE-P40-E2 and `routes/workspace.py` has routed to it all along -
+    but that route redirects to the analyst bench, which is precisely the
+    dead-end CLAUDE-DOCUMENT-SHOP-DOOR-01 removed a customer from. So the
+    capability was real, governed and tested, and simply unreachable from the
+    surface the person who uploaded the document is standing on.
+
+        NOT A SECOND REMOVAL MECHANISM. The store method, its owner-or-admin
+        authority, its recoverability and its `document_removed` audit event
+        are all the existing ones. What is new is the door and where it
+        returns you to.
+
+    RECOVERABLE, NOT DESTRUCTIVE. `remove_source` sets `removed_at` and leaves
+    the id, the stored bytes and every dependent record untouched - the sample
+    stops cluttering the active project, and the evidence it produced remains
+    reconstructible. The confirm gate is `confirm=yes|no`, the Delete-project
+    idiom, deliberately NOT the Approval Gate's `once|session|no`: removal is
+    closer in kind to Delete than to Apply (see CLAUDE.md's own note on the two
+    confirm vocabularies).
+    """
+    _document, store, workspace = _document_shop_workspace_or_404(project_id)
+    source = next((s for s in workspace.sources if s['id'] == source_id), None)
+    if source is None or source.get('removed_at'):
+        abort(404)
+
+    back = url_for('portal.document_shop_result', project_id=project_id)
+    confirm = (request.form.get('confirm') or '').strip()
+    if confirm == 'no':
+        flash('Cancelled - nothing was deleted.', 'success')
+        return redirect(back)
+    if confirm != 'yes':
+        # The confirmation step. Rendered rather than relying on a JS
+        # `confirm()`, for the same reason the upload form renders its CSRF
+        # token server-side: a guard that only exists in the browser is a guard
+        # that is absent whenever the browser is.
+        from services.case_workspace import GENERATED_SOURCE_ORIGIN_TYPES
+
+        derived = [s for s in workspace.sources
+                   if not s.get('removed_at')
+                   and s.get('origin_type') in GENERATED_SOURCE_ORIGIN_TYPES
+                   and s.get('origin_reference') == source_id]
+        return render_template(
+            'document_shop_confirm_remove.html', project_id=project_id,
+            source_id=source_id, source_name=source.get('name') or '',
+            derived_names=[d.get('name') or '' for d in derived],
+            back_url=back)
+
+    try:
+        store.remove_source(
+            workspace, source_id=source_id,
+            actor=session.get('username', ''),
+            actor_role=session.get('role') or '',
+            reason=(request.form.get('reason') or None),
+            governance_log=get_governance_log(current_app))
+        flash('"%s" was deleted.' % (source.get('name') or 'The document'), 'success')
+    except CaseWorkspaceError as exc:
+        flash(str(exc), 'error')
+    return redirect(url_for('portal.document_shop_jobs'))
+
+
 @portal_bp.route('/document-shop', methods=['GET', 'POST'])
 @login_required
 @limiter.limit("20 per hour", methods=["POST"])

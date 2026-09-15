@@ -266,6 +266,18 @@ class SurveyReferenceCase(unittest.TestCase):
         self.assertEqual(response.status_code, 302, response.get_data(as_text=True)[:400])
         return response.headers["Location"].rstrip("/").split("/")[-1]
 
+
+    def upload_many(self, payloads, name="Batch of samples"):
+        """Several files in one examination, the way a customer sends them."""
+        files = [(io.BytesIO(data), filename) for data, filename in payloads]
+        with patch.object(BHiveParser, "parse", _fake_parse):
+            response = self.client.post("/document-shop", data={
+                "file": files, "name": name,
+            }, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 302,
+                         response.get_data(as_text=True)[:400])
+        return response.headers["Location"].rstrip("/").split("/")[-1]
+
     def vision_stub(self, payload):
         def stub(**kwargs):
             self.calls.append(kwargs)
@@ -314,8 +326,13 @@ class SurveyReferenceCase(unittest.TestCase):
                                jobs=self.jobs), document, workspace
 
     def derived_sources(self, workspace):
+        """LIVE derived artifacts. Removed ones are excluded, because every
+        caller of this helper is asking what the project currently holds - and
+        a cascade test that counted removed rows as present would assert the
+        opposite of what it means."""
         return [s for s in workspace.sources
-                if s.get("origin_type") == SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE]
+                if s.get("origin_type") == SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE
+                and not s.get("removed_at")]
 
 
 class AExistingPathReuse(SurveyReferenceCase):
@@ -1393,3 +1410,224 @@ class QPendingWindowSaysOnlyThat(SurveyReferenceCase):
         self.assertEqual(failed["state_label"], completed["state_label"],
                          "a failed visual stage changed the document's state")
         self.assertFalse(failed["pending"])
+
+
+class RDeleteAnUploadedDocument(SurveyReferenceCase):
+    """CLAUDE-SURVEY-REFERENCE-03 - the person can delete their own sample.
+
+        THE CAPABILITY EXISTED. THE DOOR DID NOT.
+
+    `CaseWorkspaceStore.remove_source` has been governed, recoverable and
+    audited since CLAUDE-P40-E2, and `routes/workspace.py` has routed to it all
+    along - but only from the analyst bench, which is exactly the dead-end
+    CLAUDE-DOCUMENT-SHOP-DOOR-01 removed a customer from. So a person who
+    uploaded a test sample could not remove it from the surface they were
+    standing on, and the repair is a door plus a cascade, not a second removal
+    mechanism.
+
+    RECOVERABLE, NOT DESTRUCTIVE. `removed_at` is set; the id, the stored bytes
+    and every dependent record are untouched. The sample stops cluttering the
+    active project while the deletion stays reconstructible - which is what
+    lets the audit keep the event without the project keeping the clutter.
+    """
+
+    def _delete(self, project_id, source_id, confirm=None):
+        data = {} if confirm is None else {"confirm": confirm}
+        return self.client.post(
+            "/document-shop/jobs/%s/sources/%s/remove" % (project_id, source_id),
+            data=data, follow_redirects=False)
+
+    def _live_names(self, project_id):
+        result, _document, _workspace = self.result_for(project_id)
+        return [row["name"] for row in result["sources"]]
+
+    def test_one_source_is_deleted_from_a_multi_source_examination(self):
+        project_id = self.upload_many(
+            [(survey_jpeg(), "one.jpg"), (survey_jpeg((900, 700)), "two.jpg"),
+             (survey_jpeg((800, 600)), "three.jpg")])
+        self.assertEqual(len(self._live_names(project_id)), 3)
+        target = self.workspace(project_id).sources[1]
+
+        response = self._delete(project_id, target["id"], confirm="yes")
+        self.assertEqual(response.status_code, 302)
+
+        names = self._live_names(project_id)
+        self.assertEqual(len(names), 2, "the deleted document is still listed")
+        self.assertNotIn(target["name"], names)
+
+    def test_unrelated_sources_are_untouched(self):
+        project_id = self.upload_many(
+            [(survey_jpeg(), "one.jpg"), (survey_jpeg((900, 700)), "two.jpg")])
+        workspace = self.workspace(project_id)
+        keep, target = workspace.sources[0], workspace.sources[1]
+        keep_hash = hashlib.sha256(Path(keep["file_path"]).read_bytes()).hexdigest()
+
+        self._delete(project_id, target["id"], confirm="yes")
+
+        after = next(s for s in self.workspace(project_id).sources
+                     if s["id"] == keep["id"])
+        self.assertIsNone(after.get("removed_at"))
+        self.assertEqual(
+            hashlib.sha256(Path(after["file_path"]).read_bytes()).hexdigest(),
+            keep_hash, "an unrelated document's bytes changed")
+
+    def test_cancelling_deletes_nothing(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        source_id = self.workspace(project_id).sources[0]["id"]
+
+        response = self._delete(project_id, source_id, confirm="no")
+        self.assertEqual(response.status_code, 302)
+
+        after = self.workspace(project_id).sources[0]
+        self.assertIsNone(after.get("removed_at"), "cancelling removed the document")
+        self.assertEqual(len(self._live_names(project_id)), 1)
+
+    def test_the_first_post_asks_rather_than_deletes(self):
+        """No `confirm` at all renders the confirmation and changes nothing."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        source_id = self.workspace(project_id).sources[0]["id"]
+
+        response = self._delete(project_id, source_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-ui-ref="document-shop.remove.confirm"',
+                      response.get_data(as_text=True))
+        self.assertIsNone(self.workspace(project_id).sources[0].get("removed_at"),
+                          "the first POST deleted without asking")
+
+    def test_deleting_a_survey_takes_its_survey_reference_with_it(self):
+        from services.case_workspace import is_cascaded_removal
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source = workspace.sources[0]
+        self.assertEqual(len(self.derived_sources(workspace)), 1)
+
+        self._delete(project_id, source["id"], confirm="yes")
+
+        after = self.workspace(project_id)
+        self.assertEqual(self.derived_sources(after), [],
+                         "the Survey Reference outlived the survey it cites")
+        derived = next(s for s in after.sources
+                       if s.get("origin_type") == SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE)
+        self.assertIsNotNone(derived.get("removed_at"))
+        self.assertTrue(is_cascaded_removal(derived),
+                        "the cascade is unmarked, so a restore could not undo it")
+
+    def test_the_confirmation_names_the_derived_artifact_before_deleting_it(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        source_id = self.workspace(project_id).sources[0]["id"]
+
+        body = self._delete(project_id, source_id).get_data(as_text=True)
+        self.assertIn('data-ui-ref="document-shop.remove.derived"', body)
+        self.assertIn("Survey Reference", body)
+
+    def test_no_orphaned_active_artifact_remains(self):
+        """The point of the cascade: nothing ACTIVE may cite a document that is
+        gone."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source_id = workspace.sources[0]["id"]
+        self.assertTrue(dx.visual_reading(workspace, source_id))
+
+        self._delete(project_id, source_id, confirm="yes")
+        after = self.workspace(project_id)
+
+        live = [s for s in after.sources if not s.get("removed_at")]
+        self.assertEqual(live, [], "an active Source survived the deletion")
+
+        removed_ids = {s["id"] for s in after.sources if s.get("removed_at")}
+        orphans = [s for s in after.sources
+                   if s.get("origin_reference") in removed_ids
+                   and not s.get("removed_at")]
+        self.assertEqual(orphans, [],
+                         "an active artifact still points at a deleted source")
+
+    def test_the_result_page_no_longer_offers_the_deleted_document(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        source_id = self.workspace(project_id).sources[0]["id"]
+        self._delete(project_id, source_id, confirm="yes")
+
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="document-shop.result.reference-download"', body,
+                         "a deleted document's Survey Reference is still offered")
+
+    def test_composer_context_drops_the_deleted_document(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        before_result, document, workspace = self.result_for(project_id)
+        before = dc.build_context(document, workspace, before_result, "?")
+        self.assertTrue(before["visual_ran"])
+        self.assertTrue(before["survey_reference"])
+
+        self._delete(project_id, workspace.sources[0]["id"], confirm="yes")
+
+        after_result, document, workspace = self.result_for(project_id)
+        after = dc.build_context(document, workspace, after_result, "?")
+        self.assertFalse(after["visual_ran"],
+                         "GO still holds the deleted document's visual reading")
+        self.assertFalse(after["survey_reference"])
+        self.assertEqual(after["recovered_text"], "",
+                         "GO still holds the deleted document's recovered text")
+
+    def test_a_deletion_is_recorded_in_the_audit_trail(self):
+        from services.ingestion import get_governance_log
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        source_id = self.workspace(project_id).sources[0]["id"]
+        self._delete(project_id, source_id, confirm="yes")
+
+        events = [e for e in get_governance_log(self.app).read(project_id)
+                  if e.event_type == "document_removed"]
+        self.assertTrue(events, "the deletion left no audit record")
+        payload = events[-1].payload
+        self.assertEqual(payload["source_id"], source_id)
+        self.assertTrue(payload["derived_sources_removed"],
+                        "the cascade is not reconstructible from the audit trail")
+
+    def test_deletion_across_projects_is_refused(self):
+        """A source id from ANOTHER container must not be reachable through
+        this container's door."""
+        mine = self.upload(survey_jpeg(), "mine.jpg", name="Mine")
+        theirs = self.upload(survey_jpeg((900, 700)), "theirs.jpg", name="Theirs")
+        their_source = self.workspace(theirs).sources[0]["id"]
+
+        response = self._delete(mine, their_source, confirm="yes")
+        self.assertEqual(response.status_code, 404)
+        self.assertIsNone(self.workspace(theirs).sources[0].get("removed_at"),
+                          "a source was deleted through another project's door")
+
+    def test_another_persons_container_is_not_reachable(self):
+        from werkzeug.security import generate_password_hash
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        source_id = self.workspace(project_id).sources[0]["id"]
+
+        intruder = User(username="intruder", role=ROLE_CUSTOMER)
+        intruder.password_hash = generate_password_hash(PW)
+        db.session.add(intruder)
+        db.session.commit()
+        stranger = self.app.test_client()
+        stranger.post("/login", data={"username": "intruder", "password": PW})
+
+        response = stranger.post(
+            "/document-shop/jobs/%s/sources/%s/remove" % (project_id, source_id),
+            data={"confirm": "yes"})
+        self.assertEqual(response.status_code, 404)
+        self.assertIsNone(self.workspace(project_id).sources[0].get("removed_at"))
+
+    def test_the_original_bytes_survive_a_deletion(self):
+        """Recoverable means the file is still there - `removed_at` is a flag,
+        not an erasure."""
+        original = survey_jpeg()
+        project_id = self.upload(original, "survey.jpg")
+        source = self.workspace(project_id).sources[0]
+        self._delete(project_id, source["id"], confirm="yes")
+
+        after = self.workspace(project_id).sources[0]
+        self.assertEqual(Path(after["file_path"]).read_bytes(), original,
+                         "deletion destroyed the stored bytes")
