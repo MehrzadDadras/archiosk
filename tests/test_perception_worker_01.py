@@ -157,6 +157,12 @@ class WorkerIntegrationTests(unittest.TestCase):
         self.client.post("/login", data={"username": "cust", "password": PW_PASSWORD})
         self.jobs = pj.PerceptionJobStore(self.tmp)
         self.store = CaseWorkspaceStore(self.tmp)
+        # CLAUDE-SURVEY-REFERENCE-02: examination is TWO stages on two queues
+        # now, and a source is still being examined while either is open. These
+        # aggregate tests are about how SOURCES combine, not about how stages
+        # do, so they settle both queues and keep asserting their own subject.
+        from services import visual_classification
+        self.visual_jobs = visual_classification.visual_store(self.tmp)
 
     def tearDown(self):
         db.session.remove()
@@ -392,6 +398,13 @@ class WorkerIntegrationTests(unittest.TestCase):
         pid = self._pid(r)
         all_jobs = self.jobs.for_workspace(pid)
         self.jobs.complete(all_jobs[0], state=pj.STATE_COMPLETED)
+        # CLAUDE-SURVEY-REFERENCE-02: settle the SAME source's visual stage
+        # too, so what this measures is one source finished against one source
+        # waiting - the subject of this test - rather than stage one against
+        # stage two, which is a different question answered elsewhere.
+        for job in self.visual_jobs.for_workspace(pid):
+            if job["source_id"] == all_jobs[0]["source_id"]:
+                self.visual_jobs.complete(job, state=pj.STATE_COMPLETED)
         document = __import__("services.ingestion", fromlist=["get_registry"]) \
             .get_registry(self.app).get(pid)
         summary = dx.summarise_job(document, self.store.get(pid),
@@ -411,6 +424,8 @@ class WorkerIntegrationTests(unittest.TestCase):
         self.jobs.complete(all_jobs[0], state=pj.STATE_COMPLETED)
         self.jobs.complete(all_jobs[1], state=pj.STATE_FAILED,
                            failure_reason="engine unavailable")
+        for job in self.visual_jobs.for_workspace(pid):
+            self.visual_jobs.complete(job, state=pj.STATE_COMPLETED)
         document = __import__("services.ingestion", fromlist=["get_registry"]) \
             .get_registry(self.app).get(pid)
         result = dx.build_result(document, self.store.get(pid),

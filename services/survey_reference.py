@@ -128,11 +128,29 @@ def derive(visual, *, project_id: str, source_id: str, source_filename: str,
         elif observation["certainty"] == vx.WITHHELD_AS_UNSAFE:
             withheld.append(entry)
 
+    from services import survey_graph
+
     geometry = dict(visual.geometry or {})
+    graph = dict(getattr(visual, "graph", None) or {})
     unresolved = list(visual.unresolved or [])
-    if not geometry.get("parcel"):
-        note = "Lot outline could not be traced from the image"
-        if not any("outline" in item.lower() for item in unresolved):
+
+    # CLAUDE-SURVEY-REFERENCE-02: the geometry is COMPUTED here, once, and the
+    # refusals it produces join the unresolved list rather than being discarded.
+    # An arc whose radius was not read, a radius that cannot reach its own
+    # chord, a boundary that does not close - each is a finding about the
+    # sheet, and each would otherwise vanish behind a drawing that looked
+    # finished.
+    resolved = survey_graph.build_primitives(graph) if graph.get("nodes") else {
+        "primitives": [], "unresolved": [],
+        "stats": {"arcs": 0, "straights": 0, "nodes": 0, "footprints": 0,
+                  "closed": False}}
+    for note in resolved["unresolved"]:
+        if note not in unresolved:
+            unresolved.append(note)
+    if not resolved["stats"]["nodes"]:
+        note = "No boundary geometry could be reconstructed from the image"
+        if not any("geometry" in item.lower() or "outline" in item.lower()
+                   for item in unresolved):
             unresolved.append(note)
 
     return {
@@ -157,6 +175,8 @@ def derive(visual, *, project_id: str, source_id: str, source_filename: str,
         "prompt_version": getattr(visual, "prompt_version", ""),
         "model": getattr(visual, "model", "") or "",
         # -- what was read -------------------------------------------------
+        "graph": graph,
+        "geometry_stats": resolved["stats"],
         "document_category": visual.document_category,
         "category_certainty": visual.category_certainty,
         "recovered": recovered,
@@ -197,32 +217,30 @@ def _escape(value) -> str:
 
     return _safe(value)
 
-
 #: Built on first render and cached. `reportlab` is imported lazily throughout
 #: this codebase (see `document_export.build_pdf`) so importing a service never
 #: costs a PDF library - and a Flowable subclass cannot be declared until the
-#: base class exists. Cached rather than re-declared per call.
+#: base class exists.
 _PLAN_PANEL_CLASS = None
 
 
-def plan_panel(geometry: dict, width: float, height: float, frame_size=None):
-    """The vector plan as a platypus flowable.
+def plan_panel(resolved: dict, width: float, height: float, frame_size=None):
+    """The reconstructed plan as a platypus flowable.
 
-    A FLOWABLE RATHER THAN AN IMAGE, deliberately. The direction asks for
-    "vector-style PDF where practical", and practical is exactly what this is:
-    the geometry arrives as normalised polygons, so rasterising it to put it on
-    the page would throw away the one property that makes this a drawing rather
-    than a picture of one. Nothing is traced from pixels at render time - this
-    draws only what the reader already reported tracing.
+    CLAUDE-SURVEY-REFERENCE-02: takes RESOLVED PRIMITIVES, not a geometry dict.
+    The geometry was computed once by `survey_graph.build_primitives`, and this
+    flowable and the SVG on the review screen consume the same list - so the
+    sheet the Product Owner exports and the drawing they compared against the
+    photograph cannot diverge.
     """
     global _PLAN_PANEL_CLASS
     if _PLAN_PANEL_CLASS is None:
         from reportlab.platypus import Flowable
 
         class _PlanPanel(Flowable):
-            def __init__(self, geometry, width, height, frame_size=None):
+            def __init__(self, resolved, width, height, frame_size=None):
                 super().__init__()
-                self.geometry = geometry or {}
+                self.resolved = resolved or {"primitives": []}
                 self.width = width
                 self.height = height
                 self.frame_size = frame_size
@@ -231,33 +249,42 @@ def plan_panel(geometry: dict, width: float, height: float, frame_size=None):
                 return self.width, self.height
 
             def draw(self):
-                draw_plan(self.canv, self.geometry, self.width, self.height,
+                draw_plan(self.canv, self.resolved, self.width, self.height,
                           self.frame_size)
 
         _PLAN_PANEL_CLASS = _PlanPanel
-    return _PLAN_PANEL_CLASS(geometry, width, height, frame_size)
+    return _PLAN_PANEL_CLASS(resolved, width, height, frame_size)
 
 
-def draw_plan(canvas, geometry: dict, width: float, height: float,
+#: Boundary styling, keyed by the role the surveyor gave the line. A street
+#: line is the heaviest because it is the one a reader looks for first.
+_ROLE_STYLE = {
+    "street_line": ("#1f2933", 1.6),
+    "lot_line": ("#1f2933", 1.1),
+    "interior": ("#6b7785", 0.7),
+    "easement": ("#6b7785", 0.7),
+    "unknown": ("#6b7785", 0.9),
+}
+
+
+def draw_plan(canvas, resolved: dict, width: float, height: float,
               frame_size=None) -> None:
-    """Every stroke on the sheet, in the source image's own frame.
+    """Every stroke on the sheet, from resolved primitives.
 
-    Separated from the flowable so it is callable with a bare canvas in a test,
-    and so the drawing rules are readable without reportlab's layout protocol
-    in the way.
+    THE SOURCE'S ASPECT RATIO IS PRESERVED, letterboxed inside the panel: the
+    coordinates are fractions of the source frame, so stretching them would
+    change every angle on a drawing whose whole claim is that it was measured.
 
-    THE SOURCE'S ASPECT RATIO IS PRESERVED, letterboxed inside the panel. The
-    coordinates are fractions of the source frame, so stretching them to the
-    panel would change every angle and proportion on a drawing whose whole
-    claim is that it was traced - a square lot would print as a wide rectangle.
+    AN ARC IS DRAWN AS AN ARC. `canvas.arcTo` emits Bezier curve operators into
+    the PDF content stream - native vector geometry, which is what makes
+    `page.get_drawings()` report curve items rather than a polyline pretending
+    to be a curve.
     """
     from reportlab.lib import colors
 
-    geometry = geometry or {}
-    inset = 26.0
-    panel_w = width - 2 * inset
-    panel_h = height - 2 * inset
-
+    primitives = (resolved or {}).get("primitives") or []
+    inset = 22.0
+    panel_w, panel_h = width - 2 * inset, height - 2 * inset
     plot_w, plot_h = panel_w, panel_h
     if frame_size and len(frame_size) == 2 and frame_size[0] and frame_size[1]:
         aspect = float(frame_size[0]) / float(frame_size[1])
@@ -265,55 +292,101 @@ def draw_plan(canvas, geometry: dict, width: float, height: float,
             plot_w = panel_h * aspect
         else:
             plot_h = panel_w / aspect
-    offset_x = inset + (panel_w - plot_w) / 2.0
-    offset_y = inset + (panel_h - plot_h) / 2.0
+    ox = inset + (panel_w - plot_w) / 2.0
+    oy = inset + (panel_h - plot_h) / 2.0
 
-    def _point(pair):
-        # Normalised coordinates are top-left origin, y down; PDF user space is
+    def point(pair):
+        # Image fractions are top-left origin, y down; PDF user space is
         # bottom-left origin, y up.
-        return (offset_x + pair[0] * plot_w, offset_y + (1.0 - pair[1]) * plot_h)
-
-    def _outline(polygon, fill_hex, base_width):
-        path = canvas.beginPath()
-        for index, pair in enumerate(polygon["points"]):
-            px, py = _point(pair)
-            path.moveTo(px, py) if index == 0 else path.lineTo(px, py)
-        path.close()
-        canvas.setFillColor(colors.HexColor(fill_hex))
-        canvas.setStrokeColor(colors.HexColor("#1f2933"))
-        canvas.setLineWidth(base_width if polygon["certainty"] == vx.RECOVERED
-                            else base_width * 0.75)
-        # A traced-but-partial outline is DASHED, so the drawing itself says
-        # what the certainty table says. Somebody printing one page must not
-        # have to hold that table in their head.
-        if polygon["certainty"] != vx.RECOVERED:
-            canvas.setDash(4, 3)
-        canvas.drawPath(path, stroke=1, fill=1)
-        canvas.setDash()
+        return (ox + pair[0] * plot_w, oy + (1.0 - pair[1]) * plot_h)
 
     canvas.saveState()
     canvas.setStrokeColor(colors.HexColor("#b9c0c7"))
     canvas.setLineWidth(0.5)
     canvas.rect(0, 0, width, height, stroke=1, fill=0)
 
-    parcel = geometry.get("parcel")
-    if parcel:
-        _outline(parcel, "#f4f6f8", 1.4)
+    # Footprints first, so boundary lines and labels sit above them.
+    for item in primitives:
+        if item["type"] != "polygon":
+            continue
+        path = canvas.beginPath()
+        for index, pair in enumerate(item["points"]):
+            px, py = point(pair)
+            path.moveTo(px, py) if index == 0 else path.lineTo(px, py)
+        path.close()
+        canvas.setFillColor(colors.HexColor("#d8dee4"))
+        canvas.setStrokeColor(colors.HexColor("#1f2933"))
+        canvas.setLineWidth(0.9)
+        if not item.get("certain"):
+            canvas.setDash(3, 2)
+        canvas.drawPath(path, stroke=1, fill=1)
+        canvas.setDash()
 
-    for building in (geometry.get("buildings") or []):
-        _outline(building, "#d8dee4", 1.0)
-        label = building.get("label")
-        if label:
-            points = [_point(pair) for pair in building["points"]]
-            centre_x = sum(px for px, _ in points) / len(points)
-            centre_y = sum(py for _, py in points) / len(points)
-            canvas.setFillColor(colors.HexColor("#1f2933"))
-            canvas.setFont("Helvetica", 7)
-            canvas.drawCentredString(centre_x, centre_y, label[:40])
+    for item in primitives:
+        kind = item["type"]
+        if kind == "line":
+            colour, weight = _ROLE_STYLE.get(item.get("role"), _ROLE_STYLE["unknown"])
+            canvas.setStrokeColor(colors.HexColor(colour))
+            canvas.setLineWidth(weight)
+            if not item.get("certain"):
+                canvas.setDash(4, 3)
+            a, b = point(item["a"]), point(item["b"])
+            canvas.line(a[0], a[1], b[0], b[1])
+            canvas.setDash()
+        elif kind == "arc":
+            colour, weight = _ROLE_STYLE.get(item.get("role"), _ROLE_STYLE["unknown"])
+            canvas.setStrokeColor(colour if not isinstance(colour, str)
+                                  else colors.HexColor(colour))
+            canvas.setLineWidth(weight)
+            if not item.get("certain"):
+                canvas.setDash(4, 3)
+            # The circle's bounding box in PDF space. The y flip inverts the
+            # sweep, which is why the extent is negated here and nowhere else.
+            cx, cy = point(item["centre"])
+            rx = item["radius"] * plot_w
+            ry = item["radius"] * plot_h
+            path = canvas.beginPath()
+            # `arc` rather than `arcTo`: arcTo appends to a current point and
+            # asserts one exists, so it needs a preceding moveTo. `arc` opens
+            # the path at the arc's own start. Both emit the same Bezier
+            # operators - this is about where the subpath begins, not about
+            # what geometry reaches the PDF.
+            path.arc(cx - rx, cy - ry, cx + rx, cy + ry,
+                     -item["start_deg"], -item["extent_deg"])
+            canvas.drawPath(path, stroke=1, fill=0)
+            canvas.setDash()
 
-    north = geometry.get("north")
-    if north:
-        _draw_north(canvas, colors, north, width, height)
+    canvas.setFont("Helvetica", 6.5)
+    for item in primitives:
+        if item["type"] == "label":
+            px, py = point(item["at"])
+            canvas.setFillColor(colors.HexColor("#1f2933" if item.get("certain")
+                                                else "#6b7785"))
+            canvas.drawCentredString(px, py + 2, item["text"][:28])
+        elif item["type"] == "north":
+            _draw_north(canvas, colors, item, width, height)
+
+    # FOOTPRINT LABELS LAST, and OUTSIDE the polygon when they will not fit
+    # inside it. Centroid-anchored labels collided on the Castille sheet -
+    # "EXISTING CONC. BLOCK GARAGE" is far wider than the garage it names, so it
+    # ran straight through "1 STORY BRICK DWELLING" next door and made both
+    # unreadable. A label that obscures the drawing it annotates is worse than
+    # one sitting just below it.
+    canvas.setFont("Helvetica", 6.5)
+    canvas.setFillColor(colors.HexColor("#1f2933"))
+    for item in primitives:
+        if item["type"] != "polygon" or not item.get("label"):
+            continue
+        pts = [point(p) for p in item["points"]]
+        cx = sum(p[0] for p in pts) / len(pts)
+        text = item["label"][:34]
+        text_width = canvas.stringWidth(text, "Helvetica", 6.5)
+        box_width = max(p[0] for p in pts) - min(p[0] for p in pts)
+        if text_width <= box_width - 4:
+            cy = sum(p[1] for p in pts) / len(pts)
+        else:
+            cy = min(p[1] for p in pts) - 7.5
+        canvas.drawCentredString(cx, cy, text)
 
     canvas.restoreState()
 
@@ -324,9 +397,9 @@ def _draw_north(canvas, colors, north, width, height) -> None:
     Degrees are clockwise from straight up on the source image, which is also
     straight up on this sheet: the plan is drawn in the source's own frame and
     is never rotated to put north up. Rotating it would silently re-register
-    every coordinate on the page against a frame the reader never saw.
+    every coordinate on the page against a frame nobody saw.
     """
-    radius = 17.0
+    radius = 15.0
     cx = width - radius - 14.0
     cy = height - radius - 14.0
     angle = math.radians(90.0 - float(north["degrees"]))
@@ -347,7 +420,7 @@ def _draw_north(canvas, colors, north, width, height) -> None:
     path.lineTo(*right)
     path.close()
     canvas.drawPath(path, stroke=1, fill=1)
-    canvas.setFont("Helvetica-Bold", 7)
+    canvas.setFont("Helvetica-Bold", 6.5)
     canvas.drawCentredString(cx, cy - radius - 8, "N")
 
 
@@ -401,27 +474,34 @@ def render_pdf(reference: dict) -> bytes:
     flow.append(Paragraph(_escape(reference.get("authority_note") or AUTHORITY_NOTE), small))
     flow.append(Spacer(1, 10))
 
-    geometry = reference.get("geometry") or {}
-    if geometry.get("parcel") or geometry.get("buildings") or geometry.get("north"):
-        flow.append(plan_panel(geometry, 7.1 * inch, 4.0 * inch,
+    resolved = resolved_plan(reference)
+    stats = resolved["stats"]
+    if resolved["primitives"]:
+        flow.append(plan_panel(resolved, 7.1 * inch, 4.0 * inch,
                                reference.get("frame_size")))
         flow.append(Spacer(1, 4))
         legend = []
-        if geometry.get("parcel"):
-            legend.append("Solid outline: lot line traced from the source."
-                          if geometry["parcel"]["certainty"] == vx.RECOVERED
-                          else "Dashed outline: lot line partly traced; not fully legible.")
-        if geometry.get("buildings"):
-            legend.append("Shaded: building footprint traced from the source.")
-        if geometry.get("north"):
-            legend.append("North arrow as shown on the source; the plan is not "
-                          "rotated to put north up.")
+        if stats["arcs"]:
+            legend.append("Curved boundaries are reconstructed as true arcs from "
+                          "the radius and chord printed on the source, not "
+                          "approximated by straight segments.")
+        if stats["straights"]:
+            legend.append("Solid lines are boundaries read from the source; "
+                          "dashed lines were only partly legible.")
+        if stats["footprints"]:
+            legend.append("Shaded: building footprints, in their relative "
+                          "positions on the source.")
+        if not stats["closed"]:
+            legend.append("The boundary is drawn OPEN where the source's own "
+                          "chain does not close; nothing has been joined up to "
+                          "make it look complete.")
         legend.append("Not to scale. No dimension is drawn that was not read "
                       "from the source.")
         flow.append(Paragraph(" ".join(_escape(item) for item in legend), small))
     else:
-        flow.append(Paragraph("No geometry could be traced from the source image. "
-                              "Everything below was read as text.", body))
+        flow.append(Paragraph("No boundary geometry could be reconstructed from "
+                              "the source image. Everything below was read as "
+                              "text.", body))
 
     def _facts_table(title, entries, note=None):
         if not entries:
@@ -486,6 +566,34 @@ def render_pdf(reference: dict) -> bytes:
 
     doc.build(flow)
     return buffer.getvalue()
+
+
+def resolved_plan(reference: dict) -> dict:
+    """The stored graph, resolved to primitives.
+
+    ONE resolver for the exported sheet and the on-screen review drawing, so
+    the two cannot describe the same parcel differently. Recomputed from the
+    graph rather than stored as primitives: the graph is the evidence, and
+    primitives are a rendering of it that a future change to the geometry rules
+    should be able to improve without rewriting stored records.
+    """
+    from services import survey_graph
+
+    graph = (reference or {}).get("graph") or {}
+    if not graph.get("nodes"):
+        return {"primitives": [], "unresolved": [],
+                "stats": {"arcs": 0, "straights": 0, "nodes": 0,
+                          "footprints": 0, "closed": False}}
+    return survey_graph.fit_to_frame(survey_graph.build_primitives(graph))
+
+
+def review_svg(reference: dict, width: int = 560, height: int = 420) -> str:
+    """The reconstruction as inline SVG, for the side-by-side review."""
+    from services import survey_graph
+
+    return survey_graph.emit_svg(resolved_plan(reference), width=width,
+                                 height=height,
+                                 frame_size=(reference or {}).get("frame_size"))
 
 
 def artifact_filename(display_name: str = "") -> str:

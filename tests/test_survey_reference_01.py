@@ -102,6 +102,48 @@ SURVEY_READING = {
         {"key": "bearings", "value": "N 71 E", "certainty": "UNRESOLVED"},
     ],
     "unresolved": ["surveyor registration block partially unreadable"],
+    # CLAUDE-SURVEY-REFERENCE-02: the parametric graph the reader now returns.
+    # A wedge lot: a straight rear line, a straight street edge, a CURVED
+    # frontage carrying its own radius and chord, and a west boundary - which
+    # is the Castille shape, reduced to the smallest form that exercises every
+    # geometry branch.
+    "graph": {
+        "nodes": [
+            {"id": "N1", "x": 0.20, "y": 0.20, "kind": "property_corner", "certainty": "RECOVERED"},
+            {"id": "N2", "x": 0.80, "y": 0.22, "kind": "property_corner", "certainty": "RECOVERED"},
+            {"id": "N3", "x": 0.82, "y": 0.70, "kind": "property_corner", "certainty": "RECOVERED"},
+            {"id": "N4", "x": 0.24, "y": 0.62, "kind": "curve_point", "certainty": "RECOVERED"},
+        ],
+        "segments": [
+            {"id": "S1", "from": "N1", "to": "N2", "kind": "straight", "boundary": "lot_line",
+             "label": "LOT LINE 3", "dimension": {"text": "144.12", "value": 144.12,
+                                                  "certainty": "RECOVERED"},
+             "certainty": "RECOVERED"},
+            {"id": "S2", "from": "N2", "to": "N3", "kind": "straight", "boundary": "street_line",
+             "label": "WARDEN AVENUE", "certainty": "RECOVERED"},
+            {"id": "S3", "from": "N3", "to": "N4", "kind": "arc", "boundary": "street_line",
+             "label": "CASTILLE AVENUE", "bulge_side": "right",
+             "radius": {"text": "153.76", "value": 153.76, "certainty": "RECOVERED"},
+             "chord": {"text": "139.20", "value": 139.20, "certainty": "RECOVERED"},
+             "certainty": "RECOVERED"},
+            {"id": "S4", "from": "N4", "to": "N1", "kind": "straight", "boundary": "lot_line",
+             "label": "west lot line", "certainty": "PARTIALLY_RECOVERED"},
+        ],
+        "footprints": [
+            {"id": "B1", "kind": "dwelling", "label": "1 STORY BRICK DWELLING",
+             "outline": [{"x": 0.45, "y": 0.34}, {"x": 0.70, "y": 0.34},
+                         {"x": 0.70, "y": 0.50}, {"x": 0.45, "y": 0.50}],
+             "certainty": "RECOVERED"},
+            {"id": "B2", "kind": "garage", "label": "EXISTING CONC. BLOCK GARAGE",
+             "outline": [{"x": 0.31, "y": 0.35}, {"x": 0.44, "y": 0.35},
+                         {"x": 0.44, "y": 0.48}, {"x": 0.31, "y": 0.48}],
+             "certainty": "PARTIALLY_RECOVERED"},
+        ],
+        "north": {"degrees": 8, "certainty": "RECOVERED"},
+        "streets": [{"label": "CASTILLE AVENUE", "along_segments": ["S3"],
+                     "certainty": "RECOVERED"}],
+        "unresolved": [],
+    },
     "geometry": {
         "parcel": {"points": [[0.12, 0.18], [0.88, 0.18], [0.88, 0.82], [0.12, 0.82]],
                    "certainty": "RECOVERED"},
@@ -186,6 +228,27 @@ class SurveyReferenceCase(unittest.TestCase):
         self.client.post("/login", data={"username": "cust", "password": PW})
         self.store = CaseWorkspaceStore(str(self.tmp))
         self.jobs = perception_jobs.PerceptionJobStore(str(self.tmp))
+
+        # HERMETIC BY CONSTRUCTION, not by remembering to stub.
+        #
+        # CLAUDE.md: "Any test path that can reach ... the Anthropic API ...
+        # must replace that boundary with a deterministic spy/stub/fake."
+        # Every test here that MEANS to call the gateway already stubs it, and
+        # instrumenting httpx proved that no test reaches the network today -
+        # zero egress attempts across all 62. This closes the boundary anyway,
+        # so that a FUTURE path added to this file fails and names itself
+        # instead of quietly making a live call.
+        #
+        # It is deliberately not an AI_CALLS_DISABLED env check: an env var can
+        # be absent, and a guarantee that depends on the environment being
+        # right is not a guarantee.
+        forbid = patch.object(
+            llm_gateway, "call_llm_json",
+            lambda **kwargs: self.fail(
+                "a test reached the real model gateway - stub it, or the suite "
+                "makes live calls (see CLAUDE.md on hermetic tests)"))
+        forbid.start()
+        self.addCleanup(forbid.stop)
         self.visual_jobs = visual_classification.visual_store(str(self.tmp))
         self.calls = []
 
@@ -427,9 +490,17 @@ class BRasterSurvey(SurveyReferenceCase):
         self.assertIn("Survey Reference", text)
         self.assertIn("Derived from uploaded survey image", text)
         self.assertIn("Original retained", text)
-        for forbidden in ("certified survey", "legal survey",
-                          "replacement survey", "reconstructed"):
-            self.assertNotIn(forbidden, text.lower().replace("not a certified or legal survey", ""),
+        # THE FORBIDDEN THING IS A CLAIM OF AUTHORITY, NOT A VOCABULARY.
+        #
+        # This checked for the bare word "reconstructed", which V2 then used in
+        # the honest sentence "no boundary geometry could be reconstructed from
+        # the source image" - a sentence that says the OPPOSITE of an
+        # overclaim. A word list cannot tell those apart; the phrases can.
+        lowered = text.lower().replace("not a certified or legal survey", "")
+        for forbidden in ("certified survey", "legal survey", "replacement survey",
+                          "reconstructed legal", "reconstructed authority",
+                          "reconstructed survey"):
+            self.assertNotIn(forbidden, lowered,
                              "the sheet claimed an authority it does not have")
 
     def test_the_original_is_downloadable_and_byte_identical(self):
@@ -1071,3 +1142,254 @@ class OContentFirstFraming(unittest.TestCase):
             b"PK\x03\x04not-an-image", "book.xlsx")
         self.assertIsNone(frame,
                           "a workbook was handed to the visual path as if it were a picture")
+
+
+class PLaneCannotReachAProvider(SurveyReferenceCase):
+    """CLAUDE-TEST-HERMETICITY-01 - egress proven absent, not assumed.
+
+        THE ASSERTION IS AT THE SOCKET, NOT AT THE FUNCTION WE REMEMBERED.
+
+    Every other hermeticity measure in this file stubs a named function. That
+    is necessary and not sufficient: it proves the paths we thought of are
+    closed, and says nothing about a path added later that reaches the network
+    some other way - a bespoke client, an SDK retry, a second provider.
+
+    So this instruments the HTTP TRANSPORT and drives a full representative
+    journey through it: upload, perception, visual examination, Survey
+    Reference derivation, result rendering, and a question to GO. Any
+    connection attempt by any route is recorded and fails the test by name.
+
+    This is also the measurement that corrected a wrong conclusion. A 5h55m run
+    of this file was initially attributed to a live provider call, on the
+    strength of one fast run with AI_CALLS_DISABLED set. Instrumenting the
+    transport showed ZERO egress attempts across the whole file - so that
+    attribution was coincidence, and the cause of that run remains
+    unestablished because its diagnostic window had closed. The lesson is in
+    this docstring rather than in a commit message because it is the reason
+    this test asserts where it does.
+    """
+
+    def _record_egress(self):
+        import httpx
+
+        attempts = []
+        original = httpx.HTTPTransport.handle_request
+
+        def refuse(transport, request):
+            attempts.append(str(request.url))
+            raise AssertionError("network egress from a test: %s" % request.url)
+
+        patcher = patch.object(httpx.HTTPTransport, "handle_request", refuse)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return attempts
+
+    def test_a_full_survey_journey_opens_no_connection(self):
+        attempts = self._record_egress()
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        result, document, workspace = self.result_for(project_id)
+
+        # The journey has to have actually happened, or "no egress" is trivial.
+        self.assertEqual(result["state"], dx.STATE_RESULT_READY)
+        self.assertIsNotNone(result["survey_reference"])
+        self.assertTrue(dx.visual_reading(workspace, workspace.sources[0]["id"]))
+
+        seen = {}
+
+        def spy(**kwargs):
+            seen.update(kwargs)
+            return _Outcome(parsed={"answer": "ok"})
+
+        with patch.object(llm_gateway, "call_llm_json", spy):
+            dc.ask(document, workspace, result, "What did you recover?", app=self.app)
+        self.assertTrue(seen, "the conversation path was not exercised")
+
+        self.assertEqual(attempts, [],
+                         "the Survey Reference lane reached the network")
+
+    def test_the_pdf_and_review_drawing_need_no_network(self):
+        """Rendering is local by construction - reportlab and PyMuPDF only."""
+        attempts = self._record_egress()
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        _r, _d, workspace = self.result_for(project_id)
+        pdf = Path(self.derived_sources(workspace)[0]["file_path"]).read_bytes()
+
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertEqual(attempts, [])
+
+
+class QPendingWindowSaysOnlyThat(SurveyReferenceCase):
+    """CLAUDE-SURVEY-REFERENCE-02 - the Cassidy window.
+
+        WHILE ANY STAGE IS IN FLIGHT, THE PAGE STATES NO CONCLUSION.
+
+    A real production record - `1 Cassidy Place-Survey.jpg` - was reported as
+    showing "Waiting to be examined", "No text could be read" and "No
+    interpretation was reached" together. Nothing was wrong with the routing:
+    both jobs were enqueued at intake and completed first time, 49 seconds from
+    upload to Survey Reference. What the report caught was the 49 SECONDS in
+    between, during which the page asserted three conclusions about a reading
+    that had not happened.
+
+    Two causes, both repaired here:
+
+      1. `source_state` consulted the PERCEPTION queue only, so a completed OCR
+         pass read as a finished examination while the looking was still queued.
+      2. `build_result` computed its state AFTER assembling `not_established`,
+         so the conclusions were written before anything knew they were early.
+
+    Product Owner rule, 2026-09-15: no completed-reading conclusion until every
+    required stage is done.
+    """
+
+    FORBIDDEN_WHILE_PENDING = (
+        "No text could be read from this image",
+        "No interpretation was reached",
+        "Nothing has been concluded from the recovered text",
+        "Nothing was recovered from this file",
+        "This file has no text layer",
+        "Internal consistency was not checked",
+        "Unresolved",
+    )
+
+    def _result_with_stage_states(self, project_id, perception, visual):
+        """Render the page as it looks with the two queues in a given state."""
+        from services import perception_jobs as pj
+        from services.ingestion import _display_name_of
+        from services.requirements_registry import RequirementsRegistry
+
+        document = RequirementsRegistry(str(self.tmp)).get(project_id)
+        workspace = self.workspace(project_id)
+
+        class Stubbed:
+            root = self.tmp / "perception_jobs"
+
+            def latest_for_source(self, _wid, _sid):
+                return None if perception is None else {"state": perception}
+
+        def stage_states(_ws, _sid, jobs=None):
+            return [perception, visual]
+
+        with patch.object(dx, "examination_stage_states", stage_states):
+            return dx.build_result(document, workspace,
+                                   display_name=_display_name_of(document, self.store),
+                                   jobs=Stubbed())
+
+    def test_queued_shows_the_pending_state_and_no_conclusion(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        result = self._result_with_stage_states(
+            project_id, perception_jobs.STATE_QUEUED, perception_jobs.STATE_QUEUED)
+
+        self.assertEqual(result["state_label"], "Waiting to be examined")
+        self.assertTrue(result["pending"])
+        labels = {item["label"] for item in result["not_established"]}
+        for forbidden in self.FORBIDDEN_WHILE_PENDING:
+            self.assertNotIn(forbidden, labels,
+                             "%r was stated while the examination was queued" % forbidden)
+
+    def test_running_shows_the_pending_state_and_no_conclusion(self):
+        """RUNNING outranks QUEUED across STAGES, which is the opposite of the
+        rule across SOURCES - and deliberately so.
+
+        `_AGGREGATE_PRECEDENCE` governs several independent sources, where the
+        least settled one is the honest summary. These are sequential stages of
+        ONE source, and the question is whether the document has started being
+        looked at. With OCR running and the visual stage queued behind it,
+        "Waiting to be examined" would say nothing had begun - false, and it
+        reads as a stuck upload. Three pre-existing tests in
+        `test_perception_worker_01` assert that meaning and caught this the
+        first time it was written the other way round."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        result = self._result_with_stage_states(
+            project_id, perception_jobs.STATE_RUNNING, perception_jobs.STATE_QUEUED)
+
+        self.assertEqual(result["state_label"], "Being examined")
+        self.assertTrue(result["pending"])
+        self.assertEqual(result["not_established"], [])
+
+    def test_the_cassidy_window_specifically(self):
+        """PERCEPTION DONE, LOOKING STILL QUEUED - the exact 49-second shape.
+
+        This is the combination the old code got wrong: it consulted only the
+        first queue, saw `completed`, and declared the examination finished.
+        """
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        result = self._result_with_stage_states(
+            project_id, perception_jobs.STATE_COMPLETED, perception_jobs.STATE_QUEUED)
+
+        self.assertTrue(result["pending"],
+                        "a completed OCR pass read as a finished examination "
+                        "while the visual stage was still queued")
+        self.assertEqual(result["state_label"], "Waiting to be examined")
+        labels = {item["label"] for item in result["not_established"]}
+        for forbidden in self.FORBIDDEN_WHILE_PENDING:
+            self.assertNotIn(forbidden, labels)
+
+    def test_completed_with_no_evidence_gives_the_honest_empty_result(self):
+        """Completion is what earns the right to say nothing was found."""
+        project_id = self.upload(survey_jpeg(), "blur.jpg", name="Unreadable")
+        result = self._result_with_stage_states(
+            project_id, perception_jobs.STATE_COMPLETED,
+            perception_jobs.STATE_COMPLETED)
+
+        self.assertFalse(result["pending"])
+        labels = {item["label"] for item in result["not_established"]}
+        self.assertTrue(labels, "a finished examination said nothing at all")
+        self.assertTrue(
+            {"No text could be read from this image",
+             "No interpretation was reached"} & labels,
+            "a completed, empty examination did not say so: %s" % labels)
+
+    def test_completed_with_visual_evidence_gives_the_recovered_result(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        result, _document, _workspace = self.result_for(project_id)
+
+        self.assertFalse(result["pending"])
+        self.assertEqual(result["state_label"], "Result ready")
+        interpretation = {item["label"] for item in result["interpretation"]}
+        self.assertIn("Recovered", interpretation)
+        self.assertIn("Partially recovered", interpretation)
+        self.assertIn("Unresolved",
+                      {item["label"] for item in result["not_established"]})
+
+    def test_both_queues_are_consulted_not_just_perception(self):
+        """The structural half of the repair, asserted directly."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        workspace = self.workspace(project_id)
+        stages = dx.examination_stage_states(
+            workspace, workspace.sources[0]["id"], jobs=self.jobs)
+
+        self.assertEqual(len(stages), 2,
+                         "only one examination stage is being consulted")
+        self.assertEqual(stages[0], perception_jobs.STATE_QUEUED)
+        self.assertEqual(stages[1], perception_jobs.STATE_QUEUED,
+                         "the visual queue was not found beside the perception one")
+
+    def test_a_failed_visual_stage_changes_nothing_on_its_own(self):
+        """A file with no visual representation terminates its visual job
+        honestly, and that must not decide the document's state.
+
+        Asserted as an INVARIANCE rather than against a fixed label: the
+        question is whether the visual stage's failure changes the answer, so
+        the same document is rendered with that stage failed and completed and
+        the two compared. An absolute assertion here would have pinned whatever
+        the text path happens to produce for this fixture - a different subject,
+        and one that was never true of a plain .txt with no registered page
+        evidence, which lands on "Needs attention" for reasons that predate
+        this change entirely.
+        """
+        project_id = self.upload(b"Section 1. The Contractor shall comply.\n",
+                                 "spec.txt", name="A specification")
+        failed = self._result_with_stage_states(
+            project_id, perception_jobs.STATE_COMPLETED, perception_jobs.STATE_FAILED)
+        completed = self._result_with_stage_states(
+            project_id, perception_jobs.STATE_COMPLETED, perception_jobs.STATE_COMPLETED)
+
+        self.assertEqual(failed["state_label"], completed["state_label"],
+                         "a failed visual stage changed the document's state")
+        self.assertFalse(failed["pending"])

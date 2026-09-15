@@ -124,6 +124,65 @@
 <p class="mono" data-ui-ref="document-shop.result.reference-note">
     {{ result.survey_reference.source_note }}
 </p>
+
+{# CLAUDE-SURVEY-REFERENCE-02: the side-by-side review.
+
+   The Product Owner has to be able to judge the reconstruction against the
+   thing it was reconstructed FROM, and no amount of prose substitutes for
+   putting the two next to each other. Both panels carry the source's own
+   aspect ratio, so shapes can be read across.
+
+   The right-hand panel is INLINE SVG built from the same resolved primitives
+   the exported PDF is drawn from - a real <path> with real A (arc) commands,
+   never an <img>. What is being compared is the reconstruction itself. #}
+{% if result.survey_reference.plan_svg %}
+<div class="sr-review" data-ui-ref="document-shop.result.review">
+    <figure class="sr-review-pane" data-ui-ref="document-shop.result.review-original">
+        <figcaption class="mono"><strong>Original survey</strong> &mdash; as uploaded, unchanged</figcaption>
+        <img src="{{ url_for('workspace.source_image', project_id=project_id, source_id=result.survey_reference.original_source_id) }}"
+             alt="The original survey image you uploaded" class="sr-review-img">
+    </figure>
+    <figure class="sr-review-pane" data-ui-ref="document-shop.result.review-reference">
+        <figcaption class="mono"><strong>Survey Reference</strong> &mdash; reconstructed from what GO read</figcaption>
+        {{ result.survey_reference.plan_svg | safe }}
+    </figure>
+</div>
+<p class="mono sr-review-legend" data-ui-ref="document-shop.result.review-legend">
+    Solid lines were read clearly; dashed lines were only partly legible.
+    {% if result.survey_reference.stats.arcs %}
+    Curved boundaries are reconstructed as true arcs from the radius and chord
+    printed on the source, not approximated by straight segments.
+    {% endif %}
+    {% if not result.survey_reference.stats.closed %}
+    The boundary is drawn open where the source's own chain does not close &mdash;
+    nothing has been joined up to make it look complete.
+    {% endif %}
+    Not to scale. No dimension is drawn that was not read from the source.
+</p>
+{% endif %}
+
+{# UNRESOLVED AND WITHHELD, SEPARATELY. Shown beside the drawing rather than
+   only in the PDF, because the moment a person judges a reconstruction is the
+   moment they need to know what is missing from it. #}
+{% if result.survey_reference.unresolved or result.survey_reference.withheld %}
+<details class="sr-unresolved" data-ui-ref="document-shop.result.review-unresolved">
+    <summary class="mono">Not reconstructed
+        ({{ result.survey_reference.unresolved | length + result.survey_reference.withheld | length }})</summary>
+    {% if result.survey_reference.unresolved %}
+    <p class="mono"><strong>Unresolved</strong> &mdash; present on the sheet, not legible enough to use</p>
+    <ul class="mono">
+        {% for item in result.survey_reference.unresolved %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if result.survey_reference.withheld %}
+    <p class="mono"><strong>Withheld</strong> &mdash; read, but not reliable enough to state</p>
+    <ul class="mono">
+        {% for item in result.survey_reference.withheld %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+</details>
+{% endif %}
+
 {% if result.survey_reference.source_id %}
 <p class="mono">
     <a class="btn" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.survey_reference.source_id, download=1) }}"

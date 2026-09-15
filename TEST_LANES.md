@@ -388,3 +388,82 @@ zero-behavior-change diff to an existing file, individually reviewable.
   Redirect to a log and capture `PYTEST_EXIT=$?` as its own line. This caught a
   real red run during CLAUDE-MENU-HOME-TARGET-01, where the task notification
   said exit 0 while pytest had exited 1.
+
+
+## Test-only dependencies — `requirements-dev.txt`
+
+**CLAUDE-TEST-HERMETICITY-01.** The runner and its plugins now have a real
+manifest:
+
+```
+./venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+```
+
+`requirements.txt` ships to the production host and deliberately contains no
+test machinery; this file never ships, and is how a fresh clone gets a working
+gate rather than a subtly weakened one.
+
+**Why it exists.** `pytest.ini` has set `timeout = 300` since
+CLAUDE-TEST-TIER0-01 — a hang detector added after two recorded full-suite
+stalls (4h27m and 4h35m) and an 8.5-hour hang. `pytest-timeout` was not
+installed, and **pytest ignores an unknown ini key in silence**, so the detector
+was inert and every run was unbounded. That is how a 5h55m run of a single test
+file could pass without anything naming what it waited on.
+
+> **A SAFETY NET RECORDED ONLY IN PROSE IS A SAFETY NET NOBODY INSTALLS.**
+
+Enforcement does not rest on anyone reading this section:
+`tests/test_hang_detector_active_01.py` asks the RUNNING session for its
+timeout through pytest's own ini machinery, so it fails on a machine where the
+plugin is absent or disabled (`-p no:timeout` reproduces the failure exactly).
+
+`tests/test_survey_reference_01.py::PLaneCannotReachAProvider` is the companion
+for egress: it instruments the HTTP transport and drives a full Survey
+Reference journey through it, so hermeticity is asserted **at the socket**
+rather than at whichever function someone remembered to stub.
+
+
+## The external-provider lane — opt in twice, or not at all
+
+**CLAUDE-TEST-HERMETICITY-01.** Ordinary pytest runs **deny non-loopback egress
+at the socket**. `tests/conftest.py`'s autouse `deny_external_egress` fixture
+patches `socket.socket.connect` and `socket.create_connection`, so a connection
+fails at `connect()` — before any request is constructed, before any byte
+leaves — and the failure names the test and the host it reached for.
+
+Loopback is untouched: the Flask test client and SQLite never leave the
+process, and blocking localhost would break every route test for nothing.
+
+A test that genuinely needs a provider must say so **twice**:
+
+```
+@pytest.mark.external_provider              # declared by the test
+ARCHIOSK_ALLOW_EXTERNAL_CALLS=1             # declared by the operator
+```
+
+Either alone is deliberately insufficient. A marker alone survives a rebase
+into the default lane and starts making live calls; an env var alone enables
+them for the entire suite from one `export`. Both gates are asserted by
+`tests/test_external_egress_guard_01.py::TheGateRequiresBothKeys`.
+
+**Running the lane** (never part of the default gate):
+
+```bash
+ARCHIOSK_ALLOW_EXTERNAL_CALLS=1 ./venv/Scripts/python.exe -m pytest -m external_provider -q
+```
+
+**Why this exists, stated accurately.** A socket-level audit of the full suite
+recorded **zero** non-loopback connections across 9,055 tests, so this guard
+closes a door that was already shut. It is a structural guarantee about the
+*next* path — a bespoke client, an SDK retry, a second provider — not a
+response to a leak. The distinction is on the record because a 5h55m run was
+briefly and wrongly attributed to a live provider call before anyone measured;
+the measurement disproved it, and the cause of that run remains unestablished.
+
+> **STUBBING THE FUNCTION YOU REMEMBERED IS NOT THE SAME AS CLOSING THE DOOR.**
+
+`tests/test_external_egress_guard_01.py` proves the guard holds against real
+application code with nothing stubbed — and caught a defect in the guard on its
+first run: `_LOCAL_HOST_PREFIXES` contained `""`, and every string starts with
+the empty string, so every host was being treated as loopback. That is the
+argument for writing the regression before trusting the guard.

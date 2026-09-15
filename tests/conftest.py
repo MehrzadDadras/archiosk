@@ -63,6 +63,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from config import BASE_DIR, TestingConfig
 
 _INSTANCE_DIR = (BASE_DIR / "instance").resolve()
@@ -450,3 +452,133 @@ def _terminate_orphan_app_processes():
                   "chain rooted at PID %d - remove it by hand, or the suite "
                   "will run starved: %s" % (root, completed.stdout.strip()))
     return killed
+
+
+# -- CLAUDE-TEST-HERMETICITY-01: external egress is DENY BY DEFAULT -----------
+#
+#     A TEST THAT CAN REACH A PROVIDER WILL EVENTUALLY REACH ONE.
+#
+# Hermeticity here has been maintained by remembering to stub the right
+# function - `BHiveParser.parse` in one file, `llm_gateway.call_llm_json` in
+# another. That is necessary and NOT sufficient: it closes the paths somebody
+# thought of, and says nothing about a path added later that reaches the
+# network another way - a bespoke client, an SDK retry, a second provider, a
+# raw socket.
+#
+# So the boundary moves to the SOCKET, where all of those converge, and the
+# default becomes refusal.
+#
+# WHAT THIS IS AND IS NOT EVIDENCE OF. A full-suite audit at this same layer
+# recorded ZERO non-loopback connections across 9,055 tests, so this guard
+# closes a door that is currently shut. It is a structural guarantee against
+# the next path, not a response to a leak - and the distinction matters,
+# because a 5h55m run was briefly and wrongly attributed to a live provider
+# call before the measurement was taken. The cause of that run remains
+# unestablished; this file makes the question answerable next time instead of
+# reconstructible afterwards.
+#
+# LOOPBACK IS UNTOUCHED. The Flask test client and SQLite never leave the
+# process; a localhost connection is not egress, and blocking it would break
+# every route test for nothing.
+#
+# A test that legitimately needs a provider must say so TWICE - a marker in the
+# code and a flag in the environment - because either alone is too easy to
+# acquire by accident. A marker alone survives a rebase into the default lane;
+# an env var alone enables live calls for the whole suite from one export.
+#
+#     @pytest.mark.external_provider          # declared by the test
+#     ARCHIOSK_ALLOW_EXTERNAL_CALLS=1         # declared by the operator
+#
+# Without BOTH, the connection fails at connect() - before any request is
+# constructed, before any byte leaves - and the failure names the test and the
+# host it reached for.
+
+EXTERNAL_PROVIDER_MARKER = "external_provider"
+EXTERNAL_OPT_IN_ENV = "ARCHIOSK_ALLOW_EXTERNAL_CALLS"
+
+#: Loopback only. "No host at all" - a unix socket, an empty address - is
+#: handled separately BECAUSE AN EMPTY PREFIX MATCHES EVERY STRING: with "" in
+#: this tuple, `"api.anthropic.com".startswith("")` is True and the guard
+#: silently permits everything. The first run of
+#: `tests/test_external_egress_guard_01.py` caught exactly that, which is the
+#: whole argument for writing the regression before trusting the guard.
+_LOCAL_HOST_PREFIXES = ("127.", "::1", "localhost", "0.0.0.0")
+
+
+class ExternalEgressDenied(AssertionError):
+    """A test reached for the network without being doubly opted in.
+
+    AssertionError rather than a custom base, so it reads as a test failure
+    rather than an application error - the thing that went wrong is the test's
+    isolation, not the code under test.
+    """
+
+
+def _host_is_local(host) -> bool:
+    """Loopback, or no host at all. Never a wildcard.
+
+    An absent host is treated as local because it cannot be egress - there is
+    nowhere for it to go - but it is tested explicitly rather than expressed as
+    an empty prefix, which would match every hostname in existence.
+    """
+    text = str(host or "")
+    if not text:
+        return True
+    return any(text.startswith(prefix) for prefix in _LOCAL_HOST_PREFIXES)
+
+
+def _split_address(address):
+    if isinstance(address, tuple) and address:
+        return address[0], (address[1] if len(address) > 1 else None)
+    return address, None
+
+
+def external_calls_permitted(node) -> bool:
+    """Both gates, evaluated together. Exposed so a test can assert on it."""
+    marked = node.get_closest_marker(EXTERNAL_PROVIDER_MARKER) is not None
+    opted_in = os.getenv(EXTERNAL_OPT_IN_ENV, "").strip() == "1"
+    return marked and opted_in
+
+
+@pytest.fixture(autouse=True)
+def deny_external_egress(request):
+    """Refuse every non-loopback connection unless doubly opted in."""
+    import socket
+
+    if external_calls_permitted(request.node):
+        # An authorized external-integration test, running in its own lane.
+        # This is the ONLY way a connection leaves this process.
+        yield
+        return
+
+    original_connect = socket.socket.connect
+    original_create = socket.create_connection
+
+    def _refuse(host, port):
+        raise ExternalEgressDenied(
+            "external egress denied: %s tried to connect to %s:%s. "
+            "Tests are hermetic by default. If this call is deliberate, mark it "
+            "@pytest.mark.%s AND run the integration lane with %s=1; otherwise "
+            "stub the boundary (see CLAUDE.md on hermetic tests)."
+            % (request.node.nodeid, host, port,
+               EXTERNAL_PROVIDER_MARKER, EXTERNAL_OPT_IN_ENV))
+
+    def guarded_connect(self, address, *args, **kwargs):
+        host, port = _split_address(address)
+        if not _host_is_local(host):
+            _refuse(host, port)
+        return original_connect(self, address, *args, **kwargs)
+
+    def guarded_create(address, *args, **kwargs):
+        host, port = _split_address(address)
+        if not _host_is_local(host):
+            _refuse(host, port)
+        return original_create(address, *args, **kwargs)
+
+    socket.socket.connect = guarded_connect
+    socket.create_connection = guarded_create
+    try:
+        yield
+    finally:
+        socket.socket.connect = original_connect
+        socket.create_connection = original_create

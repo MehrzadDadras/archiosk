@@ -303,6 +303,47 @@ def _job_state_for(jobs, workspace_id, source_id):
     return record.get("state")
 
 
+def _visual_jobs_beside(jobs):
+    """The VISUAL queue that belongs to the same registry as `jobs`.
+
+    CLAUDE-SURVEY-REFERENCE-02. Examination is now TWO stages on two queues -
+    OCR on `perception_jobs`, looking on `visual_jobs` - and a page that
+    consults only the first reports a finished examination while the second is
+    still running. That is what produced the Cassidy window: perception
+    completed at 22:10:45, the visual reading at 22:11:13, and in between the
+    page asserted conclusions about a reading that had not happened.
+
+    Derived from the store it is handed rather than added as a parameter,
+    because every caller already passes the perception store and the two queues
+    live in one registry by construction. A caller cannot forget to pass the
+    second one, which is exactly the failure this repairs.
+    """
+    if jobs is None:
+        return None
+    root = getattr(jobs, "root", None)
+    if root is None:
+        return None
+    try:
+        from services import visual_classification
+
+        return visual_classification.visual_store(root.parent)
+    except Exception:  # noqa: BLE001 - a missing queue is "no job", not an error
+        return None
+
+
+def examination_stage_states(workspace, source_id, *, jobs=None) -> list:
+    """Every examination stage's state for this source, in pipeline order.
+
+    ONE reader for both queues, so "is this source still being examined" has a
+    single answer that the state function and the page cannot disagree about.
+    """
+    workspace_id = getattr(workspace, "project_id", "")
+    return [
+        _job_state_for(jobs, workspace_id, source_id),
+        _job_state_for(_visual_jobs_beside(jobs), workspace_id, source_id),
+    ]
+
+
 def source_state(document, workspace, source_id, *, jobs=None) -> str:
     """One Source's honest state.
 
@@ -312,12 +353,44 @@ def source_state(document, workspace, source_id, *, jobs=None) -> str:
     """
     from services import perception_jobs as pj
 
-    job_state = _job_state_for(jobs, getattr(workspace, "project_id", ""), source_id)
-    if job_state == pj.STATE_QUEUED:
-        return STATE_QUEUED
-    if job_state == pj.STATE_RUNNING:
+    # CLAUDE-SURVEY-REFERENCE-02: EVERY stage, not just the first one.
+    #
+    # Examination is two stages on two queues now. Consulting only perception
+    # reported a finished examination while the looking was still queued - the
+    # Cassidy window, where the page said "no text could be read" and "no
+    # interpretation was reached" twenty-eight seconds before the visual
+    # reading named the lot, the plan and both streets.
+    #
+    # PENDING WINS OVER EVERYTHING, including a failure in the other stage: a
+    # source with one stage still running is still being examined, and saying
+    # anything else is a claim about work in flight. Queued outranks running
+    # for the same reason the aggregate takes the least settled state.
+    stages = examination_stage_states(workspace, source_id, jobs=jobs)
+    # RUNNING OUTRANKS QUEUED ACROSS STAGES - the opposite of the rule across
+    # SOURCES, and the difference is not an inconsistency.
+    #
+    # `_AGGREGATE_PRECEDENCE` governs several INDEPENDENT sources, where the
+    # least settled one is the honest summary: five photographs with two done
+    # and three waiting is not "ready". These are SEQUENTIAL STAGES of one
+    # source's single examination, and the question a person is asking is "has
+    # my document started being looked at". With OCR actively running and the
+    # visual stage queued behind it, "Waiting to be examined" would say nothing
+    # has begun, which is false and reads as though the upload were stuck.
+    #
+    # Three pre-existing tests in test_perception_worker_01 assert the user-
+    # facing meaning here, and they caught this the first time it was written
+    # the other way round.
+    if pj.STATE_RUNNING in stages:
         return STATE_PROCESSING
-    if job_state == pj.STATE_FAILED:
+    if pj.STATE_QUEUED in stages:
+        return STATE_QUEUED
+    # FAILURE IS READ FROM PERCEPTION ONLY, and the asymmetry is deliberate.
+    # Pending is a property of EITHER stage - work in flight is work in flight.
+    # Failure is not: the visual stage terminates honestly for every file that
+    # has no visual representation at all, so letting it force
+    # `needs_attention` would put every .txt and .docx in the deployment into a
+    # failed-looking state for doing exactly the right thing.
+    if stages[0] == pj.STATE_FAILED:
         return STATE_NEEDS_ATTENTION
 
     # CLAUDE-SURVEY-REFERENCE-01: a VISUAL reading is an interpretation.
@@ -431,6 +504,21 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     visual = visual_reading(workspace, source["id"]) if source else None
     reference = survey_reference_of(workspace, source["id"]) if source else None
 
+    # CLAUDE-SURVEY-REFERENCE-02: THE STATE IS DECIDED BEFORE ANY CONCLUSION
+    # IS WRITTEN, because whether the examination has finished governs which
+    # conclusions may be written at all.
+    #
+    # It used to be computed at the END, after `not_established` was already
+    # built - so the page assembled "No text could be read" and "No
+    # interpretation was reached" and only afterwards discovered it was still
+    # queued. `pending` then suppressed the raw-text block and nothing else,
+    # which is the half-implemented intent this module's own docstring
+    # describes. The Cassidy record showed it: for 49 seconds the page stated
+    # three conclusions about a reading that had not happened.
+    state = state_of(document, workspace, jobs=jobs)
+    pending = state in (STATE_QUEUED, STATE_PROCESSING)
+
+
     established: list[dict[str, str]] = []
     interpretation: list[dict[str, str]] = []
     not_established: list[dict[str, str]] = []
@@ -473,7 +561,8 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                 recovered["character_count"], how,
             ),
         })
-        if not _reached_an_interpretation(document) and not _visual_established_anything(visual):
+        if (not pending and not _reached_an_interpretation(document)
+                and not _visual_established_anything(visual)):
             # Said HERE, beside the character count, because the count on its
             # own reads as success. 14,306 characters of nothing is still
             # nothing, and the customer should not have to infer that.
@@ -536,18 +625,28 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                 len(flags), "" if len(flags) == 1 else "s")) if flags
             else "Nothing inconsistent stood out.",
         })
-    elif not visual_recovered and not visual_partial:
-        # Said only where there is nothing better to say. On a survey image
-        # this line used to sit under "What we could not establish" beside two
-        # more just like it, which is how a page that HAD read the document
-        # came to read as three kinds of failure.
+    elif not pending and not visual_recovered and not visual_partial:
+        # Said only where there is nothing better to say, and only once the
+        # examination has actually finished - "was not checked" is a claim
+        # about a completed pass.
         not_established.append({
             "label": "Internal consistency was not checked",
             "value": getattr(document, "consistency_note", None)
             or "This document was not compared against itself for contradictions.",
         })
 
-    if visual_unresolved:
+    if pending:
+        # WHILE ANY STAGE IS STILL IN FLIGHT, THE PAGE SAYS ONLY THAT.
+        #
+        # Product Owner rule, 2026-09-15: no completed-reading conclusion until
+        # every required stage is done. Everything below this branch - "No text
+        # could be read", "No interpretation was reached", "Nothing was
+        # concluded", and even a partial Unresolved list - is a statement about
+        # a finished examination. Emitting any of them early is not a cosmetic
+        # problem: it tells someone their survey is unreadable while it is
+        # being read.
+        pass
+    elif visual_unresolved:
         # The ONLY not-established line a visually-read document gets, and it
         # names real items rather than describing a missing capability.
         not_established.append({"label": "Unresolved",
@@ -582,7 +681,7 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                          "out of it.",
             })
 
-    if not interpretation and not recovered["passage_count"] and not visual:
+    if not pending and not interpretation and not recovered["passage_count"] and not visual:
         # Only when there is genuinely nothing, which now includes "and nobody
         # looked". A visually-examined source has already said what it found or
         # that it found nothing, and this line would contradict the first and
@@ -593,7 +692,8 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
                      "document requires or describes.",
         })
 
-    state = state_of(document, workspace, jobs=jobs)
+    # `state` and `pending` were resolved above, before any conclusion was
+    # written; recomputing here would re-read both queues for the same answer.
     # CLAUDE-DOCUMENT-SHOP-FLOW-01: a photograph of a drawing yields marks and
     # fragments, not sentences. When nothing was concluded from them, the page
     # must present them AS fragments - the old heading "Some of what was read"
@@ -624,22 +724,38 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         # While anything is still queued or running, the page must not present
         # the raw-text block or the "nothing was concluded" grammar: both are
         # statements about a completed reading.
-        "pending": state in (STATE_QUEUED, STATE_PROCESSING),
+        "pending": pending,
         # CLAUDE-SURVEY-REFERENCE-01: the derived artifact, if one was built.
         # `reference_source_id` is what the download link needs; the rest is
         # what the page says about it, which is deliberately three words.
-        "survey_reference": _reference_view(reference),
+        "survey_reference": _reference_view(reference,
+                                            source_id=(source or {}).get("id")),
         "visual_ran": bool(visual),
     }
 
 
-def _reference_view(reference) -> Optional[dict[str, Any]]:
+def _reference_view(reference, *, source_id=None) -> Optional[dict[str, Any]]:
     """What the result page shows about a Survey Reference: that there is one,
     what it is, and how to open it. Not its contents - those are already the
     Recovered / Partially recovered / Unresolved lines above, and printing them
     twice is how a slim page stops being slim."""
     if not reference:
         return None
+    from services import survey_reference as sr
+
+    # CLAUDE-SURVEY-REFERENCE-02: the review drawing, as inline SVG.
+    #
+    # THE SAME PRIMITIVES THE PDF IS DRAWN FROM. `sr.review_svg` resolves the
+    # stored graph through the one resolver the exported sheet uses, so the
+    # drawing a person compares against their photograph is the reconstruction
+    # itself - not a second rendering that could agree with the PDF today and
+    # drift from it tomorrow.
+    try:
+        svg = sr.review_svg(reference)
+        stats = sr.resolved_plan(reference)["stats"]
+    except Exception:  # noqa: BLE001 - a review drawing is never worth a 500
+        svg, stats = "", {}
+
     return {
         "title": reference.get("title") or "Survey Reference",
         "source_note": reference.get("source_note") or "",
@@ -647,6 +763,13 @@ def _reference_view(reference) -> Optional[dict[str, Any]]:
         "filename": reference.get("artifact_filename") or "",
         "sha256": reference.get("artifact_sha256") or "",
         "generated_at": reference.get("generated_at") or "",
+        # The side-by-side needs the ORIGINAL's source id too, so the photo can
+        # be shown beside the reconstruction at the same size.
+        "original_source_id": source_id,
+        "plan_svg": svg,
+        "stats": stats,
+        "withheld": [entry["label"] for entry in (reference.get("withheld") or [])],
+        "unresolved": list(reference.get("unresolved") or []),
     }
 
 

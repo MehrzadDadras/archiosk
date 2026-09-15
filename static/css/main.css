@@ -10622,3 +10622,37 @@ dl.plain-list dd {
     outline: 2px solid var(--machine-blue);
     outline-offset: 2px;
 }
+
+/* CLAUDE-SURVEY-REFERENCE-02 — the side-by-side survey review.
+   Two panes so the Product Owner can judge a reconstruction against the source
+   it came from. Stacks below 720px: on a phone, two half-width drawings are
+   two unreadable drawings, and this surface exists to be read. */
+.sr-review {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 12px 0 8px;
+}
+.sr-review-pane { margin: 0; min-width: 0; }
+.sr-review-pane figcaption { margin-bottom: 6px; }
+.sr-review-img,
+.sr-review .sr-plan-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    /* Tokens only. The first version of this block used two raw hex values
+       and was caught by the site-wide colour guard - correctly: a comparison
+       surface that quietly invents its own greys is how a palette drifts. The
+       guard reads the FILE, so naming those values even in a comment trips it
+       again; that is the rule working, not an over-reach. --border is the
+       quiet divider, --surface-primary the panel ground. */
+    border: 1px solid var(--border);
+    background: var(--surface-primary);
+}
+.sr-review-legend { margin-top: 4px; opacity: 0.85; }
+.sr-unresolved { margin: 8px 0 12px; }
+.sr-unresolved summary { cursor: pointer; }
+.sr-unresolved ul { margin: 4px 0 8px 18px; }
+@media (max-width: 720px) {
+    .sr-review { grid-template-columns: 1fr; }
+}

@@ -76,7 +76,7 @@ from services.sheet_vision import UNTRUSTED_CLOSE, UNTRUSTED_OPEN, _strip_fence_
 
 logger = logging.getLogger(__name__)
 
-VISUAL_PROMPT_VERSION = "visual-examination-01"
+VISUAL_PROMPT_VERSION = "visual-examination-02"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -103,7 +103,21 @@ MAX_OCR_CHARS = 4000
 #: crowd out the picture.
 MAX_SPATIAL_CHARS = 6000
 
-MAX_TOKENS = 2000
+#: CLAUDE-SURVEY-REFERENCE-02 raised both of these, and the reason is the
+#: schema rather than the picture. A V1 reading was a flat list of short
+#: observations; a graph carries nodes, segments, their dimensions and their
+#: bearings, and on a real survey that is several times the output. Measured
+#: against the Castille sheet, the V1 budget TIMED OUT at the deployment's
+#: 30-second default before the reader had finished the segment list - and a
+#: truncated graph is not a partial drawing, it is a boundary with missing
+#: sides.
+#:
+#: The timeout is stated HERE rather than left to `ANTHROPIC_TIMEOUT_SECONDS`,
+#: because that default is sized for short text round trips and this call is
+#: deliberately the longest one the application makes. It runs in a worker, not
+#: a request, so a slow read costs a queue slot rather than a customer's page.
+MAX_TOKENS = 8000
+TIMEOUT_SECONDS = 180.0
 
 # -- Certainty (the Product Owner's own four states) -------------------------
 RECOVERED = "RECOVERED"
@@ -218,6 +232,7 @@ class VisualExaminationResult:
     observations: list = field(default_factory=list)
     unresolved: list = field(default_factory=list)
     geometry: dict = field(default_factory=dict)
+    graph: dict = field(default_factory=dict)
     skipped_reason: Optional[str] = None
     model: Optional[str] = None
     prompt_version: str = VISUAL_PROMPT_VERSION
@@ -255,6 +270,7 @@ class VisualExaminationResult:
             "observations": self.observations,
             "unresolved": self.unresolved,
             "geometry": self.geometry,
+            "graph": self.graph,
             # The spatial evidence that reached the model, named rather than
             # copied: "what did it have to work with" is answerable without the
             # record becoming a second copy of the sheet.
@@ -284,7 +300,18 @@ DOCUMENT CATEGORY, exactly one:
 - "unknown": none of the above, or too little is visible to say.
 Do NOT call something a survey because it is a plan. A floor plan is a drawing. A photograph OF a survey lying on a desk is a survey only if the survey itself is legible.
 
-GEOMETRY. Only where you can actually trace it. Coordinates are fractions of the image, 0.0-1.0, origin top-left. Give the parcel outline as a closed polygon and each building footprint as a polygon. "north" is the compass direction the north arrow points, in degrees clockwise from straight up on the image (0 = up, 90 = right). Omit anything you cannot trace; an outline you approximated yourself is not geometry.
+GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constructs the drawing from what you report. Coordinates are fractions of the image, 0.0-1.0, origin top-left.
+
+- "nodes": every property corner, monument or curve endpoint you can actually locate. Give each a short id you then refer to. Coordinates are fractions of the WHOLE IMAGE as supplied, including any margin, desk or background around the sheet - do not rescale them to the drawing area yourself.
+- "segments": the boundary, one segment per run between two nodes. "kind" is "straight" or "arc".
+  WALK THE WHOLE PARCEL. Go corner to corner all the way round the subject lot, in order, and report every run - not just the two or three most obvious sides. A parcel bounded by a street, two neighbouring lots and a second street has at least four runs and usually more. If the traverse genuinely does not close on the sheet, report the runs you can see and leave it open; do NOT invent a closing segment, and do NOT stop early because closing looks hard.
+  AN ARC'S ENDPOINTS ARE THE ENDS OF THE CURVE ITSELF - where the curve meets the neighbouring boundary at each end, not two points part-way along it. Getting these wrong shortens the frontage.
+  A CURVED STREET FRONTAGE IS AN ARC, NOT A CHAIN OF SHORT STRAIGHTS. If the sheet prints a RADIUS and a CHORD for that curve, report both as numbers - they are what lets the curve be reconstructed exactly. "bulge_side" is "left" or "right" relative to travelling from "from" to "to"; for a street frontage the curve bulges AWAY from the parcel interior.
+  Do NOT invent a radius. An arc whose radius you cannot read is still "arc" with no radius - it will be drawn straight and reported as unresolved, which is correct.
+- "footprints": each building as its own outline, with "kind" (dwelling / garage / accessory / structure). Keep their RELATIVE positions and orientation faithful to the sheet - a garage west of a dwelling must come out west of it.
+- "dimension" / "bearing" / "radius" / "chord" on a segment: "text" is the sheet's own string exactly as printed ("65'-10 1/2\"", "144.12"), "value" is that as a plain number where one exists, "unit" if stated. Report a dimension ONLY for the segment it actually labels.
+- "north": degrees clockwise from straight up on the image (0 = up, 90 = right). Omit it entirely if no north arrow is legible.
+- Do NOT close a boundary that does not close on the sheet. Report only the segments you can see; a gap is a finding, not a defect to smooth over.
 
 Reply with JSON only, this exact shape:
 {
@@ -294,10 +321,13 @@ Reply with JSON only, this exact shape:
     {"key": "<one of the listed keys>", "value": "<short, factual, quoting the sheet where it is text>", "certainty": "RECOVERED|PARTIALLY_RECOVERED|UNRESOLVED|WITHHELD_AS_UNSAFE", "note": "<only if it changes how the value should be read; otherwise omit>"}
   ],
   "unresolved": ["<short phrase naming something present but unreadable>"],
-  "geometry": {
-    "parcel": {"points": [[x,y]], "certainty": "RECOVERED|PARTIALLY_RECOVERED"},
-    "buildings": [{"points": [[x,y]], "certainty": "RECOVERED|PARTIALLY_RECOVERED", "label": "<optional>"}],
-    "north": {"degrees": 0, "certainty": "RECOVERED|PARTIALLY_RECOVERED"}
+  "graph": {
+    "nodes": [{"id": "N1", "x": 0.0, "y": 0.0, "kind": "property_corner|monument|curve_point|reference", "label": "<optional, e.g. IRON TUBE>", "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
+    "segments": [{"id": "S1", "from": "N1", "to": "N2", "kind": "straight|arc", "boundary": "street_line|lot_line|interior|easement", "label": "<e.g. CASTILLE AVENUE>", "bulge_side": "left|right", "dimension": {"text": "144.12", "value": 144.12, "certainty": "RECOVERED"}, "radius": {"text": "153.76", "value": 153.76, "certainty": "RECOVERED"}, "chord": {"text": "139.20", "value": 139.2, "certainty": "RECOVERED"}, "bearing": {"text": "<as printed>", "certainty": "RECOVERED"}, "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
+    "footprints": [{"id": "B1", "kind": "dwelling|garage|accessory|structure", "label": "1 STORY BRICK DWELLING", "outline": [{"x": 0.0, "y": 0.0}], "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
+    "north": {"degrees": 0, "certainty": "RECOVERED|PARTIALLY_RECOVERED"},
+    "streets": [{"label": "CASTILLE AVENUE", "along_segments": ["S1"], "certainty": "RECOVERED"}],
+    "unresolved": ["<anything present on the sheet you could not reconstruct>"]
   }
 }
 
@@ -514,9 +544,17 @@ def normalise_payload(parsed) -> dict:
                     if observation["certainty"] == UNRESOLVED
                     else "%s read but not reliable enough to state" % observation["label"])
 
+    # CLAUDE-SURVEY-REFERENCE-02: the GRAPH is the geometry now.
+    # `_clean_geometry` is kept for a record written under prompt version 01,
+    # which carries `geometry` and no graph - a stored reading must not stop
+    # being readable because the schema moved on.
+    from services import survey_graph
+
+    graph = survey_graph.normalise_graph(parsed.get("graph"))
     return {"document_category": category, "category_certainty": category_certainty,
             "observations": observations, "unresolved": unresolved[:20],
-            "geometry": _clean_geometry(parsed.get("geometry"))}
+            "geometry": _clean_geometry(parsed.get("geometry")),
+            "graph": graph}
 
 
 def examine(raw_bytes: bytes, filename: str, *, decision, api_key: Optional[str],
@@ -575,7 +613,8 @@ def examine(raw_bytes: bytes, filename: str, *, decision, api_key: Optional[str]
         outcome = call(
             user_prompt=build_user_prompt(ocr_text, context, spatial_digest),
             system_prompt=SYSTEM_PROMPT, api_key=api_key, model=model,
-            max_tokens=MAX_TOKENS, log_label="Visual examination",
+            max_tokens=MAX_TOKENS, timeout=TIMEOUT_SECONDS,
+            log_label="Visual examination",
             image_base64=payload, image_media_type=frame["media_type"])
     except Exception as exc:  # noqa: BLE001 - a provider fault is an outcome
         logger.warning("visual examination raised (%s: %s)", type(exc).__name__, exc)
@@ -600,4 +639,5 @@ def examine(raw_bytes: bytes, filename: str, *, decision, api_key: Optional[str]
         category_certainty=normalised["category_certainty"],
         observations=normalised["observations"],
         unresolved=normalised["unresolved"],
-        geometry=normalised["geometry"])
+        geometry=normalised["geometry"],
+        graph=normalised["graph"])

@@ -1,0 +1,46 @@
+# CLAUDE-TEST-HERMETICITY-01 — the test-only dependency set, made explicit.
+#
+# WHY THIS FILE EXISTS, AND WHAT WENT WRONG WITHOUT IT
+#
+# `pytest.ini` has set `timeout = 300` since CLAUDE-TEST-TIER0-01, added after
+# two recorded full-suite stalls (4h27m and 4h35m against a 26-27 minute norm)
+# and an 8.5-hour hang on a single un-mocked call. Its own comment calls it
+# "a hang detector, not a performance budget".
+#
+# `pytest-timeout` was not installed. An unknown ini key is silently ignored by
+# pytest, so the setting was inert and every run was unbounded — which is why a
+# 5h55m run of one test file could not name what it was waiting on, and had to
+# be diagnosed after the fact rather than caught at 300 seconds.
+#
+#     A SAFETY NET RECORDED ONLY IN PROSE IS A SAFETY NET NOBODY INSTALLS.
+#
+# These pins were previously "in the venv, deliberately not in requirements.txt"
+# — correct about where they must NOT go, and silent about where they should.
+# `requirements.txt` ships to the production host and contains no test
+# machinery at all; this file never ships and is how a fresh clone gets a
+# working gate.
+#
+#     ./venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+#
+# Enforcement does not rest on anyone reading this file:
+# `tests/test_hang_detector_active_01.py` fails if the hang detector is not
+# actually registered and honouring the ini setting.
+
+# The runner itself. Deliberately absent from requirements.txt — production
+# does not run tests, and shipping a test framework to a web host is surface
+# for nothing.
+pytest==9.1.1
+
+# CLAUDE-TEST-TIER0-01's hang detector. `timeout_method` is left unset so the
+# plugin picks per platform: signal where available, which fails only the
+# offending test; thread on Windows, which dumps every thread's stack and ends
+# the run — on a genuine hang that dump is the point.
+# tools/dependency_fit.py: PASS on all six constraints.
+pytest-timeout==2.3.1
+
+# Parallel execution: `pytest -q -n 8 --dist loadfile` runs the full suite in
+# ~9 minutes against ~2h45m serial, with identical results. `--dist loadfile`
+# keeps a file's tests on one worker, preserving the within-file state locality
+# many setUp methods assume. A fresh clone without this still gets a correct
+# gate, only a slower one.
+pytest-xdist==3.8.0
