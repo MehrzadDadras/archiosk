@@ -205,10 +205,49 @@ def recovered_ocr_context(workspace, source_id: str) -> dict:
     }
 
 
-def _existing_evidence_of_type(workspace, source_id, content_type):
-    return [e for e in (getattr(workspace, "evidence_items", None) or [])
-            if e.get("source_id") == source_id
-            and e.get("content_type") == content_type]
+def generation_of(version) -> str:
+    """The trailing generation of a version string, or "".
+
+    CLAUDE-SURVEY-REFERENCE-REPAIR-02. "visual-examination-02" -> "02",
+    "visual-examination@2" -> "2". Both spellings exist because one names a
+    PROMPT and the other a PROCESSING VERSION, and they have to be comparable:
+    the whole defect being repaired here is those two drifting apart.
+    """
+    # THE FIRST TOKEN ONLY. A stored visual reading records its extractor as
+    # "visual-examination-02 claude-sonnet-4-6" - the prompt version AND the
+    # model that ran it. Reading the trailing digits of the whole string finds
+    # the model's version, not the prompt's, and the exactly-once guard then
+    # matches nothing and lets a replay through. That is a re-transmission of
+    # the customer's survey, so it is the failure worth being careful about,
+    # and a test pins it.
+    text = str(version or "").strip().split()
+    head = text[0] if text else ""
+    for separator in ("@", "-"):
+        if separator in head:
+            tail = head.rsplit(separator, 1)[-1]
+            if tail.isdigit():
+                return str(int(tail))
+    return ""
+
+
+def _existing_evidence_of_type(workspace, source_id, content_type, *,
+                               generation=None):
+    """Evidence of one kind against a Source, optionally of ONE GENERATION.
+
+    CLAUDE-SURVEY-REFERENCE-REPAIR-02: the generation filter is the difference
+    between refusing a REPLAY and refusing an UPGRADE. Unfiltered, this
+    function answered "has this source ever been looked at?", and the
+    exactly-once guard above it therefore refused a second-generation
+    examination as though it were a duplicate of the first. It is not: the
+    prompt changed, and what it can return changed with it.
+    """
+    items = [e for e in (getattr(workspace, "evidence_items", None) or [])
+             if e.get("source_id") == source_id
+             and e.get("content_type") == content_type]
+    if generation is None:
+        return items
+    return [e for e in items
+            if generation_of(e.get("extractor_version")) == generation]
 
 
 def resolve_external_ai_decision(app, workspace):
@@ -370,7 +409,24 @@ def examine_source(app, jobs, job: dict, *, store=None, governance_log=None) -> 
     # EXACTLY-ONCE by re-check, the same discipline every other write stage
     # uses. A replayed job must not transmit the customer's survey again, and
     # must not mint a second Survey Reference.
-    if _existing_evidence_of_type(workspace, job["source_id"], vx.VISUAL_CONTENT_TYPE):
+    #
+    # CLAUDE-SURVEY-REFERENCE-REPAIR-02: PER GENERATION, not per Source.
+    #
+    # This guard is real and stays: without it a replayed job re-sends the
+    # customer's survey to an external service, which is the one thing this
+    # module must never do twice for the same work. But it asked "has this
+    # Source ever been looked at?", and so it refused an UPGRADED PROMPT as if
+    # it were a duplicate of the reading that prompt was written to replace.
+    #
+    # That is the second half of the defect the Product Owner found. The job
+    # identity was fixed first, so a new generation reached the worker at all -
+    # and then this line turned it away with `egress = none` and "this Source
+    # already carries a visual reading". A capability cannot reach a record
+    # through two gates when only one of them was opened.
+    #
+    # Same generation is still a replay and is still refused.
+    if _existing_evidence_of_type(workspace, job["source_id"], vx.VISUAL_CONTENT_TYPE,
+                                  generation=generation_of(vx.VISUAL_PROMPT_VERSION)):
         return jobs.complete(job, state=perception_jobs.STATE_COMPLETED,
                              extractor="visual-examination",
                              failure_reason=REASON_ALREADY_EXAMINED)
@@ -527,6 +583,22 @@ def _store_visual_record(store, job, visual, ocr, governance_log):
     return None
 
 
+def _decoded_reference(row):
+    """One stored Survey Reference record, or None if it will not parse.
+
+    A malformed row must not be able to stop a re-examination - the worst case
+    is that its generation reads as unknown and a fresh reference is built,
+    which is the safe direction.
+    """
+    import json
+
+    try:
+        decoded = json.loads(row.get("content") or "")
+    except (TypeError, ValueError):
+        return None
+    return decoded if isinstance(decoded, dict) else None
+
+
 def _build_survey_reference(app, store, job, visual, governance_log, *,
                             source=None, page_number=1):
     """Compose, store and register the Survey Reference. Never raises.
@@ -554,9 +626,23 @@ def _build_survey_reference(app, store, job, visual, governance_log, *,
     workspace = store.get(job["workspace_id"])
     if workspace is None:
         return None
-    if _existing_evidence_of_type(workspace, job["source_id"],
-                                  survey_reference.REFERENCE_CONTENT_TYPE):
-        return None
+
+    # CLAUDE-SURVEY-REFERENCE-REPAIR-02: one Survey Reference PER GENERATION.
+    #
+    # `REFERENCE_VERSION` does not move when the PROMPT does, so the generation
+    # of a reference is the generation of the reading it was derived from -
+    # which is recorded inside the reference itself. A second reference from
+    # the same reading is a duplicate and is refused exactly as before; a
+    # reference from a newer reading is the point of re-examining.
+    current = generation_of(visual.prompt_version)
+    superseded_id = None
+    for row in _existing_evidence_of_type(workspace, job["source_id"],
+                                          survey_reference.REFERENCE_CONTENT_TYPE):
+        previous = _decoded_reference(row)
+        if generation_of((previous or {}).get("prompt_version")) == current:
+            return None
+        if (previous or {}).get("derived_source_id"):
+            superseded_id = previous["derived_source_id"]
 
     display_name = (source or {}).get("name") or ""
     # THE ORIGINAL FILENAME, never the display name. Provenance hangs off the
@@ -616,6 +702,40 @@ def _build_survey_reference(app, store, job, visual, governance_log, *,
             _time.sleep(0.2 * (attempt + 1))
     if derived is None:
         return None
+
+    # CLAUDE-SURVEY-REFERENCE-REPAIR-02: a rebuilt reference SUPERSEDES its
+    # predecessor rather than sitting beside it. Two PDFs of the same parcel,
+    # differing only by which prompt read it, is exactly the ambiguity a
+    # governed record exists to prevent.
+    #
+    # Written as a revision LINK rather than through `add_source` because that
+    # method has no such parameter - `revise_source` owns the replace-a-file
+    # flow and this is not that: nothing about the original changed, a second
+    # derivative was produced from a better reading of it. Failure to link is
+    # logged and never fatal; an unlinked extra PDF is untidy, a lost Survey
+    # Reference is not.
+    if superseded_id:
+        for attempt in range(5):
+            try:
+                current_ws = store.get(job["workspace_id"])
+                rows = {s["id"]: s for s in (current_ws.sources or [])}
+                old_row, new_row = rows.get(superseded_id), rows.get(derived["id"])
+                if not old_row or not new_row:
+                    break
+                if old_row.get("superseded_by_source_id"):
+                    break
+                old_row["superseded_by_source_id"] = derived["id"]
+                new_row["supersedes_source_id"] = superseded_id
+                store.save(current_ws)
+                break
+            except Exception as exc:  # noqa: BLE001
+                if type(exc).__name__ not in ("ConcurrentModificationError",
+                                              "WriteCollisionError"):
+                    logger.warning("survey reference revision not linked for %s (%s: %s)",
+                                   job["source_id"], type(exc).__name__, exc)
+                    break
+                _time.sleep(0.2 * (attempt + 1))
+
     reference["derived_source_id"] = derived["id"]
 
     for attempt in range(5):

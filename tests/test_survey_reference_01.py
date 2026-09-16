@@ -2157,3 +2157,80 @@ class VQuietPage(SurveyReferenceCase):
                          "the long form is still inline")
         self.assertIn('data-ui-ref="document-shop.conversation.disclosure-detail"', body,
                       "the full account is not reachable at all")
+
+
+class WSecondGate(SurveyReferenceCase):
+    """CLAUDE-SURVEY-REFERENCE-REPAIR-02 - the gate behind the gate.
+
+    Fixing the job identity was necessary and not sufficient. A new-generation
+    job reached the worker and the worker turned it away:
+
+        state=completed | "this Source already carries a visual reading"
+        | egress = none
+
+    The exactly-once re-check asked whether the Source had EVER been looked at.
+    A replay and an upgrade are not the same event, and only one of them should
+    be refused. This is the same lesson as the job id, one layer down: a
+    capability cannot reach a record through two gates when one was opened.
+    """
+
+    def test_generation_is_read_from_either_spelling(self):
+        from services import visual_classification as vc
+
+        self.assertEqual(vc.generation_of("visual-examination-02"), "2")
+        self.assertEqual(vc.generation_of("visual-examination@2"), "2")
+        self.assertEqual(vc.generation_of("survey-reference-01"), "1")
+        # As actually stored: the prompt version AND the model that ran it.
+        # Reading the tail of the whole string finds the MODEL's version and
+        # the exactly-once guard then matches nothing, which lets a replay
+        # re-transmit the customer's survey.
+        self.assertEqual(
+            vc.generation_of("visual-examination-02 claude-sonnet-4-6"), "2")
+        self.assertEqual(vc.generation_of(None), "")
+        self.assertEqual(vc.generation_of("no-digits-here"), "")
+
+    def test_a_replay_of_the_same_generation_is_still_refused(self):
+        """The protection that must NOT be lost: a replayed job must not send
+        the customer's survey to an external service a second time."""
+        from services import visual_classification as vc
+        from services import visual_examination as vx
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source_id = workspace.sources[0]["id"]
+
+        same = vc._existing_evidence_of_type(
+            workspace, source_id, vx.VISUAL_CONTENT_TYPE,
+            generation=vc.generation_of(vx.VISUAL_PROMPT_VERSION))
+        self.assertTrue(same, "a same-generation replay would be allowed to "
+                              "re-transmit the survey")
+
+    def test_an_upgraded_generation_is_not_mistaken_for_a_replay(self):
+        from services import visual_classification as vc
+        from services import visual_examination as vx
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source_id = workspace.sources[0]["id"]
+
+        # The generation after the current one has examined nothing yet.
+        nxt = str(int(vc.generation_of(vx.VISUAL_PROMPT_VERSION)) + 1)
+        self.assertFalse(
+            vc._existing_evidence_of_type(workspace, source_id,
+                                          vx.VISUAL_CONTENT_TYPE, generation=nxt),
+            "an upgraded prompt is still being refused as a duplicate")
+
+    def test_unfiltered_lookup_still_sees_everything(self):
+        """The filter is opt-in; every other caller keeps its old meaning."""
+        from services import visual_classification as vc
+        from services import visual_examination as vx
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source_id = workspace.sources[0]["id"]
+
+        self.assertTrue(vc._existing_evidence_of_type(
+            workspace, source_id, vx.VISUAL_CONTENT_TYPE))
