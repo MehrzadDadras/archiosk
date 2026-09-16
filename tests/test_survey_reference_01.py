@@ -2263,18 +2263,22 @@ class XNorthReconciliation(SurveyReferenceCase):
         })
 
     def test_the_castille_conflict_is_refused(self):
+        """The live case, now decided by the measurement rather than the word:
+        the arrow measures 8.33 and was claimed at 355."""
         graph = self._graph({"degrees": 355.0, "direction": "UP_RIGHT",
-                             "certainty": "PARTIALLY_RECOVERED"})
+                             "certainty": "PARTIALLY_RECOVERED",
+                             "measured_ok": True, "measured_degrees": 8.33})
 
         self.assertIsNone(graph["north"], "the conflicting north was drawn anyway")
         joined = " ".join(graph["unresolved"]).lower()
-        self.assertIn("north", joined)
         self.assertIn("355", joined, "the refusal does not say what disagreed")
-        self.assertIn("up-right", joined)
+        self.assertIn("8.33", joined)
 
     def test_agreement_is_kept(self):
+        """Measurement accepted, with the reading corroborating it."""
         graph = self._graph({"degrees": 40.0, "direction": "UP_RIGHT",
-                             "certainty": "RECOVERED"})
+                             "certainty": "RECOVERED",
+                             "measured_ok": True, "measured_degrees": 40.0})
 
         self.assertIsNotNone(graph["north"])
         self.assertEqual(graph["north"]["degrees"], 40.0)
@@ -2284,7 +2288,9 @@ class XNorthReconciliation(SurveyReferenceCase):
     def test_up_straddles_zero_in_both_directions(self):
         for degrees in (0.0, 5.0, 355.0, 350.0):
             graph = self._graph({"degrees": degrees, "direction": "UP",
-                                 "certainty": "RECOVERED"})
+                                 "certainty": "RECOVERED",
+                                 "measured_ok": True,
+                                 "measured_degrees": degrees})
             self.assertIsNotNone(graph["north"], "%s is not UP" % degrees)
 
     def test_the_boundary_of_an_arc_is_not_called_a_lie(self):
@@ -2292,7 +2298,8 @@ class XNorthReconciliation(SurveyReferenceCase):
         side of it has not contradicted itself."""
         for word in ("UP", "UP_RIGHT"):
             graph = self._graph({"degrees": 22.5, "direction": word,
-                                 "certainty": "RECOVERED"})
+                                 "certainty": "RECOVERED",
+                                 "measured_ok": True, "measured_degrees": 22.5})
             self.assertIsNotNone(graph["north"], "%s at the edge was refused" % word)
 
     def test_the_tolerance_does_not_swallow_a_real_disagreement(self):
@@ -2316,15 +2323,18 @@ class XNorthReconciliation(SurveyReferenceCase):
         self.assertIsNone(a["north"])
         self.assertIsNone(b["north"])
 
-    def test_a_reading_from_before_dual_encoding_still_stands(self):
-        """Re-examining every historical record is a deliberate act, not a side
-        effect of deploying this. A reading with no direction word is not in
-        conflict with itself."""
+    def test_a_reading_from_before_measurement_no_longer_stands(self):
+        """SUPERSEDED. This asserted that a pre-measurement reading kept its
+        angle, so that deploying the gate did not silently change old records.
+
+        That protection is now the harm: those records carry exactly the
+        unmeasured claim shown to vary by thirty degrees. They lose their north
+        arrow until re-examined, and losing it is the honest outcome.
+        """
         graph = self._graph({"degrees": 355.0, "certainty": "PARTIALLY_RECOVERED"})
 
-        self.assertIsNotNone(graph["north"])
-        self.assertEqual(graph["north"]["degrees"], 355.0)
-        self.assertEqual(graph["north"]["direction"], "")
+        self.assertIsNone(graph["north"])
+        self.assertTrue([u for u in graph["unresolved"] if "north" in u.lower()])
 
     def test_an_unknown_direction_word_is_refused_not_ignored(self):
         graph = self._graph({"degrees": 40.0, "direction": "NORTHEAST-ISH",
@@ -2365,6 +2375,13 @@ class YMeasuredNorth(SurveyReferenceCase):
     same 45-degree UP sector. Measuring the pixels catches a 13-degree
     mirror-flip that no direction word can.
     """
+
+    def _graph_with(self, north):
+        from services import survey_graph
+
+        return survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.2}],
+            "segments": [], "north": north})
 
     def _north(self, **kw):
         from services import survey_graph
@@ -2410,12 +2427,29 @@ class YMeasuredNorth(SurveyReferenceCase):
         self.assertGreater(survey_north.angular_delta(8.4, 355.0),
                            survey_north.CORROBORATION_DELTA_DEGREES)
 
-    def test_no_measurement_falls_back_to_the_categorical_gate(self):
-        from services import survey_graph
+    def test_no_measurement_means_no_north(self):
+        """SUPERSEDED BEHAVIOUR, and the evidence that superseded it.
 
-        north = self._north(degrees=40.0, direction="UP_RIGHT", measured_ok=False)
-        self.assertEqual(north["degrees"], 40.0)
-        self.assertEqual(north["source"], survey_graph.NORTH_CLAIMED)
+        This used to assert that an unmeasurable north fell back to the
+        reader's own angle. The Castille arrow was then read three times and
+        claimed 355, 0 and 30 degrees for one unchanging symbol that measures
+        8.33 - so the fallback was shipping a thirty-degree spread to
+        production as RECOVERED. The claim alone is no longer relied on.
+        """
+        graph = self._graph_with({"degrees": 40.0, "direction": "UP_RIGHT",
+                                  "certainty": "RECOVERED",
+                                  "measured_ok": False})
+
+        self.assertIsNone(graph["north"], "an unmeasured claim was drawn")
+        self.assertTrue([u for u in graph["unresolved"] if "north" in u.lower()])
+
+    def test_the_direction_word_also_corroborates_the_measurement(self):
+        """A second independent signal, held to the same standard."""
+        graph = self._graph_with({"degrees": 8.0, "direction": "DOWN",
+                                  "certainty": "RECOVERED",
+                                  "measured_ok": True, "measured_degrees": 8.33})
+        self.assertIsNone(graph["north"],
+                          "a word contradicting the measurement was accepted")
 
     def test_angular_delta_wraps(self):
         from services import survey_north

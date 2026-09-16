@@ -40,6 +40,29 @@ WHAT IT DOES NOT DO. It does not search for the arrow. Given no bounding box it
 measures nothing and says so; a whole-sheet hunt for "the dark blob that looks
 most like an arrow" is exactly the kind of confident guess this module exists
 to replace.
+
+THE PRODUCTION HIERARCHY, and it has exactly two outcomes.
+
+    validated bbox + deterministic measurement  ->  accepted north
+    anything else                               ->  UNRESOLVED
+
+There is deliberately no third branch. A fallback to the reader's own angle
+used to sit here and it was removed on evidence: the Castille arrow was read
+three times under three prompt generations and claimed 355, then 0, then 30
+degrees for one unchanging symbol that measures 8.33. Two escalating prompt
+versions failed to make the reader return a box at all. So a missing box means
+no north, and the cost - a record whose claim happened to be right also loses
+its arrow - is accepted, because nothing can tell those records apart.
+
+IF A DETERMINISTIC LOCATOR IS BUILT LATER, three conditions come with it,
+recorded here because they are easy to lose and expensive to rediscover:
+
+  - it needs its OWN qualification test across VARIED sheets before it may
+    feed this module in production, not a demonstration on one survey;
+  - it must NOT assume the symbol lives in a title block or any fixed region
+    of the sheet - north arrows sit wherever the drafter put them;
+  - a human-supplied box is legitimate for development fixtures and must
+    never become a requirement of normal production operation.
 """
 from __future__ import annotations
 

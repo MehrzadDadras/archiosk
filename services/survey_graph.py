@@ -187,11 +187,18 @@ def _dimension(raw) -> Optional[dict]:
     bound = binding.bind(
         _num(raw.get("value")), read_certainty=certainty,
         bind_basis=binding.BIND_BASIS_PROXIMITY,
+        claimed_bind_certainty=raw.get("bind_certainty"),
         note="annotation printed near the segment; no structural container")
+    bound["read_certainty"] = binding.weaker(
+        certainty, _certainty(raw.get("read_certainty", certainty)))
+    if "bound_certainty" in raw:
+        bound["bound_certainty"] = binding.weaker(
+            bound["bound_certainty"], _certainty(raw["bound_certainty"]))
+    bound["bound_certainty"] = binding.bound_certainty(bound)
     return {"text": text[:40], "value": _num(raw.get("value")),
             "unit": str(raw.get("unit") or "").strip()[:12],
             "certainty": certainty,
-            "read_certainty": certainty,
+            "read_certainty": bound["read_certainty"],
             "bind_certainty": bound["bind_certainty"],
             "bind_basis": bound["bind_basis"],
             "bound_certainty": bound["bound_certainty"]}
@@ -340,28 +347,41 @@ def _reconcile_north(raw_north) -> tuple:
                 "by %.4g - more than the %.4g allowed. Neither was preferred "
                 "over the other" % (measured, claimed, delta,
                                     survey_north.CORROBORATION_DELTA_DEGREES))
+        # A direction word, when given, is a second independent signal and is
+        # held to the same standard: it describes the MEASURED arrow or the
+        # pair is not believed.
+        if word and word in _DIRECTION_ARCS and                 _arc_distance(measured, word) > DIRECTION_TOLERANCE_DEGREES:
+            return None, ("north arrow is unresolved: it measures %.4g degrees "
+                          "but was read as pointing %s"
+                          % (measured, word.replace("_", "-").lower()))
         return {"degrees": measured, "direction": _word_for(measured),
                 "source": NORTH_MEASURED, "claimed_degrees": claimed,
                 "certainty": certainty}, None
 
-    # No measurement: the reading is all there is, held to the categorical gate.
-    if claimed is None:
-        return None, None
-    if not word:
-        return {"degrees": claimed, "direction": "", "source": NORTH_CLAIMED,
-                "claimed_degrees": claimed, "certainty": certainty}, None
-    if word not in _DIRECTION_ARCS:
-        return None, ("north arrow direction was reported as %r, which is not "
-                      "one of the eight directions" % word[:24])
-    outside = _arc_distance(claimed, word)
-    if outside > DIRECTION_TOLERANCE_DEGREES:
-        return None, ("north arrow is unresolved: it was read as pointing %s "
-                      "but its angle was given as %.4g degrees, which is %s - "
-                      "the two disagree and neither was preferred over the "
-                      "other" % (word.replace("_", "-").lower(), claimed,
-                                 _word_for(claimed).replace("_", "-").lower()))
-    return {"degrees": claimed, "direction": word, "source": NORTH_CLAIMED,
-            "claimed_degrees": claimed, "certainty": certainty}, None
+    # NO MEASUREMENT, NO NORTH. Product Owner direction, 2026-09-16, on
+    # evidence rather than principle.
+    #
+    # The Castille arrow was read three times and claimed 355, then 0, then 30
+    # degrees. It measures 8.33. A spread of thirty degrees on one unchanging
+    # symbol is what the claim is worth on this sheet, and two escalating
+    # prompt versions failed to make the reader return the bounding box that
+    # would let the measurement run at all.
+    #
+    # The fallback that used to stand here trusted exactly that claim whenever
+    # the box was missing - which is every reading so far. It shipped 30
+    # degrees to production as RECOVERED, wrong by twenty-two, and looking
+    # freshly verified while doing it. That is worse than the stale value it
+    # replaced, because a stale number invites a second look and a confident
+    # one does not.
+    #
+    # So an unmeasurable north is UNRESOLVED and is not drawn. The cost is
+    # real: a record whose claim happened to be right also loses its arrow.
+    # That cost is accepted, because there is no way to tell which ones those
+    # are - which is the whole reason the measurement was made primary.
+    return None, ("north arrow is unresolved: it could not be measured on the "
+                  "sheet (%s), and the reported angle alone is not relied on"
+                  % (str(raw_north.get("measured_reason") or "").strip()
+                     or "no arrow location was given"))
 
 
 def _word_for(degrees: float) -> str:
@@ -407,7 +427,8 @@ def _distance_of(segment) -> Optional[float]:
     dimension = segment.get("dimension")
     if not isinstance(dimension, dict):
         return None
-    if dimension.get("certainty") not in vx.VALUE_BEARING:
+    from services import binding
+    if binding.bound_certainty(dimension) not in vx.VALUE_BEARING:
         return None
     value = _num(dimension.get("value"))
     return value if value and value > 0 else None
@@ -704,6 +725,8 @@ def build_primitives(graph: dict, include=None) -> dict:
     been computed. The tag is the difference between a reconstruction and a
     drawing that merely looks like one.
     """
+    from services import binding
+
     include = tuple(LAYERS) if include is None else tuple(include)
     traverse = solve_traverse(graph)
     inputs = {r["id"]: r for r in traverse["segments"]}
@@ -779,8 +802,7 @@ def build_primitives(graph: dict, include=None) -> dict:
                 # CLAUDE-MUSCLE-F1-01: the weaker of read and bind. A
                 # dimension read perfectly but attached by proximity is drawn
                 # as the qualified thing it is.
-                "certain": dimension.get("bound_certainty",
-                                         dimension["certainty"]) == vx.RECOVERED,
+                "certain": binding.bound_certainty(dimension) == vx.RECOVERED,
                 "for": segment["id"]})
         bearing = segment.get("bearing")
         if LAYER_LABELS in include and bearing:
