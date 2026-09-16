@@ -371,3 +371,199 @@ def register_sheet_index(store, workspace, source_id: str, *,
         elif status == RESOLUTION_STATUS_TARGET_NOT_FOUND:
             report["not_found"].append(reference)
     return report
+
+
+# -- CLAUDE-MUSCLE-F2-01: discipline, once a sheet identity exists ------------
+
+#: The leading letters of a sheet number name its discipline. This is the only
+#: new thing F2 adds, because sheet IDENTITY was already solved here and wired
+#: into `perception_worker` - `sheet_token` parses the notation and
+#: `register_sheet_index` resolves an index against the project's own Sources.
+#:
+#: A CLOSED MAP, and unknown prefixes resolve to UNRESOLVED rather than to a
+#: guess. "XR" is not a discipline just because it is two letters, and a wrong
+#: discipline is worse than none: it routes a requirement to the wrong trade.
+DISCIPLINE_BY_PREFIX = {
+    "A": "architectural",
+    "AD": "architectural_demolition",
+    "ID": "interior_design",
+    "L": "landscape",
+    "C": "civil",
+    "S": "structural",
+    "M": "mechanical",
+    "E": "electrical",
+    "P": "plumbing",
+    "FP": "fire_protection",
+    "FA": "fire_alarm",
+    "T": "telecommunications",
+    "SE": "site_electrical",
+    "G": "general",
+    "GI": "general_information",
+    "SU": "survey",
+    "Q": "equipment",
+    "H": "hazardous_materials",
+}
+
+DISCIPLINE_UNRESOLVED = "UNRESOLVED"
+
+
+def discipline_of(token):
+    """The discipline a sheet token declares, or UNRESOLVED.
+
+    Takes an already-normalised token (see `sheet_token`) so that this stays a
+    pure lookup and the notation is parsed in exactly one place.
+    """
+    normalised = normalise_sheet_token(token)
+    if not normalised:
+        return DISCIPLINE_UNRESOLVED
+    match = _SHEET_SHAPE.match(normalised)
+    if not match:
+        return DISCIPLINE_UNRESOLVED
+    return DISCIPLINE_BY_PREFIX.get(match.group(1).upper(),
+                                    DISCIPLINE_UNRESOLVED)
+
+
+def sheet_identity_of(source, *, view=None):
+    """What sheet this Source is, and which discipline - or honest absence.
+
+    ORDER OF AUTHORITY, strongest first:
+
+    1. A DerivedView's title block, via `derived_view.effective_title_block`.
+       That module has existed and been tested since CLAUDE-DERIVED-VIEW-01
+       with no production caller; this is its consumption path. It reads a
+       title block the sheet itself prints, which outranks anything inferred
+       from a filename.
+    2. The sheet tokens already recovered for this Source by the wired
+       `register_sheet_index` path.
+    3. Nothing - and then UNRESOLVED is returned, never a guess.
+
+    A CONFLICT IS SURFACED, NOT RESOLVED. If the title block and the recovered
+    token disagree, both are returned and `identity_certainty` drops: two
+    sources of truth disagreeing about which sheet this is means we do not know
+    which sheet this is, and quietly preferring one would hide that.
+    """
+    from services import derived_view as dv
+
+    title_token = None
+    title_basis = None
+    if view:
+        try:
+            block = dv.effective_title_block(view)
+        except Exception:  # noqa: BLE001 - a malformed view must not raise here
+            block = None
+        if isinstance(block, dict):
+            title_token = sheet_token(block.get("sheet_number")
+                                      or block.get("sheet_id") or "")
+            if title_token:
+                title_basis = dv.title_block_provenance(view) \
+                    if hasattr(dv, "title_block_provenance") else None
+
+    recovered = sorted(source_sheet_tokens(source or {}))
+    recovered_token = recovered[0] if len(recovered) == 1 else None
+
+    token = title_token or recovered_token
+    conflict = bool(title_token and recovered_token
+                    and title_token != recovered_token)
+    if conflict:
+        certainty = "UNRESOLVED"
+    elif title_token:
+        certainty = "RECOVERED"
+    elif recovered_token:
+        certainty = "PARTIALLY_RECOVERED"
+    else:
+        certainty = "UNRESOLVED"
+
+    return {
+        "sheet_token": None if conflict else token,
+        "discipline": (DISCIPLINE_UNRESOLVED if conflict or not token
+                       else discipline_of(token)),
+        "identity_certainty": certainty,
+        "basis": ("title_block" if title_token and not conflict
+                  else "recovered_index_token" if recovered_token and not conflict
+                  else "none"),
+        "title_block_token": title_token,
+        "title_block_provenance": title_basis,
+        "recovered_tokens": recovered,
+        "conflict": conflict,
+        "version": REGISTER_VERSION,
+    }
+
+
+# -- CLAUDE-MUSCLE-F5-01: declared but not delivered --------------------------
+
+#: What a missing sheet is, as a finding. NOTHING IS INFERRED ABOUT ITS
+#: CONTENTS - the only claim is that the package declared it and did not
+#: contain it, which is exactly what the evidence supports.
+MISSING_FINDING_KIND = "expected_source_absent"
+
+
+def missing_sheet_findings(report):
+    """Sheets an index declared that the package did not deliver.
+
+    `register_sheet_index` has always computed this - its `not_found` list -
+    and `perception_worker` has always thrown it away into a log COUNT. The
+    capability existed and had no door, which is the fourth time this pattern
+    has appeared in this application.
+
+    One finding per declared-but-absent sheet. The finding states the absence
+    and stops: no guess about what the sheet would have shown, no assumption
+    that it was withheld deliberately, no inference that the package is
+    therefore incomplete in some other way.
+    """
+    findings = []
+    for entry in (report or {}).get("not_found") or []:
+        token = entry.get("sheet_token") if isinstance(entry, dict) else entry
+        verbatim = (entry.get("reference_text") if isinstance(entry, dict)
+                    else None) or token
+        if not token:
+            continue
+        findings.append({
+            "kind": MISSING_FINDING_KIND,
+            "sheet_token": token,
+            "reference_text": verbatim,
+            "declared_by_source_id": (report or {}).get("source_id"),
+            "discipline": discipline_of(token),
+            "statement": ("%s is listed on this package's own index and no "
+                          "source in the project carries that sheet number."
+                          % token),
+            "contents_claim": None,
+            "certainty": "RECOVERED",
+            "version": REGISTER_VERSION,
+        })
+    return findings
+
+
+def declared_but_absent(workspace, source_id: str) -> list:
+    """Sheets THIS source's index declares that the project does not hold.
+
+    The store-free half of `register_sheet_index`, so a page can report the
+    absence without a write path. It reuses this module's own index parsing
+    rather than repeating it - `looks_like_index` still gates which pages may
+    contribute, so a sheet-shaped token in the middle of a specification is not
+    mistaken for a declaration.
+
+    THE PINNED-WORKER PROBLEM, stated rather than worked around: the wired
+    `register_sheet_index` call lives in `services/perception_worker.py`, whose
+    bytes are pinned by docs/records/datum-lifecycle-transition-01.json. Adding
+    the surfacing there would break that digest, so the consumption happens on
+    the read path instead. The detection logic is not duplicated - only the
+    comparison, which the worker already discards.
+    """
+    held = set()
+    for source in (getattr(workspace, "sources", None) or []):
+        if source.get("removed_at"):
+            continue
+        held |= source_sheet_tokens(source)
+
+    declared, seen = [], set()
+    for page in recovered_pages_for(workspace, source_id):
+        text = page.get("text") if isinstance(page, dict) else page
+        for entry in index_entries(text):
+            token = entry["sheet_token"]
+            if token in seen or token in held:
+                continue
+            seen.add(token)
+            declared.append(entry)
+
+    return missing_sheet_findings({"source_id": source_id,
+                                   "not_found": declared})

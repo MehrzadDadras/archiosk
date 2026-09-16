@@ -426,6 +426,7 @@ class ContextEnvelope:
     # lives in here, every consumer of ContextEnvelope has to reason about
     # binary payloads it does not want.
     attached_image: Optional[dict] = None
+    planning_study: Optional[dict] = None
 
 
 def build_context_envelope(
@@ -684,6 +685,33 @@ CONVERSATIONAL_TURN_BEHAVIORAL_CONTRACT = (
     "materially confirms intent, resolves ambiguity, or the turn proposes a "
     "consequential action - never as routine paraphrasing on an ordinary "
     "turn. Leave it null otherwise.\n"
+    # CLAUDE-MUSCLE-PROMOTION-01. Four reasoning behaviours promoted from
+    # services/spin.py's BEHAVIORAL_CONTRACT, where they were proven and then
+    # reachable only inside a Spin. Promoted as BEHAVIOUR, never as named game
+    # verbs: GO-SPIN-GAMES-01.md states the game catalogue is illustrative and
+    # "must not be hard-coded as exhaustive", and several names are still
+    # recovery-pending. Nothing from the Cognitive Gym, no games_played.
+    "- Know when to stop. Keep reasoning only while it is still reducing "
+    "uncertainty. Once further analysis of the same evidence stops changing "
+    "what you can honestly conclude, stop and say what remains unresolved. A "
+    "longer chain of reasoning over the same facts is not more evidence, and "
+    "continuing past that point produces confident-sounding output that no new "
+    "evidence supports. Stopping honestly is a result, not a failure.\n"
+    "- Judge a past decision only against what was knowable when it was made: "
+    "the evidence then available, the time then remaining, and the authority "
+    "the decider then held. Never use later evidence to characterize an "
+    "earlier choice as an error - if newer evidence changes the picture, that "
+    "is a condition to report now, not a fault to assign backward.\n"
+    "- Ground every assessment in observable constraints - what the evidence "
+    "shows, what a document says, what a date requires. Never speculate about "
+    "anyone's motives, intent, competence, or state of mind, and never "
+    "attribute a gap to carelessness or bad faith. 'The addendum is not "
+    "reflected in the mechanical drawings' is a finding; 'the mechanical team "
+    "ignored the addendum' is an accusation the evidence does not support.\n"
+    "- A document being newly added or recently changed never means its own "
+    "content became more authoritative. A reference design remains non-binding "
+    "regardless of revision number, and a draft remains non-binding regardless "
+    "of how recently it arrived.\n"
     "- Respond only in the exact JSON schema requested, with no prose "
     "outside it."
     # CLAUDE-GO-ASK-TO-SEE-01: the same rule project_qa.py carries, for
@@ -726,6 +754,7 @@ class ConversationalTurnResult:
     provider: Optional[str] = None
     model: Optional[str] = None
     requested_at: Optional[str] = None
+    planning_action: Optional[dict] = None
 
 
 def _validate_candidate_referents(raw, workspace: ProjectWorkspace) -> list[dict]:
@@ -848,12 +877,18 @@ def run_conversational_turn(
         candidate_referents=candidate_referents,
         proposed_action=proposed_action,
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
+        planning_action=(parsed.get("planning_action")
+                         if envelope.planning_study is not None and isinstance(parsed.get("planning_action"), dict)
+                         else None),
     )
 
 
 def _build_conversational_turn_prompt(
     text: str, envelope: ContextEnvelope, recent_history: Optional[list[dict]],
 ) -> str:
+    if envelope.planning_study is not None:
+        from services.planning_composer import turn_prompt
+        return turn_prompt(text, envelope.planning_study, recent_history)
     evidence = envelope.project_evidence
     lines = [
         "You are assisting a construction/design professional in an ongoing "

@@ -768,6 +768,26 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     # "Some of what was read" - reintroducing the exact defect the line above
     # describes. Seeing the north arrow concludes nothing about the characters.
     fragmentary = bool(recovered["passage_count"]) and not _reached_an_interpretation(document)
+    # CLAUDE-MUSCLE-F5-01: sheets this package declared and did not deliver.
+    #
+    # `register_sheet_index` has computed this since CLAUDE-SHEET-IDENTITY-
+    # WIRING-01, and `perception_worker` reduces it to a COUNT in a log line.
+    # The capability existed and had no door - the fourth time that pattern has
+    # appeared here. Each absence is stated and nothing is inferred about what
+    # the missing sheet would have shown.
+    try:
+        from services import sheet_identity
+
+        missing_sheets = (sheet_identity.declared_but_absent(
+            workspace, source["id"]) if source else [])
+    except Exception:  # noqa: BLE001 - a manifest check never fails a result
+        missing_sheets = []
+    for entry in missing_sheets:
+        not_established.append({
+            "label": "Listed but not received",
+            "value": entry["statement"],
+        })
+
     return {
         "name": display_name,
         "fragmentary": fragmentary,

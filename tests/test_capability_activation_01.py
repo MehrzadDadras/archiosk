@@ -54,6 +54,21 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 ACTIVE = "ACTIVE"
 DORMANT = "DORMANT"
 
+#: CLAUDE-MUSCLE-F2-01. A consumer calls it from production, and the thing that
+#: would FEED it does not exist in production - so it is reachable and still
+#: never runs.
+#:
+#: Neither existing value tells the truth about that. DORMANT is false: there is
+#: a real caller, and this file's own dormancy test correctly refuses to let a
+#: called capability be described as uncalled. ACTIVE is worse: it would tell
+#: the Product Owner a capability is working when nothing has ever exercised it.
+#:
+#: The state deserves a name because this repository keeps arriving at it. The
+#: honest reading is "half a chain", and what a CONSUMER_WIRED entry owes is the
+#: name of the missing producer, so the remaining work is visible instead of
+#: being rediscovered later as a surprise.
+CONSUMER_WIRED = "CONSUMER_WIRED"
+
 
 @dataclass(frozen=True)
 class Capability:
@@ -74,6 +89,9 @@ class Capability:
     tested_by: tuple = ()
     #: Required for DORMANT: why it is not wired, in one sentence.
     reason: str = ""
+    #: Required for CONSUMER_WIRED: the capability that must be activated
+    #: before this one can actually run, named so the gap stays visible.
+    blocked_by: str = ""
     notes: str = field(default="")
 
 
@@ -163,7 +181,8 @@ CAPABILITIES = (
     Capability(
         name="Derived view (title block, north, measurability)",
         entry_module="services/derived_view.py", entry_symbol="effective_title_block",
-        status=DORMANT,
+        status=CONSUMER_WIRED,
+        blocked_by="services/drawing_segmentation.py::segment_sheet",
         reason="No production caller. The only non-test mention in the "
                "application is a comment in services/case_workspace.py."),
 )
@@ -232,6 +251,34 @@ class InvokedStage(unittest.TestCase):
                     "an import alone is exactly what a disconnected capability "
                     "leaves behind"
                     % (capability.name, capability.invoked_by, capability.entry_symbol))
+
+    def test_consumer_wired_capabilities_name_their_missing_producer(self):
+        """CONSUMER_WIRED is the only status that describes half a chain, so it
+        has to earn the description from both ends.
+
+        It must have a production caller - otherwise it is simply DORMANT and
+        saying otherwise overstates the work done. And it must name the
+        capability that would feed it, because the whole value of this status
+        over DORMANT is that the remaining work is written down.
+        """
+        production = [p for p in (list((_REPO_ROOT / "services").glob("*.py"))
+                                  + list((_REPO_ROOT / "routes").glob("*.py")))]
+        for capability in CAPABILITIES:
+            if capability.status != CONSUMER_WIRED:
+                continue
+            with self.subTest(capability.name):
+                callers = [p.name for p in production
+                           if p.name != Path(capability.entry_module).name
+                           and capability.entry_symbol in _calls_in(p)]
+                self.assertTrue(
+                    callers,
+                    "%s is CONSUMER_WIRED with no production caller - it is "
+                    "DORMANT, and saying otherwise claims work not done"
+                    % capability.name)
+                self.assertTrue(
+                    capability.blocked_by,
+                    "%s must name the producer that would let it run"
+                    % capability.name)
 
     def test_dormant_capabilities_are_honestly_dormant(self):
         """A DORMANT entry that HAS acquired a production caller is also a
@@ -327,7 +374,8 @@ class LedgerCompleteness(unittest.TestCase):
     def test_every_capability_declares_a_known_status(self):
         for capability in CAPABILITIES:
             with self.subTest(capability.name):
-                self.assertIn(capability.status, (ACTIVE, DORMANT))
+                self.assertIn(capability.status,
+                              (ACTIVE, DORMANT, CONSUMER_WIRED))
                 if capability.status == ACTIVE:
                     self.assertTrue(
                         capability.invoked_by,

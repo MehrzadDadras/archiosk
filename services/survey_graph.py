@@ -169,9 +169,32 @@ def _dimension(raw) -> Optional[dict]:
     text = str(raw.get("text") or "").strip()
     if certainty not in vx.VALUE_BEARING or not text:
         return None
+
+    # CLAUDE-MUSCLE-F1-01: READING IT AND ATTACHING IT ARE TWO CLAIMS.
+    #
+    # This is the exact record that carried the defect. On the live Castille
+    # sheet `144.12` stored `certainty: RECOVERED`, which was true of reading
+    # the digits and unproven of the attachment to LOT LINE 3 - the annotation
+    # is merely printed near that run. One field carried both claims and the
+    # stronger won silently.
+    #
+    # `certainty` is kept and still means READ certainty, so every existing
+    # consumer keeps its meaning. What is new is that the binding now has its
+    # own certainty and its own ceiling, and `bound_certainty` - the weaker of
+    # the two - is what anything stating a fact ABOUT THE SEGMENT must use.
+    from services import binding
+
+    bound = binding.bind(
+        _num(raw.get("value")), read_certainty=certainty,
+        bind_basis=binding.BIND_BASIS_PROXIMITY,
+        note="annotation printed near the segment; no structural container")
     return {"text": text[:40], "value": _num(raw.get("value")),
             "unit": str(raw.get("unit") or "").strip()[:12],
-            "certainty": certainty}
+            "certainty": certainty,
+            "read_certainty": certainty,
+            "bind_certainty": bound["bind_certainty"],
+            "bind_basis": bound["bind_basis"],
+            "bound_certainty": bound["bound_certainty"]}
 
 
 def _bearing(raw) -> Optional[dict]:
@@ -753,7 +776,11 @@ def build_primitives(graph: dict, include=None) -> dict:
             primitives.append({
                 "type": P_LABEL, "kind": "dimension", "text": dimension["text"],
                 "at": ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0),
-                "certain": dimension["certainty"] == vx.RECOVERED,
+                # CLAUDE-MUSCLE-F1-01: the weaker of read and bind. A
+                # dimension read perfectly but attached by proximity is drawn
+                # as the qualified thing it is.
+                "certain": dimension.get("bound_certainty",
+                                         dimension["certainty"]) == vx.RECOVERED,
                 "for": segment["id"]})
         bearing = segment.get("bearing")
         if LAYER_LABELS in include and bearing:
