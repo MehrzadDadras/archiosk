@@ -1,5 +1,96 @@
 # Continuation checkpoint
 
+## 2026-09-15 — the Document Shop result page says what it is doing, and reads in order; live at `17ae954`
+
+Appended above the entries below, none of which is altered.
+
+### Shipped, gated and deployed
+
+`9aeff7a` — **the page says what is happening while it happens.** Gate
+**9,096 passed / 3 skipped / 9,991 subtests / 0 failed / 11:14**, parallel
+(`-n 8 --dist loadfile`), `PYTEST_EXIT=0` read from the log's own exit line.
+
+`17ae954` — **the page in the order a person reads it.** Gate
+**9,104 passed / 3 skipped / 9,991 subtests / 0 failed / 11:09**, same mode and
+the same way of reading the result. Tier 0 first: **1,322 passed / 5,118
+subtests / 40.6s**; document-shop lane 611 passed.
+
+### THE DEFECT WAS THAT WAITING LOOKED LIKE FINISHING
+
+An upload still being examined rendered identically to one that had finished and
+found nothing. The state label was computed once, at request time, and then sat
+there — so the only way to tell the two apart was to refresh and compare. The
+indicator is driven by the real state of the two examination stages and says
+`Waiting to be examined` / `Examining document…` / `Visual analysis in
+progress…`, then leaves the page entirely, poller included, the moment both
+settle.
+
+**No percentage, and the endpoint returns no number for one to be invented
+from.** Neither stage can honestly report progress — OCR does not know how much
+of a photograph is left, and a model call has no measurable fraction. A test
+asserts the payload carries no numeric field, because a progress bar is exactly
+what a later change would add to make the page feel busier.
+
+`/document-shop/jobs/<id>/status` returns four keys and is gated like the page it
+serves: a stranger gets 404, a signed-out poll gets the sign-in redirect. A test
+greps the serialized payload for worker names, queue ids, processing versions,
+model and vendor names, and governance vocabulary.
+
+### THE CAPABILITY EXISTED BUT HAD NO DOOR — A FOURTH TIME
+
+`Open file` and `Delete` were both real before `17ae954` and both effectively
+unreachable: the download sat under a "Your document" heading below every
+finding, and Delete was inside a closed disclosure below that. Neither is new
+code. Both now sit beside the facts, on the same routes.
+
+This is the same shape as `sheet_vision.read_sheet` (zero call sites),
+`PDFVectorExtractor` (no production caller) and `remove_source` (routed only
+from the analyst bench). **An integration gap before an architecture gap**, now
+four for four.
+
+### WHAT WAS DELIBERATELY NOT LOST
+
+- **The confirmation.** A destructive action moved into the open that quietly
+  stopped asking would be worse than a badly placed one. A test POSTs the
+  delete, asserts the confirmation page renders, and asserts the source is still
+  there afterwards.
+- **The accessible name.** The question field took its name from the "Ask GO
+  about this document" heading. Shortening that heading to "Ask GO" would have
+  silently shortened what a screen reader announces. The full name is stated on
+  the field instead — identical to the one the removed `<label>` carried.
+- **The findings and the comparison.** The Product Owner's layout sketch drew
+  neither. The question was asked rather than assumed, and the answer was to
+  keep both; a test asserts all six blocks still render so a later layout pass
+  cannot drop them silently.
+
+### Live
+
+Deployed to `archiosk.com` from `git archive` of `17ae954`, `HEAD ==
+origin/main` verified before packaging. Pre-deploy live commit `4edd9e3`
+confirmed by hash rather than assumed — the live template matched `4edd9e3`'s
+blob in CRLF form, which is what `git archive` writes. Rollback point
+`/var/www/archiosk-backup-4edd9e3`, `.env` copied into it at `600`.
+
+Dry-run first: **0 deleting lines, 0 protected paths**. `requirements.txt`
+unchanged across `4edd9e3..17ae954`, so no venv reconciliation was needed.
+`STATIC_VERSION` 177 → 178 on the host — CSS changed twice and a new JS file
+shipped, so a stale cache would have served the old page over the new markup.
+
+`archiosk-go`, `archiosk-perception`, `archiosk-visual` all active after
+restart; `/health` 200 `status: ok`; `main.css?v=178` served;
+`document_shop_status.js` 200; no errors in the service log.
+
+Neither pinned digest file — `services/perception_worker.py`,
+`services/datum_corroboration.py` — was touched.
+
+**Claude application frontier:** `17ae954`, deployed.
+
+**NOT live-verified.** The Product Owner tests the live page themselves; this
+entry records what was deployed and proven about the deployment, not a verdict
+on the result. `VISUALLY_FAITHFUL_SURVEY_REFERENCE` and
+`SOURCE_DELETE_AVAILABLE` both remain outstanding.
+
+
 ## 2026-09-12 — live Toronto readers at `8630a53`; 35 Taber Gate-01 RUN, address only in
 
 Appended above the entries below, none of which is altered.
