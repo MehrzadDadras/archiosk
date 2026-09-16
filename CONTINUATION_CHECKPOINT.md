@@ -1,5 +1,106 @@
 # Continuation checkpoint
 
+## 2026-09-16 — five document-digestion muscles and the Stage 1 survey baseline; live at `4f68d61`
+
+Appended above the entries below, none of which is altered.
+
+### Shipped, gated and deployed
+
+`313630f` — **Stage 1: north is measured, a dimensioned line says so.** Gate
+**9,141 passed / 3 skipped / 10,004 subtests / 0 failed / 11:58**, parallel
+(`-n 8 --dist loadfile`), `PYTEST_EXIT=0`.
+
+`4f68d61` — **five foundational digestion muscles.** Gate **9,175 passed / 3
+skipped / 10,043 subtests / 0 failed / 12:15**, same mode. Tier 0 1,323 passed
+/ 5,118 subtests.
+
+### THE MEASUREMENT BEAT THE MODEL, AND THE CATEGORICAL CHECK WOULD NOT HAVE
+
+The reader described the Castille north arrow as "pointing upward-right",
+which matches the sheet, and in the same breath gave 355 degrees, which is
+upward-left. Measuring the arrow's own solid wedge off the sheet gives
+**8.33 degrees**, reproducible from the located bounding box.
+
+The first repair was categorical — report a direction word as well as an
+angle, refuse the pair when they disagree — and testing it against the
+measured truth showed **it would have passed this pair**, because 355 and 8.33
+sit in the same 45-degree sector. A direction word catches a compass pointed
+at the floor. It cannot catch a mirror-flip about vertical, which is the error
+that actually happened.
+
+So the order of authority inverted: the pixel measurement is the source of
+truth and the model corroborates at ±10 degrees. A disagreement is still never
+resolved by preferring the measurement — a measurement of the wrong object is
+arithmetic too, and wrong with total confidence.
+
+### THE SHEET PRINTS NO BEARINGS, AND THAT IS ORDINARY
+
+Not one of five boundary runs on the Castille survey carries a bearing; the
+reading's own unresolved list says "All bearing values", and reading the north
+and east runs at full resolution confirms it. `solve_traverse` returns
+`computed: False`, the whole pipeline carries that without raising, and every
+run drawn from located corners is flagged `observed_graphic_dimension` — an
+observation of a drawing, never a bearing.
+
+### READING A VALUE AND ATTACHING IT ARE TWO CLAIMS
+
+`144.12` stored `certainty: RECOVERED`. True of reading the digits, unproven
+of the attachment to LOT LINE 3, which rests on the annotation being printed
+nearby. One field carried both claims and the stronger won silently.
+`services/binding.py` splits them and makes the weaker govern any use, with a
+ceiling per attachment method: proximity can never reach RECOVERED however
+legible the text.
+
+### EXISTING-CODE-FIRST CHANGED THE SHAPE OF THE WORK
+
+Three of the five muscles were substantially already built. `sheet_token`,
+`index_entries` and `register_sheet_index` have run inside `perception_worker`
+since CLAUDE-SHEET-IDENTITY-WIRING-01; `detail_callout` and `view_reference`
+already own detail notation. **`register_sheet_index` has always computed
+`not_found` and the worker has always reduced it to a count in a log line** —
+the fourth "capability with no door" in this application.
+
+### THE LEDGER GAINED A THIRD STATUS RATHER THAN A CONVENIENT LIE
+
+Calling `effective_title_block` gave a DORMANT capability a production caller
+and `test_capability_activation_01` failed, correctly. ACTIVE would have been
+worse: nothing PRODUCES a DerivedView, because `create_derived_view` has one
+caller and it is dormant `segment_sheet`.
+
+    CONSUMER_WIRED — a consumer calls it, the producer that feeds it does not
+                     exist, so it is reachable and still never runs
+
+It must have a real caller and must name what blocks it. The audit was not
+made green by wiring.
+
+### Live
+
+Deployed to `archiosk.com` from `git archive` of `4f68d61`, `HEAD ==
+origin/main` verified. Rollback point `/var/www/archiosk-backup-e781785`.
+Dry-run: **0 deleting lines, 0 protected paths**. `requirements.txt`
+unchanged. Deployed module bytes match HEAD by hash. `/health` 200;
+`archiosk-go`, `archiosk-perception`, `archiosk-visual` active. All five
+muscles executed against the live interpreter and returned correct results.
+
+**Muscle status — three ACTIVE, one CONSUMER_WIRED, two not yet.** F3 subject
+tags and F4 supersession detection are proven capabilities with no production
+caller; giving them one is a routing decision for the Product Owner, not a
+file to pick. They are NOT claimed ACTIVE.
+
+**Promotion:** cognitive stopping, temporal anti-smuggling, observable-
+constraints-only and recency-is-not-authority now reach ordinary Ask GO, as
+behaviour and never as named verbs — `GO-SPIN-GAMES-01.md` states the game
+catalogue is illustrative and must not be hard-coded, and several names remain
+recovery-pending. No Cognitive Gym, GOtex, `games_played` or C28 material; a
+test greps the contract for each of those names.
+
+**Claude application frontier:** `4f68d61`, deployed.
+
+**NOT live-verified.** The Product Owner tests it. Outstanding verdicts:
+`VISUALLY_FAITHFUL_SURVEY_REFERENCE`, `DOCUMENT_PAGE_SIMPLIFICATION`,
+`SOURCE_DELETE_AVAILABLE`.
+
+
 ## 2026-09-15 — the Document Shop result page says what it is doing, and reads in order; live at `17ae954`
 
 Appended above the entries below, none of which is altered.
