@@ -279,7 +279,10 @@ class ConversationRouteTests(unittest.TestCase):
     def test_the_composer_is_offered_on_the_result(self):
         self._login()
         body = self.client.get("/document-shop/jobs/%s" % self._job()).get_data(as_text=True)
-        self.assertIn("Ask GO about this document", body)
+        # CLAUDE-DOCUMENT-SHOP-LAYOUT-01 shortened the visible heading to
+        # "Ask GO"; the full sentence survives as the field's accessible name.
+        self.assertIn('data-ui-ref="document-shop.conversation.title">Ask GO</h2>', body)
+        self.assertIn('aria-label="Ask GO about this document"', body)
         self.assertIn('data-ui-ref="document-shop.conversation.input"', body)
         self.assertIn('data-ui-ref="document-shop.conversation.send"', body)
 

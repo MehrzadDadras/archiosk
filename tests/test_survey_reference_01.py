@@ -30,6 +30,7 @@ what lets a fixed, inspectable reading drive every assertion.
 import hashlib
 import io
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -1799,6 +1800,9 @@ class TDocumentShopCopy(SurveyReferenceCase):
         self.assertEqual(established["Document"], "Survey image")
 
     def test_ask_go_is_said_once_on_the_page(self):
+        """The sentence appeared twice on screen. Now it appears nowhere on
+        screen and once in the accessibility tree, which is where it was always
+        doing the work."""
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         self.run_worker()
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
@@ -1806,24 +1810,168 @@ class TDocumentShopCopy(SurveyReferenceCase):
         self.assertEqual(body.count("Ask GO about this document"), 1,
                          "the composer heading and its field label say the same "
                          "thing twice")
+        self.assertIn('data-ui-ref="document-shop.conversation.title">Ask GO</h2>', body,
+                      "the heading is not the short form")
 
     def test_the_question_field_keeps_an_accessible_name(self):
         """Removing the visible duplicate must not leave the textarea nameless -
-        that would trade a cosmetic problem for a real one."""
+        that would trade a cosmetic problem for a real one.
+
+        It first pointed at the heading with aria-labelledby. Shortening that
+        heading to "Ask GO" would have silently shortened the announced name
+        with it, so the full name is stated on the field and asserted here -
+        the SAME name the deleted <label> carried, which is the property that
+        actually matters.
+        """
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
 
-        self.assertIn('aria-labelledby="conversation"', body)
+        self.assertIn('aria-label="Ask GO about this document"', body)
+        self.assertNotIn('aria-labelledby="conversation"', body,
+                         "the name still tracks a heading that no longer says it")
         self.assertIn('id="conversation"', body,
-                      "the accessible name points at an element that is not there")
+                      "the redirect after a question anchors at this heading")
         self.assertNotIn('for="ds-question"', body,
                          "the duplicate field label is still rendered")
 
-    def test_the_composer_itself_is_untouched(self):
+    def test_the_composer_mechanics_are_untouched(self):
+        """The field, the route and the button are the same ones. Only what is
+        WRITTEN on them changed - the placeholder now asks the question the
+        person is there to answer instead of demonstrating a specimen one."""
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
 
         self.assertIn('id="ds-question"', body)
-        self.assertIn('placeholder="e.g. What does this document require?"', body)
+        self.assertIn(
+            'placeholder="What would you like to know about this document?"', body)
         self.assertIn('data-ui-ref="document-shop.conversation.send"', body)
         self.assertIn(">Ask</button>", body)
+
+
+class TDocumentShopLayout(SurveyReferenceCase):
+    """CLAUDE-DOCUMENT-SHOP-LAYOUT-01 - the page in the order a person reads it.
+
+    What the document IS, then what they can DO with it, then what was found,
+    then the asking. The two actions were both real before this and both buried:
+    the original file sat under a heading below every finding, and Delete inside
+    a closed disclosure below that.
+
+    NOTHING HERE IS A NEW CAPABILITY, and these tests say so by asserting the
+    routes are the same ones - a moved button that quietly stopped confirming a
+    deletion would be a far worse regression than a badly placed one.
+    """
+
+    def test_the_facts_are_the_date_and_the_file_type(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        result, _document, _workspace = self.result_for(project_id)
+        established = {item["label"]: item["value"] for item in result["established"]}
+
+        self.assertNotIn("File received", established,
+                         "the row still carries two facts under one label")
+        self.assertRegex(established["Date"], r"^\d{4}-\d{2}-\d{2}$",
+                         "Date says more than the date")
+        self.assertEqual(established["File type"], "an image (JPEG)")
+
+    def test_open_file_and_delete_sit_with_the_facts(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        self.assertIn('data-ui-ref="document-shop.result.doc-actions"', body)
+        self.assertIn('data-ui-ref="document-shop.result.download">Open file</a>', body)
+        self.assertIn('data-ui-ref="document-shop.result.delete-primary"', body)
+
+        # Above the findings, not below them.
+        actions = body.index('data-ui-ref="document-shop.result.doc-actions"')
+        self.assertLess(body.index('data-ui-ref="document-shop.result.established"'),
+                        actions, "the actions come before the facts they act on")
+        for later in ("document-shop.result.reference-title",
+                      "document-shop.conversation.title"):
+            self.assertGreater(body.index('data-ui-ref="%s"' % later), actions,
+                               "%s now sits above the actions" % later)
+
+    def test_the_moved_delete_still_asks_first(self):
+        """The whole risk of moving a destructive action into the open."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source_id = workspace.sources[0]["id"]
+
+        response = self.client.post(
+            "/document-shop/jobs/%s/sources/%s/remove" % (project_id, source_id),
+            data={})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Delete this document?", response.get_data(as_text=True))
+
+        still_there = self.workspace(project_id)
+        self.assertIsNone(still_there.sources[0].get("removed_at"),
+                          "the confirmation page deleted the document")
+
+    def test_the_findings_and_the_comparison_are_still_here(self):
+        """The layout moved things. It did not take the examination away."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        for ref in ("document-shop.result.established",
+                    "document-shop.result.interpretation",
+                    "document-shop.result.not-established",
+                    "document-shop.result.review",
+                    "document-shop.result.review-original",
+                    "document-shop.result.review-reference"):
+            self.assertIn('data-ui-ref="%s"' % ref, body, "%s was lost" % ref)
+
+    def test_the_survey_reference_button_says_open_pdf(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        self.assertIn(
+            'data-ui-ref="document-shop.result.reference-download">Open PDF</a>', body)
+        self.assertNotIn("Open the Survey Reference (PDF)", body)
+        # The heading above it already names what the PDF is, so the button
+        # does not need to repeat it.
+        self.assertIn('data-ui-ref="document-shop.result.reference-title"', body)
+
+    def test_one_document_gets_no_manage_these_documents_disclosure(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        # A survey upload derives a Survey Reference, so the workspace holds
+        # more than one Source - the disclosure counts what the page LISTS.
+        rows = body.count('data-ui-ref="document-shop.result.actions-item"')
+        if rows > 1:
+            self.assertIn("Manage these documents", body)
+        else:
+            self.assertNotIn("Manage these documents", body,
+                             "a set of one is offered as a set to manage")
+
+    def test_the_download_route_is_unchanged(self):
+        """Moved, not reimplemented: the same governed source-file route."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        workspace = self.workspace(project_id)
+        source_id = workspace.sources[0]["id"]
+
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+        row = body[body.index('data-ui-ref="document-shop.result.doc-actions"'):]
+        href = re.search(r'href="([^"]+)"', row).group(1).replace("&amp;", "&")
+
+        self.assertIn("/sources/%s/file" % source_id, href,
+                      "Open file no longer points at this document's own source")
+        # Follow the link the page actually renders, rather than one this test
+        # builds - the point is that the button reaches the governed route, and
+        # a hand-built URL proves only that the test can guess a prefix.
+        served = self.client.get(href)
+        self.assertEqual(served.status_code, 200)
+
+    def test_the_action_row_is_a_row_and_wraps(self):
+        css = (_REPO_ROOT / "static" / "css" / "main.css").read_text(encoding="utf-8")
+        block = css[css.index(".ds-doc-actions {"):]
+        block = block[:block.index("}") + 1]
+
+        self.assertIn("display: flex", block)
+        self.assertIn("flex-wrap: wrap", block,
+                      "Delete is pushed off the edge of a narrow screen")

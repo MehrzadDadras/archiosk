@@ -580,8 +580,14 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     not_established: list[dict[str, str]] = []
 
     established.append({
-        "label": "File received",
-        "value": "%s, received %s" % (filename, (getattr(document, "ingested_at", "") or "")[:10]),
+        # CLAUDE-DOCUMENT-SHOP-LAYOUT-01: the date, and only the date.
+        #
+        # This row read "<filename>, received <date>" - two facts under a label
+        # that announced neither, so a person scanning for when they uploaded
+        # something had to read past the filename to find it. The filename is
+        # not lost: it names the Open file action and captions the image.
+        "label": "Date",
+        "value": (getattr(document, "ingested_at", "") or "")[:10],
     })
     established.append({
         # CLAUDE-DOCUMENT-SHOP-COPY-01: "File type", not "Kind of file".

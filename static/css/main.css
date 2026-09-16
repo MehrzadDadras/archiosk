@@ -10664,6 +10664,20 @@ dl.plain-list dd {
 .ds-actions { margin: 10px 0 14px; }
 .ds-actions summary { cursor: pointer; }
 .ds-actions-form { display: inline; margin-left: 8px; }
+
+/* CLAUDE-DOCUMENT-SHOP-LAYOUT-01 - Open file / Delete, beside the facts.
+   A row rather than a stack so the two read as alternatives, and wrapping so a
+   phone puts them on two lines instead of pushing Delete off the edge. The
+   form inside resets .ds-actions-form's inline margin, which exists for the
+   disclosure list where the button follows a filename on the same line. */
+.ds-doc-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 18px;
+}
+.ds-doc-actions .ds-actions-form { display: inline; margin-left: 0; }
 .ds-actions .plain-list-item {
     display: flex;
     align-items: center;

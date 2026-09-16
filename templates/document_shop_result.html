@@ -70,6 +70,32 @@
 </dl>
 {% endif %}
 
+{# CLAUDE-DOCUMENT-SHOP-LAYOUT-01: what a person can DO with this document,
+   beside the facts about it rather than at the bottom of the page.
+
+   Opening the original and deleting it were both real before this and both
+   hard to find: the download sat under a "Your document" heading below every
+   finding, and Delete was inside a closed disclosure below that. Neither is a
+   new capability; they are the two the person came here able to want, so they
+   are where the document is described.
+
+   Delete still goes through the confirmation page - this button posts to the
+   same route the disclosure does, and that route asks before it removes
+   anything. A <div>, not a <p>, because a form may not sit inside one. #}
+{% if result.source_id %}
+<div class="ds-doc-actions" data-ui-ref="document-shop.result.doc-actions">
+    <a class="btn" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.source_id, download=1) }}"
+       title="{{ result.filename }}"
+       data-ui-ref="document-shop.result.download">Open file</a>
+    <form method="post" class="ds-actions-form"
+          action="{{ url_for('portal.document_shop_remove_source', project_id=project_id, source_id=result.source_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn"
+                data-ui-ref="document-shop.result.delete-primary">Delete</button>
+    </form>
+</div>
+{% endif %}
+
 {# GO INTERPRETATION. Labelled as a reading, never as what the document states. #}
 {% if result.interpretation %}
 <h2 class="np-section-title" data-ui-ref="document-shop.result.interpretation-title">What GO made of it</h2>
@@ -207,25 +233,24 @@
 {% if result.survey_reference.source_id %}
 <p class="mono">
     <a class="btn" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.survey_reference.source_id, download=1) }}"
-       data-ui-ref="document-shop.result.reference-download">Open the Survey Reference (PDF)</a>
+       data-ui-ref="document-shop.result.reference-download">Open PDF</a>
 </p>
 {% endif %}
 {% endif %}
 
-<h2 class="np-section-title" data-ui-ref="document-shop.result.source-title">Your document</h2>
+{# CLAUDE-DOCUMENT-SHOP-LAYOUT-01: the section is the PICTURE now.
+
+   Its download link moved to the actions beside the facts, which left this
+   heading standing over a link that was no longer here - and over nothing at
+   all for a PDF. So it renders only when there is an image to show. #}
 {% if result.is_image and result.source_id %}
+<h2 class="np-section-title" data-ui-ref="document-shop.result.source-title">Your document</h2>
 <figure data-ui-ref="document-shop.result.image-figure">
     <img src="{{ url_for('workspace.source_image', project_id=project_id, source_id=result.source_id) }}"
          alt="The image you uploaded, {{ result.filename }}"
          class="asread-source-image" data-ui-ref="document-shop.result.image">
     <figcaption class="mono">{{ result.filename }} &mdash; exactly as you uploaded it.</figcaption>
 </figure>
-{% endif %}
-{% if result.source_id %}
-<p class="mono">
-    <a href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.source_id, download=1) }}"
-       data-ui-ref="document-shop.result.download">Download the original file</a>
-</p>
 {% endif %}
 
 {# CLAUDE-SURVEY-REFERENCE-03: the actions menu for each uploaded document.
@@ -239,7 +264,10 @@
    A <details> disclosure rather than a JS popup menu: it works without
    JavaScript, it is keyboard-reachable by construction, and the destructive
    action stays one deliberate click away rather than one stray click away. #}
-{% if result.sources %}
+{# CLAUDE-DOCUMENT-SHOP-LAYOUT-01: only when there is more than one.
+   With a single upload this disclosure repeated the Delete already offered
+   beside the facts, under a heading promising management of a set of one. #}
+{% if result.sources and result.sources | length > 1 %}
 <details class="ds-actions" data-ui-ref="document-shop.result.actions">
     <summary class="mono" data-ui-ref="document-shop.result.actions-toggle">Manage these documents</summary>
     <ul class="plain-list" data-ui-ref="document-shop.result.actions-list">
@@ -268,7 +296,7 @@
    continuation of the examination, not a replacement for it. The stored result
    above is unchanged by anything said here. #}
 <h2 class="np-section-title" id="conversation"
-    data-ui-ref="document-shop.conversation.title">Ask GO about this document</h2>
+    data-ui-ref="document-shop.conversation.title">Ask GO</h2>
 
 {% if conversation %}
 <ol class="ds-conversation" data-ui-ref="document-shop.conversation.thread">
@@ -300,12 +328,17 @@
        again as this field's label - which is duplicate copy on screen and a
        duplicate announcement to a screen reader. Deleting the <label> outright
        would have left the textarea with no accessible name at all, trading a
-       cosmetic problem for a real one, so it points at the heading that was
-       already there. Same name, said once. #}
+       cosmetic problem for a real one.
+
+       CLAUDE-DOCUMENT-SHOP-LAYOUT-01 then shortened the heading to "Ask GO",
+       so pointing at it would have QUIETLY SHORTENED THE ACCESSIBLE NAME too -
+       a screen reader would hear "Ask GO, edit text" and be told nothing about
+       what to ask about. The name is stated here instead, unchanged from the
+       one the deleted <label> carried. #}
     <textarea id="ds-question" name="question" rows="3" class="text-input ds-composer-input"
               data-ui-ref="document-shop.conversation.input"
-              aria-labelledby="conversation"
-              placeholder="e.g. What does this document require?"></textarea>
+              aria-label="Ask GO about this document"
+              placeholder="What would you like to know about this document?"></textarea>
     <button type="submit" class="btn btn-primary"
             id="ds-conversation-send"
             data-ui-ref="document-shop.conversation.send">Ask</button>
