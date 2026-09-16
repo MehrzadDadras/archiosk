@@ -76,7 +76,13 @@ from services.sheet_vision import UNTRUSTED_CLOSE, UNTRUSTED_OPEN, _strip_fence_
 
 logger = logging.getLogger(__name__)
 
-VISUAL_PROMPT_VERSION = "visual-examination-02"
+# CLAUDE-SURVEY-STAGE1-01: -03 adds DUAL-ENCODED NORTH and numeric bearings.
+#
+# A prompt generation is part of a job's identity (see
+# `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
+# without bumping that is the defect that kept the parametric reconstruction
+# off every live record.
+VISUAL_PROMPT_VERSION = "visual-examination-03"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -309,8 +315,13 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
   A CURVED STREET FRONTAGE IS AN ARC, NOT A CHAIN OF SHORT STRAIGHTS. If the sheet prints a RADIUS and a CHORD for that curve, report both as numbers - they are what lets the curve be reconstructed exactly. "bulge_side" is "left" or "right" relative to travelling from "from" to "to"; for a street frontage the curve bulges AWAY from the parcel interior.
   Do NOT invent a radius. An arc whose radius you cannot read is still "arc" with no radius - it will be drawn straight and reported as unresolved, which is correct.
 - "footprints": each building as its own outline, with "kind" (dwelling / garage / accessory / structure). Keep their RELATIVE positions and orientation faithful to the sheet - a garage west of a dwelling must come out west of it.
+- "bearing" on a segment: "text" is the sheet's own string exactly as printed ("N 17\u00b0 30' 00\" E"). "value_degrees" is that bearing converted to a whole-circle azimuth in decimal degrees (0 = north, 90 = east) ONLY where the printed bearing gives you one - do not estimate an azimuth from the drawing's appearance, and omit "value_degrees" entirely when the sheet does not print a bearing you can read. "quadrant" is the printed quadrant where the sheet uses quadrant notation.
 - "dimension" / "bearing" / "radius" / "chord" on a segment: "text" is the sheet's own string exactly as printed ("65'-10 1/2\"", "144.12"), "value" is that as a plain number where one exists, "unit" if stated. Report a dimension ONLY for the segment it actually labels.
-- "north": degrees clockwise from straight up on the image (0 = up, 90 = right). Omit it entirely if no north arrow is legible.
+- "north": report it TWICE, independently, and do not derive one from the other.
+  "degrees": clockwise from straight up on the image (0 = up, 90 = right, 180 = down, 270 = left).
+  "direction": which way the arrow POINTS on the image, as one of UP, UP_RIGHT, RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, LEFT, UP_LEFT.
+  "bbox": a tight box around the arrow symbol ITSELF - {"x","y","w","h"} as fractions of the whole image. Include the arrowhead and its circle if it has one; exclude the word NORTH, the title block and any surrounding border. THIS IS THE MOST IMPORTANT FIELD: the angle is measured from the pixels inside this box, and your "degrees" is used only to check that measurement. A loose or wrong box is worse than no box.
+  Read the arrow, then state the direction word from what you see, then state the angle from what you see. If they disagree, say so in "unresolved" rather than adjusting one to match the other - a disagreement is a finding and will be treated as one. Omit north entirely if no arrow is legible.
 - Do NOT close a boundary that does not close on the sheet. Report only the segments you can see; a gap is a finding, not a defect to smooth over.
 
 Reply with JSON only, this exact shape:
@@ -323,9 +334,9 @@ Reply with JSON only, this exact shape:
   "unresolved": ["<short phrase naming something present but unreadable>"],
   "graph": {
     "nodes": [{"id": "N1", "x": 0.0, "y": 0.0, "kind": "property_corner|monument|curve_point|reference", "label": "<optional, e.g. IRON TUBE>", "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
-    "segments": [{"id": "S1", "from": "N1", "to": "N2", "kind": "straight|arc", "boundary": "street_line|lot_line|interior|easement", "label": "<e.g. CASTILLE AVENUE>", "bulge_side": "left|right", "dimension": {"text": "144.12", "value": 144.12, "certainty": "RECOVERED"}, "radius": {"text": "153.76", "value": 153.76, "certainty": "RECOVERED"}, "chord": {"text": "139.20", "value": 139.2, "certainty": "RECOVERED"}, "bearing": {"text": "<as printed>", "certainty": "RECOVERED"}, "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
+    "segments": [{"id": "S1", "from": "N1", "to": "N2", "kind": "straight|arc", "boundary": "street_line|lot_line|interior|easement", "label": "<e.g. CASTILLE AVENUE>", "bulge_side": "left|right", "dimension": {"text": "144.12", "value": 144.12, "certainty": "RECOVERED"}, "radius": {"text": "153.76", "value": 153.76, "certainty": "RECOVERED"}, "chord": {"text": "139.20", "value": 139.2, "certainty": "RECOVERED"}, "bearing": {"text": "<as printed>", "value_degrees": 0, "quadrant": "NE|SE|SW|NW", "certainty": "RECOVERED"}, "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
     "footprints": [{"id": "B1", "kind": "dwelling|garage|accessory|structure", "label": "1 STORY BRICK DWELLING", "outline": [{"x": 0.0, "y": 0.0}], "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
-    "north": {"degrees": 0, "certainty": "RECOVERED|PARTIALLY_RECOVERED"},
+    "north": {"degrees": 0, "direction": "UP|UP_RIGHT|RIGHT|DOWN_RIGHT|DOWN|DOWN_LEFT|LEFT|UP_LEFT", "bbox": {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}, "certainty": "RECOVERED|PARTIALLY_RECOVERED"},
     "streets": [{"label": "CASTILLE AVENUE", "along_segments": ["S1"], "certainty": "RECOVERED"}],
     "unresolved": ["<anything present on the sheet you could not reconstruct>"]
   }
@@ -501,9 +512,76 @@ def _clean_geometry(raw) -> dict:
         except (TypeError, ValueError):
             degrees = None
         if certainty in VALUE_BEARING and degrees is not None:
+            # CLAUDE-SURVEY-STAGE1-01: BOTH ENCODINGS TRAVEL, UNRECONCILED.
+            # Reconciling here would throw away the evidence of a conflict
+            # before anything could act on it. `survey_graph.normalise_graph`
+            # is the one gate that decides, and it needs both to decide with.
             geometry["north"] = {"degrees": round(degrees % 360.0, 2),
+                                 "direction": _direction_word(north.get("direction")),
+                                 "bbox": _bbox(north.get("bbox")),
                                  "certainty": certainty}
     return geometry
+
+
+#: The eight directions the reader may name, as image directions - not compass
+#: points. "UP" is up the image as supplied, which is what the angle is also
+#: measured against, so the two are comparable without knowing which way up the
+#: sheet was photographed.
+DIRECTION_WORDS = ("UP", "UP_RIGHT", "RIGHT", "DOWN_RIGHT",
+                   "DOWN", "DOWN_LEFT", "LEFT", "UP_LEFT")
+
+
+def _attach_measured_north(normalised: dict, frame_bytes) -> None:
+    """Measure north off the frame and record the result beside the claim.
+
+    Mutates `normalised` in place and never raises. Both the graph's north and
+    the legacy geometry north get the same measurement, so a consumer of either
+    sees the same truth.
+    """
+    from services import survey_north
+
+    targets = [normalised.get("graph", {}).get("north"),
+               normalised.get("geometry", {}).get("north")]
+    targets = [n for n in targets if isinstance(n, dict)]
+    if not targets:
+        return
+
+    bbox = next((n.get("bbox") for n in targets if n.get("bbox")), None)
+    if not bbox:
+        outcome = {"ok": False, "degrees": None, "pixels": 0,
+                   "reason": "the reader did not say where the arrow is"}
+    else:
+        outcome = survey_north.measure_north(frame_bytes, bbox)
+
+    for north in targets:
+        north["measured_degrees"] = outcome["degrees"]
+        north["measured_ok"] = bool(outcome["ok"])
+        north["measured_reason"] = outcome["reason"]
+        north["measure_version"] = survey_north.MEASURE_VERSION
+
+
+def _bbox(raw) -> dict:
+    """A bounding box as image fractions, or {} when it is not usable.
+
+    CLAUDE-SURVEY-STAGE1-02: this is what the reader is FOR now, where north is
+    concerned - locating the symbol, which is a perception problem. The angle
+    is measured from the pixels it frames.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key in ("x", "y", "w", "h"):
+        try:
+            out[key] = round(float(raw[key]), 5)
+        except (KeyError, TypeError, ValueError):
+            return {}
+    return out
+
+
+def _direction_word(raw) -> str:
+    """One of DIRECTION_WORDS, or "" when the reader named nothing usable."""
+    word = str(raw or "").strip().upper().replace("-", "_").replace(" ", "_")
+    return word if word in DIRECTION_WORDS else ""
 
 
 def normalise_payload(parsed) -> dict:
@@ -632,6 +710,12 @@ def examine(raw_bytes: bytes, filename: str, *, decision, api_key: Optional[str]
                                        skipped_reason=audit.skipped_reason)
 
     normalised = normalise_payload(getattr(outcome, "parsed", None))
+    # CLAUDE-SURVEY-STAGE1-02: MEASURE THE ARROW. The reader located it; the
+    # angle comes from the pixels it framed, measured here with no model in the
+    # loop and nothing transmitted. Both numbers travel onward - reconciling
+    # them is `survey_graph`'s job, and doing it here would discard the
+    # evidence of a disagreement before anything could act on it.
+    _attach_measured_north(normalised, frame["bytes"])
     return VisualExaminationResult(
         ran=True, audit=audit, model=audit.model,
         spatial_digest_used=bool(spatial_digest),

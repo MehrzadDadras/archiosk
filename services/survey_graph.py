@@ -88,6 +88,36 @@ P_LABEL = "label"
 P_NORTH = "north"
 
 
+#: Render layers. A caller asks for the layers it wants and gets exactly those.
+#: This is also the whitelist a request from Ask GO is validated against, which
+#: is why it is a frozen tuple of plain tokens and not, say, a free-text filter.
+LAYER_PROPERTY_BOUNDARY = "property_boundary"
+LAYER_NORTH = "north"
+LAYER_FOOTPRINTS = "footprints"
+LAYER_LABELS = "labels"
+#: Interior and easement lines - part of the parcel drawing but NOT the
+#: property boundary. Named separately so "give me the property boundary"
+#: cannot quietly also hand back an easement.
+LAYER_OTHER_LINES = "other_lines"
+LAYERS = (LAYER_PROPERTY_BOUNDARY, LAYER_NORTH, LAYER_FOOTPRINTS,
+          LAYER_LABELS, LAYER_OTHER_LINES)
+
+#: CLAUDE-SURVEY-STAGE1-01. Stage 1 draws the property boundary and north, and
+#: nothing else - buildings, setbacks, easements, notes and the auxiliary text
+#: layers are out of scope for this phase by Product Owner direction. The DATA
+#: is untouched; it is simply not drawn yet.
+STAGE1_LAYERS = (LAYER_PROPERTY_BOUNDARY, LAYER_NORTH)
+
+#: Boundary roles that ARE the property boundary, for the traverse.
+BOUNDARY_LAYER_ROLES = ("street_line", "lot_line")
+
+#: Roles that are positively NOT the parcel edge. Everything else - including a
+#: run the reader returned without classifying - draws as boundary, because
+#: silently dropping an unclassified side loses real geometry and leaves a
+#: convincing, emptier drawing.
+NON_BOUNDARY_ROLES = ("interior", "easement")
+
+
 class GraphError(ValueError):
     """A graph that cannot be reduced to geometry at all. Never raised at a
     caller - `normalise_graph` returns refusals as unresolved entries."""
@@ -144,6 +174,353 @@ def _dimension(raw) -> Optional[dict]:
             "certainty": certainty}
 
 
+def _bearing(raw) -> Optional[dict]:
+    """A bearing as the sheet prints it, PLUS its azimuth where one was read.
+
+    CLAUDE-SURVEY-STAGE1-01. Bearings used to go through `_dimension`, which
+    keeps `text` and a scalar `value` and drops everything else - so a numeric
+    azimuth could not survive normalisation even once the reader started
+    returning one, and a traverse solver would have found no bearings on any
+    sheet whatsoever. A bearing is not a length: it needs its own shape.
+
+    `value_degrees` is absent whenever the sheet's bearing could not be read.
+    That absence is what makes a run non-computable, and it is meant to.
+    """
+    if not isinstance(raw, dict):
+        return None
+    certainty = _certainty(raw.get("certainty"))
+    text = str(raw.get("text") or "").strip()
+    if certainty not in vx.VALUE_BEARING or not text:
+        return None
+    azimuth = _num(raw.get("value_degrees"))
+    quadrant = str(raw.get("quadrant") or "").strip().upper()[:2]
+    return {
+        "text": text[:40],
+        "value_degrees": None if azimuth is None else round(azimuth % 360.0, 4),
+        "quadrant": quadrant if quadrant in ("NE", "SE", "SW", "NW") else "",
+        "certainty": certainty,
+    }
+
+
+#: Where a north value came from. Recorded on the value itself, because "8.4
+#: degrees" means something different when arithmetic produced it than when a
+#: model asserted it, and a reader of the record must be able to tell.
+#: HOW A DRAWN LINE CAME TO BE WHERE IT IS. Carried on every boundary
+#: primitive so a rendered line can never be mistaken for a surveyed one.
+#:
+#: `computed_traverse` means the run was laid off from a bearing and a distance
+#: the sheet actually prints - a reconstruction of the surveyor's own figures.
+#:
+#: `observed_graphic_dimension` means it was drawn from where the reader
+#: located its corners, carrying whatever dimension the sheet printed. It is an
+#: observation OF A DRAWING, not a bearing. Product Owner direction,
+#: 2026-09-16: sheets that dimension their lines instead of bearing them are
+#: ordinary, not defective, and this flag is what keeps their lines honest -
+#: a line so marked must never be read, quoted or exported as a legal bearing.
+PROVENANCE_COMPUTED = "computed_traverse"
+PROVENANCE_OBSERVED = "observed_graphic_dimension"
+
+NORTH_MEASURED = "measured_pixel_axis"
+NORTH_CLAIMED = "model_reading"
+
+#: Each direction word and the arc of angles it covers, as (low, high) in
+#: degrees clockwise from image-up. UP straddles 0 and is handled as two arcs.
+_DIRECTION_ARCS = {
+    "UP": ((337.5, 360.0), (0.0, 22.5)),
+    "UP_RIGHT": ((22.5, 67.5),),
+    "RIGHT": ((67.5, 112.5),),
+    "DOWN_RIGHT": ((112.5, 157.5),),
+    "DOWN": ((157.5, 202.5),),
+    "DOWN_LEFT": ((202.5, 247.5),),
+    "LEFT": ((247.5, 292.5),),
+    "UP_LEFT": ((292.5, 337.5),),
+}
+
+#: How far outside its arc an angle may sit and still be called agreement.
+#: Small on purpose: it exists so a reader who says UP_RIGHT for an angle of
+#: exactly 22.5 is not called a liar, NOT to smooth over a real disagreement.
+#: The failure this gate was built for - "upward-right" reported as 355 - is
+#: 27.5 degrees outside its arc and is nowhere near this.
+DIRECTION_TOLERANCE_DEGREES = 5.0
+
+
+def _arc_distance(degrees: float, word: str) -> float:
+    """How far `degrees` sits outside the arc `word` names. 0.0 when inside."""
+    best = 360.0
+    for low, high in _DIRECTION_ARCS[word]:
+        if low <= degrees <= high:
+            return 0.0
+        for edge in (low, high):
+            gap = abs(degrees - edge) % 360.0
+            best = min(best, min(gap, 360.0 - gap))
+    return best
+
+
+def _reconcile_north(raw_north) -> tuple:
+    """North, from the MEASUREMENT, once the reading corroborates it.
+
+    CLAUDE-SURVEY-STAGE1-02. Product Owner direction, 2026-09-16: the
+    deterministic pixel-axis measurement is the source of truth and the model's
+    own angle is corroboration only, on a tight threshold.
+
+    WHY IT IS THIS WAY ROUND, AND NOT THE OTHER. The reader described the
+    Castille arrow as "pointing upward-right", which is right, and gave 355
+    degrees, which is upward-left. Measuring the arrow off the sheet gives 8.4.
+    The first repair here was categorical - report a direction word as well as
+    an angle, and refuse the pair when they disagree - and that gate would have
+    passed this, because 355 and 8.4 sit in the SAME 45-degree sector. A word
+    catches a compass pointed at the floor. It cannot catch a mirror-flip about
+    vertical, which is the error that actually happened.
+
+    So the order of authority is: measurement, then reading.
+
+      - measured, and the reading agrees within the threshold -> measured wins
+      - measured, and the reading disagrees                   -> UNRESOLVED
+      - no measurement                                        -> the reading,
+        still held to the categorical gate it was already held to
+
+    A DISAGREEMENT IS NEVER RESOLVED BY PREFERRING THE MEASUREMENT. It would be
+    easy to argue the arithmetic should simply win. But a measurement of the
+    wrong object - a hatch symbol, a logo, a fold in the paper - is arithmetic
+    too, and it is wrong with total confidence. The reading is the only
+    independent check that the box framed a north arrow at all, so losing that
+    check is not a small thing, and the honest output when the two disagree is
+    that north is unresolved.
+
+    Returns (north_or_None, refusal_or_None).
+    """
+    if not isinstance(raw_north, dict):
+        return None, None
+
+    certainty = _certainty(raw_north.get("certainty"))
+    if certainty not in vx.VALUE_BEARING:
+        return None, None
+
+    claimed = _num(raw_north.get("degrees"))
+    claimed = None if claimed is None else round(claimed % 360.0, 2)
+    measured = _num(raw_north.get("measured_degrees"))
+    word = str(raw_north.get("direction") or "").strip().upper()
+
+    if measured is not None and raw_north.get("measured_ok"):
+        from services import survey_north
+
+        measured = round(measured % 360.0, 2)
+        if claimed is None:
+            return {"degrees": measured, "direction": _word_for(measured),
+                    "source": NORTH_MEASURED, "claimed_degrees": None,
+                    "certainty": certainty}, None
+        delta = survey_north.angular_delta(measured, claimed)
+        if delta > survey_north.CORROBORATION_DELTA_DEGREES:
+            return None, (
+                "north arrow is unresolved: measuring the arrow on the sheet "
+                "gives %.4g degrees, the reading gave %.4g, and those differ "
+                "by %.4g - more than the %.4g allowed. Neither was preferred "
+                "over the other" % (measured, claimed, delta,
+                                    survey_north.CORROBORATION_DELTA_DEGREES))
+        return {"degrees": measured, "direction": _word_for(measured),
+                "source": NORTH_MEASURED, "claimed_degrees": claimed,
+                "certainty": certainty}, None
+
+    # No measurement: the reading is all there is, held to the categorical gate.
+    if claimed is None:
+        return None, None
+    if not word:
+        return {"degrees": claimed, "direction": "", "source": NORTH_CLAIMED,
+                "claimed_degrees": claimed, "certainty": certainty}, None
+    if word not in _DIRECTION_ARCS:
+        return None, ("north arrow direction was reported as %r, which is not "
+                      "one of the eight directions" % word[:24])
+    outside = _arc_distance(claimed, word)
+    if outside > DIRECTION_TOLERANCE_DEGREES:
+        return None, ("north arrow is unresolved: it was read as pointing %s "
+                      "but its angle was given as %.4g degrees, which is %s - "
+                      "the two disagree and neither was preferred over the "
+                      "other" % (word.replace("_", "-").lower(), claimed,
+                                 _word_for(claimed).replace("_", "-").lower()))
+    return {"degrees": claimed, "direction": word, "source": NORTH_CLAIMED,
+            "claimed_degrees": claimed, "certainty": certainty}, None
+
+
+def _word_for(degrees: float) -> str:
+    """The direction word an angle falls in. For explaining a conflict."""
+    for word in _DIRECTION_ARCS:
+        if _arc_distance(degrees, word) == 0.0:
+            return word
+    return "UP"
+
+
+#: A traverse closes when its misclosure is small RELATIVE to how far it ran.
+#: 1:5000 is the ordinary urban cadastral standard. Expressed as a ratio rather
+#: than an absolute distance because a 40m lot and a 4km boundary cannot share
+#: one tolerance.
+MISCLOSURE_RATIO_LIMIT = 5000.0
+
+#: Below this perimeter a ratio stops meaning anything, so an absolute figure
+#: is used instead - in the same units the sheet's own dimensions are in.
+MISCLOSURE_ABSOLUTE_FLOOR = 0.05
+
+
+def _azimuth_of(segment) -> Optional[float]:
+    """A segment's whole-circle azimuth in degrees, or None.
+
+    ONLY from a bearing the sheet actually printed. There is deliberately no
+    fallback to the angle between two located nodes: that number is derived
+    from where the reader thought the corners were, and feeding it into a
+    traverse would produce coordinates that LOOK computed while being a
+    restatement of the same estimate. A traverse that cannot be computed must
+    say so.
+    """
+    bearing = segment.get("bearing")
+    if not isinstance(bearing, dict):
+        return None
+    if bearing.get("certainty") not in vx.VALUE_BEARING:
+        return None
+    degrees = _num(bearing.get("value_degrees"))
+    return None if degrees is None else degrees % 360.0
+
+
+def _distance_of(segment) -> Optional[float]:
+    """A segment's length from its own printed dimension, or None."""
+    dimension = segment.get("dimension")
+    if not isinstance(dimension, dict):
+        return None
+    if dimension.get("certainty") not in vx.VALUE_BEARING:
+        return None
+    value = _num(dimension.get("value"))
+    return value if value and value > 0 else None
+
+
+def segment_inputs(segment) -> dict:
+    """What this segment offers a solver, and what it is missing.
+
+    Reported per segment rather than as one verdict for the parcel, because a
+    boundary is usually partly computable and saying "unresolved" about the
+    whole of it would throw away the half that is real.
+    """
+    azimuth = _azimuth_of(segment)
+    distance = _distance_of(segment)
+    is_arc = segment.get("kind") == "arc"
+    radius = _num((segment.get("radius") or {}).get("value"))
+    chord = _num((segment.get("chord") or {}).get("value"))
+    arc_defined = bool(is_arc and radius and chord)
+
+    missing = []
+    if azimuth is None and not arc_defined:
+        missing.append("BEARING")
+    if distance is None and not arc_defined:
+        missing.append("DIMENSION")
+
+    return {
+        "id": segment["id"],
+        "azimuth": azimuth,
+        "distance": distance,
+        "arc_defined": arc_defined,
+        "radius": radius,
+        "chord": chord,
+        # Computable means THIS RUN can be laid off from its own numbers.
+        "computable": bool((azimuth is not None and distance is not None)
+                           or arc_defined),
+        "missing": tuple(missing),
+    }
+
+
+def solve_traverse(graph: dict) -> dict:
+    """Vertex coordinates computed from the sheet's own bearings and distances.
+
+    CLAUDE-SURVEY-STAGE1-01. THE SOLVER IS DETERMINISTIC AND IT IS ALLOWED TO
+    FAIL. It lays each run off from the previous corner using the printed
+    bearing and distance; where a run has no such numbers it computes nothing
+    for that run and says which input was missing. It never substitutes the
+    angle between two located nodes for a bearing the sheet did not print -
+    that would dress an estimate up as a computation.
+
+    On the specimen this was built against, NOT ONE of five runs carries a
+    bearing; the reading's own unresolved list says "All bearing values". So
+    this returns `computed: False` there, and the drawing falls back to located
+    corners which are rendered and tagged as such. That is the honest outcome,
+    not a shortfall to be papered over.
+
+    Returns {"computed", "points", "segments", "misclosure"}.
+    """
+    segments = list(graph.get("segments") or [])
+    reports = [segment_inputs(s) for s in segments]
+    by_id = {r["id"]: r for r in reports}
+
+    boundary = [s for s in segments
+                if s.get("boundary") in BOUNDARY_LAYER_ROLES]
+    if not boundary:
+        return {"computed": False, "points": {}, "segments": reports,
+                "misclosure": _no_misclosure("there is no boundary to close")}
+
+    if not all(by_id[s["id"]]["computable"] for s in boundary):
+        short = sum(1 for s in boundary if not by_id[s["id"]]["computable"])
+        return {"computed": False, "points": {}, "segments": reports,
+                "misclosure": _no_misclosure(
+                    "%d of %d boundary runs carry no bearing or no distance"
+                    % (short, len(boundary)))}
+
+    # Survey convention: azimuth clockwise from north, north is +y.
+    # THE START IS CAPTURED HERE, NOT READ BACK LATER. A closed ring ends at
+    # the node it began at, so `points[first]` is OVERWRITTEN by the final
+    # cursor as the traverse comes round - and reading the start out of the
+    # dict afterwards then compares the endpoint with itself and reports zero
+    # misclosure for every ring, however badly it closes. The check would have
+    # passed everything while looking like it was working.
+    start = (0.0, 0.0)
+    points = {boundary[0]["from"]: start}
+    cursor = (0.0, 0.0)
+    perimeter = 0.0
+    for segment in boundary:
+        report = by_id[segment["id"]]
+        length = report["distance"] if report["distance"] else report["chord"]
+        if length is None:
+            return {"computed": False, "points": {}, "segments": reports,
+                    "misclosure": _no_misclosure(
+                        "run %s has no length to lay off" % segment["id"])}
+        azimuth = report["azimuth"]
+        if azimuth is None:
+            return {"computed": False, "points": {}, "segments": reports,
+                    "misclosure": _no_misclosure(
+                        "run %s has no bearing to lay off" % segment["id"])}
+        radians = math.radians(azimuth)
+        cursor = (cursor[0] + length * math.sin(radians),
+                  cursor[1] + length * math.cos(radians))
+        points[segment["to"]] = cursor
+        perimeter += length
+
+    linear = math.hypot(cursor[0] - start[0], cursor[1] - start[1])
+    ratio = (perimeter / linear) if linear > 1e-12 else float("inf")
+    closes = (linear <= MISCLOSURE_ABSOLUTE_FLOOR
+              or ratio >= MISCLOSURE_RATIO_LIMIT)
+
+    return {
+        "computed": True,
+        "points": points,
+        "segments": reports,
+        "misclosure": {
+            "computable": True,
+            "linear": round(linear, 4),
+            "perimeter": round(perimeter, 4),
+            # Reported as the denominator of 1:N, which is how a surveyor reads
+            # it. Infinite when the traverse closes exactly.
+            "ratio": None if ratio == float("inf") else round(ratio, 1),
+            "closes": closes,
+            "limit": MISCLOSURE_RATIO_LIMIT,
+            "reason": None if closes else (
+                "misclosure %.4g over a perimeter of %.4g is 1:%.0f, wider "
+                "than the 1:%.0f this is held to - the boundary is reported "
+                "open rather than adjusted to close"
+                % (linear, perimeter, ratio, MISCLOSURE_RATIO_LIMIT)),
+        },
+    }
+
+
+def _no_misclosure(reason: str) -> dict:
+    return {"computable": False, "linear": None, "perimeter": None,
+            "ratio": None, "closes": False, "limit": MISCLOSURE_RATIO_LIMIT,
+            "reason": reason}
+
+
 def normalise_graph(raw) -> dict:
     """Everything the reader returned, reduced to what this module will draw.
 
@@ -187,7 +564,7 @@ def normalise_graph(raw) -> dict:
             "boundary": role if role in BOUNDARY_ROLES else "unknown",
             "label": str(entry.get("label") or "").strip()[:48],
             "dimension": _dimension(entry.get("dimension")),
-            "bearing": _dimension(entry.get("bearing")),
+            "bearing": _bearing(entry.get("bearing")),
             "radius": _dimension(entry.get("radius")),
             "chord": _dimension(entry.get("chord")),
             "bulge_side": bulge if bulge in BULGE_SIDES else None,
@@ -210,13 +587,9 @@ def normalise_graph(raw) -> dict:
             "certainty": _certainty(entry.get("certainty")),
         })
 
-    north = None
-    raw_north = raw.get("north")
-    if isinstance(raw_north, dict):
-        degrees = _num(raw_north.get("degrees"))
-        certainty = _certainty(raw_north.get("certainty"))
-        if degrees is not None and certainty in vx.VALUE_BEARING:
-            north = {"degrees": round(degrees % 360.0, 2), "certainty": certainty}
+    north, north_refusal = _reconcile_north(raw.get("north"))
+    if north_refusal:
+        unresolved.append(north_refusal)
 
     streets = []
     for entry in (raw.get("streets") or [])[:12]:
@@ -289,20 +662,49 @@ def _arc_from_chord_and_radius(p1, p2, radius_survey, chord_survey, bulge_side):
     return (centre, radius, start, extent), None
 
 
-def build_primitives(graph: dict) -> dict:
+def build_primitives(graph: dict, include=None) -> dict:
     """The graph resolved into drawable primitives, once, for both renderers.
 
     Returns {"primitives": [...], "unresolved": [...], "stats": {...}}. All
     coordinates stay image fractions with a top-left origin; each renderer maps
     them into its own frame, so nothing here knows about points, pixels or
     page size.
+
+    `include` names the LAYERS to draw, from `LAYERS`. None means every layer,
+    which is what every caller meant before layers existed. Stage 1 callers
+    pass `STAGE1_LAYERS` - the property boundary and north, nothing else.
+
+    CLAUDE-SURVEY-STAGE1-01: WHERE THE TRAVERSE COULD NOT BE COMPUTED.
+    `solve_traverse` runs here so each run can be marked with what it was
+    missing. A run whose bearing or dimension the sheet never gave is drawn
+    from its located corners and TAGGED, never quietly drawn as though it had
+    been computed. The tag is the difference between a reconstruction and a
+    drawing that merely looks like one.
     """
+    include = tuple(LAYERS) if include is None else tuple(include)
+    traverse = solve_traverse(graph)
+    inputs = {r["id"]: r for r in traverse["segments"]}
     nodes = graph.get("nodes") or {}
     unresolved = list(graph.get("unresolved") or [])
     primitives = []
     arcs = straights = 0
 
     for segment in graph.get("segments") or []:
+        # A run the reader walked but did not classify is still a boundary
+        # run. Only `interior` and `easement` are positively NOT the parcel
+        # edge, so only they are excluded - dropping `unknown` here produced an
+        # empty Stage 1 drawing from a graph that had two real sides in it,
+        # which is the blank-panel failure all over again.
+        wanted = (LAYER_OTHER_LINES
+                  if segment["boundary"] in NON_BOUNDARY_ROLES
+                  else LAYER_PROPERTY_BOUNDARY)
+        if wanted not in include:
+            continue
+        report = inputs.get(segment["id"]) or {}
+        # CLAUDE-SURVEY-STAGE1-02: what this line IS, travelling with the line.
+        provenance = (PROVENANCE_COMPUTED if report.get("computable")
+                      else PROVENANCE_OBSERVED)
+        tags = tuple("[%s UNRESOLVED]" % m for m in report.get("missing", ()))
         p1 = (nodes[segment["from"]]["x"], nodes[segment["from"]]["y"])
         p2 = (nodes[segment["to"]]["x"], nodes[segment["to"]]["y"])
         certain = segment["certainty"] == vx.RECOVERED
@@ -317,6 +719,7 @@ def build_primitives(graph: dict) -> dict:
                 straights += 1
                 primitives.append({"type": P_LINE, "id": segment["id"],
                                    "a": p1, "b": p2, "certain": certain,
+                                   "provenance": provenance, "tags": tags,
                                    "role": segment["boundary"],
                                    "label": segment["label"]})
                 unresolved.append(
@@ -331,6 +734,7 @@ def build_primitives(graph: dict) -> dict:
                     "radius": round(radius_norm, 5),
                     "start_deg": round(start, 3), "extent_deg": round(extent, 3),
                     "certain": certain, "role": segment["boundary"],
+                    "provenance": provenance, "tags": tags,
                     "label": segment["label"],
                     "radius_text": (segment.get("radius") or {}).get("text"),
                     "chord_text": (segment.get("chord") or {}).get("text")})
@@ -338,33 +742,35 @@ def build_primitives(graph: dict) -> dict:
             straights += 1
             primitives.append({"type": P_LINE, "id": segment["id"],
                                "a": p1, "b": p2, "certain": certain,
+                                   "provenance": provenance, "tags": tags,
                                "role": segment["boundary"],
                                "label": segment["label"]})
 
         # A dimension is drawn ONLY where the sheet supported one, and always
         # as the sheet's own string.
         dimension = segment.get("dimension")
-        if dimension:
+        if LAYER_LABELS in include and dimension:
             primitives.append({
                 "type": P_LABEL, "kind": "dimension", "text": dimension["text"],
                 "at": ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0),
                 "certain": dimension["certainty"] == vx.RECOVERED,
                 "for": segment["id"]})
         bearing = segment.get("bearing")
-        if bearing:
+        if LAYER_LABELS in include and bearing:
             primitives.append({
                 "type": P_LABEL, "kind": "bearing", "text": bearing["text"],
                 "at": ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0),
                 "certain": bearing["certainty"] == vx.RECOVERED,
                 "for": segment["id"]})
 
-    for footprint in graph.get("footprints") or []:
+    for footprint in (graph.get("footprints") or []
+                      if LAYER_FOOTPRINTS in include else []):
         primitives.append({
             "type": P_POLYGON, "id": footprint["id"], "kind": footprint["kind"],
             "points": footprint["outline"], "label": footprint["label"],
             "certain": footprint["certainty"] == vx.RECOVERED})
 
-    north = graph.get("north")
+    north = graph.get("north") if LAYER_NORTH in include else None
     if north:
         primitives.append({"type": P_NORTH, "degrees": north["degrees"],
                            "certain": north["certainty"] == vx.RECOVERED})
@@ -380,7 +786,15 @@ def build_primitives(graph: dict) -> dict:
             "stats": {"arcs": arcs, "straights": straights,
                       "nodes": len(nodes),
                       "footprints": len(graph.get("footprints") or []),
-                      "closed": not closure["gaps"]}}
+                      # Topological closure: does the chain of runs meet itself.
+                      "closed": not closure["gaps"],
+                      # CLAUDE-SURVEY-STAGE1-02: and the arithmetic verdict,
+                      # which is a different question. A ring can close on the
+                      # page and still not close on its own figures - and on a
+                      # dimension-only sheet there are no figures to close, so
+                      # `computed` is False and that is an ordinary outcome.
+                      "computed": traverse["computed"],
+                      "misclosure": traverse["misclosure"]}}
 
 
 def fit_to_frame(resolved: dict, margin: float = 0.06) -> dict:

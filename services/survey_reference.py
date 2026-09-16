@@ -584,7 +584,12 @@ def resolved_plan(reference: dict) -> dict:
         return {"primitives": [], "unresolved": [],
                 "stats": {"arcs": 0, "straights": 0, "nodes": 0,
                           "footprints": 0, "closed": False}}
-    return survey_graph.fit_to_frame(survey_graph.build_primitives(graph))
+    # CLAUDE-SURVEY-STAGE1-01: Stage 1 draws the property boundary and north.
+    # Buildings, setbacks, easements, notes and the auxiliary text layers are
+    # out of scope this phase by Product Owner direction - the DATA is
+    # untouched and still in the record, it is simply not drawn yet.
+    return survey_graph.fit_to_frame(
+        survey_graph.build_primitives(graph, include=survey_graph.STAGE1_LAYERS))
 
 
 def review_svg(reference: dict, width: int = 560, height: int = 420) -> str:

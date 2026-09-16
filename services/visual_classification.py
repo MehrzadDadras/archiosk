@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 #
 # Tying the two together means the next prompt generation gets a new identity
 # by construction rather than by someone remembering to bump this line.
-VISUAL_VERSION = "visual-examination@2"
+VISUAL_VERSION = "visual-examination@3"
 
 #: ITS OWN QUEUE DIRECTORY, which is what keeps the deployed perception worker
 #: from ever seeing this work. That worker claims the oldest claimable job in
@@ -100,7 +100,7 @@ VISUAL_JOBS_SUBDIR = "visual_jobs"
 #: live records as "waiting to be examined" - their readings are real, they are
 #: simply from an earlier prompt. Re-examination is a deliberate act, not a
 #: side effect of a deploy.
-VISUAL_VERSION_HISTORY = ("visual-examination@1",)
+VISUAL_VERSION_HISTORY = ("visual-examination@1", "visual-examination@2")
 VISUAL_VERSIONS = frozenset({VISUAL_VERSION, *VISUAL_VERSION_HISTORY})
 
 #: Why a visual job did not produce a reading. Named, because "processing

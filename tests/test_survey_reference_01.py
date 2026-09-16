@@ -2234,3 +2234,344 @@ class WSecondGate(SurveyReferenceCase):
 
         self.assertTrue(vc._existing_evidence_of_type(
             workspace, source_id, vx.VISUAL_CONTENT_TYPE))
+
+
+class XNorthReconciliation(SurveyReferenceCase):
+    """CLAUDE-SURVEY-STAGE1-01 - north is reported twice and believed once.
+
+    THE REAL FAILURE THIS WAS BUILT FOR. On the live Castille sheet the reader
+    described the arrow as "pointing upward-right", which matches the survey,
+    and in the same breath gave 355 degrees, which is upward-LEFT. The renderer
+    was faithful and drew 355. A wrong north reached production looking exactly
+    as confident as a right one, because nothing held both encodings and so
+    nothing could compare them.
+
+    The gate never picks a winner. Preferring the angle ships this exact
+    defect; preferring the word ships its mirror image. Disagreement means
+    UNRESOLVED, and an unresolved north is not drawn.
+    """
+
+    def _graph(self, north):
+        from services import survey_graph
+        return survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.2},
+                      {"id": "N2", "x": 0.8, "y": 0.2}],
+            "segments": [{"id": "S1", "from": "N1", "to": "N2",
+                          "kind": "straight", "boundary": "lot_line",
+                          "certainty": "RECOVERED"}],
+            "north": north,
+        })
+
+    def test_the_castille_conflict_is_refused(self):
+        graph = self._graph({"degrees": 355.0, "direction": "UP_RIGHT",
+                             "certainty": "PARTIALLY_RECOVERED"})
+
+        self.assertIsNone(graph["north"], "the conflicting north was drawn anyway")
+        joined = " ".join(graph["unresolved"]).lower()
+        self.assertIn("north", joined)
+        self.assertIn("355", joined, "the refusal does not say what disagreed")
+        self.assertIn("up-right", joined)
+
+    def test_agreement_is_kept(self):
+        graph = self._graph({"degrees": 40.0, "direction": "UP_RIGHT",
+                             "certainty": "RECOVERED"})
+
+        self.assertIsNotNone(graph["north"])
+        self.assertEqual(graph["north"]["degrees"], 40.0)
+        self.assertEqual(graph["north"]["direction"], "UP_RIGHT")
+        self.assertFalse([u for u in graph["unresolved"] if "north" in u.lower()])
+
+    def test_up_straddles_zero_in_both_directions(self):
+        for degrees in (0.0, 5.0, 355.0, 350.0):
+            graph = self._graph({"degrees": degrees, "direction": "UP",
+                                 "certainty": "RECOVERED"})
+            self.assertIsNotNone(graph["north"], "%s is not UP" % degrees)
+
+    def test_the_boundary_of_an_arc_is_not_called_a_lie(self):
+        """Exactly 22.5 is the UP/UP_RIGHT edge. A reader who rounds to either
+        side of it has not contradicted itself."""
+        for word in ("UP", "UP_RIGHT"):
+            graph = self._graph({"degrees": 22.5, "direction": word,
+                                 "certainty": "RECOVERED"})
+            self.assertIsNotNone(graph["north"], "%s at the edge was refused" % word)
+
+    def test_the_tolerance_does_not_swallow_a_real_disagreement(self):
+        from services import survey_graph
+
+        # One full sector out is a disagreement whatever the tolerance is.
+        graph = self._graph({"degrees": 180.0, "direction": "UP",
+                             "certainty": "RECOVERED"})
+        self.assertIsNone(graph["north"])
+        self.assertLess(survey_graph.DIRECTION_TOLERANCE_DEGREES, 22.5,
+                        "the tolerance is wide enough to accept a whole "
+                        "neighbouring direction")
+
+    def test_neither_encoding_is_preferred(self):
+        """Both orderings of the same conflict are refused - the gate has no
+        favourite, which is the whole point."""
+        a = self._graph({"degrees": 355.0, "direction": "UP_RIGHT",
+                         "certainty": "RECOVERED"})
+        b = self._graph({"degrees": 40.0, "direction": "UP_LEFT",
+                         "certainty": "RECOVERED"})
+        self.assertIsNone(a["north"])
+        self.assertIsNone(b["north"])
+
+    def test_a_reading_from_before_dual_encoding_still_stands(self):
+        """Re-examining every historical record is a deliberate act, not a side
+        effect of deploying this. A reading with no direction word is not in
+        conflict with itself."""
+        graph = self._graph({"degrees": 355.0, "certainty": "PARTIALLY_RECOVERED"})
+
+        self.assertIsNotNone(graph["north"])
+        self.assertEqual(graph["north"]["degrees"], 355.0)
+        self.assertEqual(graph["north"]["direction"], "")
+
+    def test_an_unknown_direction_word_is_refused_not_ignored(self):
+        graph = self._graph({"degrees": 40.0, "direction": "NORTHEAST-ISH",
+                             "certainty": "RECOVERED"})
+        self.assertIsNone(graph["north"])
+        self.assertTrue([u for u in graph["unresolved"] if "north" in u.lower()])
+
+    def test_an_unresolved_north_is_never_drawn(self):
+        from services import survey_graph
+
+        graph = self._graph({"degrees": 355.0, "direction": "UP_RIGHT",
+                             "certainty": "RECOVERED"})
+        resolved = survey_graph.fit_to_frame(survey_graph.build_primitives(graph))
+        kinds = {p["type"] for p in resolved["primitives"]}
+
+        self.assertNotIn(survey_graph.P_NORTH, kinds,
+                         "a refused north still reached the renderer")
+        svg = survey_graph.emit_svg(resolved)
+        self.assertNotIn(">N</text>", svg, "the north label was drawn anyway")
+
+    def test_the_prompt_asks_for_both_and_says_not_to_derive_one(self):
+        from services import visual_examination as vx
+
+        prompt = vx.SURVEY_PROMPT if hasattr(vx, "SURVEY_PROMPT") else ""
+        source = (_REPO_ROOT / "services" / "visual_examination.py").read_text(
+            encoding="utf-8")
+        self.assertIn("report it TWICE", source)
+        self.assertIn("do not derive one from the other", source)
+        for word in vx.DIRECTION_WORDS:
+            self.assertIn(word, source, "%s is not offered to the reader" % word)
+
+
+class YMeasuredNorth(SurveyReferenceCase):
+    """CLAUDE-SURVEY-STAGE1-02 - the arrow is measured, the reading corroborates.
+
+    The categorical gate came first and could not have caught the live error:
+    the reader gave 355 for an arrow that measures 8.4, and both sit in the
+    same 45-degree UP sector. Measuring the pixels catches a 13-degree
+    mirror-flip that no direction word can.
+    """
+
+    def _north(self, **kw):
+        from services import survey_graph
+        base = {"degrees": 355.0, "certainty": "RECOVERED"}
+        base.update(kw)
+        return survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.2},
+                      {"id": "N2", "x": 0.8, "y": 0.2}],
+            "segments": [{"id": "S1", "from": "N1", "to": "N2",
+                          "kind": "straight", "boundary": "lot_line",
+                          "certainty": "RECOVERED"}],
+            "north": base})["north"]
+
+    def test_the_measurement_wins_when_the_reading_backs_it_up(self):
+        from services import survey_graph
+
+        north = self._north(degrees=8.0, measured_degrees=8.4, measured_ok=True)
+        self.assertEqual(north["degrees"], 8.4,
+                         "the claim was used, not the measurement")
+        self.assertEqual(north["source"], survey_graph.NORTH_MEASURED)
+        self.assertEqual(north["claimed_degrees"], 8.0)
+
+    def test_the_live_castille_disagreement_is_unresolved(self):
+        """355 claimed against 8.4 measured - 13.4 apart, over the threshold."""
+        from services import survey_graph
+
+        graph = survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.2}],
+            "segments": [],
+            "north": {"degrees": 355.0, "direction": "UP",
+                      "certainty": "RECOVERED",
+                      "measured_degrees": 8.4, "measured_ok": True}})
+
+        self.assertIsNone(graph["north"], "a 13-degree mirror error was accepted")
+        joined = " ".join(graph["unresolved"])
+        self.assertIn("8.4", joined)
+        self.assertIn("355", joined)
+
+    def test_the_threshold_is_tight(self):
+        from services import survey_north
+
+        self.assertLessEqual(survey_north.CORROBORATION_DELTA_DEGREES, 10.0)
+        self.assertGreater(survey_north.angular_delta(8.4, 355.0),
+                           survey_north.CORROBORATION_DELTA_DEGREES)
+
+    def test_no_measurement_falls_back_to_the_categorical_gate(self):
+        from services import survey_graph
+
+        north = self._north(degrees=40.0, direction="UP_RIGHT", measured_ok=False)
+        self.assertEqual(north["degrees"], 40.0)
+        self.assertEqual(north["source"], survey_graph.NORTH_CLAIMED)
+
+    def test_angular_delta_wraps(self):
+        from services import survey_north
+
+        self.assertAlmostEqual(survey_north.angular_delta(355.0, 5.0), 10.0)
+        self.assertAlmostEqual(survey_north.angular_delta(1.0, 359.0), 2.0)
+
+    def test_measurement_never_raises_on_bad_input(self):
+        from services import survey_north
+
+        cases = ((b"", {"x": 0, "y": 0, "w": 1, "h": 1}),
+                 (b"not an image", {"x": 0, "y": 0, "w": 1, "h": 1}),
+                 (b"", None),
+                 (b"abc", {"x": -1, "y": 0, "w": 2, "h": 2}))
+        for raw, bbox in cases:
+            out = survey_north.measure_north(raw, bbox)
+            self.assertFalse(out["ok"])
+            self.assertTrue(out["reason"])
+
+    def test_a_real_arrow_is_measured(self):
+        """A drawn wedge, apex at centre, pointing up-and-right."""
+        import io
+        import math
+
+        from PIL import Image, ImageDraw
+        from services import survey_north
+
+        image = Image.new("L", (400, 400), 255)
+        draw = ImageDraw.Draw(image)
+        cx, cy, r = 200, 200, 120
+        aim = math.radians(30.0)
+        tip = (cx + r * math.sin(aim), cy - r * math.cos(aim))
+        half = 0.28
+        left = (cx + r * 0.55 * math.sin(aim - half),
+                cy - r * 0.55 * math.cos(aim - half))
+        right = (cx + r * 0.55 * math.sin(aim + half),
+                 cy - r * 0.55 * math.cos(aim + half))
+        draw.polygon([(cx, cy), left, tip, right], fill=0)
+        buffer = io.BytesIO()
+        image.save(buffer, "PNG")
+
+        out = survey_north.measure_north(buffer.getvalue(),
+                                         {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0})
+        self.assertTrue(out["ok"], out["reason"])
+        self.assertLess(survey_north.angular_delta(out["degrees"], 30.0), 8.0,
+                        "measured %s for an arrow drawn at 30" % out["degrees"])
+
+
+class ZDimensionOnlySheets(SurveyReferenceCase):
+    """CLAUDE-SURVEY-STAGE1-02 - a sheet that dimensions its lines is ordinary.
+
+    The Castille survey prints 144.12 and other dimension strings and no
+    bearings at all. That is not a defective sheet and not a failed reading:
+    the figures are not there. `computed: False` is the correct, non-exceptional
+    answer, and every line drawn that way carries a flag saying what it is.
+    """
+
+    def _graph(self, **seg):
+        from services import survey_graph
+        base = {"id": "S1", "from": "N1", "to": "N2", "kind": "straight",
+                "boundary": "lot_line", "certainty": "RECOVERED"}
+        base.update(seg)
+        return survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.3},
+                      {"id": "N2", "x": 0.8, "y": 0.3}],
+            "segments": [base]})
+
+    def test_a_dimension_only_run_is_flagged_observed_not_computed(self):
+        from services import survey_graph
+
+        graph = self._graph(dimension={"text": "144.12", "value": 144.12,
+                                       "certainty": "RECOVERED"})
+        lines = [p for p in survey_graph.build_primitives(graph)["primitives"]
+                 if p["type"] in (survey_graph.P_LINE, survey_graph.P_ARC)]
+
+        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_OBSERVED)
+        self.assertIn("[BEARING UNRESOLVED]", lines[0]["tags"])
+
+    def test_computed_false_is_not_an_error(self):
+        from services import survey_graph
+
+        graph = self._graph()
+        stats = survey_graph.build_primitives(graph)["stats"]
+
+        self.assertFalse(stats["computed"])
+        self.assertFalse(stats["misclosure"]["computable"])
+        self.assertTrue(stats["misclosure"]["reason"])
+        svg = survey_graph.emit_svg(
+            survey_graph.fit_to_frame(survey_graph.build_primitives(graph)))
+        self.assertIn("<svg", svg)
+
+    def test_a_computed_run_is_flagged_computed(self):
+        from services import survey_graph
+
+        graph = self._graph(
+            dimension={"text": "100", "value": 100.0, "certainty": "RECOVERED"},
+            bearing={"text": "N 45 E", "value_degrees": 45.0,
+                     "certainty": "RECOVERED"})
+        lines = [p for p in survey_graph.build_primitives(graph)["primitives"]
+                 if p["type"] == survey_graph.P_LINE]
+
+        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_COMPUTED)
+        self.assertEqual(lines[0]["tags"], ())
+
+    def test_a_square_traverse_closes_and_a_broken_one_does_not(self):
+        from services import survey_graph
+
+        def ring(last_distance):
+            runs = [("N1", "N2", 0.0, 100.0), ("N2", "N3", 90.0, 100.0),
+                    ("N3", "N4", 180.0, 100.0), ("N4", "N1", 270.0, last_distance)]
+            return survey_graph.normalise_graph({
+                "nodes": [{"id": "N%d" % i, "x": 0.2 + 0.1 * i, "y": 0.3}
+                          for i in range(1, 5)],
+                "segments": [
+                    {"id": "S%d" % i, "from": a, "to": b, "kind": "straight",
+                     "boundary": "lot_line", "certainty": "RECOVERED",
+                     "dimension": {"text": str(d), "value": d,
+                                   "certainty": "RECOVERED"},
+                     "bearing": {"text": "b", "value_degrees": az,
+                                 "certainty": "RECOVERED"}}
+                    for i, (a, b, az, d) in enumerate(runs, 1)]})
+
+        good = survey_graph.solve_traverse(ring(100.0))
+        self.assertTrue(good["computed"])
+        self.assertTrue(good["misclosure"]["closes"])
+        self.assertLess(good["misclosure"]["linear"], 0.001)
+
+        bad = survey_graph.solve_traverse(ring(80.0))
+        self.assertTrue(bad["computed"], "a 20-unit gap is still computable")
+        self.assertFalse(bad["misclosure"]["closes"],
+                         "a 1:20 misclosure was called closed")
+        self.assertAlmostEqual(bad["misclosure"]["linear"], 20.0, places=3)
+        self.assertIn("open", bad["misclosure"]["reason"])
+
+    def test_stage_1_draws_the_boundary_and_north_and_nothing_else(self):
+        from services import survey_graph
+
+        graph = survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.3},
+                      {"id": "N2", "x": 0.8, "y": 0.3}],
+            "segments": [{"id": "S1", "from": "N1", "to": "N2",
+                          "kind": "straight", "boundary": "lot_line",
+                          "certainty": "RECOVERED",
+                          "dimension": {"text": "144.12", "value": 144.12,
+                                        "certainty": "RECOVERED"}}],
+            "footprints": [{"id": "B1", "kind": "dwelling", "label": "DWELLING",
+                            "outline": [{"x": 0.3, "y": 0.4}, {"x": 0.5, "y": 0.4},
+                                        {"x": 0.5, "y": 0.6}],
+                            "certainty": "RECOVERED"}],
+            "north": {"degrees": 8.0, "measured_degrees": 8.4,
+                      "measured_ok": True, "certainty": "RECOVERED"}})
+
+        kinds = {p["type"] for p in survey_graph.build_primitives(
+            graph, include=survey_graph.STAGE1_LAYERS)["primitives"]}
+
+        self.assertIn(survey_graph.P_LINE, kinds)
+        self.assertIn(survey_graph.P_NORTH, kinds)
+        self.assertNotIn(survey_graph.P_POLYGON, kinds, "a building was drawn")
+        self.assertNotIn(survey_graph.P_LABEL, kinds, "a text layer was drawn")
