@@ -71,7 +71,21 @@ logger = logging.getLogger(__name__)
 #: The kind of work, and therefore the job identity namespace. Bumping this is
 #: how a re-examination becomes an explicit new run rather than a silent
 #: overwrite - the same contract `perception_jobs.PROCESSING_VERSION` carries.
-VISUAL_VERSION = "visual-examination@1"
+# CLAUDE-SURVEY-REFERENCE-REPAIR-01: THE PROMPT GENERATION IS PART OF THE
+# JOB'S IDENTITY, because a job id that ignores it can never be re-run.
+#
+# A visual job id is sha256(workspace + source + source_sha256 +
+# processing_version). This constant was the processing_version and it stayed
+# at @1 while the prompt went visual-examination-01 -> -02 and learned to
+# return a boundary graph. Same inputs, same digest, job already `completed` -
+# so the parametric reconstruction shipped, deployed, passed its suite, and
+# COULD NOT REACH A SINGLE EXISTING SOURCE. The live Castille record was still
+# being served a V1 reading with no graph in it, which is what put an empty
+# panel on the Product Owner's screen.
+#
+# Tying the two together means the next prompt generation gets a new identity
+# by construction rather than by someone remembering to bump this line.
+VISUAL_VERSION = "visual-examination@2"
 
 #: ITS OWN QUEUE DIRECTORY, which is what keeps the deployed perception worker
 #: from ever seeing this work. That worker claims the oldest claimable job in
@@ -80,7 +94,14 @@ VISUAL_VERSION = "visual-examination@1"
 #: OCR, producing a confident empty result over a survey.
 VISUAL_JOBS_SUBDIR = "visual_jobs"
 
-VISUAL_VERSIONS = frozenset({VISUAL_VERSION})
+#: Every processing version whose completed job still counts as a finished
+#: examination. The CURRENT one is what new work is enqueued under; the older
+#: ones are here so that bumping the generation does not re-open 54 settled
+#: live records as "waiting to be examined" - their readings are real, they are
+#: simply from an earlier prompt. Re-examination is a deliberate act, not a
+#: side effect of a deploy.
+VISUAL_VERSION_HISTORY = ("visual-examination@1",)
+VISUAL_VERSIONS = frozenset({VISUAL_VERSION, *VISUAL_VERSION_HISTORY})
 
 #: Why a visual job did not produce a reading. Named, because "processing
 #: failed" tells nobody whether to retry, replace the file, or wait.

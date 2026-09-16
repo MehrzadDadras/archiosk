@@ -10653,6 +10653,19 @@ dl.plain-list dd {
 .sr-unresolved { margin: 8px 0 12px; }
 .sr-unresolved summary { cursor: pointer; }
 .sr-unresolved ul { margin: 4px 0 8px 18px; }
+
+/* CLAUDE-DOCUMENT-SHOP-LAYOUT-02 - what is sent, one click away.
+   The standing four-sentence notice under the Ask box became one visible line
+   plus this. Same words, not the same weight on the page. */
+.ds-sending { margin: 4px 0 12px; }
+.ds-sending summary { cursor: pointer; }
+.ds-sending p { margin: 6px 0 0; opacity: 0.9; }
+
+/* CLAUDE-DOCUMENT-SHOP-LAYOUT-02 - the recovered text, one click away.
+   Inline it dominated the page; deleted it took a working capability's only
+   door with it. Closed by default is the answer to both. */
+.ds-rawtext { margin: 8px 0 14px; }
+.ds-rawtext summary { cursor: pointer; }
 @media (max-width: 720px) {
     .sr-review { grid-template-columns: 1fr; }
 }

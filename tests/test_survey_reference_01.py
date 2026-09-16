@@ -1975,3 +1975,185 @@ class TDocumentShopLayout(SurveyReferenceCase):
         self.assertIn("display: flex", block)
         self.assertIn("flex-wrap: wrap", block,
                       "Delete is pushed off the edge of a narrow screen")
+
+
+class URepairedReview(SurveyReferenceCase):
+    """CLAUDE-SURVEY-REFERENCE-REPAIR-01 - the blank panel, and why it shipped.
+
+    The Product Owner opened the live page and found an empty white box where
+    the reconstruction should be. Nothing had crashed and no test had failed.
+    Two faults, each of which alone would have been caught:
+
+    1. `review_svg` is honest - a graph with no nodes resolves to a valid SVG
+       containing only its own border. 227 bytes on the live record.
+    2. The page asked `{% if plan_svg %}`, and 227 bytes of empty frame passes
+       a truthiness check. THE GUARD TESTED THAT A STRING EXISTED, NOT THAT A
+       DRAWING DID.
+
+    And the reason the graph was empty at all is the third fault, below.
+    """
+
+    def _reference_with_graph(self, graph):
+        """Stored exactly as the examination stores it - through
+        `normalise_graph`, which keys nodes by id. Building the dict by hand
+        here would test a shape production never writes."""
+        from services import survey_graph
+
+        return {"title": "Survey Reference", "source_note": "n",
+                "derived_source_id": "d",
+                "graph": survey_graph.normalise_graph(graph),
+                "frame_size": [1400, 1000]}
+
+    def test_an_empty_graph_draws_nothing_and_shows_nothing(self):
+        view = dx._reference_view(self._reference_with_graph(
+            {"nodes": [], "segments": [], "footprints": []}), source_id="s")
+
+        self.assertEqual(view["plan_svg"], "",
+                         "an empty frame is still being offered as a drawing")
+        self.assertTrue(view["plan_empty"])
+
+    def test_the_svg_itself_is_still_produced_honestly(self):
+        """The repair is in the GUARD, not in the renderer - `review_svg` was
+        never wrong and is not being changed to paper over anything."""
+        from services import survey_reference as sr
+
+        svg = sr.review_svg(self._reference_with_graph(
+            {"nodes": [], "segments": [], "footprints": []}))
+        self.assertTrue(svg, "review_svg stopped producing a frame")
+        self.assertEqual(svg.count("<path"), 0)
+        self.assertEqual(svg.count("<line"), 0)
+
+    def test_a_real_graph_still_draws_and_still_shows(self):
+        graph = {
+            "nodes": [{"id": "N%d" % i, "x": x, "y": y} for i, (x, y) in
+                      enumerate([(0.2, 0.2), (0.8, 0.2), (0.8, 0.7)], 1)],
+            "segments": [
+                {"id": "S1", "from": "N1", "to": "N2", "kind": "straight",
+                 "certainty": "RECOVERED"},
+                {"id": "S2", "from": "N2", "to": "N3", "kind": "straight",
+                 "certainty": "RECOVERED"},
+            ],
+            "footprints": [],
+        }
+        view = dx._reference_view(self._reference_with_graph(graph), source_id="s")
+
+        self.assertTrue(view["plan_svg"], "a real boundary stopped rendering")
+        self.assertFalse(view["plan_empty"])
+        self.assertGreater(view["plan_svg"].count("<path")
+                           + view["plan_svg"].count("<line"), 0)
+
+    def test_the_page_says_the_absence_instead_of_showing_a_hole(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        body = self.client.get(
+            "/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        if 'data-ui-ref="document-shop.result.review-unavailable"' in body:
+            self.assertNotIn('data-ui-ref="document-shop.result.review"', body,
+                             "it claims both a comparison and no comparison")
+        else:
+            # A drawing exists, so both panes must.
+            self.assertIn('data-ui-ref="document-shop.result.review-original"', body)
+            self.assertIn('data-ui-ref="document-shop.result.review-reference"', body)
+
+    def test_a_prompt_upgrade_reaches_records_that_were_already_examined(self):
+        """THE FAULT THAT PUT THE OTHER TWO ON PRODUCTION.
+
+        A visual job id is sha256(workspace + source + source_sha256 +
+        processing_version). The prompt went -01 -> -02 and learned to return a
+        boundary graph; `processing_version` stayed at @1. Same digest, job
+        already `completed`, so the parametric reconstruction could not reach a
+        single existing source - it shipped, deployed and passed its suite
+        while every live record kept its V1 reading.
+
+        Tying the two generations together is what makes the next upgrade
+        arrive by construction. This test fails the moment they drift again.
+        """
+        from services import visual_classification as vc
+        from services import visual_examination as vx
+
+        prompt_generation = vx.VISUAL_PROMPT_VERSION.rsplit("-", 1)[-1]
+        job_generation = vc.VISUAL_VERSION.rsplit("@", 1)[-1]
+        self.assertEqual(int(job_generation), int(prompt_generation),
+                         "the prompt moved and the job identity did not - an "
+                         "upgraded prompt can never re-examine anything")
+
+    def test_earlier_generations_stay_settled(self):
+        """Bumping the generation must not re-open every finished record as
+        'waiting to be examined' - their readings are real, just older."""
+        from services import visual_classification as vc
+
+        self.assertIn("visual-examination@1", vc.VISUAL_VERSIONS)
+        self.assertIn(vc.VISUAL_VERSION, vc.VISUAL_VERSIONS)
+
+
+class VQuietPage(SurveyReferenceCase):
+    """CLAUDE-DOCUMENT-SHOP-LAYOUT-02 - what a person reads, and what they do
+    not have to read to get to it.
+
+    Everything removed here was true. None of it was for the person holding the
+    document: a checksum, a passage-and-character count naming the OCR engine,
+    a wall of raw machine text, and four standing sentences about an AI service.
+
+    NOTHING IS DELETED FROM THE RECORD. The hash is still stored and still
+    cited by the Survey Reference; the text is still evidence, still feeds the
+    findings, still answers questions, and is still on the page behind a
+    disclosure - which is what keeps the OCR capability's door open.
+    """
+
+    def _body(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        return self.client.get(
+            "/document-shop/jobs/%s" % project_id).get_data(as_text=True), project_id
+
+    def test_the_diagnostics_are_off_the_primary_surface(self):
+        body, _ = self._body()
+        for gone in ("What we can say from the file itself",
+                     "Stored unchanged",
+                     "checksum",
+                     "Text recovered",
+                     "kept exactly as it arrived"):
+            self.assertNotIn(gone, body, "%r is still on the page" % gone)
+
+    def test_the_facts_the_product_owner_asked_to_keep_are_kept(self):
+        body, project_id = self._body()
+        result, _document, _workspace = self.result_for(project_id)
+        labels = {item["label"] for item in result["established"]}
+
+        self.assertIn("Date", labels)
+        self.assertIn("File type", labels)
+        # "Document" is the interpreted classification and is explicitly kept.
+        self.assertIn("Document", labels)
+        for ref in ("document-shop.result.doc-actions",
+                    "document-shop.result.download",
+                    "document-shop.result.delete-primary",
+                    "document-shop.conversation.title"):
+            self.assertIn('data-ui-ref="%s"' % ref, body)
+
+    def test_the_checksum_is_removed_from_the_page_not_from_the_record(self):
+        _body, project_id = self._body()
+        workspace = self.workspace(project_id)
+        source = workspace.sources[0]
+        self.assertTrue(source.get("file_hash"),
+                        "the stored hash was removed along with the prose")
+
+    def test_the_recovered_text_is_reachable_but_not_in_the_way(self):
+        body, _ = self._body()
+        if 'data-ui-ref="document-shop.result.recovered"' in body:
+            marker = body.index('data-ui-ref="document-shop.result.recovered"')
+            opening = body.rfind("<", 0, marker)
+            self.assertTrue(body.startswith("<details", opening),
+                            "the raw text is inline again rather than disclosed")
+
+    def test_the_sending_notice_is_one_line_with_the_rest_disclosed(self):
+        body, _ = self._body()
+        notice = body[body.index('data-ui-ref="document-shop.conversation.disclosure"'):]
+        notice = notice[:notice.index("</p>")]
+
+        self.assertIn("The file itself is never sent", notice,
+                      "the claim that matters left the visible line")
+        self.assertNotIn("Everything already found above", notice,
+                         "the long form is still inline")
+        self.assertIn('data-ui-ref="document-shop.conversation.disclosure-detail"', body,
+                      "the full account is not reachable at all")

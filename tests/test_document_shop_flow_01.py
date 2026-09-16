@@ -251,13 +251,22 @@ class ResultIntelligibilityTests(unittest.TestCase):
         self.assertIn("for you to judge", values)
 
     def test_the_character_count_is_not_left_reading_as_success(self):
-        """14,306 characters of nothing is still nothing."""
+        """14,306 characters of nothing is still nothing.
+
+        CLAUDE-DOCUMENT-SHOP-LAYOUT-02 answered this a second way: the count is
+        no longer printed, so there is no number left to read as success. The
+        caveat is the half that mattered and it is still asserted - the test
+        keeps its subject and loses only the mechanism it used to check.
+        """
         self._register(REAL_NOISE)
         result = dx.build_result(self._doc(), self.ws, display_name="Photo")
         established = " ".join(i["label"] for i in result["established"])
-        self.assertIn("Text recovered", established)
+        self.assertNotIn("Text recovered", established,
+                         "the extraction metric is back on the page")
+        self.assertNotIn("characters",
+                         " ".join(i["value"] for i in result["established"]))
         self.assertTrue(result["not_established"],
-                        "a character count with no caveat beside it")
+                        "nothing tells the reader the text concluded nothing")
 
     def test_the_two_statements_no_longer_contradict(self):
         """It said 'Result ready' AND 'No interpretation was reached'."""

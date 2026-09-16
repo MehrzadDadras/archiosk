@@ -606,28 +606,22 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         # (JPEG)" and "Survey image" answer two different questions and a
         # person needs both - the first is provenance, the second is the point.
         established.append({"label": "Document", "value": visual["label"]})
-    if getattr(document, "original_file_hash", None):
-        established.append({
-            "label": "Stored unchanged",
-            "value": "The original you uploaded is kept exactly as it arrived "
-                     "(checksum %s…)." % document.original_file_hash[:12],
-        })
+    # CLAUDE-DOCUMENT-SHOP-LAYOUT-02: the checksum row is gone from this
+    # surface. THE GUARANTEE IS NOT GONE - `original_file_hash` is still
+    # recorded, still verified, and still what the Survey Reference cites as
+    # its provenance. It was reassurance written for whoever built the system,
+    # printed to someone who wanted to know what their drawing says.
 
+    # CLAUDE-DOCUMENT-SHOP-LAYOUT-02: the passage and character count, and the
+    # engine that produced it, are gone from this surface. They measured the
+    # EXTRACTION, not the document - "12 passages across 1 page (858
+    # characters) - read from the image by Tesseract" tells a person nothing
+    # about their survey and a great deal about our pipeline.
+    #
+    # `recovered` is untouched and still drives everything below, including the
+    # honest "nothing has been concluded" line, which is the part of this block
+    # that was ever for the customer.
     if recovered["passage_count"]:
-        # How the text arrived is part of the claim, not decoration: one is the
-        # document speaking, the other is a machine reading a picture of it.
-        if recovered["was_recovered"]:
-            how = (" — read from the image by %s" % ", ".join(recovered["read_by"]))                 if recovered["read_by"] else " — read from the image"
-        else:
-            how = " — carried by the document itself"
-        established.append({
-            "label": "Text recovered" if recovered["was_recovered"] else "Text read",
-            "value": "%d passage%s across %d page%s (%d characters)%s." % (
-                recovered["passage_count"], "" if recovered["passage_count"] == 1 else "s",
-                max(recovered["page_count"], 1), "" if recovered["page_count"] == 1 else "s",
-                recovered["character_count"], how,
-            ),
-        })
         if (not pending and not _reached_an_interpretation(document)
                 and not _visual_established_anything(visual)):
             # Said HERE, beside the character count, because the count on its
@@ -826,6 +820,24 @@ def _reference_view(reference, *, source_id=None) -> Optional[dict[str, Any]]:
     except Exception:  # noqa: BLE001 - a review drawing is never worth a 500
         svg, stats = "", {}
 
+    # CLAUDE-SURVEY-REFERENCE-REPAIR-01: AN EMPTY FRAME IS NOT A DRAWING.
+    #
+    # This shipped and reached production, and the Product Owner saw the
+    # result: a blank white panel beside their survey photograph. The cause is
+    # that `review_svg` is honest and the GUARD WAS NOT. A graph with no nodes
+    # and no segments resolves to a valid SVG containing only its own border -
+    # 227 bytes on the live record - and the template asked `{% if plan_svg %}`,
+    # which a 227-byte string passes. The page then promised a comparison and
+    # showed an empty box.
+    #
+    # The guard now asks what the drawing CONTAINS, not whether a string was
+    # produced. Nothing drawn, nothing shown, and `plan_empty` lets the page
+    # say why instead of leaving a hole where a promise was.
+    drawn = sum(int(stats.get(key) or 0)
+                for key in ("straights", "arcs", "footprints"))
+    if not drawn:
+        svg = ""
+
     return {
         "title": reference.get("title") or "Survey Reference",
         "source_note": reference.get("source_note") or "",
@@ -837,6 +849,9 @@ def _reference_view(reference, *, source_id=None) -> Optional[dict[str, Any]]:
         # be shown beside the reconstruction at the same size.
         "original_source_id": source_id,
         "plan_svg": svg,
+        # True when a Survey Reference exists but nothing could be drawn from
+        # it - the honest state the blank panel was hiding.
+        "plan_empty": not svg,
         "stats": stats,
         "withheld": [entry["label"] for entry in (reference.get("withheld") or [])],
         "unresolved": list(reference.get("unresolved") or []),

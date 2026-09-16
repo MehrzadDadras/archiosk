@@ -152,9 +152,16 @@ class StoredShapeTests(unittest.TestCase):
             i["label"] + " " + i["value"]
             for group in ("established", "interpretation", "not_established")
             for i in result[group])
+        # THE ORIGINAL DEFECT, and still the point of this test: the page
+        # claimed the file had no text while holding text read from it.
         self.assertNotIn(FALSE_CLAIM, rendered)
-        self.assertIn("Text recovered", rendered)
-        self.assertIn("read from the image by tesseract 4.1.1", rendered)
+        # CLAUDE-DOCUMENT-SHOP-LAYOUT-02 removed the passage/character/engine
+        # row from the page - it measured the extraction, not the document.
+        # The text itself is still carried, still shown behind a disclosure,
+        # and still what GO answers from, which is what "does not deny it"
+        # actually requires.
+        self.assertNotIn("Text recovered", rendered,
+                         "the extraction metric is back on the page")
         # Limited recovery, not Result ready: the text is reported, and nothing
         # was concluded from it. See the retargeted state test above.
         self.assertEqual(result["state"], dx.STATE_READ_NOT_INTERPRETED)
@@ -170,9 +177,14 @@ class StoredShapeTests(unittest.TestCase):
         self.assertTrue(got["is_direct_source"])
         result = dx.build_result(_doc(filename="spec.pdf"), self.ws,
                                  display_name="Spec")
+        # The distinction is real and lives in the RECORD, asserted above:
+        # was_recovered False, is_direct_source True. It stopped being narrated
+        # on the page with CLAUDE-DOCUMENT-SHOP-LAYOUT-02. What must never
+        # happen is the page describing a document's own text layer as a
+        # reading taken off a picture, and that is what is asserted here.
         rendered = " ".join(i["label"] + " " + i["value"] for i in result["established"])
-        self.assertIn("carried by the document itself", rendered)
         self.assertNotIn("read from the image", rendered)
+        self.assertNotIn("recovered", rendered.lower())
 
     # -- genuinely unreadable, preserved ------------------------------------
 

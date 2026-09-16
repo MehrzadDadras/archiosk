@@ -60,8 +60,14 @@
 {% endif %}
 
 {# ESTABLISHED FROM THE SOURCE. Facts the file itself supports. #}
+{# CLAUDE-DOCUMENT-SHOP-LAYOUT-02: no heading over the facts.
+
+   "What we can say from the file itself" was a section title over three
+   rows that need no announcing - Date, File type, Document. The heading
+   existed to separate this block from "What GO made of it", a distinction
+   that matters to the people who built the pipeline and to nobody reading
+   their own document. The rows say what they are. #}
 {% if result.established %}
-<h2 class="np-section-title" data-ui-ref="document-shop.result.established-title">What we can say from the file itself</h2>
 <dl class="plain-list" data-ui-ref="document-shop.result.established">
     {% for item in result.established %}
     <dt class="mono"><strong>{{ item.label }}</strong></dt>
@@ -118,23 +124,38 @@
 </dl>
 {% endif %}
 
+{# CLAUDE-DOCUMENT-SHOP-LAYOUT-02: the raw text is BEHIND a disclosure now,
+   not gone from the page.
+
+   It used to print the engine's literal output inline - "Raw text read off
+   the file" - which for a photographed drawing is mostly linework read as
+   stray characters. A wall of machine text was the first thing the eye landed
+   on and the last thing a person wants from their own survey.
+
+   DELETING IT OUTRIGHT WAS THE WRONG FIX, and the capability audit said so
+   before a person could: `test_capability_activation_01` declares the raster
+   OCR fallback as surfaced by THIS marker, and removing the block left a live,
+   working capability with no door on any surface - the exact failure that
+   audit exists to catch, committed by the person who wrote it. A closed
+   <details> is not the normal view, which is what had to change; it is still a
+   door, which is what had to stay.
+
+   The reader who needs it - someone checking whether a faint dimension was
+   read at all - can open it. Nobody else meets it. #}
 {% if result.preview_text and not result.pending %}
-{# CLAUDE-DOCUMENT-SHOP-FLOW-01: the heading changes with the outcome. Calling
-   pages of OCR noise "Some of what was read" framed it as a reading of the
-   document, which is exactly how a working examination came to look like
-   gibberish. When nothing was concluded, it is named as raw text and captioned
-   as such. #}
-<h2 class="np-section-title" data-ui-ref="document-shop.result.recovered-title">
-    {% if result.fragmentary %}Raw text read off the file{% else %}Some of what was read{% endif %}
-</h2>
-{% if result.fragmentary %}
-<p class="mono" data-ui-ref="document-shop.result.recovered-caveat">
-    Shown exactly as the text-recognition engine produced it, so you can judge
-    it yourself rather than be told. It is not a reading of the document, and
-    stray characters here are usually linework and symbols rather than writing.
-</p>
-{% endif %}
-<pre class="mono asread-recovered-text" data-ui-ref="document-shop.result.recovered">{{ result.preview_text }}</pre>
+<details class="ds-rawtext" data-ui-ref="document-shop.result.recovered">
+    <summary class="mono" data-ui-ref="document-shop.result.recovered-toggle">
+        {% if result.fragmentary %}Raw text read off the file{% else %}Text read from the file{% endif %}
+    </summary>
+    {% if result.fragmentary %}
+    <p class="mono" data-ui-ref="document-shop.result.recovered-caveat">
+        This came from a photograph, so linework and symbols are read as stray
+        characters alongside the words. It is shown exactly as the engine
+        produced it, for you to judge rather than summarised for you.
+    </p>
+    {% endif %}
+    <pre class="mono asread-recovered-text">{{ result.preview_text }}</pre>
+</details>
 {% endif %}
 
 {# CLAUDE-GO-PERCEPTION-MULTISOURCE-01: an examination holds one or more
@@ -205,6 +226,21 @@
     nothing has been joined up to make it look complete.
     {% endif %}
     Not to scale. No dimension is drawn that was not read from the source.
+</p>
+{% endif %}
+
+{# CLAUDE-SURVEY-REFERENCE-REPAIR-01: when there is nothing to compare.
+
+   A Survey Reference can exist while no plan can be drawn from it - a reading
+   taken before the parametric reconstruction existed carries observations but
+   no boundary graph. The page used to render an empty white panel next to the
+   photograph, which reads as a broken image rather than as an absence. It says
+   the absence instead, and the PDF and the findings above are unaffected. #}
+{% if result.survey_reference.plan_empty %}
+<p class="mono" data-ui-ref="document-shop.result.review-unavailable">
+    No boundary could be reconstructed from this reading, so there is nothing
+    to compare side by side. What was read is listed above, and the Survey
+    Reference itself is unchanged.
 </p>
 {% endif %}
 
@@ -358,16 +394,33 @@
 
    So it says what is true of each: what this box sends, and what the
    examination already did. #}
+{# CLAUDE-DOCUMENT-SHOP-LAYOUT-02: one line on the page, the rest one click
+   away.
+
+   This was four sentences of standing explanation under the Ask box, read
+   once and then in the way forever. It is NOT DELETED, and deleting it was
+   not an option worth taking: it is the moment a person decides to send
+   something, and what leaves their account is theirs to know. So the claim
+   that matters stays visible - the file itself never goes - and the full
+   account sits behind a disclosure for anyone who wants it. #}
 <p class="mono ds-composer-note" data-ui-ref="document-shop.conversation.disclosure">
-    To answer, what is on this page is sent to the AI service that powers GO:
-    the findings above and the text read from your document. The file itself is
-    never sent.
-    {% if result.visual_ran %}
-    Examining it did include looking at the picture once; that has already
-    happened and asking a question does not repeat it.
-    {% endif %}
-    Everything already found above was worked out then and does not change.
+    Your question and what is on this page are sent to the AI service that
+    powers GO. The file itself is never sent.
+    <a href="#ds-sending" data-ui-ref="document-shop.conversation.disclosure-more">What is sent</a>
 </p>
+<details class="ds-sending" id="ds-sending"
+         data-ui-ref="document-shop.conversation.disclosure-detail">
+    <summary class="mono">What is sent when you ask a question</summary>
+    <p class="mono">
+        The findings on this page and the text read from your document are
+        sent, so GO can answer from them. The file itself is never sent.
+        {% if result.visual_ran %}
+        Examining it did include looking at the picture once; that has already
+        happened, and asking a question does not repeat it.
+        {% endif %}
+        Everything already found above was worked out then and does not change.
+    </p>
+</details>
 
 {# Section 7: there is always a way onward. #}
 <p data-ui-ref="document-shop.result.next">
