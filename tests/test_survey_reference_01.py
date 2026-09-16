@@ -2609,3 +2609,80 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
         self.assertIn(survey_graph.P_NORTH, kinds)
         self.assertNotIn(survey_graph.P_POLYGON, kinds, "a building was drawn")
         self.assertNotIn(survey_graph.P_LABEL, kinds, "a text layer was drawn")
+
+
+class NorthGovernsUseNotOnlyWriting(unittest.TestCase):
+    """CLAUDE-MUSCLE-NORTH-AT-USE-01 - a rule that only guards writes does not
+    guard the records people read.
+
+    The no-bbox-no-north hierarchy was deployed and the live Castille record
+    kept an unmeasured 30 degrees, because its graph had been normalised under
+    the older rule and re-examining it was correctly refused by the
+    exactly-once guard as a replay. The record was fixed going forward and
+    wrong in the present.
+    """
+
+    def _graph(self, north):
+        return {"nodes": {"N1": {"id": "N1", "x": 0.2, "y": 0.3,
+                                 "certainty": "RECOVERED"}},
+                "segments": [], "footprints": [], "north": north,
+                "unresolved": []}
+
+    def test_a_record_stored_under_the_old_rule_is_refused_when_read(self):
+        from services import survey_graph
+
+        stored = {"certainty": "PARTIALLY_RECOVERED", "claimed_degrees": 30.0,
+                  "degrees": 30.0, "direction": "UP_RIGHT",
+                  "measured_degrees": None, "measured_ok": False,
+                  "measured_reason": "the reader did not say where the arrow is",
+                  "source": "model_reading"}
+        resolved = survey_graph.build_primitives(self._graph(stored))
+
+        self.assertEqual(
+            [p for p in resolved["primitives"]
+             if p["type"] == survey_graph.P_NORTH], [],
+            "an unmeasured stored north was still drawn")
+        self.assertTrue([u for u in resolved["unresolved"]
+                         if "north" in u.lower()])
+
+    def test_a_measured_record_survives_re_reconciliation(self):
+        """Idempotent through the REAL round trip, not a hand-built dict.
+
+        Written by hand first, and that is exactly how it missed a live bug:
+        `_reconcile_north` accepted a measured north and returned it WITHOUT
+        `measured_ok`/`measured_degrees`, so a second pass over its own stored
+        output found no measurement and refused a value it had itself accepted.
+        A hand-built fixture carried those fields and never saw it; the stored
+        record does not. So the fixture is now whatever `normalise_graph`
+        actually writes.
+        """
+        from services import survey_graph
+
+        stored = survey_graph.normalise_graph({
+            "nodes": [{"id": "N1", "x": 0.2, "y": 0.3}], "segments": [],
+            "north": {"degrees": 8.0, "measured_degrees": 8.33,
+                      "measured_ok": True, "certainty": "RECOVERED"}})["north"]
+
+        for pass_number in (1, 2):
+            drawn = [p for p in survey_graph.build_primitives(
+                self._graph(stored))["primitives"]
+                if p["type"] == survey_graph.P_NORTH]
+            self.assertEqual(len(drawn), 1,
+                             "pass %d lost an accepted north" % pass_number)
+            self.assertEqual(drawn[0]["degrees"], 8.33)
+
+    def test_no_re_examination_is_needed_to_get_the_correct_answer(self):
+        """The whole point: no new model call, no re-transmission of the sheet.
+
+        `build_primitives` takes a stored graph and nothing else - if it can
+        reach the right answer from that, every existing record is governed the
+        moment the code deploys.
+        """
+        import inspect
+
+        from services import survey_graph
+
+        source = inspect.getsource(survey_graph.build_primitives)
+        for forbidden in ("examine", "llm", "api_key", "requests"):
+            self.assertNotIn(forbidden, source.lower(),
+                             "reading a stored graph reached for a model")

@@ -338,6 +338,10 @@ def _reconcile_north(raw_north) -> tuple:
         if claimed is None:
             return {"degrees": measured, "direction": _word_for(measured),
                     "source": NORTH_MEASURED, "claimed_degrees": None,
+                    # THE MEASUREMENT TRAVELS WITH ITS RESULT. Without these
+                    # two fields a second pass over a stored north finds no
+                    # measurement and refuses a value it accepted itself.
+                    "measured_ok": True, "measured_degrees": measured,
                     "certainty": certainty}, None
         delta = survey_north.angular_delta(measured, claimed)
         if delta > survey_north.CORROBORATION_DELTA_DEGREES:
@@ -356,6 +360,7 @@ def _reconcile_north(raw_north) -> tuple:
                           % (measured, word.replace("_", "-").lower()))
         return {"degrees": measured, "direction": _word_for(measured),
                 "source": NORTH_MEASURED, "claimed_degrees": claimed,
+                "measured_ok": True, "measured_degrees": measured,
                 "certainty": certainty}, None
 
     # NO MEASUREMENT, NO NORTH. Product Owner direction, 2026-09-16, on
@@ -819,7 +824,27 @@ def build_primitives(graph: dict, include=None) -> dict:
             "points": footprint["outline"], "label": footprint["label"],
             "certain": footprint["certainty"] == vx.RECOVERED})
 
-    north = graph.get("north") if LAYER_NORTH in include else None
+    # CLAUDE-MUSCLE-NORTH-AT-USE-01: RECONCILE AT THE POINT OF USE, not only
+    # at the point of write.
+    #
+    # `normalise_graph` applies the north hierarchy when a reading is STORED,
+    # which left every record written under an older rule carrying whatever
+    # that rule allowed - the live Castille record kept an unmeasured 30
+    # degrees after the no-bbox-no-north gate was deployed, and re-examining it
+    # was correctly refused by the exactly-once guard as a replay. A fix that
+    # only governs future writes does not govern the records people read.
+    #
+    # This module already argues the principle: `resolved_plan` recomputes
+    # primitives from the graph rather than storing them, so "a future change
+    # to the geometry rules should be able to improve without rewriting stored
+    # records". North simply was not following it. Re-reconciling here is
+    # idempotent - a stored measured north reconciles to itself - and needs no
+    # re-examination and no re-transmission of the customer's sheet.
+    north, north_refusal = _reconcile_north(graph.get("north"))
+    if north_refusal and north_refusal not in unresolved:
+        unresolved.append(north_refusal)
+    if LAYER_NORTH not in include:
+        north = None
     if north:
         primitives.append({"type": P_NORTH, "degrees": north["degrees"],
                            "certain": north["certainty"] == vx.RECOVERED})
