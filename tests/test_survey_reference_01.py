@@ -392,7 +392,7 @@ class BRasterSurvey(SurveyReferenceCase):
     def test_the_kind_of_file_is_identified_from_the_bytes(self):
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         result, _document, _ws = self.result_for(project_id)
-        kinds = [i["value"] for i in result["established"] if i["label"] == "Kind of file"]
+        kinds = [i["value"] for i in result["established"] if i["label"] == "File type"]
         self.assertEqual(kinds, ["an image (JPEG)"])
         self.assertNotIn("unknown", " ".join(kinds).lower())
 
@@ -865,7 +865,7 @@ class JTextDocumentRegression(SurveyReferenceCase):
         self.assertIsNone(result["survey_reference"])
         self.assertEqual(self.derived_sources(workspace), [])
         established = {i["label"]: i["value"] for i in result["established"]}
-        self.assertEqual(established.get("Kind of file"), "a PDF document")
+        self.assertEqual(established.get("File type"), "a PDF document")
 
     def test_a_text_document_with_no_visual_reading_keeps_its_old_wording(self):
         """The superseded branches were not deleted - they were scoped to the
@@ -1631,3 +1631,199 @@ class RDeleteAnUploadedDocument(SurveyReferenceCase):
         after = self.workspace(project_id).sources[0]
         self.assertEqual(Path(after["file_path"]).read_bytes(), original,
                          "deletion destroyed the stored bytes")
+
+
+class SWorkingIndicator(SurveyReferenceCase):
+    """CLAUDE-EXAMINATION-ACTIVITY-01 - visible feedback while it runs.
+
+        NO FAKE PERCENTAGE.
+
+    Neither stage can honestly report progress: OCR does not know how much of a
+    photograph is left, and a model call has no measurable fraction. So the
+    indicator is indeterminate and the status endpoint returns no number for one
+    to be invented from - asserted below, because a percentage is exactly the
+    thing a future change would add to make the page feel busier.
+
+    The labels name the WORK and never the machinery. A person waiting is told
+    "Examining document"; they are never told a queue name, a job id, a
+    processing version or a model.
+    """
+
+    def _activity(self, project_id, reading, looking):
+        def stage_states(_ws, _sid, jobs=None):
+            return [reading, looking]
+
+        with patch.object(dx, "examination_stage_states", stage_states):
+            workspace = self.workspace(project_id)
+            return dx.aggregate_activity(workspace, jobs=self.jobs)
+
+    def test_each_stage_reports_its_own_activity(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        Q, R, C = (perception_jobs.STATE_QUEUED, perception_jobs.STATE_RUNNING,
+                   perception_jobs.STATE_COMPLETED)
+
+        self.assertEqual(self._activity(project_id, Q, Q), dx.ACTIVITY_QUEUED)
+        self.assertEqual(self._activity(project_id, R, Q), dx.ACTIVITY_READING)
+        # Reading finished, looking still to come: the examination has MOVED ON
+        # rather than gone back to waiting.
+        self.assertEqual(self._activity(project_id, C, Q), dx.ACTIVITY_LOOKING)
+        self.assertEqual(self._activity(project_id, C, R), dx.ACTIVITY_LOOKING)
+        self.assertIsNone(self._activity(project_id, C, C),
+                          "an indicator would keep animating after completion")
+
+    def test_the_indicator_renders_while_pending_and_vanishes_after(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+        self.assertIn('data-ui-ref="document-shop.result.working"', body)
+        self.assertIn('role="status"', body)
+        self.assertIn('aria-live="polite"', body)
+        self.assertIn("document_shop_status.js", body,
+                      "the poller is not loaded while work is in flight")
+
+        self.run_worker()
+        done = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+        self.assertNotIn('data-ui-ref="document-shop.result.working"', done,
+                         "the indicator survived completion")
+        self.assertNotIn("document_shop_status.js", done,
+                         "a finished page still carries a poller")
+
+    def test_the_status_endpoint_advances_and_then_says_done(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+
+        first = self.client.get("/document-shop/jobs/%s/status" % project_id).get_json()
+        self.assertTrue(first["pending"])
+        self.assertFalse(first["done"])
+        self.assertEqual(first["activity"], dx.ACTIVITY_QUEUED)
+
+        self.run_worker()
+        after = self.client.get("/document-shop/jobs/%s/status" % project_id).get_json()
+        self.assertFalse(after["pending"])
+        self.assertTrue(after["done"])
+        self.assertIsNone(after["activity"])
+        self.assertEqual(after["state_label"], "Result ready")
+
+    def test_the_status_endpoint_returns_no_percentage_and_no_machinery(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        payload = self.client.get(
+            "/document-shop/jobs/%s/status" % project_id).get_json()
+
+        self.assertEqual(set(payload), {"state_label", "activity", "pending", "done"})
+        for name, value in payload.items():
+            # `bool` subclasses `int` in Python, so isinstance would reject the
+            # two flags this endpoint is built around. The thing being forbidden
+            # is a NUMBER - something a percentage could be drawn from - so the
+            # test asks for the exact type.
+            self.assertNotIn(type(value), (int, float),
+                             "%r is numeric, which invites a fake progress bar" % name)
+
+        blob = json.dumps(payload).lower()
+        for leak in ("worker", "queue", "job_id", "processing_version",
+                     "orientation-ocr", "visual-examination@", "claude",
+                     "anthropic", "governance", "evidence", "perception"):
+            self.assertNotIn(leak, blob,
+                             "%r leaked into a customer-facing status" % leak)
+
+    def test_the_status_endpoint_is_gated_like_the_page_it_serves(self):
+        from werkzeug.security import generate_password_hash
+
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        intruder = User(username="peeker", role=ROLE_CUSTOMER)
+        intruder.password_hash = generate_password_hash(PW)
+        db.session.add(intruder)
+        db.session.commit()
+        stranger = self.app.test_client()
+        stranger.post("/login", data={"username": "peeker", "password": PW})
+
+        self.assertEqual(
+            stranger.get("/document-shop/jobs/%s/status" % project_id).status_code, 404)
+        self.assertEqual(
+            self.app.test_client().get(
+                "/document-shop/jobs/%s/status" % project_id).status_code, 302,
+            "an unauthenticated poll was answered rather than sent to sign in")
+
+    def test_the_indicator_is_indeterminate_and_respects_reduced_motion(self):
+        css = (_REPO_ROOT / "static" / "css" / "main.css").read_text(encoding="utf-8")
+        block = css[css.index(".ds-working {"):]
+
+        self.assertIn("@keyframes ds-working-glide", css,
+                      "the indicator does not animate")
+        self.assertIn("prefers-reduced-motion", block,
+                      "the animation cannot be turned off by someone who needs that")
+        # Tokens only - the same rule the site-wide colour guard enforces.
+        for raw in ("#fff", "#000", "#cfd6dd"):
+            self.assertNotIn(raw, block[:1200])
+        self.assertIn("var(--surface-secondary)", block)
+        self.assertIn("var(--border-strong)", block)
+
+    def test_the_poller_degrades_to_the_rendered_page(self):
+        """A polling failure must not become the customer's problem to read."""
+        script = (_REPO_ROOT / "static" / "js" / "document_shop_status.js").read_text(
+            encoding="utf-8")
+        self.assertIn("catch", script, "a fetch failure is unhandled")
+        self.assertNotIn("alert(", script)
+        self.assertIn("MAX_POLLS", script,
+                      "a tab left open would poll forever")
+        for leak in ("percent", "progress =", "%'"):
+            self.assertNotIn(leak, script)
+
+
+class TDocumentShopCopy(SurveyReferenceCase):
+    """CLAUDE-DOCUMENT-SHOP-COPY-01 - two words on a page, and one of them was
+    said twice."""
+
+    def test_the_file_type_label_reads_file_type(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        result, _document, _workspace = self.result_for(project_id)
+        labels = {item["label"] for item in result["established"]}
+
+        self.assertIn("File type", labels)
+        self.assertNotIn("Kind of file", labels)
+
+    def test_the_value_behind_it_is_unchanged(self):
+        """Copy only. The line still answers what the BYTES say the file is."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        result, _document, _workspace = self.result_for(project_id)
+        established = {item["label"]: item["value"] for item in result["established"]}
+        self.assertEqual(established["File type"], "an image (JPEG)")
+
+    def test_file_type_and_document_stay_distinct(self):
+        """Provenance and interpretation are two different answers: "an image
+        (JPEG)" is what arrived, "Survey image" is what it turned out to be."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        result, _document, _workspace = self.result_for(project_id)
+        established = {item["label"]: item["value"] for item in result["established"]}
+
+        self.assertEqual(established["File type"], "an image (JPEG)")
+        self.assertEqual(established["Document"], "Survey image")
+
+    def test_ask_go_is_said_once_on_the_page(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        self.assertEqual(body.count("Ask GO about this document"), 1,
+                         "the composer heading and its field label say the same "
+                         "thing twice")
+
+    def test_the_question_field_keeps_an_accessible_name(self):
+        """Removing the visible duplicate must not leave the textarea nameless -
+        that would trade a cosmetic problem for a real one."""
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        self.assertIn('aria-labelledby="conversation"', body)
+        self.assertIn('id="conversation"', body,
+                      "the accessible name points at an element that is not there")
+        self.assertNotIn('for="ds-question"', body,
+                         "the duplicate field label is still rendered")
+
+    def test_the_composer_itself_is_untouched(self):
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
+
+        self.assertIn('id="ds-question"', body)
+        self.assertIn('placeholder="e.g. What does this document require?"', body)
+        self.assertIn('data-ui-ref="document-shop.conversation.send"', body)
+        self.assertIn(">Ask</button>", body)

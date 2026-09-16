@@ -57,6 +57,21 @@ STATE_LABELS = {
     STATE_COULD_NOT_COMPLETE: "Could not complete",
 }
 
+# CLAUDE-EXAMINATION-ACTIVITY-01: what the person is told WHILE it runs.
+#
+# `STATE_LABELS` answers "what is the outcome", and while an examination is in
+# flight there is no outcome yet - so a page showing only those two pending
+# labels tells someone waiting almost nothing, and tells them the same thing
+# for a minute whatever is happening underneath.
+#
+# These are finer, and each one is a fact a stored job record can actually
+# establish. THEY NAME THE WORK, NEVER THE MACHINERY: no worker, no queue, no
+# job id, no processing version, no model. "Examining document" is true and
+# useful; "orientation-ocr@1 claimed by vps-a12692b3:905538" is neither.
+ACTIVITY_QUEUED = "Waiting to be examined"
+ACTIVITY_READING = "Examining document…"
+ACTIVITY_LOOKING = "Visual analysis in progress…"
+
 # Ordered worst-last: an aggregate takes the LEAST settled state among its
 # sources, so an examination never looks finished while part of it is not.
 _AGGREGATE_PRECEDENCE = (
@@ -344,6 +359,47 @@ def examination_stage_states(workspace, source_id, *, jobs=None) -> list:
     ]
 
 
+
+def examination_activity(workspace, source_id, *, jobs=None):
+    """What is happening to this source RIGHT NOW, or None when nothing is.
+
+    Derived from the same `examination_stage_states` the state function reads,
+    so the indicator and the state can never describe different work. Returns
+    None the moment both stages are terminal - the caller then shows the
+    result, and there is nothing left to animate.
+    """
+    from services import perception_jobs as pj
+
+    reading, looking = examination_stage_states(workspace, source_id, jobs=jobs)
+    open_states = (pj.STATE_QUEUED, pj.STATE_RUNNING)
+
+    if reading == pj.STATE_RUNNING:
+        return ACTIVITY_READING
+    if reading == pj.STATE_QUEUED:
+        return ACTIVITY_QUEUED
+    # Reading is terminal (or never existed). If the looking stage is still
+    # open, the examination has MOVED ON to it rather than gone back to
+    # waiting - which is why this is not simply "queued means queued".
+    if looking in open_states:
+        return ACTIVITY_LOOKING
+    return None
+
+
+def aggregate_activity(workspace, *, jobs=None):
+    """The activity for a whole examination: the EARLIEST stage still open.
+
+    An examination of five photographs is doing the earliest thing any of them
+    still needs, because that is what the person is actually waiting for.
+    """
+    order = [ACTIVITY_QUEUED, ACTIVITY_READING, ACTIVITY_LOOKING]
+    seen = [examination_activity(workspace, source["id"], jobs=jobs)
+            for source in _live_sources(workspace)]
+    for label in order:
+        if label in seen:
+            return label
+    return None
+
+
 def source_state(document, workspace, source_id, *, jobs=None) -> str:
     """One Source's honest state.
 
@@ -528,7 +584,12 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         "value": "%s, received %s" % (filename, (getattr(document, "ingested_at", "") or "")[:10]),
     })
     established.append({
-        "label": "Kind of file",
+        # CLAUDE-DOCUMENT-SHOP-COPY-01: "File type", not "Kind of file".
+        # The VALUE and the logic behind it are untouched - this line still
+        # answers what the bytes say the file is. "Document" below remains the
+        # separate, interpreted classification, and the two stay distinct:
+        # "an image (JPEG)" is provenance, "Survey image" is the point.
+        "label": "File type",
         # The bytes first, the extension second, and the word "unknown" only
         # when neither says anything at all.
         "value": identity["label"] if identity["media_type"]
@@ -725,6 +786,9 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         # the raw-text block or the "nothing was concluded" grammar: both are
         # statements about a completed reading.
         "pending": pending,
+        # CLAUDE-EXAMINATION-ACTIVITY-01: what to animate, and what to say
+        # while animating. None once nothing is running.
+        "activity": aggregate_activity(workspace, jobs=jobs) if pending else None,
         # CLAUDE-SURVEY-REFERENCE-01: the derived artifact, if one was built.
         # `reference_source_id` is what the download link needs; the rest is
         # what the page says about it, which is deliberately three words.

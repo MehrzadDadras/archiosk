@@ -3267,6 +3267,42 @@ def _document_shop_workspace_or_404(project_id):
     return document, store, workspace
 
 
+@portal_bp.route('/document-shop/jobs/<project_id>/status')
+@login_required
+def document_shop_status(project_id):
+    """What is happening to this examination, for the working indicator.
+
+    CLAUDE-EXAMINATION-ACTIVITY-01. Small on purpose: a label, whether anything
+    is still running, and nothing else. The page polls it so the text advances
+    from waiting to examining to visual analysis without the person refreshing.
+
+    WHAT IT DELIBERATELY DOES NOT RETURN. No worker id, no queue name, no job
+    id, no processing version, no model, no governance vocabulary - the same
+    rule the result page follows, applied to the thing that updates fastest and
+    would therefore leak soonest. `done` is the only instruction the client
+    needs: when it flips, reload and read the real page.
+
+    NO PERCENTAGE. Neither stage can honestly report progress - OCR does not
+    know how much of a photograph is left and a model call has no measurable
+    fraction - so the indicator is indeterminate and this returns no number for
+    one to be invented from.
+    """
+    from services.ingestion import _display_name_of as _document_display_name
+
+    document, store, workspace = _document_shop_workspace_or_404(project_id)
+    jobs = perception_jobs.PerceptionJobStore(
+        current_app.config['REGISTRY_STORE_PATH'])
+    result = document_examination.build_result(
+        document, workspace,
+        display_name=_document_display_name(document, store), jobs=jobs)
+    return jsonify(
+        state_label=result['state_label'],
+        activity=result['activity'],
+        pending=result['pending'],
+        done=not result['pending'],
+    )
+
+
 @portal_bp.route('/document-shop/jobs/<project_id>/sources/<source_id>/remove',
                  methods=['POST'])
 @login_required

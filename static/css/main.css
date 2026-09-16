@@ -10674,3 +10674,47 @@ dl.plain-list dd {
     border-bottom: 1px solid var(--border);
 }
 .ds-actions-note { margin-top: 8px; opacity: 0.85; }
+
+/* CLAUDE-EXAMINATION-ACTIVITY-01 — the working indicator.
+   Indeterminate by design: neither examination stage can honestly report
+   progress, so there is no fraction to draw and none is invented. Tokens only. */
+.ds-working {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 14px;
+}
+.ds-working-bar {
+    position: relative;
+    display: block;
+    width: 120px;
+    height: 3px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--surface-secondary);
+    border-radius: 2px;
+}
+.ds-working-glide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 40%;
+    background: var(--border-strong);
+    border-radius: 2px;
+    animation: ds-working-glide 1.15s ease-in-out infinite;
+}
+@keyframes ds-working-glide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+}
+.ds-working-label { opacity: 0.9; }
+/* An animation nobody asked for is an accessibility problem, not a flourish.
+   Reduced motion keeps the indicator visible and stops it moving. */
+@media (prefers-reduced-motion: reduce) {
+    .ds-working-glide {
+        animation: none;
+        width: 100%;
+        opacity: 0.5;
+    }
+}

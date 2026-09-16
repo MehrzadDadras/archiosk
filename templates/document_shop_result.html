@@ -38,6 +38,27 @@
     <strong data-ui-ref="document-shop.result.state-label">{{ result.state_label }}</strong>
 </p>
 
+{# CLAUDE-EXAMINATION-ACTIVITY-01: the working indicator.
+
+   INDETERMINATE, AND THAT IS NOT A SHORTCUT. Neither stage can honestly report
+   progress - OCR does not know how much of a photograph is left, and a model
+   call has no measurable fraction - so a percentage would be a number invented
+   to look reassuring. A bar that moves without meaning is worse than one that
+   only says "still working", because the person plans around it.
+
+   `role="status"` + `aria-live="polite"` so the text is announced as it
+   advances rather than only seen; `aria-hidden` on the animation itself,
+   because a decorative stripe has nothing to announce. #}
+{% if result.pending %}
+<div class="ds-working" data-ui-ref="document-shop.result.working"
+     data-status-url="{{ url_for('portal.document_shop_status', project_id=project_id) }}"
+     role="status" aria-live="polite">
+    <span class="ds-working-bar" aria-hidden="true"><span class="ds-working-glide"></span></span>
+    <span class="mono ds-working-label"
+          data-ui-ref="document-shop.result.working-label">{{ result.activity or result.state_label }}</span>
+</div>
+{% endif %}
+
 {# ESTABLISHED FROM THE SOURCE. Facts the file itself supports. #}
 {% if result.established %}
 <h2 class="np-section-title" data-ui-ref="document-shop.result.established-title">What we can say from the file itself</h2>
@@ -272,9 +293,18 @@
        token arrives only via JavaScript reports its own failure as an expired
        session, which sends the person to re-authenticate over nothing. #}
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label class="field-label" for="ds-question">Ask GO about this document</label>
+    {# CLAUDE-DOCUMENT-SHOP-COPY-01: the visible label is gone, the ACCESSIBLE
+       NAME is not.
+
+       "Ask GO about this document" appeared twice - as the section heading and
+       again as this field's label - which is duplicate copy on screen and a
+       duplicate announcement to a screen reader. Deleting the <label> outright
+       would have left the textarea with no accessible name at all, trading a
+       cosmetic problem for a real one, so it points at the heading that was
+       already there. Same name, said once. #}
     <textarea id="ds-question" name="question" rows="3" class="text-input ds-composer-input"
               data-ui-ref="document-shop.conversation.input"
+              aria-labelledby="conversation"
               placeholder="e.g. What does this document require?"></textarea>
     <button type="submit" class="btn btn-primary"
             id="ds-conversation-send"
@@ -318,6 +348,11 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{# CLAUDE-EXAMINATION-ACTIVITY-01: loaded only while something is running, so a
+   finished page carries no poller at all. #}
+{% if result.pending %}
+<script src="{{ url_for('static', filename='js/document_shop_status.js') }}?v={{ config['STATIC_VERSION'] }}" defer></script>
+{% endif %}
 <script nonce="{{ csp_nonce }}">
     // CLAUDE-CUSTOMER-CONTAINMENT-01: one question, one request.
     //
