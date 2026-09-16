@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 #
 # Tying the two together means the next prompt generation gets a new identity
 # by construction rather than by someone remembering to bump this line.
-VISUAL_VERSION = "visual-examination@3"
+VISUAL_VERSION = "visual-examination@4"
 
 #: ITS OWN QUEUE DIRECTORY, which is what keeps the deployed perception worker
 #: from ever seeing this work. That worker claims the oldest claimable job in
@@ -100,7 +100,8 @@ VISUAL_JOBS_SUBDIR = "visual_jobs"
 #: live records as "waiting to be examined" - their readings are real, they are
 #: simply from an earlier prompt. Re-examination is a deliberate act, not a
 #: side effect of a deploy.
-VISUAL_VERSION_HISTORY = ("visual-examination@1", "visual-examination@2")
+VISUAL_VERSION_HISTORY = ("visual-examination@1", "visual-examination@2",
+                          "visual-examination@3")
 VISUAL_VERSIONS = frozenset({VISUAL_VERSION, *VISUAL_VERSION_HISTORY})
 
 #: Why a visual job did not produce a reading. Named, because "processing
@@ -498,6 +499,32 @@ def examine_source(app, jobs, job: dict, *, store=None, governance_log=None) -> 
                              evidence_refs=refs,
                              failure_reason="nothing legible was found in this image")
 
+    # CLAUDE-MUSCLE-ACTIVATION-01: the five muscles get their production
+    # caller here, at the end of an examination that has already succeeded.
+    #
+    # THIS IS THE DOOR, NOT A NEW SERVICE. Subject keys, supersessions and
+    # manifest gaps are written through primitives that already existed -
+    # register_evidence_item, record_evidence_relationship, record_supersession.
+    # The natural home would be `perception_worker`, where sheet indexes are
+    # already registered and `not_found` is already computed and discarded,
+    # but that file's bytes are pinned by the flight-deck digest guard, so the
+    # hook lives on this end of the same examination instead.
+    #
+    # It never raises: the reading is worth more than the enrichment, and a
+    # malformed clause must not fail an examination that has already earned
+    # its result.
+    try:
+        from services import package_muscles
+
+        package_muscles.activate(
+            store, store.get(job["workspace_id"]) or workspace,
+            job["source_id"],
+            extra_text=_observation_text(visual),
+            governance_log=governance_log)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("package muscles did not activate for %s (%s: %s)",
+                       job["source_id"], type(exc).__name__, exc)
+
     return jobs.complete(job, state=perception_jobs.STATE_COMPLETED,
                          extractor="visual-examination",
                          extractor_version=visual.prompt_version,
@@ -597,6 +624,22 @@ def _decoded_reference(row):
     except (TypeError, ValueError):
         return None
     return decoded if isinstance(decoded, dict) else None
+
+
+def _observation_text(visual) -> str:
+    """What the reading SAW, as text a subject extractor can read.
+
+    A tag printed on a drawing reaches the evidence graph through the visual
+    observations rather than through OCR, so without this a schedule row read
+    by vision would never share a subject key with the specification clause
+    that names the same unit - which is the entire point of F3.
+    """
+    parts = []
+    for observation in (getattr(visual, "observations", None) or []):
+        value = observation.get("value") if isinstance(observation, dict) else None
+        if value:
+            parts.append(str(value))
+    return chr(10).join(parts)
 
 
 def _build_survey_reference(app, store, job, visual, governance_log, *,

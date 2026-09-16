@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
 # without bumping that is the defect that kept the parametric reconstruction
 # off every live record.
-VISUAL_PROMPT_VERSION = "visual-examination-03"
+VISUAL_PROMPT_VERSION = "visual-examination-04"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -320,7 +320,8 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
 - "north": report it TWICE, independently, and do not derive one from the other.
   "degrees": clockwise from straight up on the image (0 = up, 90 = right, 180 = down, 270 = left).
   "direction": which way the arrow POINTS on the image, as one of UP, UP_RIGHT, RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, LEFT, UP_LEFT.
-  "bbox": a tight box around the arrow symbol ITSELF - {"x","y","w","h"} as fractions of the whole image. Include the arrowhead and its circle if it has one; exclude the word NORTH, the title block and any surrounding border. THIS IS THE MOST IMPORTANT FIELD: the angle is measured from the pixels inside this box, and your "degrees" is used only to check that measurement. A loose or wrong box is worse than no box.
+  "bbox": REQUIRED whenever you report north at all, and the single most important field in this object. A tight box around the arrow symbol ITSELF - {"x","y","w","h"} as fractions of the whole image. Include the arrowhead and its circle if it has one; exclude the word NORTH, the title block and any surrounding border. THIS IS THE MOST IMPORTANT FIELD: the angle is measured from the pixels inside this box, and your "degrees" is used only to check that measurement. A loose or wrong box is worse than no box.
+  DO NOT REPORT NORTH WITHOUT A BBOX. An angle with no box cannot be checked against the sheet and will be treated as a claim rather than a reading. If you can see the arrow well enough to give an angle, you can give the box around it; if you cannot locate it, omit north entirely rather than reporting an angle alone.
   Read the arrow, then state the direction word from what you see, then state the angle from what you see. If they disagree, say so in "unresolved" rather than adjusting one to match the other - a disagreement is a finding and will be treated as one. Omit north entirely if no arrow is legible.
 - Do NOT close a boundary that does not close on the sheet. Report only the segments you can see; a gap is a finding, not a defect to smooth over.
 
