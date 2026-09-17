@@ -336,6 +336,195 @@ class SurveyReferenceCase(unittest.TestCase):
                 and not s.get("removed_at")]
 
 
+class BindingPromotionJourney(SurveyReferenceCase):
+    """The Castille failure's reading through the real store and user route.
+
+    Provider response is fixed, not a claim to requalify OCR accuracy. The
+    failure being qualified is promotion of a clear reading to a bound fact.
+    """
+
+    def test_castille_binding_survives_storage_reload_and_consumption(self):
+        from services import binding, survey_graph
+
+        payload = dict(SURVEY_READING)
+        payload["graph"] = {
+            "nodes": [{"id": "N1", "x": .2, "y": .3},
+                      {"id": "N2", "x": .8, "y": .3}],
+            "segments": [{"id": "S1", "from": "N1", "to": "N2",
+                          "kind": "straight", "boundary": "lot_line",
+                          "label": "LOT LINE 3", "certainty": "RECOVERED",
+                          "dimension": {"text": "144.12", "value": 144.12,
+                                        "certainty": "RECOVERED"}}]}
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker(payload)
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        dimension = visual["graph"]["segments"][0]["dimension"]
+        self.assertEqual(dimension["read_certainty"], "RECOVERED")
+        self.assertEqual(dimension["bind_certainty"], "PARTIALLY_RECOVERED")
+        self.assertEqual(binding.bound_certainty(dimension), "PARTIALLY_RECOVERED")
+
+        # A stale aggregate survives a real disk round trip, but cannot govern
+        # either the display or the prompt after reloading that evidence.
+        row = next(e for e in workspace.evidence_items
+                   if e.get("source_id") == result["source_id"]
+                   and e.get("content_type") == vx.VISUAL_CONTENT_TYPE)
+        stored = json.loads(row["content"])
+        stored["graph"]["segments"][0]["dimension"]["bound_certainty"] = "RECOVERED"
+        row["content"] = json.dumps(stored)
+        self.store.save(workspace)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, reloaded = self.result_for(project_id)
+        visual = dx.visual_reading(reloaded, result["source_id"])
+        primitives = survey_graph.build_primitives(visual["graph"])["primitives"]
+        label = next(p for p in primitives if p.get("kind") == "dimension")
+        self.assertFalse(label["certain"])
+        response = self.client.get("/document-shop/jobs/" + project_id)
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("144.12", html)
+        self.assertIn("attachment PARTIALLY_RECOVERED", html)
+        context = dc.build_context(document, reloaded, result, "How long is LOT LINE 3?")
+        self.assertTrue(any("144.12" in s and "PARTIALLY_RECOVERED" in s
+                            for s in context["visual_partially_recovered"]))
+        self.assertFalse(any("144.12" in s for s in context["visual_recovered"]))
+        sent = {}
+
+        def spy(**kwargs):
+            sent.update(kwargs)
+            return _Outcome(parsed={"answer": "144.12 is readable; its attachment to LOT LINE 3 is uncertain."})
+
+        with patch.object(llm_gateway, "call_llm_json", spy):
+            reply = dc.ask(document, reloaded, result, "How long is LOT LINE 3?", app=self.app)
+        self.assertTrue(reply["ok"])
+        self.assertIn("attachment PARTIALLY_RECOVERED", sent["user_prompt"])
+
+
+class SheetIdentityPromotionJourney(SurveyReferenceCase):
+    def test_title_fields_from_actual_regions_reach_store_page_and_go(self):
+        import pymupdf
+        from services import sheet_identity
+
+        for token, discipline, revision, state in (
+            ("A-203", "Architectural", "1", "SUPERSEDED"),
+            ("A-203", "Architectural", "2", "CURRENT"),
+            ("M-501", "Mechanical", "3", "ISSUED FOR CONSTRUCTION"),
+            (None, None, None, None),
+        ):
+            with self.subTest(token=token, revision=revision):
+                with pymupdf.open() as pdf:
+                    page = pdf.new_page(width=600, height=800)
+                    if token:
+                        lines = ["Sheet: " + token, "Drawing title: Equipment plan",
+                                 "Discipline: " + discipline, "Revision: " + revision,
+                                 "Issue date: 2026-09-16", "Issue state: " + state]
+                        for n, line in enumerate(lines):
+                            page.insert_text((470, 680 + n * 15), line, fontsize=5)
+                    else:
+                        from PIL import ImageFilter
+                        blurred = Image.new("RGB", (600, 800), "white")
+                        ImageDraw.Draw(blurred).text((470, 680), "A-203 REV 2", fill="black")
+                        image_bytes = io.BytesIO()
+                        blurred.filter(ImageFilter.GaussianBlur(12)).save(image_bytes, "PNG")
+                        page.insert_image(page.rect, stream=image_bytes.getvalue())
+                    raw = pdf.tobytes()
+                project_id = self.upload(raw, "A-999-rev99-current.pdf",
+                                         name="Sheet fixture %s %s" % (token, revision))
+                # Optional OCR is held at its boundary; blank fixture supplies
+                # no text. The readable fixtures use real native region text.
+                with patch("services.raster_extraction.extract_region_text",
+                           return_value={"ran": True, "text": "", "rotate": 0}):
+                    self.run_worker({"document_category": "drawing",
+                                     "category_certainty": "RECOVERED",
+                                     "observations": [], "unresolved": []})
+                result, document, workspace = self.result_for(project_id)
+                pages = sheet_identity.title_block_readings(workspace, result["source_id"])
+                self.assertTrue(pages, "normal examination did not produce a DerivedView")
+                fields = pages[0]["fields"]
+                self.assertEqual(fields["sheet_number"]["value"], token)
+                self.assertEqual(fields["discipline"]["value"], discipline)
+                self.assertEqual(fields["revision"]["value"], revision)
+                self.assertEqual(fields["issue_state"]["value"], state)
+                if token:
+                    for field in fields.values():
+                        self.assertEqual(field["certainty"], "RECOVERED")
+                        self.assertTrue(field["provenance"])
+                        self.assertEqual(field["provenance"][0]["source_id"], result["source_id"])
+                else:
+                    self.assertTrue(all(f["certainty"] == "UNRESOLVED" for f in fields.values()))
+                    self.assertTrue(all(f["value"] is None for f in fields.values()))
+                    for field in fields.values():
+                        self.assertTrue(field["provenance"])
+                        self.assertTrue(all(p["source_id"] == result["source_id"]
+                                            and p["region"] and p["note"]
+                                            for p in field["provenance"]))
+                    from services import drawing_segmentation
+                    before = (len(workspace.structural_units), len(workspace.derived_views))
+                    with patch("services.raster_extraction.extract_region_text",
+                               return_value={"ran": True, "text": "", "rotate": 0}):
+                        drawing_segmentation.examine_title_blocks(
+                            self.store, workspace, result["source_id"], raw)
+                    reloaded = self.store.get(project_id)
+                    self.assertEqual(before, (len(reloaded.structural_units), len(reloaded.derived_views)))
+                html = self.client.get("/document-shop/jobs/" + project_id).get_data(as_text=True)
+                prompt = dc.render_prompt(dc.build_context(document, workspace, result, "Which revision?"))
+                for output in (html, prompt):
+                    self.assertIn("Sheet revision", output)
+                    self.assertIn(revision + " (RECOVERED)" if revision else "UNRESOLVED", output)
+
+
+class MissingSheetPromotionJourney(SurveyReferenceCase):
+    def test_absence_is_persisted_and_arrival_clears_only_the_current_projection(self):
+        import pymupdf
+        from werkzeug.datastructures import FileStorage
+        from services import sheet_identity
+        from services.ingestion import attach_document_shop_sources
+
+        with pymupdf.open() as pdf:
+            page = pdf.new_page()
+            page.insert_text((72, 72), "DRAWING INDEX\nA-203")
+            raw = pdf.tobytes()
+        project_id = self.upload(raw, "manifest.pdf", name="Manifest qualification")
+        self.run_perception_only()
+        workspace = self.store.get(project_id)
+        history = [e for e in workspace.evidence_items
+                   if e.get("content_type") == sheet_identity.MANIFEST_GAP_CONTENT_TYPE]
+        self.assertEqual(len(history), 1, "absence must persist without a visual/model call")
+        snapshot = dict(history[0])
+        payload = json.loads(snapshot["content"])
+        self.assertEqual(payload["missing"][0]["reference_text"], "A-203")
+        self.assertEqual(payload["missing"][0]["sheet_token"], "A203")
+        self.assertIsNone(payload["missing"][0]["contents_claim"])
+        self.assertTrue(snapshot["created_at"])
+        self.run_worker(NOTHING_READING)
+        result, document, workspace = self.result_for(project_id)
+        self.assertTrue(any(e["label"] == "Missing evidence: A-203"
+                            for e in result["not_established"]))
+        response = self.client.get("/document-shop/jobs/" + project_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Missing evidence: A-203", response.get_data(as_text=True))
+        prompt = dc.render_prompt(dc.build_context(document, workspace, result, "What is missing?"))
+        self.assertIn("Missing evidence: A-203", prompt)
+
+        with patch.object(BHiveParser, "parse", _fake_parse):
+            attach_document_shop_sources(
+                self.app, workspace,
+                [FileStorage(stream=io.BytesIO(text_pdf("Sheet: A203")), filename="A203.pdf")],
+                owner="cust")
+        self.run_worker(NOTHING_READING)
+        result, document, workspace = self.result_for(project_id)
+        self.assertFalse(any(e["label"] == "Missing evidence: A-203"
+                             for e in result["not_established"]))
+        prompt = dc.render_prompt(dc.build_context(document, workspace, result, "What is missing now?"))
+        self.assertNotIn("Missing evidence: A-203", prompt)
+        response = self.client.get("/document-shop/jobs/" + project_id)
+        self.assertNotIn("Missing evidence: A-203", response.get_data(as_text=True))
+        retained = next(e for e in workspace.evidence_items if e["id"] == snapshot["id"])
+        self.assertEqual(retained, snapshot, "arrival rewrote the original absence evidence")
+        self.assertNotIn(next(s["id"] for s in workspace.sources if s.get("name") == "A203.pdf"),
+                         payload["observed_source_ids"])
+
+
 class AExistingPathReuse(SurveyReferenceCase):
     """A. The survey image uses the ESTABLISHED perception machinery.
 

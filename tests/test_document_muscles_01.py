@@ -22,6 +22,20 @@ class F1BindConfidenceSplit(unittest.TestCase):
     the attachment, which rests on the annotation being printed nearby.
     """
 
+    def test_persisted_aggregate_cannot_strengthen_components(self):
+        import json
+
+        record = binding.bind(144.12, read_certainty=RECOVERED,
+                              bind_basis=binding.BIND_BASIS_PROXIMITY,
+                              bound_to="LOT LINE 3")
+        record["bound_certainty"] = RECOVERED
+        reloaded = json.loads(json.dumps(record))
+        self.assertEqual(binding.bound_certainty(reloaded), PARTIALLY_RECOVERED)
+        reloaded["read_certainty"] = UNRESOLVED
+        self.assertEqual(binding.bound_certainty(reloaded), UNRESOLVED)
+        reloaded.pop("read_certainty")
+        self.assertEqual(binding.bound_certainty(reloaded), UNRESOLVED)
+
     def test_the_castille_annotation_is_read_clearly_and_bound_weakly(self):
         record = binding.bind(
             144.12, read_certainty=RECOVERED,
@@ -232,8 +246,12 @@ class F5ExpectedButAbsent(unittest.TestCase):
 
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["sheet_token"], "A203")
+        self.assertEqual(findings[0]["reference_text"], "A-203")
+        self.assertEqual(sheet_identity.normalise_sheet_token("A-203"),
+                         sheet_identity.normalise_sheet_token("A203"))
         self.assertEqual(findings[0]["discipline"], "architectural")
-        self.assertIn("A203", findings[0]["statement"])
+        self.assertIn("A-203", findings[0]["statement"])
+        self.assertNotIn("A203", findings[0]["statement"])
 
     def test_nothing_is_inferred_about_the_missing_sheet(self):
         finding = sheet_identity.missing_sheet_findings({

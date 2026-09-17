@@ -1,6 +1,10 @@
 """
 B2 - requirement-level supersession linkage. The governed old -> new transition.
 
+Cycle 4 also accepts scoped proposal EvidenceItems through this SAME gate.
+Those transitions retain the exact existing evidence/source endpoints; they
+do not manufacture a Requirement or transfer unrelated clauses' authority.
+
 WHAT B2 IS
 
 B1 decided a change arrived and a human accepted it. B2 is the act that makes
@@ -151,6 +155,11 @@ def apply_accepted_change(store, workspace, assessment_id: str, actor: str,
     if not applicable:
         raise ChangeApplicationError(reason)
 
+    if assessment.get("supersession_proposal_id"):
+        if overrides:
+            raise ChangeApplicationError("Scoped evidence is immutable; edited text needs a new proposal.")
+        return _apply_scoped_change(store, workspace, assessment, actor, governance_log)
+
     predecessor_id = assessment["target_requirement_id"]
     conflict = existing_successor(workspace, predecessor_id)
     if conflict is not None:
@@ -184,6 +193,71 @@ def apply_accepted_change(store, workspace, assessment_id: str, actor: str,
         "successor_id": successor["id"],
         "supersession_id": supersession["id"],
     }
+
+
+def _scoped_proposal(workspace, assessment):
+    from services.package_muscles import supersession_proposal
+    try:
+        item, proposal = supersession_proposal(workspace, assessment["supersession_proposal_id"])
+    except (ValueError, TypeError) as exc:
+        raise ChangeApplicationError(str(exc)) from exc
+    expected = CHANGE_TYPE_AMENDS if proposal["action"] == "amends" else CHANGE_TYPE_SUPERSEDES
+    if (proposal["certainty"] != "RECOVERED" or assessment["change_type"] != expected
+            or item["source_id"] != assessment["incoming_source_id"]
+            or assessment.get("authority_basis") != proposal["authority_basis"]
+            or assessment.get("subject_scope") != proposal["scope"]
+            or assessment.get("evidence") != proposal["directive_text"]):
+        raise ChangeApplicationError("Scope, evidence or authority is unresolved or changed since assessment.")
+    return proposal
+
+
+def _scoped_successor(workspace, predecessor):
+    return next((s for s in workspace.supersessions
+                 if s["predecessor_type"] == predecessor["type"]
+                 and s["predecessor_id"] == predecessor["id"]), None)
+
+
+def _apply_scoped_change(store, workspace, assessment, actor, governance_log):
+    """The existing accepted-change gate's scoped endpoint branch, not a new authority path."""
+    proposal = _scoped_proposal(workspace, assessment)
+    if not assessment.get("reviewed_by") or not assessment.get("reviewed_at"):
+        raise ChangeApplicationError("A human review record is required.")
+    before, after = proposal["predecessor"], proposal["successor"]
+    reason = "Accepted assessment %s; proposal evidence %s" % (
+        assessment["id"], assessment["supersession_proposal_id"])
+    link = _scoped_successor(workspace, before)
+    if link and (link.get("reason") != reason or link["successor_type"] != after["type"]
+                 or link["successor_id"] != after["id"]):
+        raise ChangeApplicationConflict("This exact predecessor already has another successor.")
+    # Recover a successful lineage write if the subsequent assessment stamp
+    # was interrupted; never mint a second authoritative edge on retry.
+    if link is None:
+        if before["type"] == "source":
+            predecessor_source = next(s for s in workspace.sources if s["id"] == before["id"])
+            successor_source = next(s for s in workspace.sources if s["id"] == after["id"])
+            if (predecessor_source.get("superseded_by_source_id")
+                    or successor_source.get("supersedes_source_id")):
+                raise ChangeApplicationConflict("Source revision pointers already have lineage.")
+            predecessor_source["superseded_by_source_id"] = after["id"]
+            successor_source["supersedes_source_id"] = before["id"]
+        else:
+            item = next(e for e in workspace.evidence_items if e["id"] == before["id"])
+            parent = next(s for s in workspace.sources if s["id"] == item["source_id"])
+            if parent.get("superseded_by_source_id") or _scoped_successor(workspace, {"type": "source", "id": parent["id"]}):
+                raise ChangeApplicationConflict("The predecessor's source already has whole-source lineage; review its scope first.")
+        link = store.record_supersession(
+            workspace, predecessor_type=before["type"], predecessor_id=before["id"],
+            successor_type=after["type"], successor_id=after["id"], actor=actor,
+            reason=reason, authority_class=assessment["authority_basis"])
+    store.mark_change_arrival_applied(
+        workspace, assessment["id"], supersession_id=link["id"], successor_id=after["id"], actor=actor)
+    if governance_log is not None:
+        governance_log.append(project_id=workspace.project_id, event_type="scoped_change_applied",
+                              actor=actor, role="reviewer", reason=reason,
+                              payload={"assessment_id": assessment["id"], "supersession_id": link["id"]})
+    return {"applied": True, "already_applied": False, "assessment_id": assessment["id"],
+            "predecessor_id": before["id"], "successor_id": after["id"],
+            "supersession_id": link["id"], "authority_basis": assessment["authority_basis"]}
 
 
 def lineage_of(store, workspace, requirement_id: str) -> dict:
@@ -243,11 +317,20 @@ def pending_conflicts(store, workspace) -> list[dict]:
         applicable, _reason = is_applicable(assessment)
         if not applicable:
             continue
-        conflict = existing_successor(workspace, assessment["target_requirement_id"])
+        if assessment.get("supersession_proposal_id"):
+            try:
+                predecessor = _scoped_proposal(workspace, assessment)["predecessor"]
+            except ChangeApplicationError:
+                continue
+            conflict = _scoped_successor(workspace, predecessor)
+            predecessor_id = predecessor["id"]
+        else:
+            predecessor_id = assessment["target_requirement_id"]
+            conflict = existing_successor(workspace, predecessor_id)
         if conflict is not None:
             blocked.append({
                 "assessment_id": assessment["id"],
-                "predecessor_id": assessment["target_requirement_id"],
+                "predecessor_id": predecessor_id,
                 "existing_successor_id": conflict["successor_id"],
                 "existing_supersession_id": conflict["id"],
                 "change_type": assessment["change_type"],
@@ -265,6 +348,18 @@ def transition_brief(store, workspace, assessment_id: str) -> dict:
     """
     assessment = _assessment(workspace, assessment_id)
     applicable, reason = is_applicable(assessment)
+    if assessment.get("supersession_proposal_id"):
+        try:
+            proposal = _scoped_proposal(workspace, assessment)
+            conflict = _scoped_successor(workspace, proposal["predecessor"])
+        except ChangeApplicationError as exc:
+            return {"assessment": assessment, "applicable": False, "reason": str(exc),
+                    "already_applied": bool(assessment.get("applied_supersession_id")), "affected": None}
+        return {"assessment": assessment, "proposal": proposal,
+                "applicable": applicable and conflict is None,
+                "reason": "The exact predecessor already has a successor." if conflict else reason,
+                "already_applied": bool(assessment.get("applied_supersession_id")),
+                "affected": None}
     conflict = existing_successor(workspace, assessment["target_requirement_id"])
     return {
         "assessment": assessment,

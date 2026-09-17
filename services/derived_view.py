@@ -71,6 +71,12 @@ def effective_title_block(view: dict) -> dict:
     what the sheet said and what a person corrected both stay recoverable.
     """
     effective = dict(view.get("inherited_title_block") or {})
+    readings = effective.get("field_readings")
+    if readings is not None:
+        # Source revision/date remain in the inherited provenance record;
+        # only region evidence can fill a recovered title-block field.
+        for key, reading in readings.items():
+            effective[key] = reading.get("value")
     effective.update(view.get("title_block_overrides") or {})
     return effective
 

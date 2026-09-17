@@ -437,6 +437,14 @@ def examine_source(app, jobs, job: dict, *, store=None, governance_log=None) -> 
         return jobs.complete(job, state=perception_jobs.STATE_FAILED,
                              failure_reason=REASON_BYTES_MISSING)
 
+    from services import drawing_segmentation
+    try:
+        drawing_segmentation.examine_title_blocks(
+            store, workspace, source["id"], raw, governance_log=governance_log)
+        workspace = store.get(job["workspace_id"]) or workspace
+    except Exception as exc:
+        logger.warning("title-block examination failed for %s: %s", source["id"], exc)
+
     frame, frame_name, page_number, is_pdf = _frame_for(
         raw, job.get("source_name") or source.get("name") or "")
     if frame is None:

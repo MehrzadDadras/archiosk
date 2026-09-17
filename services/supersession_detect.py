@@ -47,6 +47,58 @@ from typing import Optional
 
 DETECT_VERSION = "supersession-detect@1"
 
+
+def scoped_directive(text):
+    """A bounded, explicit directive; proximity alone never establishes scope.
+
+    Only a complete paragraph with one target is supported. More complicated
+    language remains a detection proposal, never an authoritative target.
+    """
+    body = str(text or "").strip()
+    whole = re.fullmatch(
+        r'This document (?:replaces|supersedes) "([^"\n]+)" in its entirety\.?',
+        body, re.I)
+    if whole:
+        return {"scope": "whole_document", "target_name": whole[1],
+                "action": "replaces"}
+    reference = r"(?:Section|Clause|Paragraph|Article)\s+(\d+(?:\.\d+)*)\b"
+    patterns = (
+        ("replaces", rf"Replace {reference}(?: in its entirety)? (?:with|to read)[:\s]+(.+)"),
+        ("replaces", rf"Delete {reference}(?: in its entirety)? and replace (?:it )?with[:\s]+(.+)"),
+        ("amends", rf"{reference} is (?:amended|revised) to read[:\s]+(.+)"),
+        ("replaces", rf"{reference} is replaced (?:in its entirety )?with[:\s]+(.+)"),
+        ("deletes", rf"Delete {reference}(?: in its entirety)?\.?"),
+    )
+    for action, pattern in patterns:
+        match = re.fullmatch(pattern, body, re.I | re.S)
+        if match and len(clause_references(body)) == 1:
+            if action != "deletes" and match[2].strip().rstrip(".:").lower() in ("the following", "as follows", "follows"):
+                return None
+            return {"scope": "clause", "clause": match[1], "action": action}
+    return None
+
+
+def clause_paragraph(text, clause):
+    """Does this entire paragraph state exactly this clause, not cite it?
+
+    Multiple headings, subclauses, or a heading without body are not a proven
+    paragraph scope. They require a finer address before acceptance can apply.
+    """
+    body = str(text or "").strip()
+    heading = re.match(
+        r"(?:Section|Clause|Paragraph|Article)\s+(\d+(?:\.\d+)*)\b[.: \t]+(\S.+)",
+        body, re.I | re.S)
+    headings = re.findall(r"(?m)^\s*(?:(?:Section|Clause|Paragraph|Article)\s+)?\d+(?:\.\d+)+\b", body, re.I)
+    return bool(heading and heading[1] == clause and len(headings) == 1
+                and not scoped_directive(body))
+
+
+def has_directed_change(text):
+    """Nominate uncertain scope only when an action is directed at a reference."""
+    ref = r"(?:Section|Clause|Paragraph|Article)\s+\d+(?:\.\d+)*\b"
+    return bool(re.match(rf"\s*(?:(?:Replace|Delete|Amend|Revise)\s+{ref}|{ref}\s+is\s+(?:amended|revised|replaced|deleted)\b)",
+                         str(text or ""), re.I))
+
 #: What the addendum is doing to the clause it names.
 ACTION_REPLACES = "replaces"
 ACTION_AMENDS = "amends"

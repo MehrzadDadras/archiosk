@@ -172,6 +172,15 @@ def read_region(raw_bytes: bytes, page_index: int, rect, *, rotate: int = 0,
     trusting a character count - the measured failure mode on a real sheet was
     thousands of characters of noise, which looks like success by length alone.
     """
+    # Native text is read from this bounded region, never from a filename or
+    # the package register. Scans still use the existing local OCR seam.
+    import pymupdf
+    with pymupdf.open(stream=raw_bytes, filetype="pdf") as document:
+        text = document[page_index].get_text("text", clip=pymupdf.Rect(rect))
+    if text.strip():
+        return {"ran": True, "text": text, "rotate": rotate,
+                "method": "native_region_text",
+                "legible_ratio": raster_extraction.legible_ratio(text)}
     result = raster_extraction.extract_region_text(
         raw_bytes, page_index, rect, dpi=dpi, rotate=rotate, psm=psm,
         engine=engine, reader=reader)
@@ -217,6 +226,24 @@ def segment_sheet(store, workspace, source_id: str, page_structural_unit_id: str
         best = best_reading(readings)
         text = (best or {}).get("text") or ""
         scale = parse_scale_notation(text) or {}
+        from services.drawing_intelligence import _title_block_fields_for_page
+        fields = _title_block_fields_for_page(text, page_index + 1)
+        readings = {}
+        for key in ("sheet_number", "sheet_title", "discipline", "revision",
+                    "issue_date", "issue_state"):
+            field = fields.get("drawing_title" if key == "sheet_title" else key) or {}
+            # A prefix classification is not a recovered title-block field.
+            if field.get("reliability") == "inferred":
+                field = {}
+            certainty = "RECOVERED" if field.get("value") else "UNRESOLVED"
+            readings[key] = {"value": field.get("value"), "certainty": certainty,
+                             "source_id": source_id, "page_index": page_index,
+                             "region": list(candidate["rect"]),
+                             "method": (best or {}).get("method", "region_ocr"),
+                             "evidence_snippet": field.get("evidence_snippet"),
+                             "note": (None if field.get("value") else
+                                      "This field could not be established from the title-block region."),
+                             "reliability": field.get("reliability")}
 
         view = store.create_derived_view(
             workspace,
@@ -236,6 +263,7 @@ def segment_sheet(store, workspace, source_id: str, page_structural_unit_id: str
             unit_system=scale.get("unit_system"),
             source_rotation_degrees=float((best or {}).get("rotate") or 0),
             normalized_rotation_degrees=0.0,
+            title_block_readings=readings,
             governance_log=governance_log,
         )
         created.append({
@@ -255,3 +283,41 @@ def segment_sheet(store, workspace, source_id: str, page_structural_unit_id: str
         "best_convention": (max(created, key=lambda c: c["legible_ratio"])["convention"]
                             if created else None),
     }
+
+
+def examine_title_blocks(store, workspace, source_id, raw_bytes, *, actor="visual-worker",
+                         governance_log=None):
+    """Activate the existing producer over the source's registered pages.
+
+    Originals stay untouched; an image is wrapped in a transient PDF only for
+    the existing region reader. Persisted provenance names the original source.
+    """
+    import pymupdf
+
+    with pymupdf.open(stream=raw_bytes) as original:
+        pdf = raw_bytes if original.is_pdf else original.convert_to_pdf()
+    existing = {(v["page_structural_unit_id"], v.get("derivation_reason"))
+                for v in workspace.derived_views if v.get("source_id") == source_id
+                and (v.get("inherited_title_block") or {}).get("field_readings")}
+    with pymupdf.open(stream=pdf, filetype="pdf") as document:
+        # OCR failure does not erase a physically present page. The perception
+        # worker may have returned before registering any page structure; use
+        # the existing unconditional page primitive without inventing text.
+        if not any(u.get("source_id") == source_id and u.get("unit_type") in
+                   ("page", "sheet", "image") for u in workspace.structural_units):
+            store.register_pdf_page_structure(
+                workspace, source_id, [""] * len(document),
+                extractor_version="pymupdf page structure (no text assertion)",
+                actor=actor, governance_log=governance_log)
+        for unit in workspace.structural_units:
+            if unit.get("source_id") != source_id or unit.get("unit_type") not in ("page", "sheet", "image"):
+                continue
+            index = int(unit.get("order_index") or 0)
+            if index < 0 or index >= len(document):
+                continue
+            if any(page == unit["id"] for page, _ in existing):
+                continue
+            page = document[index]
+            segment_sheet(store, workspace, source_id, unit["id"], pdf, index,
+                          page.rect.width, page.rect.height, actor,
+                          governance_log=governance_log)

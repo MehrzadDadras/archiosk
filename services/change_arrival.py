@@ -221,6 +221,11 @@ def assessment_brief(store, workspace, assessment_id: str) -> dict:
         (a for a in workspace.change_arrival_assessments if a["id"] == assessment_id), None)
     if assessment is None:
         raise ChangeArrivalError("Assessment %s was not found." % assessment_id)
+    if assessment.get("supersession_proposal_id"):
+        from services.change_application import transition_brief
+        return {**transition_brief(store, workspace, assessment_id),
+                "moves_authority": assessment["change_type"] in AUTHORITY_MOVING_CHANGE_TYPES,
+                "awaiting_human": assessment.get("state") == CHANGE_ARRIVAL_STATE_PROPOSED}
     return {
         "assessment": assessment,
         "moves_authority": assessment["change_type"] in AUTHORITY_MOVING_CHANGE_TYPES,

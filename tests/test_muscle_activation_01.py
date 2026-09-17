@@ -63,6 +63,9 @@ class _FakeWorkspace:
         self.project_id = "p1"
         self.sources = sources
         self.evidence_items = []
+        self.addressable_regions = []
+        self.structural_units = []
+        self.change_arrival_assessments = []
         self._pages = pages
 
 
@@ -150,68 +153,239 @@ class F4SupersessionActivated(unittest.TestCase):
     ADDENDUM = "add-3"
 
     def _build(self, addendum_text):
-        workspace = _FakeWorkspace(
-            sources=[{"id": self.BASE, "name": "Specification.pdf"},
-                     {"id": self.ADDENDUM, "name": "Addendum 3.pdf"}],
-            pages={})
-        _patch_pages(self, {
-            self.BASE: "Section 2.4 AHU-1 shall serve Room 203.",
-            self.ADDENDUM: addendum_text,
-        })
-        return _FakeStore(workspace), workspace
+        import tempfile
+        from services.case_workspace import CaseWorkspaceStore
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = CaseWorkspaceStore(Path(tmp.name))
+        workspace = store.get_or_create("scope-qualification")
+        base = store.add_source(workspace, name="Specification.pdf", file_path=None,
+                                kind="project_document", document_authority="contractual")
+        addendum = store.add_source(workspace, name="Addendum 3.pdf", file_path=None,
+                                    kind="project_document", document_authority="contractual")
+        self.BASE, self.ADDENDUM = base["id"], addendum["id"]
+        store.register_pdf_page_structure(workspace, self.BASE,
+            ["Section 2.4 AHU-1 shall serve Room 203.\n\nSection 2.5 Doors shall remain locked."])
+        store.register_pdf_page_structure(workspace, self.ADDENDUM, [addendum_text])
+        return store, workspace
 
-    def test_a_replacement_creates_the_governed_supersession(self):
+    def test_replacement_requires_acceptance_and_preserves_exact_scope_after_reload(self):
+        from services import change_application as ca
         store, workspace = self._build(
-            "Addendum 3. Delete Section 2.4 and replace with the following.")
+            "Replace Section 2.4 with: AHU-1 shall serve Room 204.")
         report = package_muscles.register_supersessions(
             store, workspace, self.ADDENDUM)
 
-        self.assertEqual(report["recorded"], 1)
-        self.assertEqual(report["clauses"], ["2.4"])
-        self.assertEqual(len(store.supersessions), 1)
-        self.assertEqual(store.supersessions[0]["predecessor_id"], self.BASE)
-        self.assertEqual(store.supersessions[0]["successor_id"], self.ADDENDUM)
-        self.assertIn("2.4", store.supersessions[0]["reason"])
+        self.assertEqual(report["recorded"], 0)
+        self.assertEqual(report["proposed"], 1)
+        self.assertEqual(workspace.supersessions, [])
+        assessment_id = report["assessment_ids"][0]
+        original = {e["id"]: dict(e) for e in workspace.evidence_items}
+        with self.assertRaises(ca.ChangeApplicationError):
+            ca.apply_accepted_change(store, workspace, assessment_id, actor="reviewer")
+        store.review_change_arrival_assessment(workspace, assessment_id, actor="reviewer", outcome="accepted")
+        workspace = store.get(workspace.project_id)
+        ca.apply_accepted_change(store, workspace, assessment_id, actor="reviewer")
+        workspace = store.get(workspace.project_id)
+        link = workspace.supersessions[0]
+        self.assertEqual(link["predecessor_type"], "evidence_item")
+        self.assertEqual(link["successor_type"], "evidence_item")
+        self.assertEqual(original[link["predecessor_id"]]["content"], "Section 2.4 AHU-1 shall serve Room 203.")
+        self.assertEqual(original[link["successor_id"]]["content"], "Replace Section 2.4 with: AHU-1 shall serve Room 204.")
+        self.assertEqual(link["authority_class"], "contractual")
+        for item in workspace.evidence_items:
+            self.assertEqual(item, original[item["id"]])
+            if "2.5" in item["content"]:
+                self.assertEqual(store.supersessions_for(workspace, "evidence_item", item["id"]), [])
+        self.assertEqual(store.supersessions_for(workspace, "source", self.BASE), [])
+        self.assertTrue(ca.apply_accepted_change(store, workspace, assessment_id, actor="reviewer")["already_applied"])
+        package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+        self.assertEqual(len(workspace.supersessions), 1)
+        self.assertEqual(len(workspace.change_arrival_assessments), 1)
 
     def test_a_mere_reference_creates_nothing(self):
         """The failure that would hide a requirement which still governs."""
         store, workspace = self._build(
-            "Addendum 3. Refer to Section 2.4 for coordination requirements.")
+            "Refer to Section 2.4 for coordination requirements.")
         report = package_muscles.register_supersessions(
             store, workspace, self.ADDENDUM)
 
         self.assertEqual(report["recorded"], 0)
-        self.assertEqual(store.supersessions, [],
+        self.assertEqual(workspace.supersessions, [],
                          "a reference was recorded as a replacement")
-        self.assertIn("2.4", report["mentions"])
+        self.assertEqual(report["proposed"], 0)
 
     def test_a_supplement_creates_nothing(self):
         store, workspace = self._build(
-            "Addendum 3. This clause supplements Section 2.4.")
+            "This clause supplements Section 2.4.")
         self.assertEqual(
             package_muscles.register_supersessions(
                 store, workspace, self.ADDENDUM)["recorded"], 0)
-        self.assertEqual(store.supersessions, [])
+        self.assertEqual(workspace.supersessions, [])
 
     def test_nothing_is_recorded_when_no_source_states_that_clause(self):
         """A supersession must point at something real."""
         store, workspace = self._build(
-            "Addendum 3. Delete Section 99.9 and replace with the following.")
+            "Replace Section 99.9 with: Use new equipment.")
         report = package_muscles.register_supersessions(
             store, workspace, self.ADDENDUM)
 
         self.assertEqual(report["recorded"], 0)
-        self.assertEqual(store.supersessions, [])
-        self.assertIn("no earlier source", report.get("note", ""))
+        self.assertEqual(workspace.supersessions, [])
+        self.assertEqual(report["unresolved"], 1)
 
     def test_both_documents_survive(self):
         store, workspace = self._build(
-            "Addendum 3. Delete Section 2.4 and replace with the following.")
+            "Replace Section 2.4 with: AHU-1 shall serve Room 204.")
         package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
 
         live = {s["id"] for s in workspace.sources if not s.get("removed_at")}
         self.assertEqual(live, {self.BASE, self.ADDENDUM},
                          "recording a supersession removed a document")
+
+    def test_ambiguous_predecessor_cannot_be_accepted(self):
+        from services.case_workspace import CaseWorkspaceError
+        store, workspace = self._build("Replace Section 2.4 with: New requirement.")
+        other = store.add_source(workspace, name="Other.pdf", file_path=None, kind="project_document")
+        store.register_pdf_page_structure(workspace, other["id"], ["Section 2.4 Another requirement."])
+        report = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+        self.assertEqual(report["unresolved"], 1)
+        assessment = workspace.change_arrival_assessments[0]
+        _, proposal = package_muscles.supersession_proposal(workspace, assessment["supersession_proposal_id"])
+        self.assertIsNone(proposal["predecessor"])
+        self.assertEqual(len(proposal["predecessor_candidates"]), 2)
+        with self.assertRaises(CaseWorkspaceError):
+            store.review_change_arrival_assessment(workspace, assessment["id"], actor="reviewer", outcome="accepted")
+        self.assertEqual(workspace.supersessions, [])
+
+    def test_explicit_whole_document_replacement_only_after_acceptance(self):
+        from services import change_application as ca
+        store, workspace = self._build('This document replaces "Specification.pdf" in its entirety.')
+        report = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+        self.assertEqual(workspace.supersessions, [])
+        self.assertEqual(report["unresolved"], 0)
+        aid = report["assessment_ids"][0]
+        store.review_change_arrival_assessment(workspace, aid, actor="reviewer", outcome="accepted")
+        ca.apply_accepted_change(store, workspace, aid, actor="reviewer")
+        link = store.get(workspace.project_id).supersessions[0]
+        self.assertEqual((link["predecessor_type"], link["predecessor_id"]), ("source", self.BASE))
+        self.assertEqual((link["successor_type"], link["successor_id"]), ("source", self.ADDENDUM))
+        self.assertEqual(workspace.sources[0]["superseded_by_source_id"], self.ADDENDUM)
+        self.assertEqual(workspace.sources[1]["supersedes_source_id"], self.BASE)
+
+    def test_rejection_or_deferral_never_applies(self):
+        from services import change_application as ca
+        for outcome in (None, "rejected"):
+            with self.subTest(outcome=outcome):
+                store, workspace = self._build("Section 2.4 is amended to read: New requirement.")
+                aid = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)["assessment_ids"][0]
+                if outcome:
+                    store.review_change_arrival_assessment(workspace, aid, actor="reviewer", outcome=outcome)
+                with self.assertRaises(ca.ChangeApplicationError):
+                    ca.apply_accepted_change(store, workspace, aid, actor="reviewer")
+                self.assertEqual(workspace.supersessions, [])
+
+    def test_missing_authority_or_ocr_target_is_unresolved(self):
+        for weak in ("authority", "ocr"):
+            with self.subTest(weak=weak):
+                store, workspace = self._build("Replace Section 2.4 with: New requirement.")
+                if weak == "authority":
+                    workspace.sources[1]["document_authority"] = None
+                else:
+                    workspace.evidence_items[0]["evidence_class"] = "ai_generated_proposal"
+                report = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+                self.assertEqual(report["unresolved"], 1)
+                self.assertEqual(workspace.supersessions, [])
+
+    def test_changed_evidence_after_acceptance_is_refused(self):
+        from services import change_application as ca
+        store, workspace = self._build("Replace Section 2.4 with: New requirement.")
+        aid = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)["assessment_ids"][0]
+        store.review_change_arrival_assessment(workspace, aid, actor="reviewer", outcome="accepted")
+        workspace.evidence_items[0]["content"] = "Section 2.4 Changed text at the same clause id."
+        with self.assertRaises(ca.ChangeApplicationError):
+            ca.apply_accepted_change(store, workspace, aid, actor="reviewer")
+        self.assertEqual(workspace.supersessions, [])
+
+    def test_nearby_replacement_verb_does_not_promote_a_mention(self):
+        store, workspace = self._build("Refer to Section 2.4. Replace damaged equipment promptly.")
+        report = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+        self.assertEqual(report["proposed"], 0)
+        self.assertEqual(workspace.supersessions, [])
+
+    def test_multiple_clause_headings_in_one_paragraph_require_finer_scope(self):
+        store, workspace = self._build("Replace Section 2.4 with: New requirement.")
+        workspace.evidence_items[0]["content"] += "\nSection 2.6 Keep this separate clause."
+        report = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+        self.assertEqual(report["unresolved"], 1)
+        self.assertEqual(workspace.supersessions, [])
+
+    def test_replacement_without_its_body_is_unresolved(self):
+        store, workspace = self._build("Delete Section 2.4 and replace with the following.")
+        report = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)
+        self.assertEqual(report["unresolved"], 1)
+        self.assertEqual(workspace.supersessions, [])
+
+    def test_runtime_accept_and_apply_routes_keep_the_same_human_gate(self):
+        import app as app_module
+        from unittest.mock import patch
+        from routes import workspace as routes
+        store, workspace = self._build("Replace Section 2.4 with: New requirement.")
+        aid = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)["assessment_ids"][0]
+        app = app_module.create_app("testing")
+        from models import db, User
+        from werkzeug.security import generate_password_hash
+        with app.app_context():
+            db.create_all()
+            user = User.query.filter_by(username="scope-reviewer").first()
+            if user is None:
+                user = User(username="scope-reviewer", role="customer")
+                user.password_hash = generate_password_hash("scope-test-password")
+                db.session.add(user)
+                db.session.commit()
+        client = app.test_client()
+        client.post("/login", data={"username": "scope-reviewer", "password": "scope-test-password"})
+        root = "/projects/%s/workspace/change-arrival/%s" % (workspace.project_id, aid)
+        with patch.object(routes, "_load_workspace_or_404", side_effect=lambda _: (None, store, store.get(workspace.project_id))), \
+                patch.object(routes, "_reviewer", return_value="human-reviewer"), \
+                patch.object(routes, "_log", return_value=None):
+            self.assertEqual(client.post(root + "/apply").status_code, 302)
+            self.assertEqual(store.get(workspace.project_id).supersessions, [])
+            self.assertEqual(client.post(root + "/review", data={"outcome": "accepted"}).status_code, 302)
+            self.assertEqual(store.get(workspace.project_id).supersessions, [])
+            self.assertEqual(client.post(root + "/apply").status_code, 302)
+            reloaded = store.get(workspace.project_id)
+            self.assertEqual(len(reloaded.supersessions), 1)
+            self.assertEqual(reloaded.supersessions[0]["predecessor_type"], "evidence_item")
+
+    def test_interrupted_assessment_stamp_reuses_the_authoritative_edge(self):
+        from unittest.mock import patch
+        from services import change_application as ca
+        store, workspace = self._build("Replace Section 2.4 with: New requirement.")
+        aid = package_muscles.register_supersessions(store, workspace, self.ADDENDUM)["assessment_ids"][0]
+        store.review_change_arrival_assessment(workspace, aid, actor="reviewer", outcome="accepted")
+        with patch.object(store, "mark_change_arrival_applied", side_effect=RuntimeError("interrupted")):
+            with self.assertRaises(RuntimeError):
+                ca.apply_accepted_change(store, workspace, aid, actor="reviewer")
+        workspace = store.get(workspace.project_id)
+        ca.apply_accepted_change(store, workspace, aid, actor="reviewer")
+        self.assertEqual(len(workspace.supersessions), 1)
+
+    def test_conflicting_accepted_successors_are_not_silently_branched(self):
+        from services import change_application as ca
+        store, workspace = self._build("Replace Section 2.4 with: First replacement.")
+        second = store.add_source(workspace, name="Second.pdf", file_path=None,
+                                  kind="project_document", document_authority="contractual")
+        store.register_pdf_page_structure(workspace, second["id"], ["Replace Section 2.4 with: Second replacement."])
+        aids = [package_muscles.register_supersessions(store, workspace, sid)["assessment_ids"][0]
+                for sid in (self.ADDENDUM, second["id"])]
+        for aid in aids:
+            store.review_change_arrival_assessment(workspace, aid, actor="reviewer", outcome="accepted")
+        ca.apply_accepted_change(store, workspace, aids[0], actor="reviewer")
+        with self.assertRaises(ca.ChangeApplicationConflict):
+            ca.apply_accepted_change(store, workspace, aids[1], actor="reviewer")
+        self.assertEqual(len(ca.pending_conflicts(store, workspace)), 1)
+        self.assertFalse(ca.transition_brief(store, workspace, aids[1])["applicable"])
 
 
 class F5ManifestGapActivated(unittest.TestCase):
@@ -317,9 +491,8 @@ class MixedPackageActivated(unittest.TestCase):
         self.assertIn("equipment:AHU-1",
                       package_muscles.subjects_of(workspace, "m501"))
 
-        # COMPARE / REASON - the addendum replaces a clause the spec states.
-        self.assertTrue(store.supersessions, "no supersession was recorded")
-        self.assertEqual(store.supersessions[0]["predecessor_id"], "spec")
+        # Unanchored test strings do not prove a clause endpoint or authorize lineage.
+        self.assertEqual(store.supersessions, [])
 
         # REASON - a declared sheet was not delivered.
         gaps = [json.loads(e["content"])["missing"] for e in store.evidence

@@ -370,6 +370,11 @@ def register_sheet_index(store, workspace, source_id: str, *,
             report["ambiguous"].append(reference)
         elif status == RESOLUTION_STATUS_TARGET_NOT_FOUND:
             report["not_found"].append(reference)
+    # This is the normal perception caller, including native-text packages
+    # that never need a visual/model call. Persist the observation separately
+    # from SourceReference's historical resolution status.
+    register_manifest_gap_evidence(store, workspace, source_id,
+                                   actor=actor, governance_log=governance_log)
     return report
 
 
@@ -458,17 +463,18 @@ def sheet_identity_of(source, *, view=None):
                 title_basis = dv.title_block_provenance(view) \
                     if hasattr(dv, "title_block_provenance") else None
 
+    readings = ((view or {}).get("inherited_title_block") or {}).get("field_readings")
     recovered = sorted(source_sheet_tokens(source or {}))
     recovered_token = recovered[0] if len(recovered) == 1 else None
 
-    token = title_token or recovered_token
+    token = title_token if readings is not None else title_token or recovered_token
     conflict = bool(title_token and recovered_token
                     and title_token != recovered_token)
     if conflict:
         certainty = "UNRESOLVED"
     elif title_token:
         certainty = "RECOVERED"
-    elif recovered_token:
+    elif recovered_token and readings is None:
         certainty = "PARTIALLY_RECOVERED"
     else:
         certainty = "UNRESOLVED"
@@ -486,7 +492,44 @@ def sheet_identity_of(source, *, view=None):
         "recovered_tokens": recovered,
         "conflict": conflict,
         "version": REGISTER_VERSION,
+        "field_readings": readings,
     }
+
+
+def title_block_readings(workspace, source_id):
+    """Per-page fields from the actual candidate regions, never source metadata.
+
+    Agreeing candidates corroborate a reading; disagreement is unresolved.
+    Blank candidates contribute no invented value. All candidate provenance is
+    preserved so a value can be inspected at the region that supplied it.
+    """
+    from services import binding
+
+    pages = {}
+    for view in workspace.derived_views:
+        if view.get("source_id") != source_id:
+            continue
+        readings = (view.get("inherited_title_block") or {}).get("field_readings")
+        if readings is not None:
+            pages.setdefault(view["page_structural_unit_id"], []).append(readings)
+    result = []
+    for page_id, candidates in pages.items():
+        fields = {}
+        for key in ("sheet_number", "sheet_title", "discipline", "revision", "issue_date", "issue_state"):
+            origins = [c[key] for c in candidates if key in c]
+            usable = [r for r in origins if r.get("value") and r.get("certainty") in
+                      ("RECOVERED", "PARTIALLY_RECOVERED")]
+            values = {r["value"] for r in usable}
+            certainty = "UNRESOLVED"
+            if len(values) == 1:
+                certainty = "RECOVERED"
+                for r in usable:
+                    certainty = binding.weaker(certainty, r["certainty"])
+            fields[key] = {"value": next(iter(values)) if len(values) == 1 else None,
+                           "certainty": certainty, "provenance": origins,
+                           "conflict": len(values) > 1}
+        result.append({"page_structural_unit_id": page_id, "fields": fields})
+    return result
 
 
 # -- CLAUDE-MUSCLE-F5-01: declared but not delivered --------------------------
@@ -495,6 +538,40 @@ def sheet_identity_of(source, *, view=None):
 #: CONTENTS - the only claim is that the package declared it and did not
 #: contain it, which is exactly what the evidence supports.
 MISSING_FINDING_KIND = "expected_source_absent"
+MANIFEST_GAP_CONTENT_TYPE = "application/vnd.archiosk.manifest-gap+json"
+
+
+def register_manifest_gap_evidence(store, workspace, source_id, *, actor="system",
+                                   governance_log=None):
+    """Append a dated observation; never rewrite an earlier absence.
+
+    The current projection is recomputed from current Sources. An unchanged
+    observation is idempotent; a later empty observation cannot erase the
+    earlier missing-sheet evidence.
+    """
+    import json
+    from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
+
+    gaps = declared_but_absent(workspace, source_id)
+    previous = [e for e in workspace.evidence_items
+                if e.get("source_id") == source_id
+                and e.get("content_type") == MANIFEST_GAP_CONTENT_TYPE]
+    if not gaps and not previous:
+        return {"registered": 0, "missing": []}
+    payload = {"missing": gaps, "version": REGISTER_VERSION,
+               "scope": "sources present in this project at observation time",
+               "observed_source_ids": sorted(s["id"] for s in workspace.sources
+                                             if not s.get("removed_at")),
+               "historical_observation": True}
+    content = json.dumps(payload, sort_keys=True)
+    if previous and previous[-1].get("content") == content:
+        return {"registered": 0, "missing": [g["sheet_token"] for g in gaps]}
+    evidence = store.register_evidence_item(
+        workspace, source_id=source_id, evidence_class=EVIDENCE_CLASS_AI_GENERATED_PROPOSAL,
+        content=content, content_type=MANIFEST_GAP_CONTENT_TYPE,
+        extractor_version=REGISTER_VERSION, actor=actor, governance_log=governance_log)
+    return {"registered": len(gaps), "missing": [g["sheet_token"] for g in gaps],
+            "evidence_item_id": evidence["id"]}
 
 
 def missing_sheet_findings(report):
@@ -525,7 +602,7 @@ def missing_sheet_findings(report):
             "discipline": discipline_of(token),
             "statement": ("%s is listed on this package's own index and no "
                           "source in the project carries that sheet number."
-                          % token),
+                          % verbatim),
             "contents_claim": None,
             "certainty": "RECOVERED",
             "version": REGISTER_VERSION,
@@ -549,10 +626,9 @@ def declared_but_absent(workspace, source_id: str) -> list:
     the read path instead. The detection logic is not duplicated - only the
     comparison, which the worker already discards.
     """
+    from services import view_reference
     held = set()
-    for source in (getattr(workspace, "sources", None) or []):
-        if source.get("removed_at"):
-            continue
+    for source in view_reference.eligible_targets(None, workspace, exclude_source_id=source_id):
         held |= source_sheet_tokens(source)
 
     declared, seen = [], set()

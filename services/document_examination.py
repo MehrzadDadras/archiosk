@@ -285,7 +285,27 @@ def _visual_lines(visual) -> tuple[list, list, list]:
                  if o.get("certainty") == vx.RECOVERED]
     partial = [_phrase(o) for o in observations
                if o.get("certainty") == vx.PARTIALLY_RECOVERED]
-    return recovered, partial, list(visual.get("unresolved") or [])
+    unresolved = list(visual.get("unresolved") or [])
+    from services import binding
+
+    # Read the persisted components again; a cached aggregate is not evidence.
+    for segment in (visual.get("graph") or {}).get("segments") or []:
+        dimension = segment.get("dimension") or {}
+        if not dimension:
+            continue
+        target = segment.get("label") or segment.get("id") or "boundary segment"
+        certainty = binding.bound_certainty(dimension)
+        phrase = "%s: %s (attachment %s; read %s)" % (
+            target, dimension.get("text", ""), certainty,
+            dimension.get("read_certainty", dimension.get("certainty", "UNRESOLVED")))
+        if certainty == vx.RECOVERED:
+            recovered.append(phrase)
+        elif certainty == vx.PARTIALLY_RECOVERED:
+            partial.append(phrase)
+        else:
+            unresolved.append("Dimension attachment to %s is %s; do not use it as a bound value"
+                              % (target, certainty))
+    return recovered, partial, unresolved
 
 
 def _reached_an_interpretation(document) -> bool:
@@ -671,6 +691,15 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     # unresolved - and nothing else. No paragraph about how vision works, no
     # explanation of what a certainty state is.
     visual_recovered, visual_partial, visual_unresolved = _visual_lines(visual)
+    if source:
+        from services.sheet_identity import title_block_readings
+
+        for page in title_block_readings(workspace, source["id"]):
+            for key, field in page["fields"].items():
+                entry = {"label": "Sheet " + key.replace("_", " "),
+                         "value": (str(field["value"]) + " (" + field["certainty"] + ")"
+                                   if field["value"] is not None else "UNRESOLVED")}
+                (interpretation if field["value"] is not None else not_established).append(entry)
     if visual_recovered:
         interpretation.append({"label": "Recovered",
                                "value": "; ".join(visual_recovered)})
@@ -778,13 +807,14 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
     try:
         from services import sheet_identity
 
-        missing_sheets = (sheet_identity.declared_but_absent(
-            workspace, source["id"]) if source else [])
+        missing_sheets = [entry for package_source in _live_sources(workspace)
+                          for entry in sheet_identity.declared_but_absent(
+                              workspace, package_source["id"])] if workspace else []
     except Exception:  # noqa: BLE001 - a manifest check never fails a result
         missing_sheets = []
     for entry in missing_sheets:
         not_established.append({
-            "label": "Listed but not received",
+            "label": "Missing evidence: " + entry["reference_text"],
             "value": entry["statement"],
         })
 

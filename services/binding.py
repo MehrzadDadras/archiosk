@@ -161,9 +161,19 @@ def bound_certainty(record) -> str:
     """
     if not isinstance(record, dict):
         return UNRESOLVED
+    def state(value):
+        value = str(value or "").strip().upper()
+        return value if value in CERTAINTY_ORDER else UNRESOLVED
+
+    result = weaker(state(record.get("read_certainty")),
+                    state(record.get("bind_certainty")))
+    if "bind_basis" in record:
+        result = weaker(result, ceiling_for(record["bind_basis"]))
+    # A stored aggregate is a cache, never authority to strengthen either
+    # component. Preserve a more conservative stored decision as well.
     if "bound_certainty" in record:
-        return record["bound_certainty"]
-    return weaker(record.get("read_certainty"), record.get("bind_certainty"))
+        result = weaker(result, state(record["bound_certainty"]))
+    return result
 
 
 def is_value_bearing(record) -> bool:

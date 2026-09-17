@@ -137,6 +137,9 @@ _FIELD_PATTERNS: dict[str, list[re.Pattern]] = {
     "revision": [
         re.compile(r"^rev(ision)?\s*(no\.?|number|#)?\s*:\s*(?P<value>.+)$", re.IGNORECASE),
     ],
+    "issue_state": [
+        re.compile(r"^(issue\s*(state|status)|drawing\s*status)\s*:\s*(?P<value>.+)$", re.IGNORECASE),
+    ],
     "scale": [
         re.compile(r"^scale\s*:\s*(?P<value>.+)$", re.IGNORECASE),
     ],

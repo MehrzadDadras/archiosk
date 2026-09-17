@@ -3219,12 +3219,16 @@ class ChangeArrivalAssessment:
     `change_type` may be CHANGE_TYPE_REVIEW, which is an explicit refusal to
     guess at ambiguous scope rather than a low-confidence amendment. Nothing
     downstream may treat REVIEW as a weak AMENDS.
+
+    Cycle 4: `supersession_proposal_id` may identify proposal evidence with
+    exact evidence/source endpoints instead of a `target_requirement_id`.
+    These are mutually exclusive targets and share the same review/apply gate.
     """
 
     id: str
     project_id: str
     incoming_source_id: str
-    target_requirement_id: str
+    target_requirement_id: Optional[str]
     change_type: str            # open-world, KNOWN_CHANGE_TYPES
     authority_basis: Optional[str]
     evidence: str
@@ -3244,6 +3248,8 @@ class ChangeArrivalAssessment:
     applied_successor_id: Optional[str] = None
     applied_at: Optional[str] = None
     applied_by: Optional[str] = None
+    # Scoped evidence/source proposals use the SAME human review/apply path.
+    supersession_proposal_id: Optional[str] = None
 
 
 @dataclass
@@ -7368,7 +7374,7 @@ class CaseWorkspaceStore:
         self,
         workspace: ProjectWorkspace,
         incoming_source_id: str,
-        target_requirement_id: str,
+        target_requirement_id: Optional[str],
         change_type: str,
         evidence: str,
         created_by: str,
@@ -7377,6 +7383,7 @@ class CaseWorkspaceStore:
         uncertainty: Optional[str] = None,
         subject_scope: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
+        supersession_proposal_id: Optional[str] = None,
     ) -> dict:
         """Record ONE proposed change, PROPOSED and awaiting a human.
 
@@ -7388,7 +7395,20 @@ class CaseWorkspaceStore:
         if source is None:
             raise CaseWorkspaceError(f"Source {incoming_source_id} was not found.")
         requirement = self._find(workspace.requirements, target_requirement_id)
-        if requirement is None:
+        if supersession_proposal_id is not None:
+            from services.package_muscles import supersession_proposal
+            try:
+                item, proposal = supersession_proposal(workspace, supersession_proposal_id)
+            except (ValueError, TypeError) as exc:
+                raise CaseWorkspaceError(str(exc)) from exc
+            if target_requirement_id is not None or item["source_id"] != incoming_source_id:
+                raise CaseWorkspaceError("Scoped proposal and assessment endpoints disagree.")
+            expected_change = (CHANGE_TYPE_AMENDS if proposal["action"] == "amends"
+                               else CHANGE_TYPE_SUPERSEDES) if proposal["certainty"] == "RECOVERED" else CHANGE_TYPE_REVIEW
+            if (change_type != expected_change or authority_basis != proposal["authority_basis"]
+                    or evidence != proposal["directive_text"] or subject_scope != proposal["scope"]):
+                raise CaseWorkspaceError("Assessment must preserve the proposal's scope and authority.")
+        elif requirement is None:
             raise CaseWorkspaceError(
                 f"Requirement {target_requirement_id} was not found.")
 
@@ -7406,6 +7426,7 @@ class CaseWorkspaceStore:
             confidence=confidence,
             uncertainty=uncertainty,
             subject_scope=subject_scope,
+            supersession_proposal_id=supersession_proposal_id,
         )
         workspace.change_arrival_assessments.append(asdict(assessment))
         self.save(workspace)
@@ -7448,6 +7469,17 @@ class CaseWorkspaceStore:
                 f"'{outcome}' is not a valid review outcome. Use one of: "
                 f"{CHANGE_ARRIVAL_STATE_ACCEPTED}, {CHANGE_ARRIVAL_STATE_REJECTED}."
             )
+        if assessment.get("supersession_proposal_id"):
+            if assessment.get("applied_supersession_id"):
+                raise CaseWorkspaceError("An applied change cannot be re-reviewed; its history must remain intact.")
+            if outcome == CHANGE_ARRIVAL_STATE_ACCEPTED:
+                from services.package_muscles import supersession_proposal
+                try:
+                    _, proposal = supersession_proposal(workspace, assessment["supersession_proposal_id"])
+                except (ValueError, TypeError) as exc:
+                    raise CaseWorkspaceError(str(exc)) from exc
+                if proposal["certainty"] != "RECOVERED" or assessment["change_type"] not in AUTHORITY_MOVING_CHANGE_TYPES:
+                    raise CaseWorkspaceError("Unresolved scope or authority cannot be accepted as supersession.")
         assessment["state"] = outcome
         assessment["reviewed_by"] = actor
         assessment["reviewed_at"] = _now()
@@ -7507,6 +7539,7 @@ class CaseWorkspaceStore:
         project_north_method: Optional[str] = None,
         project_north_confidence: Optional[float] = None,
         governance_log: Optional[GovernanceLog] = None,
+        title_block_readings: Optional[dict] = None,
     ) -> dict:
         """Derive one governed view from a page. The page is not touched.
 
@@ -7550,6 +7583,11 @@ class CaseWorkspaceStore:
             "document_authority": source.get("document_authority"),
             "sheet_fields": dict((page.get("modality_metadata") or {}).get("fields") or {}),
         }
+
+        if title_block_readings is not None:
+            # Administrative inheritance is retained separately. It must never
+            # supply a missing value in the region's actual reading.
+            inherited["field_readings"] = dict(title_block_readings)
 
         view = DerivedView(
             id=_new_id(),

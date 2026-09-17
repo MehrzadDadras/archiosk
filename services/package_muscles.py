@@ -13,7 +13,9 @@ through a primitive that already existed:
 
     register_evidence_item        subject keys, manifest gaps
     record_evidence_relationship  same_subject_as between two evidence items
-    record_supersession           an addendum clause replacing a base clause
+    record_change_arrival_assessment  proposed scoped change awaiting human review
+
+Only change_application's accepted-change path may call record_supersession.
 
 WHY IT LIVES HERE AND NOT IN THE WORKER. The natural home is
 `services/perception_worker.py`, where sheet indexes are already registered
@@ -206,81 +208,120 @@ def _subject_row_id(workspace, source_id: str) -> Optional[str]:
 
 def register_supersessions(store, workspace, source_id: str, *,
                            actor: str = "system", governance_log=None) -> dict:
-    """F4. Record what an addendum actually replaces - and only that.
+    """Propose exact evidence lineage. Never write authoritative supersession."""
+    from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
 
-    A clause that amends or deletes an earlier one creates a governed
-    Supersession through `record_supersession`, the primitive that has existed
-    for this since Section 15. A clause that merely refers to an earlier one
-    creates NOTHING, and that restraint is the point: claiming a supersession
-    that did not happen removes a requirement that still governs from every
-    later reader's view.
+    report = {"recorded": 0, "proposed": 0, "unresolved": 0, "assessment_ids": []}
+    for candidate in supersession_candidates(workspace, source_id):
+        content = json.dumps(candidate, sort_keys=True)
+        evidence = next((e for e in workspace.evidence_items
+                         if e.get("source_id") == source_id
+                         and e.get("content_type") == SUPERSESSION_PROPOSAL_CONTENT_TYPE
+                         and e.get("content") == content), None)
+        if evidence is None:
+            evidence = store.register_evidence_item(
+                workspace, source_id=source_id,
+                evidence_class=EVIDENCE_CLASS_AI_GENERATED_PROPOSAL,
+                content=content, content_type=SUPERSESSION_PROPOSAL_CONTENT_TYPE,
+                actor=actor, governance_log=governance_log)
+        assessment = next((a for a in workspace.change_arrival_assessments
+                           if a.get("supersession_proposal_id") == evidence["id"]), None)
+        if assessment is None:
+            assessment = store.record_change_arrival_assessment(
+                workspace, incoming_source_id=source_id, target_requirement_id=None,
+                change_type=("amends" if candidate["action"] == "amends" else "supersedes")
+                            if candidate["certainty"] == "RECOVERED" else "review",
+                evidence=candidate["directive_text"], created_by=actor,
+                authority_basis=candidate["authority_basis"],
+                uncertainty=candidate["uncertainty"], subject_scope=candidate["scope"],
+                supersession_proposal_id=evidence["id"], governance_log=governance_log)
+        report["proposed"] += 1
+        report["unresolved"] += candidate["certainty"] != "RECOVERED"
+        report["assessment_ids"].append(assessment["id"])
+    return report
 
-    The predecessor is the SOURCE the clause belongs to, not the clause itself.
-    Clause-level objects do not exist in this application yet, and inventing
-    one here to be precise about the target would be a new primitive smuggled
-    in as a detail - the honest record is "this addendum supersedes something
-    in that source, at clause 2.4", with the clause named in the reason.
+
+SUPERSESSION_PROPOSAL_CONTENT_TYPE = "application/vnd.archiosk.supersession-proposal+json"
+
+
+def supersession_candidates(workspace, source_id):
+    """Read-only qualification from situated paragraphs, never filename recency.
+
+    Current support is an entire clause in one paragraph. Finer or uncertain
+    scopes remain unresolved, rather than silently acquiring Source endpoints.
     """
-    from services import supersession_detect
-    from services.case_workspace import OBJECT_KIND_SOURCE
-
-    text = _text_for(workspace, source_id)
-    entries = supersession_detect.detect(text)
-    superseding = [e for e in entries if e["supersedes"]]
-    if not superseding:
-        return {"recorded": 0, "clauses": [],
-                "mentions": [e["clause"] for e in entries]}
-
-    predecessor = _earlier_source_naming(workspace, source_id,
-                                         [e["clause"] for e in superseding])
-    if predecessor is None:
-        return {"recorded": 0, "clauses": [],
-                "mentions": [e["clause"] for e in entries],
-                "note": "no earlier source in this project states those clauses"}
-
-    recorded = []
-    for entry in superseding:
-        try:
-            store.record_supersession(
-                workspace,
-                predecessor_type=OBJECT_KIND_SOURCE, predecessor_id=predecessor,
-                successor_type=OBJECT_KIND_SOURCE, successor_id=source_id,
-                actor=actor,
-                reason="clause %s is %s by this document (%s)"
-                       % (entry["clause"], entry["action"],
-                          entry["reference_text"]))
-            recorded.append(entry["clause"])
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("supersession not recorded for %s clause %s (%s: %s)",
-                           source_id, entry["clause"], type(exc).__name__, exc)
-    return {"recorded": len(recorded), "clauses": recorded,
-            "predecessor_source_id": predecessor,
-            "mentions": [e["clause"] for e in entries if not e["supersedes"]]}
-
-
-def _earlier_source_naming(workspace, source_id: str, clauses: list):
-    """The earlier source that actually states one of these clauses.
-
-    Required so that a supersession points at something real. An addendum
-    naming Section 2.4 supersedes the document that CONTAINS Section 2.4, and
-    if this project holds no such document there is nothing to supersede - in
-    which case none is recorded, rather than one being attached to the nearest
-    plausible source.
-    """
-    from services import supersession_detect
-
-    wanted = set(clauses)
-    for other in (getattr(workspace, "sources", None) or []):
-        other_id = other.get("id")
-        if other_id == source_id or other.get("removed_at"):
+    from services import supersession_detect as sd, change_arrival
+    from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
+    sources = {s["id"]: s for s in workspace.sources if not s.get("removed_at")}
+    if source_id not in sources:
+        return []
+    regions = {r["id"]: r for r in workspace.addressable_regions}
+    units = {u["id"]: u for u in workspace.structural_units}
+    paragraphs = []
+    for e in workspace.evidence_items:
+        r = regions.get(e.get("region_id"), {})
+        u = units.get(r.get("structural_unit_id"), {})
+        if (e.get("content_type") == "text" and r.get("region_type") == "paragraph"
+                and u.get("source_id") == e.get("source_id")
+                and e.get("source_id") in sources):
+            paragraphs.append(e)
+    result = []
+    for e in paragraphs:
+        if e["source_id"] != source_id:
             continue
-        text = _text_for(workspace, other_id)
-        if not text:
-            continue
-        stated = {r["clause"] for r in supersession_detect.clause_references(text)}
-        if wanted & stated:
-            return other_id
-    return None
+        directive = sd.scoped_directive(e["content"])
+        if directive is None:
+            if not sd.has_directed_change(e["content"]):
+                continue
+            directive = {"scope": "unresolved", "action": "unknown"}
+        scope = directive["scope"]
+        if scope == "clause":
+            matches = [p for p in paragraphs if p["source_id"] != source_id
+                       and sd.clause_paragraph(p["content"], directive["clause"])]
+            endpoints = [{"type": "evidence_item", "id": p["id"]} for p in matches]
+            successor = {"type": "evidence_item", "id": e["id"]}
+        elif scope == "whole_document":
+            matches = [s for s in sources.values() if s["id"] != source_id
+                       and s.get("name") == directive["target_name"]]
+            endpoints = [{"type": "source", "id": s["id"]} for s in matches]
+            successor = {"type": "source", "id": source_id}
+        else:
+            matches, endpoints = [], []
+            successor = {"type": "evidence_item", "id": e["id"]}
+        authority = change_arrival.authority_of(sources[source_id])
+        proven = (len(matches) == 1 and scope != "unresolved"
+                  and e.get("evidence_class") == EVIDENCE_CLASS_DIRECT_SOURCE
+                  and (scope == "whole_document" or matches[0].get("evidence_class") == EVIDENCE_CLASS_DIRECT_SOURCE)
+                  and change_arrival.carries_change_authority(sources[source_id]))
+        import hashlib
+        def proof(item):
+            # Persist what was actually read, so changing text at the same id
+            # cannot leave a previously accepted proposal looking current.
+            region = regions.get(item.get("region_id"))
+            return {"evidence_id": item["id"], "source_id": item["source_id"],
+                    "region": region, "evidence_class": item.get("evidence_class"),
+                    "content_sha256": hashlib.sha256(item["content"].encode("utf-8")).hexdigest()}
+        result.append({**directive, "predecessor": endpoints[0] if len(endpoints) == 1 else None,
+                       "predecessor_candidates": endpoints, "successor": successor,
+                       "predecessor_provenance": [proof(p) for p in matches] if scope == "clause" else [],
+                       "directive_provenance": proof(e),
+                       "directive_evidence_id": e["id"], "directive_text": e["content"],
+                       "authority_basis": authority, "certainty": "RECOVERED" if proven else "UNRESOLVED",
+                       "uncertainty": None if proven else "Exact scope, unique predecessor, native evidence and declared change authority are required."})
+    return result
+
+
+def supersession_proposal(workspace, proposal_id):
+    """Revalidate a persisted proposal against current evidence before acceptance/application."""
+    item = next((e for e in workspace.evidence_items if e["id"] == proposal_id
+                 and e.get("content_type") == SUPERSESSION_PROPOSAL_CONTENT_TYPE
+                 and e.get("evidence_class") == "ai_generated_proposal"), None)
+    if item is None:
+        raise ValueError("Supersession proposal evidence not found.")
+    payload = json.loads(item["content"])
+    if payload not in supersession_candidates(workspace, item["source_id"]):
+        raise ValueError("Supersession proposal is stale or its scope is no longer proven.")
+    return item, payload
 
 
 def register_manifest_gaps(store, workspace, source_id: str, *,
@@ -294,30 +335,13 @@ def register_manifest_gaps(store, workspace, source_id: str, *,
     what the missing sheet would have contained.
     """
     from services import sheet_identity
-    from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
-
-    gaps = sheet_identity.declared_but_absent(workspace, source_id)
-    if not gaps:
-        return {"registered": 0, "missing": []}
-
     try:
-        store.register_evidence_item(
-            workspace, source_id=source_id,
-            evidence_class=EVIDENCE_CLASS_AI_GENERATED_PROPOSAL,
-            content=json.dumps({"missing": gaps,
-                                "version": ACTIVATION_VERSION},
-                               sort_keys=True),
-            content_type=MANIFEST_GAP_CONTENT_TYPE,
-            extractor_version=sheet_identity.REGISTER_VERSION,
-            actor=actor, governance_log=governance_log)
+        return sheet_identity.register_manifest_gap_evidence(
+            store, workspace, source_id, actor=actor, governance_log=governance_log)
     except Exception as exc:  # noqa: BLE001
         logger.warning("manifest gaps not registered for %s (%s: %s)",
                        source_id, type(exc).__name__, exc)
         return {"registered": 0, "missing": []}
-
-    return {"registered": len(gaps),
-            "missing": [g["sheet_token"] for g in gaps]}
-
 
 def activate(store, workspace, source_id: str, *, extra_text: str = "",
              actor: str = "package-muscles", governance_log=None) -> dict:

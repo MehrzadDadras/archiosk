@@ -1,5 +1,21 @@
 # MANIFEST
 
+GO promotion cycles 1–4: `services/binding.py` recomputes bound certainty;
+`services/drawing_segmentation.py:examine_title_blocks` produces situated views
+even when title fields are unresolved; `services/sheet_identity.py` persists
+manifest-gap history and projects current absences. `services/document_examination.py`
+surfaces these through Document Shop and the existing Ask GO context.
+`services/package_muscles.py:register_supersessions` now stores scoped proposal
+EvidenceItems and proposed ChangeArrivalAssessments, never authoritative lineage.
+`services/supersession_detect.py` supplies bounded paragraph-scope qualification.
+`services/case_workspace.py` extends the existing assessment/review record with
+`supersession_proposal_id`; `services/change_application.py:apply_accepted_change`
+applies accepted evidence/source endpoints through the existing Supersession primitive.
+`services/change_arrival.py:assessment_brief` shares that scoped review context.
+The existing review/apply routes in `routes/workspace.py` remain the human gate.
+`docs/GO_PROMOTION_HANDOFF_CYCLES_1_4.md` specifies Claude's incorporation and
+live-proof obligations; local test success alone is not promotion.
+
 Operational Flight Deck: `services/operational_flight_deck.py`, the GET-only
 admin route in `routes/portal.py`, `templates/operational_flight_deck.html`, and
 matching CSS/JS render the proven read-only feed. `docs/OPERATIONAL_FLIGHT_DECK.md`

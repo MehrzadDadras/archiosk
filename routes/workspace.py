@@ -2966,7 +2966,7 @@ def apply_change_arrival_route(project_id, assessment_id):
     if result["already_applied"]:
         flash("That change was already applied; nothing was duplicated.", "success")
     else:
-        flash("Applied. Requirement %s is superseded by %s."
+        flash("Applied. Accepted predecessor %s is superseded by %s."
               % (result["predecessor_id"], result["successor_id"]), "success")
     return redirect(url_for("workspace.show_workspace", project_id=project_id))
 
