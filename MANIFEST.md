@@ -1,5 +1,11 @@
 # MANIFEST
 
+Survey Rule 5 extends `services/survey_graph.py` with separate access occurrences,
+proposal EvidenceItems and existing relationship-review projections. The visual
+worker, examination consumer and Ask GO prompt preserve access uncertainty;
+`tests/test_survey_reference_01.py::SurveyAccessQualification` covers evidence
+binding, subject containment, review/reload, corner candidates and service access.
+
 Survey Rule 4 qualification extends the existing `services/survey_graph.py`
 printed-bearing parser and curve-parameter handling, plus visual examination and
 Document Shop/Ask GO consumers. `tests/test_survey_notation_qualification.py`

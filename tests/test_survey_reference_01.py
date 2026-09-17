@@ -688,6 +688,136 @@ class TrueNorthQualification(SurveyReferenceCase):
                          "Unresolved true North must gate directional setback claims beyond the renderer")
 
 
+class SurveyAccessQualification(SurveyReferenceCase):
+    def reading(self):
+        raw = SubjectContainmentQualification.containment_reading(self, "inside")
+        features = {name: {"value": True, "read_certainty": "RECOVERED",
+            "bind_certainty": "RECOVERED", "bind_basis": "declared", "bound_to": "S1",
+            "provenance": "Synthetic labeled access detail explicitly binds " + name + " to S1"}
+            for name in ("public_street", "sidewalk", "landscape_strip", "curb", "curb_cut",
+                         "driveway_access", "pedestrian_approach", "building_entry_relation")}
+        raw["graph"]["access_occurrences"] = [dict(features, id="ACCESS-1", edge_id="S1",
+            entry_id="ENTRY-1", building_id="B1", street_name="First Street", printed_role="Main public entry",
+            classification="PRIMARY_PUBLIC_ACCESS", provenance="Explicit main-entry detail in synthetic survey",
+            source_region={"x": .1, "y": .1, "w": .2, "h": .2},
+            entry_region={"x": .4, "y": .4, "w": .1, "h": .1})]
+        return raw
+
+    def test_access_requires_review_and_survives_reload_into_consumers(self):
+        from services import survey_graph
+        project_id = self.upload(survey_jpeg(), "access.jpg", name="Rule 5 public access")
+        self.run_worker(self.reading())
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["state"], "UNRESOLVED")
+
+        proposal = next(e for e in workspace.evidence_items if e.get("content_type") == survey_graph.ACCESS_CONTENT_TYPE)
+        edge = next(e for e in workspace.relationships if e.get("from_id") == proposal["id"])
+        self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["state"], "PRIMARY_PUBLIC_ACCESS")
+        prompt = dc.render_prompt(dc.build_context(document, workspace, result, "Where is primary public access?"))
+        self.assertIn("PRIMARY_PUBLIC_ACCESS", prompt)
+        self.assertIn("landscape_strip", prompt)
+        self.assertIn(proposal["id"], prompt)
+        self.assertIn("not legal frontage or building-front designation", prompt)
+        page = self.client.get("/document-shop/jobs/" + project_id)
+        self.assertIn(b"PRIMARY_PUBLIC_ACCESS", page.data)
+        # The review belongs to this exact occurrence; changed source evidence
+        # cannot inherit it, nor can a cached validation flag bypass reloading.
+        visual["graph"]["access_occurrences"][0]["edge_id"] = "S2"
+        survey_graph.resolve_access_interpretations(self.store, workspace, visual)
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["state"], "UNRESOLVED")
+
+        self.store.reject_relationship(workspace, edge["id"], actor="cust", reason="Access interpretation not established")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["state"], "UNRESOLVED")
+
+    def test_corner_service_and_missing_premise_controls(self):
+        from services import survey_graph
+        base = survey_graph.normalise_graph(self.reading()["graph"])
+        # Isolated classifier controls receive a trusted review projection;
+        # the separate runtime test proves how that projection is established.
+        base["access_occurrences"][0]["validated_access"] = {"state": "ESTABLISHED"}
+        for missing in ("public_street", "building_entry_relation", "both_approaches", "entry_region", "subject_parcel", "wrong_edge"):
+            graph = json.loads(json.dumps(base))
+            candidate = graph["access_occurrences"][0]
+            if missing == "both_approaches":
+                candidate["driveway_access"]["value"] = None
+                candidate["pedestrian_approach"]["value"] = None
+            elif missing == "entry_region":
+                candidate[missing] = {}
+            elif missing == "subject_parcel":
+                graph.pop("subject_parcel")
+            elif missing == "wrong_edge":
+                candidate["building_entry_relation"]["bound_to"] = "S2"
+            else:
+                candidate[missing]["bind_certainty"] = "UNRESOLVED"
+            with self.subTest(missing=missing):
+                self.assertEqual(survey_graph.access_interpretations(graph)[0]["state"], "UNRESOLVED")
+        second = json.loads(json.dumps(base["access_occurrences"][0]))
+        second.update(id="ACCESS-2", edge_id="S2", street_name="Second Street")
+        for name in survey_graph.ACCESS_FEATURES:
+            second[name]["bound_to"] = "S2"
+        base["access_occurrences"].append(second)
+        self.assertEqual([r["state"] for r in survey_graph.access_interpretations(base)], ["UNRESOLVED", "UNRESOLVED"])
+        second["classification"] = "SERVICE_ACCESS"
+        self.assertEqual([r["state"] for r in survey_graph.access_interpretations(base)], ["PRIMARY_PUBLIC_ACCESS", "SERVICE_ACCESS"])
+        second["classification"] = "SECONDARY_ACCESS"
+        self.assertEqual(survey_graph.access_interpretations(base)[1]["state"], "SECONDARY_ACCESS")
+        second["classification"] = "PRIMARY_PUBLIC_ACCESS"
+        base["access_occurrences"][0]["building_entry_relation"]["value"] = None
+        self.assertEqual([r["state"] for r in survey_graph.access_interpretations(base)], ["UNRESOLVED", "UNRESOLVED"])
+        first = base["access_occurrences"][0]
+        first["classification"] = "STREET_ADJACENT_NO_ACCESS"
+        first["printed_role"] = "Access prohibited on this edge"
+        first["no_access"] = dict(first["public_street"], value=True)
+        self.assertEqual(survey_graph.access_interpretations(base)[0]["state"], "UNRESOLVED", "Conflicting access evidence cannot be averaged away")
+        first["driveway_access"]["value"] = first["pedestrian_approach"]["value"] = False
+        self.assertEqual(survey_graph.access_interpretations(base)[0]["state"], "STREET_ADJACENT_NO_ACCESS")
+        self.assertEqual(survey_graph.access_interpretations(base)[1]["state"], "PRIMARY_PUBLIC_ACCESS")
+
+    def test_unreviewed_frontage_text_cannot_be_a_recovered_access_claim(self):
+        visual = {"document_category": "survey", "graph": {}, "observations": [
+            {"key": "notes_legend", "label": "Notes", "value": "Building front and main entry face First Street",
+             "certainty": "RECOVERED"}]}
+        recovered, partial, unresolved = dx._visual_lines(visual)
+        self.assertFalse(any("main entry" in line for line in recovered))
+        self.assertTrue(any("main entry" in line and "UNRESOLVED" in line for line in unresolved))
+        visual["observations"] = [{"key": "lot_dimensions", "label": "Lot dimensions",
+            "value": "15.24 m frontage", "certainty": "PARTIALLY_RECOVERED"}]
+        recovered, partial, unresolved = dx._visual_lines(visual)
+        self.assertTrue(any("15.24 m frontage" in line for line in partial))
+
+    def test_unresolved_competing_primary_prevents_selection(self):
+        from services import survey_graph
+        graph = survey_graph.normalise_graph(self.reading()["graph"])
+        first = graph["access_occurrences"][0]
+        first["validated_access"] = {"state": "ESTABLISHED"}
+        second = json.loads(json.dumps(first))
+        second.update(id="ACCESS-2", edge_id="S2", validated_access={"state": "UNRESOLVED"})
+        graph["access_occurrences"].append(second)
+        self.assertEqual(survey_graph.access_interpretations(graph)[0]["state"], "UNRESOLVED")
+
+    def test_street_adjacency_does_not_establish_primary_access(self):
+        from services import survey_graph
+        raw = json.loads(json.dumps(SURVEY_READING["graph"]))
+        raw["access_occurrences"] = [{"id": "ACCESS-1", "edge_id": "S1",
+            "street_name": "First Street", "classification": "PRIMARY_PUBLIC_ACCESS",
+            "provenance": "A named street adjoins this edge",
+            "public_street": {"value": True, "read_certainty": "RECOVERED",
+                              "bind_certainty": "RECOVERED", "bind_basis": "declared"}}]
+        graph = survey_graph.normalise_graph(raw)
+        self.assertEqual(len(graph["access_occurrences"]), 1)
+        result = survey_graph.access_interpretations(graph)
+        self.assertEqual(result[0]["state"], "UNRESOLVED")
+        self.assertEqual(result[0]["occurrence"]["street_name"], "First Street")
+
+
 class SurveyNotationRuntimeQualification(SurveyReferenceCase):
     def test_notation_survives_worker_reload_and_actual_consumers(self):
         from services import survey_graph

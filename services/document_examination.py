@@ -258,6 +258,11 @@ def visual_reading(workspace, source_id: str):
         from services.case_workspace import CaseWorkspaceStore
         from services.survey_north import resolve_conversions
         resolve_conversions(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
+    if visual and (visual.get("graph") or {}).get("access_occurrences"):
+        from flask import current_app
+        from services.case_workspace import CaseWorkspaceStore
+        from services.survey_graph import resolve_access_interpretations
+        resolve_access_interpretations(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
     return visual
 
 
@@ -308,7 +313,12 @@ def _visual_lines(visual) -> tuple[list, list, list]:
         north_resolution = survey_north.resolve_true_north(visual.get("graph") or {})
         admitted = []
         for observation in observations:
-            if survey_north.directional_observation(observation) and not survey_north.admits_true_direction(observation, north_resolution):
+            import re
+            if observation.get("key") not in ("address", "streets") and re.search(
+                    r"\b(?:primary frontage|building front|primary access|main entr(?:y|ance))\b", observation.get("value", ""), re.I):
+                directional_unresolved.append("Access interpretation UNRESOLVED from free-form text alone; observed %s [directional reference %s; true North %s]; use scoped reviewed access evidence" % (
+                    _phrase(observation), observation.get("directional_reference", "UNRESOLVED"), north_resolution["state"]))
+            elif survey_north.directional_observation(observation) and not survey_north.admits_true_direction(observation, north_resolution):
                 directional_unresolved.append("Directional conclusion UNRESOLVED; observed %s [reference %s; true North %s]" % (
                     _phrase(observation), observation.get("directional_reference", "UNRESOLVED"), north_resolution["state"]))
             else:
@@ -330,6 +340,21 @@ def _visual_lines(visual) -> tuple[list, list, list]:
     if survey:
         from services import survey_graph
         graph = visual.get("graph") or {}
+        accesses = survey_graph.access_interpretations(graph)
+        if not accesses:
+            unresolved.append("Primary public access UNRESOLVED: street adjacency does not establish access or building front")
+        for access in accesses:
+            occurrence = access["occurrence"]
+            phrase = "Access %s on edge %s (%s): %s; provenance %s; review evidence %s; access interpretation only, not legal frontage or building-front designation" % (
+                occurrence["id"], occurrence["edge_id"], occurrence["street_name"], access["state"], occurrence["provenance"],
+                ", ".join((occurrence.get("validated_access") or {}).get("evidence_ids", [])))
+            (unresolved if access["state"] == "UNRESOLVED" else recovered).append(phrase)
+            for name in survey_graph.ACCESS_FEATURES:
+                feature = occurrence.get(name) or {}
+                if feature.get("value") is not None:
+                    partial.append("Access observation %s / %s: %s; read %s; binding %s; provenance %s" % (
+                        occurrence["id"], name, feature["value"], feature.get("read_certainty"),
+                        binding.bound_certainty(feature), feature.get("note")))
         footprints = graph.get("footprints") or []
         if structures and not footprints:
             unresolved.append("Structure containment UNRESOLVED: no traceable footprint outlines; "

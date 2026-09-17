@@ -826,6 +826,133 @@ def footprint_containment(graph, footprint) -> dict:
     return result
 
 
+ACCESS_CONTENT_TYPE = "survey_access_interpretation"
+ACCESS_CLASSES = ("PRIMARY_PUBLIC_ACCESS", "SECONDARY_ACCESS", "SERVICE_ACCESS",
+                  "STREET_ADJACENT_NO_ACCESS", "UNRESOLVED")
+ACCESS_FEATURES = ("public_street", "sidewalk", "landscape_strip", "curb", "curb_cut",
+                   "driveway_access", "pedestrian_approach", "building_entry_relation", "no_access")
+
+
+def _access_occurrences(raw):
+    from services import binding
+    result = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        record = {key: str(item.get(key) or "") for key in
+                  ("id", "edge_id", "entry_id", "building_id", "street_name", "printed_role", "provenance")}
+        role = item.get("classification")
+        record["classification"] = role if role in ACCESS_CLASSES else "UNRESOLVED"
+        record["source_region"] = vx._bbox(item.get("source_region"))
+        record["entry_region"] = vx._bbox(item.get("entry_region"))
+        for name in ACCESS_FEATURES:
+            feature = item.get(name) if isinstance(item.get(name), dict) else {}
+            record[name] = binding.bind(feature.get("value"),
+                read_certainty=_certainty(feature.get("read_certainty")),
+                bind_basis=feature.get("bind_basis", "none"),
+                claimed_bind_certainty=_certainty(feature.get("bind_certainty")),
+                bound_to=feature.get("bound_to"), note=str(feature.get("provenance") or ""))
+        result.append(record)
+    return result
+
+
+def access_snapshot(candidate):
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps({k: v for k, v in candidate.items()
+                                     if k != "validated_access"}, sort_keys=True).encode()).hexdigest()
+
+
+def propose_access_interpretations(store, workspace, visual_evidence, graph):
+    """Use existing proposal EvidenceItems and relationship confirmation."""
+    import json
+    from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
+    for candidate in graph.get("access_occurrences", []):
+        record = {"candidate_id": candidate["id"], "snapshot": access_snapshot(candidate),
+                  "visual_evidence_id": visual_evidence["id"], "candidate": candidate,
+                  "review_obligation": "Verify exact street/edge/entry occurrences, public status, binding and stated access role. Adjacency is not primary access; absence of a drawn entrance is not no-access evidence. No legal frontage or ownership determination."}
+        row = store.register_evidence_item(workspace, visual_evidence["source_id"],
+            EVIDENCE_CLASS_AI_GENERATED_PROPOSAL, json.dumps(record, sort_keys=True),
+            ACCESS_CONTENT_TYPE, actor="visual-worker")
+        store.record_evidence_relationship(workspace, "evidence_item", row["id"],
+            "evidence_item", visual_evidence["id"], "supports", provisional=True,
+            created_by="visual-worker", reason="Proposed scoped public-access interpretation")
+
+
+def resolve_access_interpretations(store, workspace, visual):
+    """Recompute review state against current exact source evidence; no writes."""
+    import json
+    evidence = {row["id"]: row for row in workspace.evidence_items}
+    for candidate in (visual.get("graph") or {}).get("access_occurrences", []):
+        snapshot = access_snapshot(candidate)
+        states, ids, statuses = [], [], []
+        for edge in workspace.relationships:
+            if (edge.get("from_type") != "evidence_item" or edge.get("to_type") != "evidence_item"
+                    or edge.get("to_id") != visual.get("evidence_item_id")
+                    or edge.get("relationship_type") != "supports"):
+                continue
+            row = evidence.get(edge.get("from_id"), {})
+            if row.get("content_type") != ACCESS_CONTENT_TYPE:
+                continue
+            try:
+                record = json.loads(row["content"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (record.get("snapshot") != snapshot or record.get("candidate_id") != candidate.get("id")
+                    or record.get("visual_evidence_id") != visual.get("evidence_item_id")):
+                continue
+            status = store.resolve_relationship_status(workspace, edge["id"])["status"]
+            statuses.append(status)
+            states.append(status == "confirmed"
+                          and bool(edge.get("confirmed_by")))
+            ids.append(row["id"])
+        candidate["validated_access"] = {"state": "ESTABLISHED" if states and all(states) else
+                                         "REJECTED" if statuses and all(s == "rejected" for s in statuses) else "UNRESOLVED",
+                                         "evidence_ids": ids}
+    return visual
+
+
+def access_interpretations(graph):
+    from services import binding
+    candidates = graph.get("access_occurrences", [])
+    edges = {s["id"] for s in graph.get("segments", [])}
+    buildings = {f["id"] for f in graph.get("footprints", [])
+                 if footprint_containment(graph, f)["state"] == "INSIDE_SUBJECT_PARCEL"}
+    subject_edges = set((graph.get("subject_parcel") or {}).get("boundary_segments", []))
+    result = []
+    for candidate in candidates:
+        kind = candidate.get("classification", "UNRESOLVED")
+        def established(name):
+            record = candidate.get(name) or {}
+            return (record.get("value") is True and binding.bound_certainty(record) == "RECOVERED"
+                    and record.get("bound_to") == candidate.get("edge_id") and bool(record.get("note")))
+        valid = ((candidate.get("validated_access") or {}).get("state") == "ESTABLISHED"
+                 and candidate.get("edge_id") in edges & subject_edges and bool(buildings) and bool(candidate.get("id"))
+                 and sum(c.get("id") == candidate.get("id") for c in candidates) == 1
+                 and candidate.get("provenance") and candidate.get("source_region") and candidate.get("printed_role"))
+        if kind in ("PRIMARY_PUBLIC_ACCESS", "SECONDARY_ACCESS"):
+            valid = valid and established("public_street")
+        if kind in ("PRIMARY_PUBLIC_ACCESS", "SECONDARY_ACCESS", "SERVICE_ACCESS"):
+            valid = (valid and candidate.get("building_id") in buildings and candidate.get("entry_id") and candidate.get("entry_region")
+                     and established("building_entry_relation")
+                     and (established("driveway_access") or established("pedestrian_approach")))
+        elif kind == "STREET_ADJACENT_NO_ACCESS":
+            valid = valid and established("public_street") and established("no_access")
+        else:
+            valid = False
+        if established("no_access") and (established("driveway_access") or established("pedestrian_approach")):
+            valid = False
+        result.append({"occurrence": candidate, "state": kind if valid else "UNRESOLVED",
+                       "reason": "Reviewed scoped access evidence" if valid else "Access role, binding or review premise is UNRESOLVED"})
+    primaries = [r for r in result if r["state"] == "PRIMARY_PUBLIC_ACCESS"]
+    primary_claims = [c for c in candidates if c.get("classification") == "PRIMARY_PUBLIC_ACCESS"
+                      and (c.get("validated_access") or {}).get("state") != "REJECTED"]
+    if len(primary_claims) > 1:
+        for result_row in primaries:
+            result_row.update(state="UNRESOLVED", reason="Competing primary access candidates; no automatic corner-lot choice")
+    return result
+
+
 def normalise_graph(raw) -> dict:
     """Everything the reader returned, reduced to what this module will draw.
 
@@ -920,6 +1047,7 @@ def normalise_graph(raw) -> dict:
     from services import survey_north
     graph = {"graph_version": GRAPH_VERSION, "nodes": nodes, "segments": segments,
             "north_candidates": survey_north.normalise_candidates(raw.get("north_candidates")),
+            "access_occurrences": _access_occurrences(raw.get("access_occurrences")),
             "bearing_reference": raw.get("bearing_reference") if raw.get("bearing_reference") in survey_north.REFERENCE_TYPES else "UNRESOLVED",
             "footprints": footprints, "north": north, "streets": streets,
             "unresolved": unresolved,

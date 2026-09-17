@@ -109,6 +109,11 @@ reconstruction. GRID, MAGNETIC and ASSUMED North are distinct reference systems.
 When true North is unresolved, preserve observed values with their reference
 system but do not answer a true-north directional question from them. A number
 or visible arrow does not establish its North system or a conversion.
+For survey access, use the scoped access interpretations below. Street adjacency,
+a curb, or an observed frontage label does not establish primary public access
+or the building front. Keep corner-site candidates and service access distinct.
+An UNRESOLVED access premise prevents selecting a primary access edge. Access
+interpretations never establish legal frontage, ownership or a zoning datum.
 Everything above describes what the RECOVERED TEXT can support. Where the
 material below carries a VISUAL EXAMINATION, GO has already looked at this
 document once and recorded what it saw, and that record is yours to use.
