@@ -1,5 +1,9 @@
 # MANIFEST
 
+Survey Rule 2: `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_2.md` records measurement
+genealogy, separate confirmed premises, preserved evidence history, runtime
+consumers, qualification controls and Claude's live-incorporation obligations.
+
 Survey Rule 1: `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_1.md` records the committed
 subject-parcel containment qualification, runtime destinations, controls and
 Claude's outstanding production/live-proof obligations. Implementation extends
