@@ -204,6 +204,156 @@ def _dimension(raw) -> Optional[dict]:
             "bound_certainty": bound["bound_certainty"]}
 
 
+MEASUREMENT_PREMISES = ("segment_binding", "chronology", "role", "authority", "applicability", "precedence")
+MEASUREMENT_PREMISE_CONTENT_TYPE = "survey_measurement_premise"
+
+
+def measurement_snapshot(segment):
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps({"id": segment.get("id"), "measurements": [
+        {k: v for k, v in m.items() if k != "validated_premises"}
+        for m in segment.get("measurements", [])]}, sort_keys=True).encode()).hexdigest()
+
+
+def propose_measurement_premises(store, workspace, visual_evidence, graph):
+    """Proposals only; existing human Relationship confirmation governs review."""
+    import json
+    from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
+    for segment in graph.get("segments", []):
+        snapshot = measurement_snapshot(segment)
+        for m in segment.get("measurements", []):
+            for premise in MEASUREMENT_PREMISES:
+                content = {"premise": premise, "conclusion": "ESTABLISHED",
+                           "occurrence_id": m["occurrence_id"], "segment_id": segment["id"],
+                           "visual_evidence_id": visual_evidence["id"], "snapshot": snapshot,
+                           "measurement": m,
+                           "review_obligation": "Verify this premise independently against source evidence; unresolved is not established."}
+                row = store.register_evidence_item(workspace, visual_evidence["source_id"],
+                    EVIDENCE_CLASS_AI_GENERATED_PROPOSAL, json.dumps(content, sort_keys=True),
+                    MEASUREMENT_PREMISE_CONTENT_TYPE, actor="visual-worker")
+                store.record_evidence_relationship(workspace, "evidence_item", row["id"],
+                    "evidence_item", visual_evidence["id"], "supports", provisional=True,
+                    created_by="visual-worker", reason="Proposed measurement premise: " + premise)
+
+
+def resolve_measurement_premises(store, workspace, visual):
+    """Read-time projection; never trust model/persisted validation flags."""
+    import json
+    evidence = {e["id"]: e for e in workspace.evidence_items}
+    for segment in (visual.get("graph") or {}).get("segments", []):
+        snapshot = measurement_snapshot(segment)
+        for m in segment.get("measurements", []):
+            states = {key: {"state": "UNRESOLVED", "evidence_ids": []} for key in MEASUREMENT_PREMISES}
+            for edge in workspace.relationships:
+                if (edge.get("to_type") != "evidence_item" or edge.get("to_id") != visual.get("evidence_item_id")
+                        or edge.get("from_type") != "evidence_item" or edge.get("relationship_type") != "supports"):
+                    continue
+                row = evidence.get(edge["from_id"], {})
+                if row.get("content_type") != MEASUREMENT_PREMISE_CONTENT_TYPE:
+                    continue
+                try:
+                    proposal = json.loads(row["content"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                axis = proposal.get("premise")
+                if (axis not in states or proposal.get("snapshot") != snapshot
+                        or proposal.get("visual_evidence_id") != visual.get("evidence_item_id")
+                        or proposal.get("segment_id") != segment.get("id")
+                        or proposal.get("occurrence_id") != m.get("occurrence_id")):
+                    continue
+                status = store.resolve_relationship_status(workspace, edge["id"])["status"]
+                state = "ESTABLISHED" if status == "confirmed" and edge.get("confirmed_by") and proposal.get("conclusion") == "ESTABLISHED" else "UNRESOLVED"
+                entry = states[axis]
+                # Conflicting/unaccepted support never silently loses to an accepted row.
+                entry["state"] = state if not entry["evidence_ids"] else (
+                    "ESTABLISHED" if entry["state"] == state == "ESTABLISHED" else "UNRESOLVED")
+                entry["evidence_ids"].append(row["id"])
+            m["validated_premises"] = states
+    return visual
+
+
+def measurement_genealogy(segment) -> dict:
+    """Advisory working dimension from explicit same-object precedence only.
+
+    No authority transition or historical mutation. Dates order evidence only
+    after declared applicability/precedence; model confidence never supplies it.
+    """
+    from datetime import date
+    from services import binding
+
+    occurrences = segment.get("measurements") or []
+    result = {"status": "UNRESOLVED", "current": None, "history": occurrences,
+              "reason": "Chronology, binding or applicable authority not established",
+              "discrepancy": None,
+              "premises": {m.get("occurrence_id"): m.get("validated_premises", {}) for m in occurrences}}
+    relevant = [m for m in occurrences if m.get("segment_id") == segment.get("id")]
+    if not relevant:
+        return result
+    ids = [m.get("occurrence_id") for m in relevant]
+    if not all(ids) or len(set(ids)) != len(ids):
+        return result
+    dated = []
+    for m in relevant:
+        states = m.get("validated_premises") or {}
+        missing = [key for key in MEASUREMENT_PREMISES if (states.get(key) or {}).get("state") != "ESTABLISHED"]
+        if missing:
+            result["reason"] = "Unestablished premises for %s: %s" % (m.get("occurrence_id"), ", ".join(missing))
+            return result
+        try:
+            when = date.fromisoformat(m.get("survey_date", ""))
+        except (TypeError, ValueError):
+            return result
+        if (not m.get("source_plan") or not m.get("provenance")
+                or m.get("role") not in ("RECORD", "REGISTERED_PLAN", "PREVIOUS_MEASURED", "CURRENT_MEASURED", "CALCULATED")
+                or not m.get("printed_role")
+                or binding.bound_certainty(m) != "RECOVERED"):
+            return result
+        dated.append((when, m))
+    dated.sort(key=lambda pair: pair[0])
+    if len({d for d, m in dated}) != len(dated):
+        result["reason"] = "Same-date candidates have no unique temporal precedence"
+        return result
+    for (_, older), (_, newer) in zip(dated, dated[1:]):
+        if newer.get("prior_occurrence") != older["occurrence_id"]:
+            result["reason"] = "Recency alone does not establish measurement precedence"
+            return result
+    current = dated[-1][1]
+    if current.get("role") != "CURRENT_MEASURED" or _num(current.get("value")) is None or not current.get("unit"):
+        return result
+    result.update(status="RECOVERED", current=current,
+                  reason="Explicit same-segment applicability and precedence; working value only")
+    # Numeric difference is descriptive, never an automatic contradiction or
+    # materiality finding. No unstated unit conversion or tolerance is assumed.
+    comparable = [m for _, m in dated if m.get("unit") == current["unit"] and _num(m.get("value")) is not None]
+    if len(comparable) > 1:
+        delta = max(m["value"] for m in comparable) - min(m["value"] for m in comparable)
+        if delta:
+            result["discrepancy"] = {"difference": delta, "unit": current["unit"], "materiality": "UNRESOLVED"}
+    return result
+
+
+def _measurement_occurrences(raw):
+    """Preserve every supplied occurrence, including unreadable candidates."""
+    from services import binding
+    result = []
+    for entry in raw if isinstance(raw, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        record = {key: str(entry.get(key) or "") for key in (
+            "occurrence_id", "segment_id", "text", "unit", "source_plan", "survey_date",
+            "role", "printed_role", "authority_basis", "applicability_basis", "prior_occurrence",
+            "precedence_basis", "provenance")}
+        record.update(binding.bind(_num(entry.get("value")),
+                                   read_certainty=_certainty(entry.get("read_certainty")),
+                                   bind_basis=str(entry.get("bind_basis") or "none"),
+                                   claimed_bind_certainty=_certainty(entry.get("bind_certainty")),
+                                   bound_to=record["segment_id"]))
+        record["certainty"] = record["read_certainty"]
+        result.append(record)
+    return result
+
+
 def _bearing(raw) -> Optional[dict]:
     """A bearing as the sheet prints it, PLUS its azimuth where one was read.
 
@@ -429,7 +579,8 @@ def _azimuth_of(segment) -> Optional[float]:
 
 def _distance_of(segment) -> Optional[float]:
     """A segment's length from its own printed dimension, or None."""
-    dimension = segment.get("dimension")
+    dimension = (measurement_genealogy(segment)["current"] if segment.get("measurements")
+                 else segment.get("dimension"))
     if not isinstance(dimension, dict):
         return None
     from services import binding
@@ -714,6 +865,7 @@ def normalise_graph(raw) -> dict:
             "boundary": role if role in BOUNDARY_ROLES else "unknown",
             "label": str(entry.get("label") or "").strip()[:48],
             "dimension": _dimension(entry.get("dimension")),
+            "measurements": _measurement_occurrences(entry.get("measurements")),
             "bearing": _bearing(entry.get("bearing")),
             "radius": _dimension(entry.get("radius")),
             "chord": _dimension(entry.get("chord")),
@@ -913,7 +1065,8 @@ def build_primitives(graph: dict, include=None) -> dict:
 
         # A dimension is drawn ONLY where the sheet supported one, and always
         # as the sheet's own string.
-        dimension = segment.get("dimension")
+        dimension = (measurement_genealogy(segment)["current"] if segment.get("measurements")
+                     else segment.get("dimension"))
         if LAYER_LABELS in include and dimension:
             primitives.append({
                 "type": P_LABEL, "kind": "dimension", "text": dimension["text"],

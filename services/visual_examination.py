@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
 # without bumping that is the defect that kept the parametric reconstruction
 # off every live record.
-VISUAL_PROMPT_VERSION = "visual-examination-05"
+VISUAL_PROMPT_VERSION = "visual-examination-06"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -318,6 +318,7 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
 - "footprints": preserve EVERY building occurrence, including neighboring context, as its own outline, with "kind" (dwelling / garage / accessory / structure; do not guess a type), label, certainty for its outline, and read_certainty for its label. Do not merge buildings into a subject-property claim. The application determines containment using the bound subject boundary. Keep relative positions faithful to the sheet; they are observed image geometry, not legal survey geometry.
 - "bearing" on a segment: "text" is the sheet's own string exactly as printed ("N 17\u00b0 30' 00\" E"). "value_degrees" is that bearing converted to a whole-circle azimuth in decimal degrees (0 = north, 90 = east) ONLY where the printed bearing gives you one - do not estimate an azimuth from the drawing's appearance, and omit "value_degrees" entirely when the sheet does not print a bearing you can read. "quadrant" is the printed quadrant where the sheet uses quadrant notation.
 - "dimension" / "bearing" / "radius" / "chord" on a segment: "text" is the sheet's own string exactly as printed ("65'-10 1/2\"", "144.12"), "value" is that as a plain number where one exists, "unit" if stated. Report a dimension ONLY for the segment it actually labels.
+- When multiple dimensions concern a segment, preserve ALL as "measurements" on that segment, not a single selected dimension. Each occurrence carries occurrence_id, segment_id, text, value (null when unreadable), unit, source_plan, survey_date (ISO date only if established), role (RECORD / REGISTERED_PLAN / PREVIOUS_MEASURED / CURRENT_MEASURED / CALCULATED / UNRESOLVED), printed_role (verbatim), read_certainty, bind_certainty, bind_basis, provenance, authority_basis, applicability_basis, prior_occurrence and precedence_basis. The last three basis fields quote explicit source evidence, or are empty: never infer authority, applicability or precedence from date, a MEASURED label, position or plausibility. prior_occurrence identifies the explicitly related earlier occurrence; proximity does not establish genealogy. Preserve less-legible current candidates and historical values. This is a working dimension, not authority to change legal geometry.
 - "north": report it TWICE, independently, and do not derive one from the other.
   "degrees": clockwise from straight up on the image (0 = up, 90 = right, 180 = down, 270 = left).
   "direction": which way the arrow POINTS on the image, as one of UP, UP_RIGHT, RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, LEFT, UP_LEFT.

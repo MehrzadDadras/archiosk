@@ -502,6 +502,154 @@ class SubjectContainmentQualification(SurveyReferenceCase):
                 self.assertTrue(any("Building A" in line and "UNRESOLVED" in line for line in unresolved))
 
 
+class MeasurementGenealogyQualification(SurveyReferenceCase):
+    def reading(self):
+        payload = json.loads(json.dumps(SURVEY_READING))
+        def occurrence(identifier, value, when, role):
+            return {"occurrence_id": identifier, "segment_id": "S1", "text": str(value),
+                    "value": value, "unit": "m", "source_plan": "Synthetic plan " + when,
+                    "survey_date": when, "role": role, "printed_role": role,
+                    "read_certainty": "RECOVERED", "bind_certainty": "RECOVERED",
+                    "bind_basis": "declared", "provenance": "Dimension table explicitly names S1",
+                    "authority_basis": "Survey note: field measurements govern this working dimension",
+                    "applicability_basis": "Survey note identifies the same unchanged segment S1"}
+        old = occurrence("M1", 144.00, "1990-01-02", "RECORD")
+        new = occurrence("M2", 144.12, "2025-03-04", "CURRENT_MEASURED")
+        new.update(prior_occurrence="M1", precedence_basis="Survey note: M2 replaces M1 as the working dimension for S1")
+        payload["graph"]["segments"][0]["measurements"] = [old, new]
+        return payload
+
+    def test_comparison_note_does_not_establish_authority_or_precedence(self):
+        from services import survey_graph
+        raw = self.reading()["graph"]
+        newer = raw["segments"][0]["measurements"][1]
+        newer["authority_basis"] = "Both dimensions are printed on a signed survey; governing authority is unresolved"
+        newer["applicability_basis"] = "Both annotations identify S1; applicability of the newer measurement is unresolved"
+        newer["precedence_basis"] = "M1 is shown for comparison with M2; no determination of which value governs"
+        segment = survey_graph.normalise_graph(raw)["segments"][0]
+        conclusion = survey_graph.measurement_genealogy(segment)
+        self.assertEqual(conclusion["status"], "UNRESOLVED",
+                         "Presence of basis text is not proof of applicable authority or precedence")
+        self.assertIsNone(conclusion["current"])
+        self.assertEqual(len(conclusion["history"]), 2)
+
+    def test_controls_preserve_all_candidates_without_choosing_by_recency_or_legibility(self):
+        from services import survey_graph
+        for control in ("two_dates", "missing_date", "other_line", "less_legible", "ambiguous_role", "no_precedence", "no_authority"):
+            with self.subTest(control=control):
+                raw = self.reading()["graph"]
+                old, new = raw["segments"][0]["measurements"]
+                if control == "missing_date":
+                    new["survey_date"] = ""
+                elif control == "other_line":
+                    new["segment_id"] = "S2"
+                elif control == "less_legible":
+                    new["read_certainty"] = "PARTIALLY_RECOVERED"
+                elif control == "ambiguous_role":
+                    new["role"] = "UNRESOLVED"
+                elif control == "no_precedence":
+                    new["precedence_basis"] = ""
+                elif control == "no_authority":
+                    new["authority_basis"] = ""
+                segment = survey_graph.normalise_graph(raw)["segments"][0]
+                # Selector unit controls receive a trusted review projection;
+                # the journey below exercises its real persisted producer.
+                for m in segment["measurements"]:
+                    m["validated_premises"] = {axis: {"state": "ESTABLISHED"} for axis in survey_graph.MEASUREMENT_PREMISES}
+                if control == "no_authority":
+                    segment["measurements"][1]["validated_premises"]["authority"]["state"] = "UNRESOLVED"
+                elif control == "no_precedence":
+                    segment["measurements"][1]["validated_premises"]["precedence"]["state"] = "UNRESOLVED"
+                before = json.dumps(segment, sort_keys=True)
+                result = survey_graph.measurement_genealogy(segment)
+                self.assertEqual(len(result["history"]), 2)
+                self.assertEqual(json.dumps(segment, sort_keys=True), before)
+                if control == "two_dates":
+                    self.assertEqual(result["current"]["occurrence_id"], "M2")
+                    self.assertEqual(survey_graph._distance_of(segment), 144.12)
+                else:
+                    self.assertEqual(result["status"], "UNRESOLVED")
+                    self.assertIsNone(result["current"])
+                    self.assertIsNone(survey_graph._distance_of(segment))
+
+    def test_persist_reload_renderer_document_shop_and_ask_go(self):
+        from services import survey_graph
+        project_id = self.upload(survey_jpeg(), "genealogy.jpg", name="Synthetic measurement genealogy")
+        self.run_worker(self.reading())
+        result, document, workspace = self.result_for(project_id)
+        initial = dc.build_context(document, workspace, result, "What is the current dimension?")
+        self.assertTrue(any("CURRENT_VALUE = UNRESOLVED for S1" in line for line in initial["visual_unresolved"]))
+        premise_edges = [edge for edge in workspace.relationships
+                         if (edge.get("reason") or "").startswith("Proposed measurement premise:")]
+        self.assertEqual(len(premise_edges), 12)
+        for edge in premise_edges:
+            self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        segment = visual["graph"]["segments"][0]
+        self.assertEqual([m["value"] for m in segment["measurements"]], [144.0, 144.12])
+        self.assertEqual(survey_graph.measurement_genealogy(segment)["current"]["occurrence_id"], "M2")
+        labels = survey_graph.build_primitives(visual["graph"])["primitives"]
+        self.assertTrue(any(p.get("kind") == "dimension" and p.get("text") == "144.12" for p in labels))
+        html = self.client.get("/document-shop/jobs/" + project_id).get_data(as_text=True)
+        self.assertIn("Current working measurement for S1", html)
+        self.assertIn("1990-01-02", html)
+        sent = {}
+        def spy(**kwargs):
+            sent.update(kwargs)
+            return _Outcome(parsed={"answer": "Both measurements remain evidence."})
+        with patch.object(llm_gateway, "call_llm_json", spy):
+            self.assertTrue(dc.ask(document, workspace, result, "What is the current dimension?", app=self.app)["ok"])
+        self.assertIn("occurrence M2", sent["user_prompt"])
+        self.assertIn("Measurement evidence M1", sent["user_prompt"])
+        self.assertIn("not an established contradiction", sent["user_prompt"])
+        # A clearer historical value must not win when current reading weakens.
+        row = next(e for e in workspace.evidence_items if e.get("content_type") == vx.VISUAL_CONTENT_TYPE)
+        stored = json.loads(row["content"])
+        stored["graph"]["segments"][0]["measurements"][1]["read_certainty"] = "PARTIALLY_RECOVERED"
+        row["content"] = json.dumps(stored)
+        self.store.save(workspace)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        context = dc.build_context(document, workspace, result, "What is the current dimension?")
+        self.assertTrue(any("CURRENT_VALUE = UNRESOLVED for S1" in s for s in context["visual_unresolved"]))
+        self.assertFalse(any("Current working measurement for S1" in s for s in context["visual_recovered"]))
+
+    def test_each_required_premise_is_independent_and_untrusted_flags_are_discarded(self):
+        from services import survey_graph
+        for axis in survey_graph.MEASUREMENT_PREMISES:
+            for state in ("ESTABLISHED", "REJECTED", "UNRESOLVED"):
+                with self.subTest(axis=axis, state=state):
+                    raw = self.reading()["graph"]
+                    raw["segments"][0]["measurements"][1]["validated_premises"] = {
+                        key: {"state": "ESTABLISHED"} for key in survey_graph.MEASUREMENT_PREMISES}
+                    segment = survey_graph.normalise_graph(raw)["segments"][0]
+                    self.assertNotIn("validated_premises", segment["measurements"][1])
+                    for m in segment["measurements"]:
+                        m["validated_premises"] = {key: {"state": "ESTABLISHED"} for key in survey_graph.MEASUREMENT_PREMISES}
+                    segment["measurements"][1]["validated_premises"][axis]["state"] = state
+                    selection = survey_graph.measurement_genealogy(segment)
+                    self.assertEqual(selection["status"], "RECOVERED" if state == "ESTABLISHED" else "UNRESOLVED")
+                    self.assertEqual(len(selection["history"]), 2)
+
+    def test_disputed_authority_blocks_previously_confirmed_selection_after_reload(self):
+        project_id = self.upload(survey_jpeg(), "authority.jpg", name="Synthetic measurement review")
+        self.run_worker(self.reading())
+        workspace = self.workspace(project_id)
+        edges = [edge for edge in workspace.relationships
+                 if (edge.get("reason") or "").startswith("Proposed measurement premise:")]
+        for edge in edges:
+            self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+        authority = next(edge for edge in edges if edge["reason"].endswith(": authority"))
+        self.store.dispute_relationship(workspace, authority["id"], actor="cust", reason="Authority unresolved")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, reloaded = self.result_for(project_id)
+        context = dc.build_context(document, reloaded, result, "What is the current dimension?")
+        self.assertTrue(any("CURRENT_VALUE = UNRESOLVED for S1" in line for line in context["visual_unresolved"]))
+        self.assertFalse(any("Current working measurement for S1" in line for line in context["visual_recovered"]))
+
+
 class BindingPromotionJourney(SurveyReferenceCase):
     """The Castille failure's reading through the real store and user route.
 

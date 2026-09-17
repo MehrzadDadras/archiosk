@@ -246,7 +246,14 @@ def visual_reading(workspace, source_id: str):
     `_recovered`, and read the same way: off the record, never recomputed."""
     from services import visual_examination as vx
 
-    return _decoded_record(workspace, source_id, vx.VISUAL_CONTENT_TYPE)
+    visual = _decoded_record(workspace, source_id, vx.VISUAL_CONTENT_TYPE)
+    if visual and any(s.get("measurements") for s in (visual.get("graph") or {}).get("segments", [])):
+        from flask import current_app
+        from services.case_workspace import CaseWorkspaceStore
+        from services.survey_graph import resolve_measurement_premises
+        store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+        resolve_measurement_premises(store, workspace, visual)
+    return visual
 
 
 def survey_reference_of(workspace, source_id: str):
@@ -317,6 +324,30 @@ def _visual_lines(visual) -> tuple[list, list, list]:
 
     # Read the persisted components again; a cached aggregate is not evidence.
     for segment in (visual.get("graph") or {}).get("segments") or []:
+        if segment.get("measurements"):
+            from services import survey_graph
+            genealogy = survey_graph.measurement_genealogy(segment)
+            for measurement in genealogy["history"]:
+                partial.append("Measurement premises %s: %s" % (
+                    measurement["occurrence_id"], "; ".join(
+                        "%s=%s [evidence %s]" % (axis, (measurement.get("validated_premises", {}).get(axis) or {}).get("state", "UNRESOLVED"),
+                                                   ", ".join((measurement.get("validated_premises", {}).get(axis) or {}).get("evidence_ids", [])))
+                        for axis in survey_graph.MEASUREMENT_PREMISES)))
+                partial.append("Measurement evidence %s: %s %s; segment %s; plan %s; date %s; role %s; read %s; binding %s; provenance: %s" % (
+                    measurement["occurrence_id"], measurement["text"], measurement["unit"],
+                    measurement["segment_id"], measurement["source_plan"], measurement["survey_date"] or "UNRESOLVED",
+                    measurement["printed_role"] or "UNRESOLVED", measurement["read_certainty"],
+                    binding.bound_certainty(measurement), measurement["provenance"]))
+            current = genealogy["current"]
+            if current:
+                recovered.append("Current working measurement for %s: %s %s (occurrence %s; authority basis: %s; applicability: %s; precedence: %s)" % (
+                    segment["id"], current["text"], current["unit"], current["occurrence_id"],
+                    current["authority_basis"], current["applicability_basis"], current["precedence_basis"]))
+            else:
+                unresolved.append("CURRENT_VALUE = UNRESOLVED for %s: %s" % (segment["id"], genealogy["reason"]))
+            if genealogy["discrepancy"]:
+                partial.append("Measurement discrepancy for %s: %s; not an established contradiction" % (segment["id"], genealogy["discrepancy"]))
+            continue
         dimension = segment.get("dimension") or {}
         if not dimension:
             continue
