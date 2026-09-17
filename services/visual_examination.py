@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
 # without bumping that is the defect that kept the parametric reconstruction
 # off every live record.
-VISUAL_PROMPT_VERSION = "visual-examination-04"
+VISUAL_PROMPT_VERSION = "visual-examination-05"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -314,7 +314,8 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
   AN ARC'S ENDPOINTS ARE THE ENDS OF THE CURVE ITSELF - where the curve meets the neighbouring boundary at each end, not two points part-way along it. Getting these wrong shortens the frontage.
   A CURVED STREET FRONTAGE IS AN ARC, NOT A CHAIN OF SHORT STRAIGHTS. If the sheet prints a RADIUS and a CHORD for that curve, report both as numbers - they are what lets the curve be reconstructed exactly. "bulge_side" is "left" or "right" relative to travelling from "from" to "to"; for a street frontage the curve bulges AWAY from the parcel interior.
   Do NOT invent a radius. An arc whose radius you cannot read is still "arc" with no radius - it will be drawn straight and reported as unresolved, which is correct.
-- "footprints": each building as its own outline, with "kind" (dwelling / garage / accessory / structure). Keep their RELATIVE positions and orientation faithful to the sheet - a garage west of a dwelling must come out west of it.
+- "subject_parcel": identify the subject ONLY from explicit parcel identity evidence on the sheet, never page position. Report identity, ordered boundary_segments (existing segment ids forming its closed boundary), read_certainty, bind_certainty, bind_basis (declared / structural / proximity / asserted / none), and provenance quoting the identity and explaining its attachment to those segments. Proximity or unsupported assertion cannot establish subject identity. If identity or boundary attachment is uncertain, say UNRESOLVED. Do not guess a closing edge.
+- "footprints": preserve EVERY building occurrence, including neighboring context, as its own outline, with "kind" (dwelling / garage / accessory / structure; do not guess a type), label, certainty for its outline, and read_certainty for its label. Do not merge buildings into a subject-property claim. The application determines containment using the bound subject boundary. Keep relative positions faithful to the sheet; they are observed image geometry, not legal survey geometry.
 - "bearing" on a segment: "text" is the sheet's own string exactly as printed ("N 17\u00b0 30' 00\" E"). "value_degrees" is that bearing converted to a whole-circle azimuth in decimal degrees (0 = north, 90 = east) ONLY where the printed bearing gives you one - do not estimate an azimuth from the drawing's appearance, and omit "value_degrees" entirely when the sheet does not print a bearing you can read. "quadrant" is the printed quadrant where the sheet uses quadrant notation.
 - "dimension" / "bearing" / "radius" / "chord" on a segment: "text" is the sheet's own string exactly as printed ("65'-10 1/2\"", "144.12"), "value" is that as a plain number where one exists, "unit" if stated. Report a dimension ONLY for the segment it actually labels.
 - "north": report it TWICE, independently, and do not derive one from the other.
@@ -334,6 +335,7 @@ Reply with JSON only, this exact shape:
   ],
   "unresolved": ["<short phrase naming something present but unreadable>"],
   "graph": {
+    "subject_parcel": {"identity": "<printed subject parcel identity, or empty>", "boundary_segments": ["<ordered existing segment ids>"], "read_certainty": "RECOVERED|PARTIALLY_RECOVERED|UNRESOLVED", "bind_certainty": "RECOVERED|PARTIALLY_RECOVERED|UNRESOLVED", "bind_basis": "declared|structural|proximity|asserted|none", "provenance": "<source identity quotation and evidence binding it to these boundary runs>"},
     "nodes": [{"id": "N1", "x": 0.0, "y": 0.0, "kind": "property_corner|monument|curve_point|reference", "label": "<optional, e.g. IRON TUBE>", "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
     "segments": [{"id": "S1", "from": "N1", "to": "N2", "kind": "straight|arc", "boundary": "street_line|lot_line|interior|easement", "label": "<e.g. CASTILLE AVENUE>", "bulge_side": "left|right", "dimension": {"text": "144.12", "value": 144.12, "certainty": "RECOVERED"}, "radius": {"text": "153.76", "value": 153.76, "certainty": "RECOVERED"}, "chord": {"text": "139.20", "value": 139.2, "certainty": "RECOVERED"}, "bearing": {"text": "<as printed>", "value_degrees": 0, "quadrant": "NE|SE|SW|NW", "certainty": "RECOVERED"}, "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],
     "footprints": [{"id": "B1", "kind": "dwelling|garage|accessory|structure", "label": "1 STORY BRICK DWELLING", "outline": [{"x": 0.0, "y": 0.0}], "certainty": "RECOVERED|PARTIALLY_RECOVERED"}],

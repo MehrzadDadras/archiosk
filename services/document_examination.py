@@ -281,12 +281,39 @@ def _visual_lines(visual) -> tuple[list, list, list]:
                 if observation.get("value") else observation["label"])
 
     observations = visual.get("observations") or []
+    survey = visual.get("document_category") == "survey"
+    structures = [o for o in observations if o.get("key") in ("building_footprint", "accessory_structures")]
+    if survey:
+        observations = [o for o in observations if o not in structures]
     recovered = [_phrase(o) for o in observations
                  if o.get("certainty") == vx.RECOVERED]
     partial = [_phrase(o) for o in observations
                if o.get("certainty") == vx.PARTIALLY_RECOVERED]
     unresolved = list(visual.get("unresolved") or [])
     from services import binding
+
+    if survey:
+        from services import survey_graph
+        graph = visual.get("graph") or {}
+        footprints = graph.get("footprints") or []
+        if structures and not footprints:
+            unresolved.append("Structure containment UNRESOLVED: no traceable footprint outlines; "
+                              + "; ".join(_phrase(o) for o in structures))
+        for footprint in footprints:
+            containment = survey_graph.footprint_containment(graph, footprint)
+            name = footprint.get("label") or footprint.get("id") or "Unidentified structure"
+            state = containment["state"]
+            provenance = containment["provenance"]
+            detail = (" (parcel %s; %s; read %s; binding %s; occurrence %s; boundary %s; source basis: %s)" % (
+                containment["subject_identity"], state, containment["read_certainty"],
+                containment["bind_certainty"], footprint.get("id"),
+                ", ".join(provenance["boundary_segments"]), provenance["identity_basis"] or "unestablished"))
+            if state == "INSIDE_SUBJECT_PARCEL":
+                recovered.append("Existing building on subject property: " + name + detail)
+            elif state == "OUTSIDE_SUBJECT_PARCEL":
+                recovered.append("Neighboring context only: " + name + detail)
+            else:
+                unresolved.append("Structure containment UNRESOLVED: " + name + detail + "; " + containment["reason"])
 
     # Read the persisted components again; a cached aggregate is not evidence.
     for segment in (visual.get("graph") or {}).get("segments") or []:

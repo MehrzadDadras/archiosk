@@ -336,6 +336,172 @@ class SurveyReferenceCase(unittest.TestCase):
                 and not s.get("removed_at")]
 
 
+class SubjectContainmentQualification(SurveyReferenceCase):
+    """Fixed readings qualify binding, not the provider's optical accuracy.
+
+    Coordinates are observed image fractions, not legal parcel geometry.
+    The source distinguishes Lot 257 / No. 44 from Lots 256 and 258. Reading
+    a building label alone must never establish its subject-parcel membership.
+    """
+
+    def containment_reading(self, control):
+        def outline(left, top, right, bottom):
+            return [{"x": left, "y": top}, {"x": right, "y": top},
+                    {"x": right, "y": bottom}, {"x": left, "y": bottom}]
+
+        boundary = outline(.3, .2, .7, .8)
+        footprints = [{"id": "B1", "kind": "dwelling", "label": "Building A",
+                       "outline": outline(.4, .4, .6, .6), "certainty": "RECOVERED"}]
+        if control == "neighbor":
+            footprints.extend([
+                {"id": "B2", "kind": "structure", "label": "Building B",
+                 "outline": outline(.05, .4, .2, .6), "certainty": "RECOVERED"},
+                {"id": "B3", "kind": "structure", "label": "Building C",
+                 "outline": outline(.8, .4, .95, .6), "certainty": "RECOVERED"}])
+        elif control == "ambiguous":
+            footprints[0]["outline"] = outline(.2, .4, .4, .6)
+        return {
+            "document_category": "survey", "category_certainty": "RECOVERED",
+            "observations": [
+                {"key": "address", "value": "No. 44", "certainty": "RECOVERED"},
+                {"key": "legal_description", "certainty": "RECOVERED",
+                 "value": "Subject: Lot 257; adjoining lots: 256 and 258"},
+                {"key": "building_footprint", "certainty": "RECOVERED",
+                 "value": "; ".join(f["label"] for f in footprints)}],
+            "graph": {
+                "subject_parcel": {"identity": "Lot 257 / No. 44",
+                                   "boundary_segments": ["S0", "S1", "S2", "S3"],
+                                   "read_certainty": "RECOVERED", "bind_certainty": "RECOVERED",
+                                   "bind_basis": "declared",
+                                   "provenance": "Fixture explicitly identifies closed runs S0-S3 as Lot 257 / No. 44"},
+                "nodes": [dict(p, id="N%d" % i, kind="property_corner",
+                               certainty="RECOVERED") for i, p in enumerate(boundary)],
+                "segments": [{"id": "S%d" % i, "from": "N%d" % i,
+                              "to": "N%d" % ((i + 1) % 4), "kind": "straight",
+                              "boundary": "lot_line", "label": "Lot 257",
+                              "certainty": "RECOVERED"} for i in range(4)],
+                "footprints": footprints}, "unresolved": []}
+
+    def persisted_context(self, control):
+        reading = self.containment_reading(control)
+        if control == "unbound":
+            reading["graph"].pop("subject_parcel")
+        elif control == "touch":
+            reading["graph"]["footprints"][0]["outline"][0]["x"] = .3
+        project_id = self.upload(survey_jpeg(), "containment.jpg",
+                                 name="Synthetic containment qualification " + control)
+        self.run_worker(reading)
+        if control == "stale":
+            workspace = self.workspace(project_id)
+            row = next(e for e in workspace.evidence_items
+                       if e.get("content_type") == vx.VISUAL_CONTENT_TYPE)
+            stored = json.loads(row["content"])
+            self.assertEqual(stored["graph"]["footprints"][0]["containment"]["state"],
+                             "INSIDE_SUBJECT_PARCEL")
+            stored["graph"]["segments"][0]["certainty"] = "PARTIALLY_RECOVERED"
+            row["content"] = json.dumps(stored)
+            self.store.save(workspace)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertEqual(len(visual["graph"]["footprints"]),
+                         len(reading["graph"]["footprints"]))
+        self.assertTrue(any(e.get("source_id") == result["source_id"]
+                            and e.get("content_type") == vx.VISUAL_CONTENT_TYPE
+                            for e in workspace.evidence_items))
+        response = self.client.get("/document-shop/jobs/" + project_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Building A", response.get_data(as_text=True))
+        context = dc.build_context(document, workspace, result,
+                                   "What are the structures on this property?")
+        for footprint in visual["graph"]["footprints"]:
+            self.assertIn("containment", footprint)
+            self.assertEqual(footprint["containment"]["read_certainty"], "RECOVERED")
+            if control == "stale":
+                self.assertIn("UNRESOLVED", response.get_data(as_text=True))
+                self.assertNotIn("Existing building on subject property", response.get_data(as_text=True))
+            else:
+                self.assertIn(footprint["containment"]["state"], response.get_data(as_text=True))
+        sent = {}
+        def spy(**kwargs):
+            sent.update(kwargs)
+            return _Outcome(parsed={"answer": "Containment evidence reviewed."})
+        with patch.object(llm_gateway, "call_llm_json", spy):
+            self.assertTrue(dc.ask(document, workspace, result,
+                                   "What are the structures on this property?", app=self.app)["ok"])
+        if control != "unbound":
+            self.assertIn("boundary S0, S1, S2, S3", sent["user_prompt"])
+        if control in ("unbound", "touch", "stale", "ambiguous"):
+            self.assertIn("Structure containment UNRESOLVED: Building A", sent["user_prompt"])
+            self.assertNotIn("Existing building on subject property", sent["user_prompt"])
+        self.assertEqual(next(o for o in visual["observations"] if o["key"] == "building_footprint")["value"],
+                         next(o for o in reading["observations"] if o["key"] == "building_footprint")["value"])
+        return context
+
+    def test_unbound_observation_touching_and_stale_inside_survive_reload_as_unresolved(self):
+        for control in ("unbound", "touch", "stale"):
+            with self.subTest(control=control):
+                context = self.persisted_context(control)
+                self.assertFalse(any("Building A" in line for line in context["visual_recovered"]))
+                self.assertTrue(any("Building A" in line and "UNRESOLVED" in line
+                                    for line in context["visual_unresolved"]))
+
+    def test_neighboring_structures_are_not_unqualified_subject_facts(self):
+        context = self.persisted_context("neighbor")
+        self.assertTrue(any("Building B" in line and "Neighboring context only" in line
+                            for line in context["visual_recovered"]))
+        self.assertTrue(any("Building C" in line and "Neighboring context only" in line
+                            for line in context["visual_recovered"]))
+        for line in context["visual_recovered"]:
+            if "Building B" in line or "Building C" in line:
+                self.assertRegex(line.lower(), r"neighbor|adjoining|outside|context",
+                                 "A neighboring building reached Ask GO as an unqualified recovered fact")
+
+    def test_boundary_crossing_is_explicitly_unresolved(self):
+        context = self.persisted_context("ambiguous")
+        self.assertFalse(any("Building A" in line for line in context["visual_recovered"]),
+                         "Reading a building does not recover its parcel containment")
+        self.assertTrue(any("Building A" in line for line in context["visual_unresolved"]))
+
+    def test_subject_building_requires_a_surfaced_parcel_binding(self):
+        context = self.persisted_context("inside")
+        # Without proven subject-boundary identity, explicit uncertainty is
+        # acceptable. An unqualified footprint listing is never sufficient.
+        lines = context["visual_recovered"] + context["visual_unresolved"]
+        self.assertTrue(any("Building A" in line and "257" in line for line in lines),
+                        "The consumer must receive the building-to-parcel binding or its uncertainty")
+        self.assertTrue(any(line.startswith("Existing building on subject property: Building A")
+                            for line in context["visual_recovered"]))
+
+    def test_weaker_components_and_invalid_geometry_cannot_reuse_cached_inside(self):
+        from services import survey_graph
+        for control in ("identity", "edge", "proximity", "open", "curve", "touch", "invalid"):
+            with self.subTest(control=control):
+                raw = self.containment_reading("inside")["graph"]
+                if control == "identity":
+                    raw.pop("subject_parcel")
+                elif control == "edge":
+                    raw["segments"][0]["certainty"] = "PARTIALLY_RECOVERED"
+                elif control == "proximity":
+                    raw["subject_parcel"]["bind_basis"] = "proximity"
+                elif control == "open":
+                    raw["segments"].pop()
+                elif control == "curve":
+                    raw["segments"][0]["kind"] = "arc"
+                elif control == "touch":
+                    raw["footprints"][0]["outline"][0]["x"] = .3
+                else:
+                    raw["footprints"][0]["outline"][0]["x"] = -1
+                graph = survey_graph.normalise_graph(raw)
+                footprint = graph["footprints"][0]
+                self.assertIn(footprint["containment"]["state"], ("UNRESOLVED", "TOUCHES_BOUNDARY"))
+                footprint["containment"] = {"state": "INSIDE_SUBJECT_PARCEL", "bound_certainty": "RECOVERED"}
+                visual = {"document_category": "survey", "graph": graph, "observations": []}
+                recovered, partial, unresolved = dx._visual_lines(visual)
+                self.assertEqual(recovered, [])
+                self.assertTrue(any("Building A" in line and "UNRESOLVED" in line for line in unresolved))
+
+
 class BindingPromotionJourney(SurveyReferenceCase):
     """The Castille failure's reading through the real store and user route.
 
@@ -616,7 +782,16 @@ class BRasterSurvey(SurveyReferenceCase):
         interpretation = {i["label"]: i["value"] for i in result["interpretation"]}
         self.assertIn("Recovered", interpretation)
         self.assertIn("North", interpretation["Recovered"])
-        self.assertIn("Existing building", interpretation["Recovered"])
+        # STALE_PRE_CONTAINMENT_EXPECTATION: optical recovery is not proof
+        # that an observed building belongs to this parcel.
+        self.assertIn("Address", interpretation["Recovered"])
+        self.assertNotIn("Existing building on subject property", interpretation["Recovered"])
+        visual = dx.visual_reading(_w, result["source_id"])
+        self.assertTrue(any(o["key"] == "building_footprint" and o["value"]
+                            for o in visual["observations"]))
+        unresolved = next(i["value"] for i in result["not_established"] if i["label"] == "Unresolved")
+        self.assertIn("Structure containment UNRESOLVED", unresolved)
+        self.assertIn("1 STORY BRICK DWELLING", unresolved)
         self.assertIn("Partially recovered", interpretation)
 
         not_established = {i["label"] for i in result["not_established"]}

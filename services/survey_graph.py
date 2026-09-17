@@ -570,6 +570,107 @@ def _no_misclosure(reason: str) -> dict:
             "reason": reason}
 
 
+def footprint_containment(graph, footprint) -> dict:
+    """Observed image containment, never a legal boundary determination.
+
+    Recomputed at consumption: persisted classifications cannot outrank their
+    component evidence. Curves, incomplete rings and unbound identity abstain.
+    Uses the existing coordinate-independent spatial predicates, not a fake CRS.
+    """
+    from services import binding, deterministic_spatial as spatial
+
+    subject = graph.get("subject_parcel") or {}
+    identity = subject.get("identity") or "unestablished subject parcel"
+    result = {"state": "UNRESOLVED", "subject_identity": identity,
+              "occurrence_id": footprint.get("id"), "relationship": None,
+              "read_certainty": footprint.get("read_certainty", footprint.get("certainty", "UNRESOLVED")),
+              "bind_certainty": "UNRESOLVED", "bound_certainty": "UNRESOLVED",
+              "provenance": {"boundary_segments": subject.get("boundary_segments", []),
+                             "identity_basis": subject.get("provenance", ""),
+                             "coordinate_space": "source image fractions"},
+              "reason": "Subject identity or closed boundary not established"}
+    if not subject.get("identity") or not subject.get("provenance"):
+        return result
+    certainty = binding.weaker(subject.get("read_certainty", "UNRESOLVED"),
+                              binding.bind_certainty(subject.get("bind_basis"),
+                                                     subject.get("bind_certainty", "UNRESOLVED")))
+    certainty = binding.weaker(certainty, result["read_certainty"])
+    certainty = binding.weaker(certainty, footprint.get("certainty", "UNRESOLVED"))
+    nodes = graph.get("nodes") or {}
+    segments = graph.get("segments") or []
+    ids = subject.get("boundary_segments") or []
+    if len(ids) < 3 or len(set(ids)) != len(ids):
+        return result
+    selected = []
+    for sid in ids:
+        matches = [s for s in segments if s.get("id") == sid]
+        if len(matches) != 1:
+            return result
+        segment = matches[0]
+        if segment.get("kind") != "straight" or segment.get("boundary") not in ("lot_line", "street_line"):
+            return result
+        if segment.get("from") not in nodes or segment.get("to") not in nodes:
+            return result
+        certainty = binding.weaker(certainty, segment.get("certainty", "UNRESOLVED"))
+        for nid in (segment["from"], segment["to"]):
+            certainty = binding.weaker(certainty, nodes[nid].get("certainty", "UNRESOLVED"))
+        selected.append(segment)
+    if any(s["to"] != selected[(i + 1) % len(selected)]["from"] for i, s in enumerate(selected)):
+        return result
+    ring = [_point(nodes[s["from"]]) for s in selected]
+    raw_outline = footprint.get("outline") or []
+    outline = [_point(p if isinstance(p, dict) else {"x": p[0], "y": p[1]})
+               for p in raw_outline if isinstance(p, dict) or isinstance(p, (tuple, list)) and len(p) == 2]
+
+    def closed_simple(points):
+        if not points or None in points:
+            return None
+        points = list(points)
+        if points[-1] == points[0]:
+            points.pop()
+        if len(points) < 3 or len(set(points)) != len(points):
+            return None
+        closed = points + [points[0]]
+        area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(closed, closed[1:]))
+        if abs(area) < 1e-10:
+            return None
+        for i in range(len(points)):
+            for j in range(i + 1, len(points)):
+                if j == i + 1 or (i == 0 and j == len(points) - 1):
+                    continue
+                if spatial._segments_cross(closed[i], closed[i + 1], closed[j], closed[j + 1]):
+                    return None
+        return closed
+
+    ring, outline = closed_simple(ring), closed_simple(outline)
+    if not ring or not outline or len(raw_outline) < 3:
+        result["reason"] = "Invalid or incomplete observed boundary/footprint"
+        return result
+    if certainty != "RECOVERED":
+        result["reason"] = "Parcel identity, boundary or footprint has weaker component certainty"
+        return result
+    # A small image-space exclusion band is conservative, not a survey tolerance.
+    near = any(spatial._min_distance_to_ring(p, ring) <= .002 for p in outline[:-1])
+    near = near or any(spatial._min_distance_to_ring(p, outline) <= .002 for p in ring[:-1])
+    crossing = spatial._rings_cross(ring, outline)
+    inside = [spatial._point_in_ring(p, ring) for p in outline[:-1]]
+    encloses = any(spatial._point_in_ring(p, outline) for p in ring[:-1])
+    if near:
+        state = "TOUCHES_BOUNDARY"
+    elif crossing or encloses or any(inside) and not all(inside):
+        state = "CROSSES_BOUNDARY"
+    elif all(inside):
+        state = "INSIDE_SUBJECT_PARCEL"
+    else:
+        state = "OUTSIDE_SUBJECT_PARCEL"
+    resolved = state in ("INSIDE_SUBJECT_PARCEL", "OUTSIDE_SUBJECT_PARCEL")
+    result.update(state=state, bind_certainty="RECOVERED" if resolved else "UNRESOLVED",
+                  bound_certainty="RECOVERED" if resolved else "UNRESOLVED",
+                  relationship="contained_by" if state == "INSIDE_SUBJECT_PARCEL" else None,
+                  reason="Deterministic observed-outline comparison; not legal survey geometry")
+    return result
+
+
 def normalise_graph(raw) -> dict:
     """Everything the reader returned, reduced to what this module will draw.
 
@@ -625,8 +726,8 @@ def normalise_graph(raw) -> dict:
         if not isinstance(entry, dict):
             continue
         outline = [p for p in (_point(pt) for pt in (entry.get("outline") or [])[:60]) if p]
-        if len(outline) < 3:
-            continue
+        if len(outline) != len(entry.get("outline") or []):
+            outline = []  # Never repair an incomplete occurrence into a polygon.
         kind = str(entry.get("kind") or "").strip()
         footprints.append({
             "id": str(entry.get("id") or "").strip()[:24] or "B%d" % (len(footprints) + 1),
@@ -634,6 +735,7 @@ def normalise_graph(raw) -> dict:
             "label": str(entry.get("label") or "").strip()[:48],
             "outline": outline,
             "certainty": _certainty(entry.get("certainty")),
+            "read_certainty": _certainty(entry.get("read_certainty", entry.get("certainty"))),
         })
 
     north, north_refusal = _reconcile_north(raw.get("north"))
@@ -654,9 +756,21 @@ def normalise_graph(raw) -> dict:
     unresolved += [str(u).strip()[:160] for u in (raw.get("unresolved") or [])[:24]
                    if str(u or "").strip()]
 
-    return {"graph_version": GRAPH_VERSION, "nodes": nodes, "segments": segments,
+    subject = raw.get("subject_parcel") or {}
+    subject = subject if isinstance(subject, dict) else {}
+    graph = {"graph_version": GRAPH_VERSION, "nodes": nodes, "segments": segments,
             "footprints": footprints, "north": north, "streets": streets,
-            "unresolved": unresolved}
+            "unresolved": unresolved,
+            "subject_parcel": {
+                "identity": str(subject.get("identity") or "")[:160],
+                "boundary_segments": [s for s in (subject.get("boundary_segments") or [])[:200] if isinstance(s, str)],
+                "read_certainty": _certainty(subject.get("read_certainty")),
+                "bind_certainty": _certainty(subject.get("bind_certainty")),
+                "bind_basis": str(subject.get("bind_basis") or "none")[:24],
+                "provenance": str(subject.get("provenance") or "")[:500]}}
+    for footprint in footprints:
+        footprint["containment"] = footprint_containment(graph, footprint)
+    return graph
 
 
 # -- Deterministic geometry --------------------------------------------------
