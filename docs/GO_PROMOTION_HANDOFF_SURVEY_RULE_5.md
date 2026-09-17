@@ -1,5 +1,96 @@
 # Claude Promotion Handoff: scoped public access
 
+**CURRENT STATUS: CONTRADICTION REPAIR FULL-GATE GREEN / READY FOR CLAUDE / NOT_PROMOTED.**
+Repair implementation: `43a3b5c46528a75e94c1089260cb27073c7ae7f3`.
+QUALIFIED / DISTILLED / IMPLEMENTED / GATED / RUNTIME_WIRED locally.
+LIVE_REACHABLE is not proven; Claude must verify, incorporate, gate, deploy and
+prove the ordinary Ask GO path. No push or deployment occurred.
+The original implementation SHA and historical gates below describe the earlier increment.
+
+The Rule 5 counterevidence fixture exposed an IMPLEMENTATION_DEFECT: confirmed
+support ignored confirmed contradiction. The Rule 2 measurement-precedence and
+Rule 3 reviewed grid-to-true conversion controls independently reproduced the
+same defect. Their narrowly scoped repairs consume the existing trust projection.
+The independent, conflicting measured-North control passes without changing the
+existing angle-conflict resolver. Rule 1 and Rule 4 behavior remain unchanged.
+
+Contradiction-repair implementation symbols:
+- `services/case_workspace.py::CaseWorkspaceStore.explain_evidence_trust` exposes
+  confirmed and unresolved counterevidence separately; all historical edges remain.
+- `services/survey_graph.py::resolve_access_interpretations`,
+  `resolve_measurement_premises`, `access_interpretations` gate conclusions on
+  current counterevidence and retain trust records and explicit premise states.
+- `services/survey_north.py::resolve_conversions` refuses contested conversion.
+- `services/document_examination.py::_visual_lines` carries qualified access and
+  measurement states and counterevidence relationship IDs to Document Shop and
+  ordinary Ask GO. North context retains candidates and conversion review records.
+- `tests/test_survey_reference_01.py`: `SurveyAccessQualification`,
+  `MeasurementGenealogyQualification`, `TrueNorthQualification`.
+
+Controls use the existing synthetic parcel/access detail, M1/M2 measurement
+genealogy, a same-segment M3 counterevidence record, reviewed grid-to-true
+conversion, and independently measured 30/100-degree North candidates. Positive:
+confirmed support alone. Negative: confirmed counterevidence prevents an
+established conclusion. Ambiguous: proposed counterevidence remains UNRESOLVED.
+Access confirmation, reload, counterevidence rejection, and another reload prove
+that current projection can change without deleting either evidence record.
+The runtime path remains worker -> persisted EvidenceItems/relationships ->
+reload -> trust projection -> examination -> Document Shop / Ask GO context.
+
+Governance: supported does not mean uncontested. No new contradiction engine,
+authority transition, storage schema or migration. Existing relationship review
+remains authoritative. Exact subject/snapshot, applicability and independent
+read/bind certainty remain required. Unresolved counterevidence is conservatively
+blocking; rejected/superseded counterevidence stays visible but is not active.
+Do not promote raw proposal classifications or conversions around this gate.
+
+Gates for the contradiction repair:
+- Rule 5 focused: 6 passed, 6 subtests, 11.08 seconds.
+- Combined Rule 2/3/5 focused: 19 passed, 51 subtests, 34.77 seconds; additional
+  persisted independent North-conflict control: 1 passed, 6.63 seconds.
+- Affected survey/document/evidence-trust lane: 383 passed, 83 subtests,
+  306.16 seconds, exit 0.
+- Full repository gate: **1 failed, 9252 passed, 3 skipped, 14 warnings,
+  10133 subtests passed, 741.63 seconds, exit 1**.
+
+Full-gate blocker classified UNRELATED_REGRESSION:
+`tests/test_storage_bridge_durable_05.py::ClaimingIsAtomicAcrossRealProcesses::test_exactly_one_of_four_processes_wins_a_single_request`.
+The claiming subprocess raises Windows WinError 32 at
+`services/bridge_queue.py:195`, `path.unlink(missing_ok=True)`, leaving the
+observed winner list empty. Those files were not changed by the repair.
+Implementation initially stopped per the mandatory full-gate rule at
+`72717e63408fdc1da31aca7d94f3ea933ddf7058`. The Product Owner then authorized a
+bounded classification sequence and one fresh full gate. All runs follow;
+the original red result above remains evidence.
+
+### Queue classification, 2026-09-17
+
+**UNRELATED_ENVIRONMENTAL_CONTENTION**, under the authorized classification
+criteria. This is not proof that Windows queue contention can never recur.
+The exact failing test invokes `BridgeQueueStore` directly; `bridge_queue.py`
+imports only standard-library modules. Its claim path, test setup and conftest
+do not call the changed survey/trust functions. `services/__init__.py` is empty.
+The containing test file also tests CaseWorkspaceStore in separate test classes;
+those are not on the failing subprocess call path. Queue code/test and conftest
+have no tranche diff. No production or test code was modified in this investigation.
+
+| Run | Command scope | Result |
+| --- | --- | --- |
+| Original full gate | `pytest -q -n 8 --dist loadfile` | 1 failed, 9252 passed, 3 skipped, 10133 subtests, 14 warnings; 741.63s; exit 1 |
+| Isolation 1 | Exact failing node above, serial pytest | 1 passed; 0.45s; exit 0 |
+| Isolation 2 | Same exact node | 1 passed; 0.61s; exit 0 |
+| Isolation 3 | Same exact node | 1 passed; 0.40s; exit 0 |
+| Smallest relevant lane | `pytest -q tests/test_storage_bridge_durable_05.py` | 25 passed, 7 subtests; 4.67s; exit 0 |
+| One authorized fresh full gate | `pytest -q -n 8 --dist loadfile` | **9253 passed, 3 skipped, 10133 subtests, 14 warnings; 713.37s; exit 0** |
+
+All commands used `venv/Scripts/python.exe -m pytest` with
+`PYTHONDONTWRITEBYTECODE=1`. Runs were sequential. Scoped repair and queue file
+hashes matched before and after the fresh full gate. No overlapping writer was
+observed. The exact tested repair was committed without further code changes.
+The invariant remains: confirmed support cannot authorize a downstream conclusion
+while its governing premise remains actively contested. This applies to future
+datum/authority and geometry/projective premises as well as Rules 2/3/5.
+
 Implementation: `a423d7901adb75be2f84e6f9273fee275ff7e54c`.
 QUALIFIED / DISTILLED / IMPLEMENTED / GATED / RUNTIME_WIRED locally.
 **NOT_PROMOTED**: Claude must verify, incorporate, gate, deploy and prove
@@ -72,6 +163,7 @@ Final survey/document lane: **314 passed, 75 subtests**, 320.50 seconds, exit 0.
 Implementation/fixture hashes were unchanged across the final lane.
 Latest full repository gate was the Rule 4 milestone, before Rule 5:
 9245 passed, 3 skipped, 14 warnings, 10127 subtests, 705.75 seconds, exit 0.
+The contradiction-repair full gate above supersedes this historical checkpoint.
 The next required full gate is after Rule 8. Existing unrelated dirty planning/
 feasibility work was preserved and excluded from this commit.
 
