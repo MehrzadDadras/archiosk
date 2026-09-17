@@ -6,6 +6,8 @@ Document Shop/Ask GO consumers. `tests/test_survey_notation_qualification.py`
 holds isolated notation, missing-premise and conditional arc-family controls;
 `tests/test_survey_reference_01.py::SurveyNotationRuntimeQualification` covers
 worker persistence, reload, rendering and the ordinary consumer boundary.
+`docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_4.md` records implementation SHA,
+controls, the frozen-tree full gate and Claude's live-incorporation obligations.
 
 Survey Rule 3: `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_3.md` records typed North
 reconciliation, reviewed same-view conversions, directional consumer gates,
