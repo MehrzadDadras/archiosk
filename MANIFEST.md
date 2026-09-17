@@ -1,5 +1,11 @@
 # MANIFEST
 
+Survey Rule 1: `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_1.md` records the committed
+subject-parcel containment qualification, runtime destinations, controls and
+Claude's outstanding production/live-proof obligations. Implementation extends
+`services/survey_graph.py`, the existing visual examination/version path, and
+`services/document_examination.py`; controls live in `tests/test_survey_reference_01.py`.
+
 GO promotion cycles 1–4: `services/binding.py` recomputes bound certainty;
 `services/drawing_segmentation.py:examine_title_blocks` produces situated views
 even when title fields are unresolved; `services/sheet_identity.py` persists
