@@ -503,6 +503,26 @@ class SubjectContainmentQualification(SurveyReferenceCase):
 
 
 class TrueNorthQualification(SurveyReferenceCase):
+    def test_independently_measured_conflicting_north_blocks_semantics_after_reload(self):
+        from services import survey_north
+        payload = json.loads(json.dumps(SURVEY_READING))
+        payload["graph"]["north_candidates"] = [self.candidate("A", degrees=30),
+            self.candidate("T", degrees=100, source="title_block")]
+        payload["observations"] = [{"key": "setbacks", "value": "North setback: 5 m",
+            "certainty": "RECOVERED", "directional_reference": "TRUE_NORTH"}]
+        project_id = self.upload(survey_jpeg(), "north-conflict.jpg", name="Independent North conflict")
+        with patch.object(survey_north, "measure_north", side_effect=[
+                {"ok": True, "degrees": 30, "reason": "isolated arrow measurement"},
+                {"ok": True, "degrees": 100, "reason": "isolated title measurement"}]):
+            self.run_worker(payload)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        context = dc.build_context(document, workspace, result, "North setback?")
+        self.assertEqual(context["true_north_premise"]["state"], "UNRESOLVED")
+        self.assertEqual(len(context["true_north_premise"]["candidates"]), 2)
+        self.assertFalse(any("North setback: 5 m" in s for s in context["visual_recovered"]))
+        self.assertTrue(any("North setback: 5 m" in s for s in context["visual_unresolved"]))
+
     def test_grid_to_true_requires_established_conversion_and_reloads_at_consumers(self):
         from services import survey_graph, survey_north
         candidate = self.candidate("G", "GRID_NORTH", degrees=25)
@@ -533,6 +553,18 @@ class TrueNorthQualification(SurveyReferenceCase):
                             for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
         reference = dx.survey_reference_of(workspace, result["source_id"])
         self.assertTrue(any(p["type"] == "north" for p in sr.resolved_plan(reference)["primitives"]))
+        from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
+        counter = self.store.register_evidence_item(workspace, result["source_id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+            "Independent confirmed bearing reference conflicts with this grid-to-true conversion.", "text", actor="cust")
+        conflict = self.store.record_evidence_relationship(workspace, "evidence_item", counter["id"],
+            "evidence_item", edge["from_id"], "contradicts", provisional=True, created_by="cust",
+            reason="Conversion conflicts with independently confirmed reference")
+        self.store.confirm_relationship(workspace, conflict["id"], actor="cust")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        context = dc.build_context(document, workspace, result, "Where is true North?")
+        self.assertEqual(context["true_north_premise"]["state"], "UNRESOLVED",
+                         "A confirmed conversion cannot hide confirmed counterevidence")
         self.store.reject_relationship(workspace, edge["id"], actor="cust", reason="Conversion applicability unresolved")
         self.store = CaseWorkspaceStore(str(self.tmp))
         result, document, workspace = self.result_for(project_id)
@@ -689,6 +721,51 @@ class TrueNorthQualification(SurveyReferenceCase):
 
 
 class SurveyAccessQualification(SurveyReferenceCase):
+    def test_confirmed_counterevidence_blocks_reviewed_access_conclusion(self):
+        from services import survey_graph
+        from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
+        project_id = self.upload(survey_jpeg(), "access-conflict.jpg", name="Rule 6 prerequisite: conflict propagation")
+        self.run_worker(self.reading())
+        result, document, workspace = self.result_for(project_id)
+        proposal = next(e for e in workspace.evidence_items if e.get("content_type") == survey_graph.ACCESS_CONTENT_TYPE)
+        supporting = next(e for e in workspace.relationships if e.get("from_id") == proposal["id"])
+        self.store.confirm_relationship(workspace, supporting["id"], actor="cust")
+        counter = self.store.register_evidence_item(workspace, result["source_id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+            "Synthetic control: the entry at ACCESS-1 is service-only, not the primary public entry.",
+            "text", actor="cust")
+        contradicting = self.store.record_evidence_relationship(workspace,
+            "evidence_item", counter["id"], "evidence_item", proposal["id"], "contradicts",
+            provisional=True, created_by="cust", reason="Explicit conflicting access-role evidence")
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        weak = survey_graph.access_interpretations(visual["graph"])[0]
+        self.assertEqual(weak["state"], "UNRESOLVED")
+        self.assertEqual(weak["premise_state"], "UNRESOLVED")
+        self.store.confirm_relationship(workspace, contradicting["id"], actor="cust")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        trust = self.store.explain_evidence_trust(workspace, proposal["id"])
+        self.assertTrue(trust["has_contradictions"])
+        self.assertEqual(trust["contradicting_relationships"][0]["status"], "confirmed")
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["state"], "UNRESOLVED",
+                         "Confirmed support must not hide confirmed counterevidence")
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["premise_state"],
+                         "SUPPORTED_BUT_CONTESTED")
+        context = dc.build_context(document, workspace, result, "Which access is established?")
+        self.assertFalse(any("PRIMARY_PUBLIC_ACCESS" in line for line in context["visual_recovered"]))
+        self.assertIn("SUPPORTED_BUT_CONTESTED", json.dumps(context))
+        self.assertIn(contradicting["id"], json.dumps(context))
+        self.store.reject_relationship(workspace, contradicting["id"], actor="cust",
+                                       reason="Counterevidence targets a different entry; review resolved")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertEqual(survey_graph.access_interpretations(visual["graph"])[0]["state"], "PRIMARY_PUBLIC_ACCESS")
+        trust = self.store.explain_evidence_trust(workspace, proposal["id"])
+        self.assertEqual(trust["contradicting_relationships"][0]["status"], "rejected")
+        self.assertTrue(any(e["id"] == counter["id"] for e in workspace.evidence_items))
+
     def reading(self):
         raw = SubjectContainmentQualification.containment_reading(self, "inside")
         features = {name: {"value": True, "read_certainty": "RECOVERED",
@@ -856,6 +933,35 @@ class SurveyNotationRuntimeQualification(SurveyReferenceCase):
 
 
 class MeasurementGenealogyQualification(SurveyReferenceCase):
+    def test_confirmed_competing_measurement_defeats_precedence_after_reload(self):
+        from services import survey_graph
+        from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
+        project_id = self.upload(survey_jpeg(), "competing.jpg", name="Competing confirmed measurement")
+        self.run_worker(self.reading())
+        result, document, workspace = self.result_for(project_id)
+        for edge in list(workspace.relationships):
+            if (edge.get("reason") or "").startswith("Proposed measurement premise:"):
+                self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+        proposal = next(e for e in workspace.evidence_items
+            if e.get("content_type") == survey_graph.MEASUREMENT_PREMISE_CONTENT_TYPE
+            and json.loads(e["content"])["premise"] == "precedence"
+            and json.loads(e["content"])["occurrence_id"] == "M2")
+        counter = self.store.register_evidence_item(workspace, result["source_id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+            json.dumps({"segment_id": "S1", "occurrence_id": "M3", "value": 145,
+                        "unit": "ft", "precedence_over_M2": "UNRESOLVED"}), "text", actor="cust")
+        edge = self.store.record_evidence_relationship(workspace, "evidence_item", counter["id"],
+            "evidence_item", proposal["id"], "contradicts", provisional=True, created_by="cust",
+            reason="Confirmed same-segment competing measurement; M2 precedence not established")
+        self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        selection = survey_graph.measurement_genealogy(visual["graph"]["segments"][0])
+        self.assertIsNone(selection["current"], "Confirmed competing evidence must defeat individual completeness")
+        self.assertEqual(len(selection["history"]), 2)
+        context = dc.build_context(document, workspace, result, "Current dimension?")
+        self.assertFalse(any("Current working measurement for S1" in s for s in context["visual_recovered"]))
+
     def reading(self):
         payload = json.loads(json.dumps(SURVEY_READING))
         def occurrence(identifier, value, when, role):

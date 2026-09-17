@@ -216,7 +216,14 @@ def resolve_measurement_premises(store, workspace, visual):
                     continue
                 status = store.resolve_relationship_status(workspace, edge["id"])["status"]
                 state = "ESTABLISHED" if status == "confirmed" and edge.get("confirmed_by") and proposal.get("conclusion") == "ESTABLISHED" else "UNRESOLVED"
+                trust = store.explain_evidence_trust(workspace, row["id"])
+                if state == "ESTABLISHED":
+                    if trust.get("confirmed_counterevidence"):
+                        state = "SUPPORTED_BUT_CONTESTED"
+                    elif trust.get("unresolved_counterevidence"):
+                        state = "UNRESOLVED"
                 entry = states[axis]
+                entry.setdefault("trust_records", []).append(trust)
                 # Conflicting/unaccepted support never silently loses to an accepted row.
                 entry["state"] = state if not entry["evidence_ids"] else (
                     "ESTABLISHED" if entry["state"] == state == "ESTABLISHED" else "UNRESOLVED")
@@ -885,7 +892,7 @@ def resolve_access_interpretations(store, workspace, visual):
     evidence = {row["id"]: row for row in workspace.evidence_items}
     for candidate in (visual.get("graph") or {}).get("access_occurrences", []):
         snapshot = access_snapshot(candidate)
-        states, ids, statuses = [], [], []
+        states, ids, statuses, trust_records = [], [], [], []
         for edge in workspace.relationships:
             if (edge.get("from_type") != "evidence_item" or edge.get("to_type") != "evidence_item"
                     or edge.get("to_id") != visual.get("evidence_item_id")
@@ -906,9 +913,17 @@ def resolve_access_interpretations(store, workspace, visual):
             states.append(status == "confirmed"
                           and bool(edge.get("confirmed_by")))
             ids.append(row["id"])
+            trust_records.append(store.explain_evidence_trust(workspace, row["id"]))
+        confirmed_counter = [edge for trust in trust_records for edge in trust.get("confirmed_counterevidence", [])]
+        unresolved_counter = [edge for trust in trust_records for edge in trust.get("unresolved_counterevidence", [])]
         candidate["validated_access"] = {"state": "ESTABLISHED" if states and all(states) else
                                          "REJECTED" if statuses and all(s == "rejected" for s in statuses) else "UNRESOLVED",
-                                         "evidence_ids": ids}
+                                         "evidence_ids": ids, "trust_records": trust_records}
+        if candidate["validated_access"]["state"] == "ESTABLISHED":
+            if confirmed_counter:
+                candidate["validated_access"]["state"] = "SUPPORTED_BUT_CONTESTED"
+            elif unresolved_counter:
+                candidate["validated_access"]["state"] = "UNRESOLVED"
     return visual
 
 
@@ -943,6 +958,7 @@ def access_interpretations(graph):
         if established("no_access") and (established("driveway_access") or established("pedestrian_approach")):
             valid = False
         result.append({"occurrence": candidate, "state": kind if valid else "UNRESOLVED",
+                       "premise_state": (candidate.get("validated_access") or {}).get("state", "UNRESOLVED"),
                        "reason": "Reviewed scoped access evidence" if valid else "Access role, binding or review premise is UNRESOLVED"})
     primaries = [r for r in result if r["state"] == "PRIMARY_PUBLIC_ACCESS"]
     primary_claims = [c for c in candidates if c.get("classification") == "PRIMARY_PUBLIC_ACCESS"

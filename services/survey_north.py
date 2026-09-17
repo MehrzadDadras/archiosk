@@ -133,6 +133,13 @@ def resolve_conversions(store, workspace, visual):
                 continue
             accepted = store.resolve_relationship_status(workspace, edge["id"])["status"] == "confirmed" and bool(edge.get("confirmed_by"))
             state = "ESTABLISHED" if accepted else "UNRESOLVED"
+            trust = store.explain_evidence_trust(workspace, row["id"])
+            review.setdefault("trust_records", []).append(trust)
+            if state == "ESTABLISHED":
+                if trust.get("confirmed_counterevidence"):
+                    state = "SUPPORTED_BUT_CONTESTED"
+                elif trust.get("unresolved_counterevidence"):
+                    state = "UNRESOLVED"
             review["state"] = state if not review["evidence_ids"] else (
                 "ESTABLISHED" if state == review["state"] == "ESTABLISHED" else "UNRESOLVED")
             review["evidence_ids"].append(row["id"])

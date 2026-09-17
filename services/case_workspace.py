@@ -15104,6 +15104,12 @@ class CaseWorkspaceStore:
             "contradicting_relationships": contradicting,
             "other_relationships": other,
             "has_contradictions": len(contradicting) > 0,
+            # Counterevidence is never netted against support. Consumers must
+            # still establish exact scope and authority independently. Retain
+            # inactive edges above so a changed projection does not erase history.
+            "confirmed_counterevidence": [e for e in contradicting if e["status"] == "confirmed"],
+            "unresolved_counterevidence": [e for e in contradicting if e["status"] not in
+                                           ("confirmed", "rejected", "superseded")],
             "derived_observation_ids": sorted(observation_ids),
             "finding_ids": sorted(finding_ids),
             "authority_boundary": authority_boundary,

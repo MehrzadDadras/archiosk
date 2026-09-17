@@ -348,6 +348,10 @@ def _visual_lines(visual) -> tuple[list, list, list]:
             phrase = "Access %s on edge %s (%s): %s; provenance %s; review evidence %s; access interpretation only, not legal frontage or building-front designation" % (
                 occurrence["id"], occurrence["edge_id"], occurrence["street_name"], access["state"], occurrence["provenance"],
                 ", ".join((occurrence.get("validated_access") or {}).get("evidence_ids", [])))
+            phrase += "; premise " + access["premise_state"]
+            for trust in (occurrence.get("validated_access") or {}).get("trust_records", []):
+                for edge in trust.get("contradicting_relationships", []):
+                    phrase += "; counterevidence relationship %s (%s)" % (edge["relationship_id"], edge["status"])
             (unresolved if access["state"] == "UNRESOLVED" else recovered).append(phrase)
             for name in survey_graph.ACCESS_FEATURES:
                 feature = occurrence.get(name) or {}
@@ -409,6 +413,11 @@ def _visual_lines(visual) -> tuple[list, list, list]:
                     measurement["segment_id"], measurement["source_plan"], measurement["survey_date"] or "UNRESOLVED",
                     measurement["printed_role"] or "UNRESOLVED", measurement["read_certainty"],
                     binding.bound_certainty(measurement), measurement["provenance"]))
+                for premise in measurement.get("validated_premises", {}).values():
+                    for trust in premise.get("trust_records", []):
+                        for edge in trust.get("contradicting_relationships", []):
+                            partial.append("Measurement counterevidence relationship %s (%s); premise %s" % (
+                                edge["relationship_id"], edge["status"], premise["state"]))
             current = genealogy["current"]
             if current:
                 recovered.append("Current working measurement for %s: %s %s (occurrence %s; authority basis: %s; applicability: %s; precedence: %s)" % (
