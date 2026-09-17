@@ -688,6 +688,43 @@ class TrueNorthQualification(SurveyReferenceCase):
                          "Unresolved true North must gate directional setback claims beyond the renderer")
 
 
+class SurveyNotationRuntimeQualification(SurveyReferenceCase):
+    def test_notation_survives_worker_reload_and_actual_consumers(self):
+        from services import survey_graph
+        payload = json.loads(json.dumps(SURVEY_READING))
+        # One mixed-completeness sheet: old dimension-only run, explicit
+        # quadrant bearing, a supported curve, and ambiguous letter C.
+        segments = payload["graph"]["segments"]
+        segments[0].pop("bearing", None)
+        segments[1]["bearing"] = {"text": "S 30 E", "certainty": "RECOVERED"}
+        segments[2]["notation"] = "C; radius and chord printed beside curved street line"
+        segments[2]["radius"]["unit"] = "ft"
+        segments[2]["chord"]["unit"] = "ft"
+        segments[3]["notation"] = "C (ambiguous label)"
+        project_id = self.upload(survey_jpeg(), "notation.jpg", name="Rule 4 mixed notation")
+        self.run_worker(payload)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        graph = visual["graph"]
+        self.assertIsNone(graph["segments"][0]["bearing"])
+        self.assertEqual(graph["segments"][1]["bearing"]["value_degrees"], 150)
+        self.assertEqual(graph["segments"][3]["kind"], "straight")
+        curve = survey_graph.curve_constraints(graph["segments"][2])
+        self.assertEqual(curve["state"], "CONDITIONAL_ARC_FAMILY")
+        primitives = survey_graph.build_primitives(graph)
+        self.assertFalse(any(p["type"] == survey_graph.P_ARC for p in primitives["primitives"]))
+        context = dc.build_context(document, workspace, result, "What boundary geometry is established?")
+        prompt = dc.render_prompt(context)
+        self.assertIn("S 30 E", prompt)
+        self.assertIn("CONDITIONAL_ARC_FAMILY", prompt)
+        self.assertIn("PARTIALLY_RECOVERED", prompt)
+        self.assertIn("placement and metric image frame remain UNRESOLVED", prompt)
+        page = self.client.get("/document-shop/jobs/" + project_id)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"CONDITIONAL_ARC_FAMILY", page.data)
+
+
 class MeasurementGenealogyQualification(SurveyReferenceCase):
     def reading(self):
         payload = json.loads(json.dumps(SURVEY_READING))
@@ -3272,7 +3309,7 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
                      "boundary": "lot_line", "certainty": "RECOVERED",
                      "dimension": {"text": str(d), "value": d,
                                    "certainty": "RECOVERED"},
-                     "bearing": {"text": "b", "value_degrees": az,
+                     "bearing": {"text": {0: "N 0 E", 90: "N 90 E", 180: "S 0 E", 270: "N 90 W"}[az], "value_degrees": az,
                                  "certainty": "RECOVERED"}}
                     for i, (a, b, az, d) in enumerate(runs, 1)]})
 

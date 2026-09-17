@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
 # without bumping that is the defect that kept the parametric reconstruction
 # off every live record.
-VISUAL_PROMPT_VERSION = "visual-examination-07"
+VISUAL_PROMPT_VERSION = "visual-examination-08"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -312,7 +312,7 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
 - "segments": the boundary, one segment per run between two nodes. "kind" is "straight" or "arc".
   WALK THE WHOLE PARCEL. Go corner to corner all the way round the subject lot, in order, and report every run - not just the two or three most obvious sides. A parcel bounded by a street, two neighbouring lots and a second street has at least four runs and usually more. If the traverse genuinely does not close on the sheet, report the runs you can see and leave it open; do NOT invent a closing segment, and do NOT stop early because closing looks hard.
   AN ARC'S ENDPOINTS ARE THE ENDS OF THE CURVE ITSELF - where the curve meets the neighbouring boundary at each end, not two points part-way along it. Getting these wrong shortens the frontage.
-  A CURVED STREET FRONTAGE IS AN ARC, NOT A CHAIN OF SHORT STRAIGHTS. If the sheet prints a RADIUS and a CHORD for that curve, report both as numbers - they are what lets the curve be reconstructed exactly. "bulge_side" is "left" or "right" relative to travelling from "from" to "to"; for a street frontage the curve bulges AWAY from the parcel interior.
+  Preserve explicit curve notation and its context. C alone is not proof of a curve (it may be another label). Classify kind=arc only with supporting curve geometry/annotation. Preserve radius, chord, arc_length and delta independently with printed text, units and certainty; missing parameters remain unresolved. Radius and chord constrain an arc family, not its branch or image-space placement. Never infer bulge_side from parcel/street conventions. Older notation or missing bearings is valid partial evidence. Preserve printed quadrant bearings exactly; do not supply a bearing from page orientation or era. Era changes what to search for, never what evidence exists.
   Do NOT invent a radius. An arc whose radius you cannot read is still "arc" with no radius - it will be drawn straight and reported as unresolved, which is correct.
 - "subject_parcel": identify the subject ONLY from explicit parcel identity evidence on the sheet, never page position. Report identity, ordered boundary_segments (existing segment ids forming its closed boundary), read_certainty, bind_certainty, bind_basis (declared / structural / proximity / asserted / none), and provenance quoting the identity and explaining its attachment to those segments. Proximity or unsupported assertion cannot establish subject identity. If identity or boundary attachment is uncertain, say UNRESOLVED. Do not guess a closing edge.
 - "footprints": preserve EVERY building occurrence, including neighboring context, as its own outline, with "kind" (dwelling / garage / accessory / structure; do not guess a type), label, certainty for its outline, and read_certainty for its label. Do not merge buildings into a subject-property claim. The application determines containment using the bound subject boundary. Keep relative positions faithful to the sheet; they are observed image geometry, not legal survey geometry.

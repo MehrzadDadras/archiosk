@@ -355,6 +355,21 @@ def _visual_lines(visual) -> tuple[list, list, list]:
 
     # Read the persisted components again; a cached aggregate is not evidence.
     for segment in (visual.get("graph") or {}).get("segments") or []:
+        from services import survey_graph
+        if segment.get("bearing"):
+            bearing = survey_graph._bearing(segment["bearing"])
+            partial.append("Printed bearing on %s: %s; parsing %s; reference %s; read %s; binding %s" % (
+                segment["id"], segment["bearing"].get("text", ""),
+                (bearing or {}).get("parse_state", "UNRESOLVED"),
+                (visual.get("graph") or {}).get("bearing_reference", "UNRESOLVED"),
+                (bearing or {}).get("read_certainty", "UNRESOLVED"), binding.bound_certainty(bearing)))
+        if segment.get("kind") == "arc":
+            curve = survey_graph.curve_constraints(segment)
+            partial.append("Curve evidence on %s: %s; binding %s; parameters %s" % (
+                segment["id"], curve["state"], curve["binding_certainty"],
+                "; ".join("%s=%s" % (name, value.get("text") or "UNRESOLVED")
+                          for name, value in curve["parameters"].items())))
+            unresolved.append("Curve on %s: %s" % (segment["id"], curve["reason"]))
         if segment.get("measurements"):
             from services import survey_graph
             genealogy = survey_graph.measurement_genealogy(segment)

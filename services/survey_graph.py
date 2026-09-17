@@ -1,64 +1,16 @@
-"""CLAUDE-SURVEY-REFERENCE-02 - the parametric graph, and deterministic geometry.
+"""Survey evidence graph and deterministic, premise-limited geometry.
 
-    THE MODEL IDENTIFIES AND BINDS EVIDENCE. THIS MODULE CONSTRUCTS THE DRAWING.
-
-V1 asked the reader for polygons and drew them. That is a traced diagram: the
-curved Castille Avenue frontage arrived as a chain of straight segments because
-a polygon is all a polygon can be, and the one number on the sheet that
-actually defines that curve - RADIUS 153.76, beside CHORD 139.20 - was captured
-as a text observation and then not used for anything.
-
-So the division of labour changes, and only the division:
-
-  - the reader returns a GRAPH - corner nodes, segments with their kind,
-    footprints, north, street labels, dimensions and bearings, each with its
-    own certainty and its own evidence binding;
-  - this module computes the geometry from that graph, deterministically, with
-    no model involved. An arc segment carrying a radius becomes a real circular
-    arc through its two endpoints.
-
-WHAT DETERMINISTIC BUYS THAT A POLYGON CANNOT
-
-A circle through two known points with a known radius is fully determined up to
-which side it bulges, and the sheet says which side. So the frontage is not an
-approximation of a curve - it is the curve the surveyor recorded, reconstructed
-from its own parameters.
-
-    SCALE IS DERIVED FROM THE SEGMENT'S OWN CHORD, NOT GUESSED.
-
-The nodes are in image fractions and the radius is in survey feet, so the two
-have to be related before any arc can be drawn. `_arc_from_chord_and_radius`
-derives the scale from THAT SEGMENT's own chord dimension against its own
-endpoint separation - self-consistent by construction, needing no sheet scale,
-no title-block ratio and no cross-segment assumption.
-
-FIVE REFUSALS, each of which would otherwise make a drawing look finished:
-
-1. NO FORCED CLOSURE. A boundary whose segments do not form a closed ring is
-   drawn open, and the gap is reported. V1's polygon could not express "the
-   surveyor's chain does not close here", so it always closed.
-2. NO INVENTED CURVATURE. An arc segment whose radius was not read is drawn as
-   a STRAIGHT line and its curvature is reported unresolved - never a guessed
-   bulge.
-3. NO GEOMETRICALLY IMPOSSIBLE ARC. A radius smaller than half its own chord
-   cannot pass through both endpoints. It is refused and reported, not clamped
-   to the minimum that would have worked.
-4. NO UNSUPPORTED DIMENSION. A dimension is drawn only where its certainty
-   bears a value, and it is drawn as the sheet's own string, never recomputed
-   from the reconstructed geometry - a measured 44.09 and a pixel-derived 43.6
-   must never be confusable.
-5. NO INFERRED NORTH. Absent a read north arrow, no arrow is drawn.
-
-ONE GEOMETRY, TWO EMITTERS. `build_primitives` resolves the graph into plain
-primitives once; `emit_svg` and the PDF renderer in `survey_reference` both
-consume that list. The review drawing on screen and the exported sheet are
-therefore the same geometry by construction, not by two implementations
-agreeing.
+Printed dimensions/bearings are distinct from observed image coordinates.
+Radius and chord constrain a conditional arc family; they do not establish
+an arc branch, a Euclidean image frame, or legal geometry. Missing inputs
+remain unresolved. Both renderers consume the same qualified primitives.
+Historical source evidence is retained and revalidated at point of use.
 """
 from __future__ import annotations
 
 import logging
 import math
+import re
 from typing import Optional
 
 from services import visual_examination as vx
@@ -354,6 +306,24 @@ def _measurement_occurrences(raw):
     return result
 
 
+def _printed_azimuth(text):
+    """Parse an explicit quadrant bearing; never derive one from page geometry."""
+    match = re.fullmatch(r'\s*([NS])\s*(\d+(?:\.\d+)?)\s*(?:°|D)?\s*'
+                         r'(?:(\d+(?:\.\d+)?)\s*[\'′]\s*)?'
+                         r'(?:(\d+(?:\.\d+)?)\s*["″]\s*)?([EW])\s*',
+                         str(text).upper())
+    if not match:
+        return None
+    ns, degrees, minutes, seconds, ew = match.groups()
+    degrees, minutes, seconds = float(degrees), float(minutes or 0), float(seconds or 0)
+    angle = degrees + minutes / 60 + seconds / 3600
+    if minutes >= 60 or seconds >= 60 or angle > 90:
+        return None
+    return (angle if ns == "N" and ew == "E" else
+            180 - angle if ns == "S" and ew == "E" else
+            180 + angle if ns == "S" else 360 - angle) % 360
+
+
 def _bearing(raw) -> Optional[dict]:
     """A bearing as the sheet prints it, PLUS its azimuth where one was read.
 
@@ -372,13 +342,23 @@ def _bearing(raw) -> Optional[dict]:
     text = str(raw.get("text") or "").strip()
     if certainty not in vx.VALUE_BEARING or not text:
         return None
-    azimuth = _num(raw.get("value_degrees"))
+    claimed = _num(raw.get("claimed_value_degrees", raw.get("value_degrees")))
+    azimuth = _printed_azimuth(text)
+    conflict = (azimuth is not None and claimed is not None and
+                abs((claimed - azimuth + 180) % 360 - 180) > .0001)
+    if conflict:
+        azimuth = None
     quadrant = str(raw.get("quadrant") or "").strip().upper()[:2]
     return {
+        **(_dimension(dict(raw, value=azimuth)) or {}),
         "text": text[:40],
         "value_degrees": None if azimuth is None else round(azimuth % 360.0, 4),
+        "claimed_value_degrees": claimed,
+        "parse_state": "EVIDENCE_CONFLICT" if conflict else "PARSED" if azimuth is not None else "UNRESOLVED",
         "quadrant": quadrant if quadrant in ("NE", "SE", "SW", "NW") else "",
         "certainty": certainty,
+        "source_region": raw.get("source_region"),
+        "provenance": str(raw.get("provenance") or ""),
     }
 
 
@@ -573,7 +553,12 @@ def _azimuth_of(segment) -> Optional[float]:
         return None
     if bearing.get("certainty") not in vx.VALUE_BEARING:
         return None
-    degrees = _num(bearing.get("value_degrees"))
+    # Revalidate persisted pre-qualification bearings at point of use.
+    from services import binding
+    parsed = _bearing(bearing) or {}
+    if binding.bound_certainty(parsed) not in vx.VALUE_BEARING:
+        return None
+    degrees = _num(parsed.get("value_degrees"))
     return None if degrees is None else degrees % 360.0
 
 
@@ -602,13 +587,17 @@ def segment_inputs(segment) -> dict:
     is_arc = segment.get("kind") == "arc"
     radius = _num((segment.get("radius") or {}).get("value"))
     chord = _num((segment.get("chord") or {}).get("value"))
-    arc_defined = bool(is_arc and radius and chord)
+    # Radius/chord constrain a family, not its branch, orientation or an
+    # image-space Euclidean embedding. Do not mark that family computable.
+    arc_defined = False
 
     missing = []
     if azimuth is None and not arc_defined:
         missing.append("BEARING")
     if distance is None and not arc_defined:
         missing.append("DIMENSION")
+    if is_arc:
+        missing.extend(("ARC_BRANCH", "EUCLIDEAN_FRAME"))
 
     return {
         "id": segment["id"],
@@ -618,7 +607,7 @@ def segment_inputs(segment) -> dict:
         "radius": radius,
         "chord": chord,
         # Computable means THIS RUN can be laid off from its own numbers.
-        "computable": bool((azimuth is not None and distance is not None)
+        "computable": bool((not is_arc and azimuth is not None and distance is not None)
                            or arc_defined),
         "missing": tuple(missing),
     }
@@ -884,6 +873,9 @@ def normalise_graph(raw) -> dict:
             "bearing": _bearing(entry.get("bearing")),
             "radius": _dimension(entry.get("radius")),
             "chord": _dimension(entry.get("chord")),
+            "arc_length": _dimension(entry.get("arc_length")),
+            "delta": _dimension(entry.get("delta")),
+            "notation": str(entry.get("notation") or "")[:80],
             "bulge_side": bulge if bulge in BULGE_SIDES else None,
             "certainty": _certainty(entry.get("certainty")),
         })
@@ -945,54 +937,44 @@ def normalise_graph(raw) -> dict:
 
 # -- Deterministic geometry --------------------------------------------------
 
+def curve_constraints(segment):
+    """Conditional circular-arc family, never a guessed image-space curve."""
+    from services import binding
+    params = {name: segment.get(name) or {} for name in
+              ("radius", "chord", "arc_length", "delta")}
+    radius, chord = (_num(params[name].get("value")) for name in ("radius", "chord"))
+    result = {"state": "PARTIAL", "parameters": params, "minor_delta_degrees": None,
+              "major_delta_degrees": None, "binding_certainty": "UNRESOLVED",
+              "operator": "circle_chord_relation", "premises": ["c = 2 r sin(delta/2)"],
+              "reason": "Missing or unbound curve parameters; no unique arc established"}
+    if radius is None or chord is None:
+        return result
+    if radius <= 0 or chord <= 0 or chord > 2 * radius:
+        result.update(state="EVIDENCE_CONFLICT", reason="Radius/chord admit no nonzero circular arc")
+        return result
+    units = [params[name].get("unit") for name in ("radius", "chord")]
+    if not all(units) or units[0] != units[1]:
+        result["reason"] = "Radius/chord units are unresolved or incomparable"
+        return result
+    certainty = binding.weaker(*(binding.bound_certainty(params[name]) for name in ("radius", "chord")))
+    result["binding_certainty"] = certainty
+    if certainty not in vx.VALUE_BEARING:
+        return result
+    minor = math.degrees(2 * math.asin(chord / (2 * radius)))
+    result.update(state="CONDITIONAL_ARC_FAMILY", minor_delta_degrees=minor,
+                  major_delta_degrees=360 - minor,
+                  reason="Radius/chord constrain minor and major alternatives; branch, placement and metric image frame remain UNRESOLVED")
+    return result
+
+
 def _arc_from_chord_and_radius(p1, p2, radius_survey, chord_survey, bulge_side):
-    """The circular arc through p1 and p2 with the surveyed radius.
+    """Legacy image-fraction API cannot establish a metric circular arc.
 
-    Returns (centre, radius_norm, start_deg, extent_deg) or (None, reason).
-
-    THE SCALE COMES FROM THIS SEGMENT'S OWN CHORD. The endpoints are image
-    fractions and the radius is in survey units; relating them needs one
-    number, and the chord is the one the sheet prints for exactly this arc. No
-    sheet scale, no title-block ratio, no assumption carried from another
-    segment.
-
-    The MINOR arc is chosen. On a lot frontage the surveyed chord and radius
-    describe the short way round; the major arc would sweep the curve away
-    across the whole parcel, which no street frontage does.
+    Keep the refusal at point of use for historical persisted graphs too.
+    A future qualified rectification supplies a typed Euclidean frame; a
+    chord-to-pixel ratio alone cannot remove perspective or unequal x/y scale.
     """
-    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
-    separation = math.hypot(dx, dy)
-    if separation <= 1e-9:
-        return None, "the arc's endpoints coincide"
-    if not radius_survey or not chord_survey or chord_survey <= 0:
-        return None, "the arc has no readable radius and chord"
-
-    scale = separation / float(chord_survey)
-    radius = float(radius_survey) * scale
-    half = separation / 2.0
-    if radius < half - 1e-9:
-        # A radius shorter than half its own chord describes no circle through
-        # both points. REFUSED rather than clamped: clamping would silently
-        # substitute a different curve for the surveyed one.
-        return None, ("radius %s is smaller than half its own chord %s - no arc "
-                      "can pass through both endpoints"
-                      % (radius_survey, chord_survey))
-
-    height = math.sqrt(max(radius * radius - half * half, 0.0))
-    mid = ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
-    # Unit normal to the chord. Image space is y-DOWN, so "left of travel" is
-    # (dy, -dx) normalised; the sign flip below is the only place that
-    # convention matters.
-    nx, ny = dy / separation, -dx / separation
-    sign = 1.0 if bulge_side == BULGE_LEFT else -1.0
-    centre = (mid[0] - sign * nx * height, mid[1] - sign * ny * height)
-
-    start = math.degrees(math.atan2(p1[1] - centre[1], p1[0] - centre[0]))
-    end = math.degrees(math.atan2(p2[1] - centre[1], p2[0] - centre[0]))
-    extent = (end - start) % 360.0
-    if extent > 180.0:
-        extent -= 360.0
-    return (centre, radius, start, extent), None
+    return None, "UNRESOLVED: arc branch and Euclidean image frame are not established"
 
 
 def build_primitives(graph: dict, include=None) -> dict:
@@ -1048,12 +1030,12 @@ def build_primitives(graph: dict, include=None) -> dict:
             radius = (segment.get("radius") or {}).get("value")
             chord = (segment.get("chord") or {}).get("value")
             resolved, reason = _arc_from_chord_and_radius(
-                p1, p2, radius, chord, segment.get("bulge_side") or BULGE_LEFT)
+                p1, p2, radius, chord, segment.get("bulge_side"))
             if resolved is None:
                 # NO INVENTED CURVATURE. Drawn straight, and said out loud.
                 straights += 1
                 primitives.append({"type": P_LINE, "id": segment["id"],
-                                   "a": p1, "b": p2, "certain": certain,
+                                   "a": p1, "b": p2, "certain": False,
                                    "provenance": provenance, "tags": tags,
                                    "role": segment["boundary"],
                                    "label": segment["label"]})
