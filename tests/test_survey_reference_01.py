@@ -502,6 +502,192 @@ class SubjectContainmentQualification(SurveyReferenceCase):
                 self.assertTrue(any("Building A" in line and "UNRESOLVED" in line for line in unresolved))
 
 
+class TrueNorthQualification(SurveyReferenceCase):
+    def test_grid_to_true_requires_established_conversion_and_reloads_at_consumers(self):
+        from services import survey_graph, survey_north
+        candidate = self.candidate("G", "GRID_NORTH", degrees=25)
+        candidate["conversion_to_true"] = {"from": "GRID_NORTH", "to": "TRUE_NORTH",
+            "clockwise_image_offset_degrees": 5, "applicability": "THIS_VIEW",
+            "read_certainty": "RECOVERED", "bind_certainty": "RECOVERED", "bind_basis": "declared",
+            "provenance": "Explicit synthetic conversion: true North is 5 degrees clockwise from grid North in this image"}
+        candidate["validated_conversion"] = {"state": "ESTABLISHED"}  # must be discarded
+        payload = json.loads(json.dumps(SURVEY_READING))
+        payload["graph"]["north_candidates"] = [candidate]
+        project_id = self.upload(survey_jpeg(), "conversion.jpg", name="Synthetic North conversion review")
+        # Axis measurement has independent pixel fixtures; this control isolates
+        # reference conversion and the existing human confirmation boundary.
+        with patch.object(survey_north, "measure_north", return_value={"ok": True, "degrees": 25, "reason": "fixed measurement"}):
+            self.run_worker(payload)
+        result, document, workspace = self.result_for(project_id)
+        initial = dc.build_context(document, workspace, result, "Where is true North?")
+        self.assertEqual(initial["true_north_premise"]["state"], "UNRESOLVED")
+        edge = next(e for e in workspace.relationships if e.get("reason") == "Proposed North reference conversion")
+        self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        context = dc.build_context(document, workspace, result, "Where is true North?")
+        self.assertEqual(context["true_north_premise"]["state"], "ESTABLISHED")
+        self.assertEqual(context["true_north_premise"]["degrees"], 30)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertTrue(any(p["type"] == "north" and p["degrees"] == 30
+                            for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
+        reference = dx.survey_reference_of(workspace, result["source_id"])
+        self.assertTrue(any(p["type"] == "north" for p in sr.resolved_plan(reference)["primitives"]))
+        self.store.reject_relationship(workspace, edge["id"], actor="cust", reason="Conversion applicability unresolved")
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        context = dc.build_context(document, workspace, result, "Where is true North?")
+        self.assertEqual(context["true_north_premise"]["state"], "UNRESOLVED")
+
+    def test_measured_typed_north_survives_reload_renderer_and_ask_boundary(self):
+        import math
+        from services import survey_graph, survey_north
+        for degrees in (30, 120):
+            with self.subTest(degrees=degrees):
+                image = Image.new("RGB", (400, 400), "white")
+                draw = ImageDraw.Draw(image)
+                aim = math.radians(degrees)
+                tip = (200 + 120 * math.sin(aim), 200 - 120 * math.cos(aim))
+                sides = [(200 + 66 * math.sin(aim + offset), 200 - 66 * math.cos(aim + offset)) for offset in (-.28, .28)]
+                draw.polygon([(200, 200), sides[0], tip, sides[1]], fill="black")
+                buf = io.BytesIO()
+                image.save(buf, "JPEG")
+                candidate = self.candidate("A", degrees=degrees)
+                candidate["source_region"] = {"x": 0, "y": 0, "w": 1, "h": 1}
+                payload = json.loads(json.dumps(SURVEY_READING))
+                payload["graph"]["north_candidates"] = [candidate]
+                payload["graph"]["bearing_reference"] = "TRUE_NORTH"
+                payload["observations"] = [{"key": "setbacks", "value": "North setback: 5 m",
+                                             "certainty": "RECOVERED", "directional_reference": "TRUE_NORTH"}]
+                project_id = self.upload(buf.getvalue(), "north.jpg", name="Synthetic typed North %s" % degrees)
+                self.run_worker(payload)
+                self.store = CaseWorkspaceStore(str(self.tmp))
+                result, document, workspace = self.result_for(project_id)
+                visual = dx.visual_reading(workspace, result["source_id"])
+                north = survey_north.resolve_true_north(visual["graph"])
+                self.assertEqual(north["state"], "ESTABLISHED")
+                self.assertLess(survey_north.angular_delta(north["degrees"], degrees), 10)
+                self.assertTrue(any(p["type"] == "north" for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
+                html = self.client.get("/document-shop/jobs/" + project_id).get_data(as_text=True)
+                self.assertIn("North setback: 5 m", html)
+                sent = {}
+                def spy(**kwargs):
+                    sent.update(kwargs)
+                    return _Outcome(parsed={"answer": "The qualified reading is 5 m."})
+                with patch.object(llm_gateway, "call_llm_json", spy):
+                    self.assertTrue(dc.ask(document, workspace, result, "North setback?", app=self.app)["ok"])
+                self.assertIn("TRUE NORTH PREMISE", sent["user_prompt"])
+                self.assertIn("ESTABLISHED", sent["user_prompt"])
+                row = next(e for e in workspace.evidence_items if e.get("content_type") == vx.VISUAL_CONTENT_TYPE)
+                stored = json.loads(row["content"])
+                stored["graph"]["north_candidates"][0]["bind_certainty"] = "PARTIALLY_RECOVERED"
+                row["content"] = json.dumps(stored)
+                self.store.save(workspace)
+                self.store = CaseWorkspaceStore(str(self.tmp))
+                result, document, workspace = self.result_for(project_id)
+                visual = dx.visual_reading(workspace, result["source_id"])
+                self.assertFalse(any(p["type"] == "north" for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
+                self.assertFalse(survey_graph.solve_traverse(visual["graph"], reference_type="TRUE_NORTH")["computed"])
+                context = dc.build_context(document, workspace, result, "North setback?")
+                self.assertFalse(any("North setback: 5 m" in line for line in context["visual_recovered"]))
+
+    def candidate(self, identifier, kind="TRUE_NORTH", degrees=30, source="survey_arrow"):
+        return {"id": identifier, "reference_type": kind, "source_type": source,
+                "reference_text": kind, "degrees": degrees, "measured_degrees": degrees,
+                "measured_ok": True, "certainty": "RECOVERED", "read_certainty": "RECOVERED",
+                "bind_certainty": "RECOVERED", "bind_basis": "declared", "applicability": "THIS_VIEW",
+                "source_region": {"x": .1, "y": .1, "w": .2, "h": .2},
+                "provenance": "Synthetic typed North symbol and its independent pixel measurement"}
+
+    def test_typed_north_controls(self):
+        from services import survey_north
+        cases = {
+            "arrow": [self.candidate("A")],
+            "title": [self.candidate("T", source="title_block")],
+            "agree": [self.candidate("A"), self.candidate("T", degrees=31, source="title_block")],
+            "disagree": [self.candidate("A"), self.candidate("T", degrees=100, source="title_block")],
+            "grid": [self.candidate("G", "GRID_NORTH")],
+            "magnetic": [self.candidate("M", "MAGNETIC_NORTH")],
+            "assumed": [self.candidate("S", "ASSUMED_NORTH")],
+            "other": [self.candidate("O", "OTHER")],
+            "basis_note": [self.candidate("N", source="survey_note")],
+            "baseline": [self.candidate("B", source="baseline_bearing")],
+            "none": [],
+            "rotated": [self.candidate("A", degrees=120)],
+            "conversion": [self.candidate("G", "GRID_NORTH", degrees=25), self.candidate("T")],
+        }
+        for case, candidates in cases.items():
+            with self.subTest(case=case):
+                result = survey_north.resolve_true_north({"north_candidates": candidates})
+                established = case in ("arrow", "title", "agree", "rotated", "conversion")
+                self.assertEqual(result["state"], "ESTABLISHED" if established else "UNRESOLVED")
+                self.assertEqual(result["candidates"], candidates)
+                if case == "conversion":
+                    self.assertEqual(result["conversions"][0]["clockwise_image_offset_degrees"], 5)
+                if case == "rotated":
+                    self.assertEqual(result["degrees"], 120)
+
+    def test_all_directional_semantics_are_gated(self):
+        for key, value in (("setbacks", "North setback: 5 m"), ("lot_lines", "East frontage"),
+                           ("building_footprint", "Structure on west side"),
+                           ("accessory_structures", "Garage to the south"),
+                           ("bearings", "N 45 E")):
+            with self.subTest(key=key):
+                visual = vx.normalise_payload({"document_category": "survey", "category_certainty": "RECOVERED",
+                    "observations": [{"key": key, "value": value, "certainty": "RECOVERED"}]})
+                recovered, partial, unresolved = dx._visual_lines(visual)
+                self.assertFalse(any(value in line for line in recovered))
+                self.assertTrue(any(value in line and "UNRESOLVED" in line for line in unresolved))
+
+    def test_directional_footprint_label_does_not_upgrade_containment_to_orientation(self):
+        payload = SubjectContainmentQualification.containment_reading(self, "inside")
+        payload["graph"]["footprints"][0]["label"] = "Structure on north side"
+        visual = vx.normalise_payload(payload)
+        recovered, partial, unresolved = dx._visual_lines(visual)
+        statement = next(line for line in recovered if line.startswith("Existing building on subject property:"))
+        self.assertIn("Structure on north side", statement)
+        self.assertIn("directional reference UNRESOLVED", statement)
+
+    def test_reference_read_time_guard_preserves_observation_and_refuses_true_bearing(self):
+        from services import survey_graph
+        reference = {"graph": {}, "recovered": [{"key": "setbacks", "label": "Setbacks",
+                     "value": "North setback: 5 m", "certainty": "RECOVERED"}], "unresolved": []}
+        original = json.dumps(reference, sort_keys=True)
+        qualified = sr.headline(reference)
+        self.assertEqual(qualified["recovered"], [])
+        self.assertTrue(any("North setback: 5 m" in line for line in qualified["unresolved"]))
+        self.assertEqual(json.dumps(reference, sort_keys=True), original)
+        traversal = survey_graph.solve_traverse({"segments": []}, reference_type="TRUE_NORTH")
+        self.assertFalse(traversal["computed"])
+        self.assertEqual(traversal["north_premise"]["state"], "UNRESOLVED")
+
+    def test_grid_basis_without_conversion_cannot_establish_a_true_north_setback(self):
+        # Existing payload vocabulary, no new candidate schema: the refusal
+        # already reached geometry but must also reach the ordinary consumer.
+        payload = json.loads(json.dumps(SURVEY_READING))
+        payload["graph"].pop("north", None)
+        payload["observations"] = [
+            {"key": "north", "value": "Survey note: bearings refer to GRID NORTH; true-North conversion not stated",
+             "certainty": "RECOVERED"},
+            {"key": "setbacks", "value": "North setback: 5 m",
+             "certainty": "RECOVERED"}]
+        payload["unresolved"] = ["True-North conversion is not stated"]
+        project_id = self.upload(survey_jpeg(), "grid-basis.jpg", name="Synthetic grid North qualification")
+        self.run_worker(payload)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertIsNone(visual["graph"]["north"])
+        self.assertTrue(any("GRID NORTH" in o["value"] for o in visual["observations"]))
+        context = dc.build_context(document, workspace, result,
+                                   "What is the setback on the true-north side of this property?")
+        unqualified = [line for line in context["visual_recovered"]
+                       if "North setback: 5 m" in line and "GRID" not in line
+                       and "UNRESOLVED" not in line]
+        self.assertEqual(unqualified, [],
+                         "Unresolved true North must gate directional setback claims beyond the renderer")
+
+
 class MeasurementGenealogyQualification(SurveyReferenceCase):
     def reading(self):
         payload = json.loads(json.dumps(SURVEY_READING))
@@ -929,7 +1115,10 @@ class BRasterSurvey(SurveyReferenceCase):
         self.assertEqual(result["state"], dx.STATE_RESULT_READY)
         interpretation = {i["label"]: i["value"] for i in result["interpretation"]}
         self.assertIn("Recovered", interpretation)
-        self.assertIn("North", interpretation["Recovered"])
+        # EXPECTED_SUPERSESSION: an untyped arrow remains observed evidence,
+        # but does not establish true North for semantic use.
+        self.assertNotIn("North", interpretation["Recovered"])
+        self.assertTrue(any("True North UNRESOLVED" in i["value"] for i in result["not_established"]))
         # STALE_PRE_CONTAINMENT_EXPECTATION: optical recovery is not proof
         # that an observed building belongs to this parcel.
         self.assertIn("Address", interpretation["Recovered"])
@@ -1206,7 +1395,8 @@ class GComposerAndAskGo(SurveyReferenceCase):
                                    "Which direction is north?")
         self.assertTrue(context["visual_ran"])
         self.assertEqual(context["visual_document"], "Survey image")
-        self.assertTrue(any("North" in item for item in context["visual_recovered"]))
+        self.assertTrue(any("North" in item for item in context["visual_unresolved"]))
+        self.assertEqual(context["true_north_premise"]["state"], "UNRESOLVED")
         self.assertTrue(context["survey_reference"])
 
     def test_the_prompt_states_the_reading_and_keeps_its_uncertainty(self):
@@ -1218,7 +1408,9 @@ class GComposerAndAskGo(SurveyReferenceCase):
         self.assertIn("VISUAL EXAMINATION", prompt)
         self.assertIn("1 Castille Avenue", prompt)
         self.assertIn("Partially recovered", prompt)
-        self.assertIn("must not supply one", prompt)
+        # EXPECTED_SUPERSESSION: unresolved use no longer erases a readable
+        # observation, but the prohibition on inventing conclusions remains.
+        self.assertIn("do not supply or promote an unestablished conclusion", prompt)
         self.assertIn("SURVEY REFERENCE", prompt)
 
     def test_asking_go_still_sends_no_image_bytes(self):
@@ -3114,6 +3306,13 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
             "north": {"degrees": 8.0, "measured_degrees": 8.4,
                       "measured_ok": True, "certainty": "RECOVERED"}})
 
+        # This layer test explicitly establishes the reference system; an
+        # angle alone no longer earns a North arrow (EXPECTED_SUPERSESSION).
+        graph["north_candidates"] = [dict(graph["north"], id="NORTH",
+            reference_type="TRUE_NORTH", source_type="survey_arrow", reference_text="TRUE NORTH",
+            read_certainty="RECOVERED", bind_certainty="RECOVERED", bind_basis="declared",
+            source_region={"x": .1, "y": .1, "w": .2, "h": .2},
+            applicability="THIS_VIEW", provenance="Explicit true-North fixture")]
         kinds = {p["type"] for p in survey_graph.build_primitives(
             graph, include=survey_graph.STAGE1_LAYERS)["primitives"]}
 
@@ -3179,9 +3378,10 @@ class NorthGovernsUseNotOnlyWriting(unittest.TestCase):
             drawn = [p for p in survey_graph.build_primitives(
                 self._graph(stored))["primitives"]
                 if p["type"] == survey_graph.P_NORTH]
-            self.assertEqual(len(drawn), 1,
-                             "pass %d lost an accepted north" % pass_number)
-            self.assertEqual(drawn[0]["degrees"], 8.33)
+            self.assertEqual(len(drawn), 0,
+                             "pass %d promoted an untyped measurement to true North" % pass_number)
+            # The old measurement remains idempotent and available as evidence.
+            self.assertEqual(survey_graph._reconcile_north(stored)[0]["degrees"], 8.33)
 
     def test_no_re_examination_is_needed_to_get_the_correct_answer(self):
         """The whole point: no new model call, no re-transmission of the sheet.

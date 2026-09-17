@@ -624,7 +624,22 @@ def segment_inputs(segment) -> dict:
     }
 
 
-def solve_traverse(graph: dict) -> dict:
+def solve_traverse(graph: dict, *, reference_type=None) -> dict:
+    """Relative mathematics is not proof of a true-North reference frame."""
+    from services import survey_north
+    requested = reference_type or graph.get("bearing_reference") or "UNRESOLVED"
+    north = survey_north.resolve_true_north(graph)
+    if requested == "TRUE_NORTH" and north["state"] != "ESTABLISHED":
+        return {"computed": False, "points": {}, "segments": [segment_inputs(s) for s in graph.get("segments", [])],
+                "reference_type": requested, "north_premise": north,
+                "misclosure": _no_misclosure("PREMISE_UNESTABLISHED: true North is unresolved")}
+    result = _solve_traverse_relative(graph)
+    result["reference_type"] = requested
+    result["north_premise"] = north
+    return result
+
+
+def _solve_traverse_relative(graph: dict) -> dict:
     """Vertex coordinates computed from the sheet's own bearings and distances.
 
     CLAUDE-SURVEY-STAGE1-01. THE SOLVER IS DETERMINISTIC AND IT IS ALLOWED TO
@@ -910,7 +925,10 @@ def normalise_graph(raw) -> dict:
 
     subject = raw.get("subject_parcel") or {}
     subject = subject if isinstance(subject, dict) else {}
+    from services import survey_north
     graph = {"graph_version": GRAPH_VERSION, "nodes": nodes, "segments": segments,
+            "north_candidates": survey_north.normalise_candidates(raw.get("north_candidates")),
+            "bearing_reference": raw.get("bearing_reference") if raw.get("bearing_reference") in survey_north.REFERENCE_TYPES else "UNRESOLVED",
             "footprints": footprints, "north": north, "streets": streets,
             "unresolved": unresolved,
             "subject_parcel": {
@@ -1107,7 +1125,11 @@ def build_primitives(graph: dict, include=None) -> dict:
     # records". North simply was not following it. Re-reconciling here is
     # idempotent - a stored measured north reconciles to itself - and needs no
     # re-examination and no re-transmission of the customer's sheet.
-    north, north_refusal = _reconcile_north(graph.get("north"))
+    from services import survey_north
+    resolution = survey_north.resolve_true_north(graph)
+    north = ({"degrees": resolution["degrees"], "certainty": vx.RECOVERED}
+             if resolution["state"] == "ESTABLISHED" else None)
+    north_refusal = resolution["reason"] if north is None else None
     if north_refusal and north_refusal not in unresolved:
         unresolved.append(north_refusal)
     if LAYER_NORTH not in include:

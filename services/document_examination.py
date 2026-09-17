@@ -253,6 +253,11 @@ def visual_reading(workspace, source_id: str):
         from services.survey_graph import resolve_measurement_premises
         store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
         resolve_measurement_premises(store, workspace, visual)
+    if visual and (visual.get("graph") or {}).get("north_candidates"):
+        from flask import current_app
+        from services.case_workspace import CaseWorkspaceStore
+        from services.survey_north import resolve_conversions
+        resolve_conversions(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
     return visual
 
 
@@ -260,7 +265,16 @@ def survey_reference_of(workspace, source_id: str):
     """The Survey Reference derived from this source, or None."""
     from services import survey_reference as sr
 
-    return _decoded_record(workspace, source_id, sr.REFERENCE_CONTENT_TYPE)
+    reference = _decoded_record(workspace, source_id, sr.REFERENCE_CONTENT_TYPE)
+    if reference and (reference.get("graph") or {}).get("north_candidates"):
+        from flask import current_app
+        from services.case_workspace import CaseWorkspaceStore
+        from services.survey_north import resolve_conversions
+        visual = visual_reading(workspace, source_id)
+        if visual:
+            resolve_conversions(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace,
+                                {"graph": reference["graph"], "evidence_item_id": visual["evidence_item_id"]})
+    return reference
 
 
 def _visual_established_anything(visual) -> bool:
@@ -288,6 +302,20 @@ def _visual_lines(visual) -> tuple[list, list, list]:
                 if observation.get("value") else observation["label"])
 
     observations = visual.get("observations") or []
+    directional_unresolved = []
+    if visual.get("document_category") == "survey":
+        from services import survey_north
+        north_resolution = survey_north.resolve_true_north(visual.get("graph") or {})
+        admitted = []
+        for observation in observations:
+            if survey_north.directional_observation(observation) and not survey_north.admits_true_direction(observation, north_resolution):
+                directional_unresolved.append("Directional conclusion UNRESOLVED; observed %s [reference %s; true North %s]" % (
+                    _phrase(observation), observation.get("directional_reference", "UNRESOLVED"), north_resolution["state"]))
+            else:
+                admitted.append(observation)
+        observations = admitted
+        if north_resolution["state"] != "ESTABLISHED":
+            directional_unresolved.append("True North UNRESOLVED: " + north_resolution["reason"])
     survey = visual.get("document_category") == "survey"
     structures = [o for o in observations if o.get("key") in ("building_footprint", "accessory_structures")]
     if survey:
@@ -296,7 +324,7 @@ def _visual_lines(visual) -> tuple[list, list, list]:
                  if o.get("certainty") == vx.RECOVERED]
     partial = [_phrase(o) for o in observations
                if o.get("certainty") == vx.PARTIALLY_RECOVERED]
-    unresolved = list(visual.get("unresolved") or [])
+    unresolved = list(visual.get("unresolved") or []) + directional_unresolved
     from services import binding
 
     if survey:
@@ -309,6 +337,9 @@ def _visual_lines(visual) -> tuple[list, list, list]:
         for footprint in footprints:
             containment = survey_graph.footprint_containment(graph, footprint)
             name = footprint.get("label") or footprint.get("id") or "Unidentified structure"
+            from services import survey_north
+            if survey_north.directional_observation({"key": "structure_label", "value": name}):
+                name += " [label as observed; directional reference UNRESOLVED]"
             state = containment["state"]
             provenance = containment["provenance"]
             detail = (" (parcel %s; %s; read %s; binding %s; occurrence %s; boundary %s; source basis: %s)" % (

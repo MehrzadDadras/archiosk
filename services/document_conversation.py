@@ -103,6 +103,12 @@ WHAT YOU CAN AND CANNOT DO
   where things are on it. Do not guess. Do not hedge into a half-answer.
 
 WHEN A VISUAL EXAMINATION IS INCLUDED BELOW
+For survey directions, the TRUE NORTH PREMISE below governs every claim,
+including recovered text, setbacks, frontage, structure descriptions and bearing
+reconstruction. GRID, MAGNETIC and ASSUMED North are distinct reference systems.
+When true North is unresolved, preserve observed values with their reference
+system but do not answer a true-north directional question from them. A number
+or visible arrow does not establish its North system or a conversion.
 Everything above describes what the RECOVERED TEXT can support. Where the
 material below carries a VISUAL EXAMINATION, GO has already looked at this
 document once and recorded what it saw, and that record is yours to use.
@@ -207,6 +213,8 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
     visual = dx.visual_reading(workspace, source_id) if source_id else None
     reference = dx.survey_reference_of(workspace, source_id) if source_id else None
     visual_recovered, visual_partial, visual_unresolved = dx._visual_lines(visual)
+    from services import survey_north
+    north = survey_north.resolve_true_north((visual or {}).get("graph") or {})
 
     return {
         # identity of THIS document only - never the container id, never a path
@@ -221,6 +229,7 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
         "visual_recovered": visual_recovered,
         "visual_partially_recovered": visual_partial,
         "visual_unresolved": visual_unresolved,
+        "true_north_premise": north if (visual or {}).get("document_category") == "survey" else None,
         "survey_reference": bool(reference),
         "survey_reference_note": (reference or {}).get("source_note") or "",
         # the examination result as the customer sees it
@@ -248,6 +257,9 @@ def render_prompt(context: dict[str, Any]) -> str:
     # CLAUDE-SURVEY-REFERENCE-01. Placed BEFORE the recovered text, because on
     # a survey image it is the substantive answer and the text is fragments.
     if context.get("visual_ran"):
+        if context.get("true_north_premise"):
+            import json
+            parts.append("TRUE NORTH PREMISE (governs all directional semantics): " + json.dumps(context["true_north_premise"], sort_keys=True))
         visual = ["VISUAL EXAMINATION - what GO saw when it looked at this "
                   "document. This is GO's reading, not the document speaking."]
         if context.get("visual_document"):
@@ -261,8 +273,8 @@ def render_prompt(context: dict[str, Any]) -> str:
             visual.append("Partially recovered - legible in part only:\n%s" % "\n".join(
                 "- " + item for item in context["visual_partially_recovered"]))
         if context.get("visual_unresolved"):
-            visual.append("Unresolved - present but NOT readable. You have no "
-                          "value for these and must not supply one:\n%s" % "\n".join(
+            visual.append("Unresolved claims - a quoted observation may be readable while its binding, reference system or permitted use is unproven. "
+                          "Preserve the qualified observation; do not supply or promote an unestablished conclusion:\n%s" % "\n".join(
                               "- " + item for item in context["visual_unresolved"]))
         if context.get("survey_reference"):
             visual.append("A SURVEY REFERENCE has been produced from this "

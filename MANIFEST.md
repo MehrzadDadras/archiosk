@@ -1,5 +1,9 @@
 # MANIFEST
 
+`docs/SURVEY_GEOMETRY_PROOF_QUALIFICATION_SCOPE.md` records the accepted extension
+of survey Rule 7 to typed Euclidean/projective proof and rectification. It is a
+qualification scope, not an implemented capability or promotion claim.
+
 Survey Rule 2: `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_2.md` records measurement
 genealogy, separate confirmed premises, preserved evidence history, runtime
 consumers, qualification controls and Claude's live-incorporation obligations.

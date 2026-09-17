@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
 # without bumping that is the defect that kept the parametric reconstruction
 # off every live record.
-VISUAL_PROMPT_VERSION = "visual-examination-06"
+VISUAL_PROMPT_VERSION = "visual-examination-07"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -320,6 +320,8 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
 - "dimension" / "bearing" / "radius" / "chord" on a segment: "text" is the sheet's own string exactly as printed ("65'-10 1/2\"", "144.12"), "value" is that as a plain number where one exists, "unit" if stated. Report a dimension ONLY for the segment it actually labels.
 - When multiple dimensions concern a segment, preserve ALL as "measurements" on that segment, not a single selected dimension. Each occurrence carries occurrence_id, segment_id, text, value (null when unreadable), unit, source_plan, survey_date (ISO date only if established), role (RECORD / REGISTERED_PLAN / PREVIOUS_MEASURED / CURRENT_MEASURED / CALCULATED / UNRESOLVED), printed_role (verbatim), read_certainty, bind_certainty, bind_basis, provenance, authority_basis, applicability_basis, prior_occurrence and precedence_basis. The last three basis fields quote explicit source evidence, or are empty: never infer authority, applicability or precedence from date, a MEASURED label, position or plausibility. prior_occurrence identifies the explicitly related earlier occurrence; proximity does not establish genealogy. Preserve less-legible current candidates and historical values. This is a working dimension, not authority to change legal geometry.
 - "north": report it TWICE, independently, and do not derive one from the other.
+- Also preserve every North candidate in graph.north_candidates: id, source_type (survey_arrow/title_block/survey_note/baseline_bearing), reference_type (TRUE_NORTH/GRID_NORTH/MAGNETIC_NORTH/ASSUMED_NORTH/OTHER/UNRESOLVED), reference_text (verbatim basis), source_region ({x,y,w,h} in image fractions), degrees (clockwise from image up, only if established), direction, read_certainty, bind_certainty, bind_basis, provenance, applicability (THIS_VIEW or UNRESOLVED). Type must come from explicit source evidence, never from the existence of an arrow or an angle. Preserve conflicting candidates. A note without an observable direction remains a basis observation, not an invented angle. For every directional observation, supply directional_reference with the same reference-type vocabulary. No page-up assumption, no grid/magnetic-to-true promotion.
+- If explicitly stated, preserve conversion_to_true on its candidate: from, to=TRUE_NORTH, clockwise_image_offset_degrees (only with explicit sign convention), applicability, provenance, read_certainty, bind_certainty, bind_basis. This is a proposal requiring independent review; never supply validated_conversion. Do not invent declination, convergence, or a conversion from geographic location or numeric plausibility.
   "degrees": clockwise from straight up on the image (0 = up, 90 = right, 180 = down, 270 = left).
   "direction": which way the arrow POINTS on the image, as one of UP, UP_RIGHT, RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, LEFT, UP_LEFT.
   "bbox": REQUIRED whenever you report north at all, and the single most important field in this object. A tight box around the arrow symbol ITSELF - {"x","y","w","h"} as fractions of the whole image. Include the arrowhead and its circle if it has one; exclude the word NORTH, the title block and any surrounding border. THIS IS THE MOST IMPORTANT FIELD: the angle is measured from the pixels inside this box, and your "degrees" is used only to check that measurement. A loose or wrong box is worse than no box.
@@ -327,7 +329,7 @@ GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constr
   Read the arrow, then state the direction word from what you see, then state the angle from what you see. If they disagree, say so in "unresolved" rather than adjusting one to match the other - a disagreement is a finding and will be treated as one. Omit north entirely if no arrow is legible.
 - Do NOT close a boundary that does not close on the sheet. Report only the segments you can see; a gap is a finding, not a defect to smooth over.
 
-Reply with JSON only, this exact shape:
+Reply with JSON only. The core shape is shown below; include the optional measurement and North-candidate fields described above when supported by evidence:
 {
   "document_category": "survey|drawing|photograph|document_page|unknown",
   "category_certainty": "RECOVERED|PARTIALLY_RECOVERED|UNRESOLVED",
@@ -463,7 +465,10 @@ def _clean_observation(raw) -> Optional[dict]:
         # content. Demoted rather than dropped: the thing WAS seen.
         certainty = UNRESOLVED
     note = str(raw.get("note") or "").strip()
+    from services.survey_north import REFERENCE_TYPES
+    reference = raw.get("directional_reference")
     return {"key": key, "label": OBSERVATION_LABELS[key], "value": value[:240],
+            "directional_reference": reference if reference in REFERENCE_TYPES else "UNRESOLVED",
             "certainty": certainty, "note": note[:240]}
 
 
@@ -543,6 +548,14 @@ def _attach_measured_north(normalised: dict, frame_bytes) -> None:
     sees the same truth.
     """
     from services import survey_north
+
+    for candidate in normalised.get("graph", {}).get("north_candidates", []):
+        outcome = (survey_north.measure_north(frame_bytes, candidate.get("bbox"))
+                   if candidate.get("source_type") in ("survey_arrow", "title_block")
+                   else {"ok": False, "degrees": None,
+                         "reason": "A basis note or baseline requires a separately established directional derivation, not arrow measurement"})
+        candidate.update(measured_degrees=outcome["degrees"], measured_ok=bool(outcome["ok"]),
+                         measured_reason=outcome["reason"], measure_version=survey_north.MEASURE_VERSION)
 
     targets = [normalised.get("graph", {}).get("north"),
                normalised.get("geometry", {}).get("north")]

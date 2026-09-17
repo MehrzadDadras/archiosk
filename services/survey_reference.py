@@ -113,6 +113,7 @@ def derive(visual, *, project_id: str, source_id: str, source_filename: str,
     recovered, partial, withheld = [], [], []
     for observation in (visual.observations or []):
         entry = {"key": observation["key"], "label": observation["label"],
+                 "directional_reference": observation.get("directional_reference", "UNRESOLVED"),
                  "value": observation["value"], "note": observation.get("note") or "",
                  "certainty": observation["certainty"],
                  # WHERE THIS CAME FROM. The direction asks for text-OCR vs
@@ -187,12 +188,32 @@ def derive(visual, *, project_id: str, source_id: str, source_filename: str,
     }
 
 
+def _qualified_reference(reference):
+    """Read-time semantic guard also covers reference records written earlier."""
+    import copy
+    from services import survey_north
+    qualified = copy.deepcopy(reference)
+    resolution = survey_north.resolve_true_north(qualified.get("graph") or {})
+    unresolved = qualified.setdefault("unresolved", [])
+    for group in ("recovered", "partially_recovered"):
+        admitted = []
+        for item in qualified.get(group, []):
+            if survey_north.directional_observation(item) and not survey_north.admits_true_direction(item, resolution):
+                unresolved.append("Directional conclusion UNRESOLVED; observed %s: %s [reference %s]" % (
+                    item.get("label"), item.get("value"), item.get("directional_reference", "UNRESOLVED")))
+            else:
+                admitted.append(item)
+        qualified[group] = admitted
+    return qualified
+
+
 def headline(reference: dict) -> dict:
     """The slim, factual summary the result page and GO both read.
 
     ONE derivation of the compact form, so the page a person sees and the
     answer GO gives cannot describe the same reference differently.
     """
+    reference = _qualified_reference(reference)
     def _phrases(entries):
         out = []
         for entry in entries:
@@ -433,6 +454,7 @@ def render_pdf(reference: dict) -> bytes:
     the direction is explicit about that, and a long apology would bury the
     three facts that matter.
     """
+    reference = _qualified_reference(reference)
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import LETTER
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
