@@ -5,6 +5,8 @@ proposal EvidenceItems and existing relationship-review projections. The visual
 worker, examination consumer and Ask GO prompt preserve access uncertainty;
 `tests/test_survey_reference_01.py::SurveyAccessQualification` covers evidence
 binding, subject containment, review/reload, corner candidates and service access.
+`docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_5.md` records the committed capability,
+controls, gate results, authority limits and Claude's production obligations.
 
 Survey Rule 4 qualification extends the existing `services/survey_graph.py`
 printed-bearing parser and curve-parameter handling, plus visual examination and
