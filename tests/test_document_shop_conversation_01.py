@@ -208,7 +208,12 @@ class ProviderBoundaryTests(unittest.TestCase):
                           lambda **k: _Outcome(parsed={"answer": "   "})):
             reply = dc.ask(self.doc, self.ws, self.result, "?", app=self.app)
         self.assertFalse(reply["ok"])
-        self.assertEqual(reply["answer"], dc.UNAVAILABLE_MESSAGE)
+        # CLAUDE-ASK-GO-HONEST-FAILURE-01: still a failure and still not shown
+        # as an answer, which is what this test is about. The SENTENCE changed:
+        # a reply that arrived carrying nothing usable is not an unresponsive
+        # service, and "did not respond" sent a person to retry a service that
+        # was never down.
+        self.assertEqual(reply["answer"], dc.MALFORMED_MESSAGE)
 
     def test_no_key_configured_says_so_rather_than_calling(self):
         self.app.config["ANTHROPIC_API_KEY"] = None

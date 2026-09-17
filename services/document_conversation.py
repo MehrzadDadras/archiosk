@@ -39,6 +39,37 @@ UNAVAILABLE_MESSAGE = (
     "Your document and everything already found are unaffected. Please try again."
 )
 
+# CLAUDE-ASK-GO-HONEST-FAILURE-01: a reply that arrived and could not be read
+# is NOT an unresponsive service, and saying so was a live defect.
+#
+# The Product Owner asked "What are the structures on this property?" and was
+# told the assistant service did not respond. It had responded - HTTP 200, in
+# well under a second - with a correct answer that began "GO read two
+# structures on this property: 1. 1-storey brick dwelling...". The reply simply
+# was not in the shape this caller requires, so the gateway returned ran=False
+# and every ran=False mapped to the same sentence.
+#
+# The cost of that wording is not cosmetic: it sends a person to retry a
+# service that was never down, and it points diagnosis at the provider when the
+# fault is on this side. Four occurrences in thirty days, the earliest well
+# before any of this tranche.
+#
+# NOTHING IS SALVAGED. The answer text sits in `outcome.raw_text`, and
+# `LLMCallOutcome` states plainly that those fields are diagnostic evidence
+# only and that `ran=False` still means unusable. Product Owner decision,
+# 2026-09-17: keep that invariant and fix the sentence. The answer is still
+# discarded; the person is simply told the truth about why.
+MALFORMED_MESSAGE = (
+    "GO answered, but not in a form I could read, so I have not shown it. "
+    "Nothing about your document has changed. Asking again usually works."
+)
+
+TRUNCATED_MESSAGE = (
+    "GO's answer was cut off before it finished, so I have not shown a part of "
+    "it as though it were the whole. Nothing about your document has changed. "
+    "A shorter or more specific question usually works."
+)
+
 NOT_CONFIGURED_MESSAGE = (
     "Asking questions about a document is not available in this environment yet. "
     "Everything on this page was worked out here and is unaffected."
@@ -258,6 +289,24 @@ def render_prompt(context: dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+def _failure_message(parse_status) -> str:
+    """The sentence that matches what actually happened.
+
+    Deliberately three outcomes and no more. A person needs to know whether to
+    retry, rephrase, or wait - and those are the only three actions available
+    to them. Nothing here names a format, a provider, a model or a status code:
+    the distinction that matters to the reader is "it never answered" versus
+    "it answered and I could not use it", not how the answer was malformed.
+    """
+    from services import llm_gateway
+
+    if parse_status == llm_gateway.PARSE_TRUNCATED:
+        return TRUNCATED_MESSAGE
+    if parse_status == llm_gateway.PARSE_MALFORMED:
+        return MALFORMED_MESSAGE
+    return UNAVAILABLE_MESSAGE
+
+
 def ask(document, workspace, result: dict, question: str, *, app) -> dict[str, Any]:
     """One question, one answer. Returns {"ok", "answer", "reason"}.
 
@@ -286,13 +335,18 @@ def ask(document, workspace, result: dict, question: str, *, app) -> dict[str, A
     )
 
     if not getattr(outcome, "ran", False):
-        return {"ok": False, "answer": UNAVAILABLE_MESSAGE,
+        # WHICH FAILURE IT WAS, in the person's words and without internals.
+        # "did not respond" is reserved for the case where that is true.
+        return {"ok": False,
+                "answer": _failure_message(getattr(outcome, "parse_status", None)),
                 "reason": getattr(outcome, "skipped_reason", None) or "not_run"}
 
     parsed = getattr(outcome, "parsed", None) or {}
     answer = (parsed.get("answer") or "").strip()
     if not answer:
-        return {"ok": False, "answer": UNAVAILABLE_MESSAGE, "reason": "empty_answer"}
+        # A well-formed reply carrying no answer is also something that came
+        # back and could not be used - not an absent service.
+        return {"ok": False, "answer": MALFORMED_MESSAGE, "reason": "empty_answer"}
     return {"ok": True, "answer": answer, "reason": None}
 
 
