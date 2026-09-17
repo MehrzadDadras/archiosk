@@ -1,5 +1,9 @@
 # MANIFEST
 
+Survey Rule 3: `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_3.md` records typed North
+reconciliation, reviewed same-view conversions, directional consumer gates,
+qualification evidence and remaining Claude live-incorporation obligations.
+
 `docs/SURVEY_GEOMETRY_PROOF_QUALIFICATION_SCOPE.md` records the accepted extension
 of survey Rule 7 to typed Euclidean/projective proof and rectification. It is a
 qualification scope, not an implemented capability or promotion claim.
