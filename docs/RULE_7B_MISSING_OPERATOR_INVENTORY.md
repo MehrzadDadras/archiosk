@@ -55,3 +55,41 @@ outside the implementation boundary.
 
 The current adapter tranche does not start production implementation of this
 operator set. Claude live incorporation/proof remains a separate promotion gate.
+
+## Dedicated Rule 7B read-only start
+
+Started after adapter implementation commit
+`24058463f7e634cd4b769b9ca94b76bb60616a75`. Re-read this inventory, the compiler's
+ToleranceContext, the display transform pair, the derived-view transform pair,
+and the survey chord/radius operator; searched engine/services for vector,
+homography, inverse, dehomogenization and matrix-linear-algebra implementations.
+
+Confirmed overlaps and limits:
+
+- `drawing_intelligence` composes mirroring with quarter-turn display rotation;
+  its rotation normalization floors to a quarter turn by its own contract. That
+  behavior must not be imported as projective-angle or matrix normalization.
+- `derived_view` supplies translation plus planar rotation and its inverse, with
+  a refusal for unknown rotation. It does not validate arbitrary 3x3 matrices,
+  homogeneous W, conditioning, or an earned affine/Euclidean rectification.
+- `survey_graph.curve_constraints` validates its bound, same-unit radius/chord
+  relation before applying asin. It retains conditional arc alternatives and
+  does not establish a generic bounded-error acos policy.
+- Existing projection and polygon predicates already own explicit frames and
+  centralized segment/boundary tolerance. Their host heuristics and local
+  geometry tests must not be mistaken for arbitrary projective proofs.
+
+The operator set in the table is established as the qualification inventory,
+not as an implemented kernel. The smallest initial mathematical tranche is
+homography validation, homogeneous point transformation and dehomogenization
+(TR-001/002/003), with explicit numeric/tolerance dependencies. Line transforms,
+composition, inversion and horizon/vanishing-point operations need their own
+independent fixtures before implementation. The vector and inverse-trigonometric
+blockers remain separately named prerequisites; they are not folded into a
+fictional homography adapter.
+
+Prospective ownership: extend the unpinned compiler geometry owner and its
+tolerance context for qualified mathematics; keep IFC as an admission/emission
+consumer and CaseWorkspaceStore as evidence/review owner. Confirm conditioning,
+homogeneous-scale, uncertainty and error-taxonomy controls before writing that
+production increment. No production code changed during this Rule 7B start.

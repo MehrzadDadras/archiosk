@@ -68,7 +68,7 @@ proof; the adapter qualification below adds explicit API-path persistence proof.
 
 ## Authoritative evidence-routing and adapter tranche (2026-09-18)
 
-Adapter implementation SHA: pending gated implementation commit. NOT_PROMOTED.
+Adapter implementation SHA: `24058463f7e634cd4b769b9ca94b76bb60616a75`. NOT_PROMOTED.
 The projection implementation SHA above remains the unchanged mathematics owner.
 
 ### Existing authoritative route
