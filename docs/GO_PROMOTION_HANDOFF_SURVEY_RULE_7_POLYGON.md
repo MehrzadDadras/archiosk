@@ -1,6 +1,6 @@
 # Claude Promotion Handoff: polygon validity before IFC space export
 
-Implementation SHA: pending implementation commit.
+Implementation SHA: `ef8a621cfdf278c228898f6a278937f9bc36c877`.
 **NOT_PROMOTED**. QUALIFIED / DISTILLED / IMPLEMENTED / GATED locally;
 RUNTIME_WIRED to the existing compiler/IFC consumer. Ordinary Ask GO and
 LIVE_REACHABLE remain unproven. No push or deployment.
