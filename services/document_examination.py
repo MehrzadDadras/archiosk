@@ -701,6 +701,59 @@ def state_of(document, workspace, *, jobs=None) -> str:
     return STATE_NEEDS_ATTENTION
 
 
+def _calculated_geometry_lines(workspace, source_id):
+    """Project scoped calculation evidence into the existing examination rows.
+
+    Storage is not acceptance. Recompute trust and input-link reviews on every
+    read; neither a reviewed link nor a finite number upgrades a refused result.
+    Provenance stays on the row for inspection, while conversation's existing
+    label/value projection carries only the customer-facing qualification.
+    """
+    import json
+    from flask import current_app
+    from services.case_workspace import CaseWorkspaceStore, EVIDENCE_CLASS_CALCULATED_VALUE
+
+    rows = []
+    for evidence in getattr(workspace, "evidence_items", []) or []:
+        if (evidence.get("source_id") != source_id
+                or evidence.get("evidence_class") != EVIDENCE_CLASS_CALCULATED_VALUE
+                or evidence.get("content_type") != "application/json"):
+            continue
+        try:
+            record = json.loads(evidence.get("content") or "")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        derivation = record.get("derivation") or {}
+        if not isinstance(derivation, dict) or derivation.get("operator") not in (
+                "numeric_validity@1", "segment_projection@1", "polygon_region@1",
+                "semantic_binding@1", "wall_host@1"):
+            continue
+        field = record.get("field")
+        label = {"height": "Height", "thickness": "Wall thickness",
+                 "projection": "Segment projection", "point": "Point",
+                 "endpoint": "Segment endpoint", "polygon": "Polygon",
+                 "wall": "Wall placement"}.get(field)
+        if not label:
+            continue
+        store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
+        governed = store.project_geometry_evidence(workspace, evidence["id"])
+        usable = governed["state"] in ("FINITE", "ESTABLISHED") and not governed["errors"]
+        qualified = governed["state"] in ("PARTIALLY_RECOVERED", "WEAK")
+        text = str(governed["value"]) if usable else label + " could not be established."
+        if qualified:
+            text += " The evidence is only partially recovered."
+        rows.append(("interpretation" if usable or qualified else "not_established", {
+            "label": label,
+            "value": text,
+            "evidence_item_id": evidence["id"], "object_id": record.get("object_id"),
+            "field": field, "state": governed["state"], "errors": governed["errors"],
+            "derivation_record": record, "trust": governed["trust"],
+        }))
+    return rows
+
+
 def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[str, Any]:
     """Everything the Document Examination Result page renders.
 
@@ -977,6 +1030,10 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
             "label": "Missing evidence: " + entry["reference_text"],
             "value": entry["statement"],
         })
+
+    if source and not pending:
+        for group, entry in _calculated_geometry_lines(workspace, source["id"]):
+            (interpretation if group == "interpretation" else not_established).append(entry)
 
     return {
         "name": display_name,

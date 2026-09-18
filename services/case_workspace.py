@@ -15171,6 +15171,117 @@ class CaseWorkspaceStore:
             "authority_boundary": authority_boundary,
         }
 
+    def project_geometry_evidence(self, workspace, evidence_item_id, *, _visited=()):
+        """Read-time use of a calculated EvidenceItem; no stored trust shortcut.
+
+        Reuses the existing region, relationship review, binding and trust owners.
+        The original operator result remains in `record`, even when later review
+        or source currentness requires a weaker consumer state.
+        """
+        import json
+        from services import binding
+        from engine.ifc_volume_validator import numeric_validity
+
+        result = {"state": "UNRESOLVED", "errors": [], "value": None,
+                  "record": {}, "trust": [], "evidence_item_id": evidence_item_id}
+        def block(code, state="UNRESOLVED"):
+            result["state"] = state
+            result["value"] = None
+            if code not in result["errors"]:
+                result["errors"].append(code)
+        evidence = self.get_evidence_item(workspace, evidence_item_id)
+        if (evidence_item_id in _visited or not evidence
+                or evidence.get("project_id") != workspace.project_id
+                or evidence.get("evidence_class") != EVIDENCE_CLASS_CALCULATED_VALUE):
+            block("PREMISE_UNESTABLISHED")
+            return result
+        try:
+            record = json.loads(evidence.get("content") or "")
+        except (ValueError, TypeError):
+            record = {}
+        if not isinstance(record, dict):
+            record = {}
+        result["record"] = record
+        result["state"] = record.get("state", "UNRESOLVED")
+        errors = record.get("errors", [])
+        if not isinstance(errors, list) or not all(isinstance(code, str) for code in errors):
+            block("PREMISE_UNESTABLISHED")
+            return result
+        result["errors"] = list(errors)
+        result["value"] = record.get("value")
+        derivation = record.get("derivation") or {}
+        premise_ids = record.get("premise_ids")
+        source_ids = record.get("source_evidence_ids")
+        citation = self.resolve_region_citation(workspace, evidence.get("region_id"))
+        scoped = (isinstance(derivation, dict) and derivation.get("operator") in (
+                    "numeric_validity@1", "segment_projection@1", "polygon_region@1",
+                    "semantic_binding@1", "wall_host@1")
+                  and isinstance(premise_ids, list) and bool(premise_ids)
+                  and all(isinstance(p, str) for p in premise_ids)
+                  and isinstance(source_ids, list) and bool(source_ids)
+                  and all(p in premise_ids for p in source_ids)
+                  and citation.get("source_id") == evidence.get("source_id")
+                  and bool(record.get("object_id"))
+                  and citation.get("address", {}).get("object_id") == record.get("object_id")
+                  and bool(record.get("coordinate_space")) and bool(record.get("plane_id")))
+        if not scoped:
+            block("PREMISE_UNESTABLISHED")
+            return result
+        trusts = [self.explain_evidence_trust(workspace, identifier)
+                  for identifier in [evidence_item_id, *premise_ids]]
+        result["trust"] = trusts
+        links = [edge for edge in workspace.relationships
+                 if edge.get("from_type") == edge.get("to_type") == "evidence_item"
+                 and edge.get("from_id") == evidence_item_id
+                 and edge.get("relationship_type") == "derived_from"
+                 and edge.get("to_id") in premise_ids]
+        reviewed = {edge["to_id"] for edge in links if edge.get("confirmed_by")
+                    and self.resolve_relationship_status(workspace, edge["id"])["status"] == "confirmed"}
+        if (set(premise_ids) != reviewed or any(
+                not edge.get("confirmed_by") or
+                self.resolve_relationship_status(workspace, edge["id"])["status"] != "confirmed"
+                for edge in links)):
+            block("PREMISE_UNESTABLISHED")
+        certainty = binding.bound_certainty(record)
+        for identifier in premise_ids:
+            premise = self.get_evidence_item(workspace, identifier) or {}
+            try:
+                content = json.loads(premise.get("content") or "")
+            except (ValueError, TypeError):
+                content = {}
+            if isinstance(content, dict) and "read_certainty" in content:
+                certainty = binding.weaker(certainty, binding.bound_certainty(content))
+            if premise.get("evidence_class") == EVIDENCE_CLASS_CALCULATED_VALUE:
+                upstream = self.project_geometry_evidence(workspace, identifier,
+                    _visited=(*_visited, evidence_item_id))
+                if upstream["state"] not in ("FINITE", "ESTABLISHED") or upstream["errors"]:
+                    block("PREMISE_UNESTABLISHED")
+                    for code in upstream["errors"]:
+                        if code not in result["errors"]:
+                            result["errors"].append(code)
+        if certainty != "RECOVERED":
+            block("PREMISE_UNESTABLISHED", "PARTIALLY_RECOVERED" if certainty == "PARTIALLY_RECOVERED" else "UNRESOLVED")
+        if any(t.get("status") != "assembled" for t in trusts):
+            block("PREMISE_UNESTABLISHED")
+        if any(t.get("currentness", {}).get("status") != "current" for t in trusts):
+            block("STALE_EVIDENCE")
+        if any(t.get("unresolved_counterevidence") for t in trusts):
+            block("PREMISE_UNESTABLISHED")
+        if any(t.get("confirmed_counterevidence") for t in trusts):
+            block("EVIDENCE_CONFLICT", "CONTESTED")
+        def finite_values(value):
+            if isinstance(value, (list, tuple)):
+                return bool(value) and all(finite_values(v) for v in value)
+            if isinstance(value, dict):
+                return bool(value) and all(finite_values(v) for v in value.values())
+            return numeric_validity(value) == "FINITE"
+        if result["state"] in ("FINITE", "ESTABLISHED") and not result["errors"]:
+            if not finite_values(result["value"]):
+                block("NON_FINITE_DERIVED_VALUE")
+        else:
+            result["value"] = None
+        return result
+
     def explain_investigation_answer(self, workspace: ProjectWorkspace, investigation_step_id: str) -> dict:
         """
         CLAUDE-MM7 Section 5/6: the Trustworthy Answer Contract AND the

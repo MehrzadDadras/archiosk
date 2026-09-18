@@ -1,0 +1,511 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suite_id",
+    "suite_version",
+    "fixtures"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "suite_id": {
+      "const": "GO_RULE7_GEOMETRY_FIXTURE_MAP"
+    },
+    "suite_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fixture_id",
+          "fixture_version",
+          "category",
+          "description",
+          "inputs",
+          "validator_expectation",
+          "transform_expectation",
+          "persistence_expectation",
+          "ifc_expectation",
+          "ask_go_expectation",
+          "pass_fail_assertions",
+          "provenance_requirements"
+        ],
+        "properties": {
+          "fixture_id": {
+            "type": "string",
+            "pattern": "^R7-(FIN|PROJ)-[A-Z]+-[0-9]{3}$"
+          },
+          "fixture_version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object"
+          },
+          "validator_expectation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "value_expected",
+              "coordinate_space",
+              "errors",
+              "must_preserve",
+              "must_not_contain",
+              "notes"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "FINITE",
+                  "ESTABLISHED",
+                  "WEAK",
+                  "PARTIALLY_RECOVERED",
+                  "UNRESOLVED",
+                  "NON_FINITE",
+                  "DEGENERATE",
+                  "INCOMPARABLE",
+                  "BLOCKED",
+                  "NOT_APPLICABLE",
+                  "CONTESTED"
+                ]
+              },
+              "value_expected": {
+                "type": "boolean"
+              },
+              "coordinate_space": {
+                "enum": [
+                  "SOURCE_PIXELS",
+                  "NORMALIZED_IMAGE",
+                  "AFFINE_RECTIFIED",
+                  "EUCLIDEAN_RECTIFIED",
+                  "WORLD_SCALED",
+                  "RECTIFIED_DISPLAY_PIXELS",
+                  "NONE"
+                ]
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "NON_FINITE_SCALAR",
+                    "NON_FINITE_POINT",
+                    "NON_FINITE_VECTOR",
+                    "NON_FINITE_LINE",
+                    "NON_FINITE_SEGMENT",
+                    "NON_FINITE_POLYGON",
+                    "NON_FINITE_DIMENSION",
+                    "NON_FINITE_TRANSFORM_RESULT",
+                    "NON_FINITE_DERIVED_VALUE",
+                    "ZERO_LENGTH_VECTOR",
+                    "ZERO_LENGTH_SEGMENT",
+                    "DEHOMOGENIZATION_UNSTABLE",
+                    "HOMOGRAPHY_SINGULAR",
+                    "HOMOGRAPHY_ILL_CONDITIONED",
+                    "SPACE_MISMATCH",
+                    "PLANE_MISMATCH",
+                    "INVALID_NUMERIC_DOMAIN",
+                    "PREMISE_UNESTABLISHED",
+                    "EVIDENCE_CONFLICT",
+                    "DEGENERATE_GEOMETRY",
+                    "SEMANTIC_BINDING_UNRESOLVED",
+                    "STALE_EVIDENCE",
+                    "NONE"
+                  ]
+                }
+              },
+              "must_preserve": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "must_not_contain": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          },
+          "transform_expectation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "value_expected",
+              "coordinate_space",
+              "errors",
+              "must_preserve",
+              "must_not_contain",
+              "notes",
+              "consumer",
+              "target_space",
+              "transform_required"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "FINITE",
+                  "ESTABLISHED",
+                  "WEAK",
+                  "PARTIALLY_RECOVERED",
+                  "UNRESOLVED",
+                  "NON_FINITE",
+                  "DEGENERATE",
+                  "INCOMPARABLE",
+                  "BLOCKED",
+                  "NOT_APPLICABLE",
+                  "CONTESTED"
+                ]
+              },
+              "value_expected": {
+                "type": "boolean"
+              },
+              "coordinate_space": {
+                "enum": [
+                  "SOURCE_PIXELS",
+                  "NORMALIZED_IMAGE",
+                  "AFFINE_RECTIFIED",
+                  "EUCLIDEAN_RECTIFIED",
+                  "WORLD_SCALED",
+                  "RECTIFIED_DISPLAY_PIXELS",
+                  "NONE"
+                ]
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "NON_FINITE_SCALAR",
+                    "NON_FINITE_POINT",
+                    "NON_FINITE_VECTOR",
+                    "NON_FINITE_LINE",
+                    "NON_FINITE_SEGMENT",
+                    "NON_FINITE_POLYGON",
+                    "NON_FINITE_DIMENSION",
+                    "NON_FINITE_TRANSFORM_RESULT",
+                    "NON_FINITE_DERIVED_VALUE",
+                    "ZERO_LENGTH_VECTOR",
+                    "ZERO_LENGTH_SEGMENT",
+                    "DEHOMOGENIZATION_UNSTABLE",
+                    "HOMOGRAPHY_SINGULAR",
+                    "HOMOGRAPHY_ILL_CONDITIONED",
+                    "SPACE_MISMATCH",
+                    "PLANE_MISMATCH",
+                    "INVALID_NUMERIC_DOMAIN",
+                    "PREMISE_UNESTABLISHED",
+                    "EVIDENCE_CONFLICT",
+                    "DEGENERATE_GEOMETRY",
+                    "SEMANTIC_BINDING_UNRESOLVED",
+                    "STALE_EVIDENCE",
+                    "NONE"
+                  ]
+                }
+              },
+              "must_preserve": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "must_not_contain": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notes": {
+                "type": "string"
+              },
+              "consumer": {
+                "type": "string"
+              },
+              "target_space": {
+                "enum": [
+                  "SOURCE_PIXELS",
+                  "NORMALIZED_IMAGE",
+                  "AFFINE_RECTIFIED",
+                  "EUCLIDEAN_RECTIFIED",
+                  "WORLD_SCALED",
+                  "RECTIFIED_DISPLAY_PIXELS",
+                  "NONE"
+                ]
+              },
+              "transform_required": {
+                "type": "boolean"
+              }
+            }
+          },
+          "persistence_expectation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "value_expected",
+              "coordinate_space",
+              "errors",
+              "must_preserve",
+              "must_not_contain",
+              "notes",
+              "persist",
+              "reload",
+              "state_after_reload",
+              "must_not_strengthen"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "FINITE",
+                  "ESTABLISHED",
+                  "WEAK",
+                  "PARTIALLY_RECOVERED",
+                  "UNRESOLVED",
+                  "NON_FINITE",
+                  "DEGENERATE",
+                  "INCOMPARABLE",
+                  "BLOCKED",
+                  "NOT_APPLICABLE",
+                  "CONTESTED"
+                ]
+              },
+              "value_expected": {
+                "type": "boolean"
+              },
+              "coordinate_space": {
+                "enum": [
+                  "SOURCE_PIXELS",
+                  "NORMALIZED_IMAGE",
+                  "AFFINE_RECTIFIED",
+                  "EUCLIDEAN_RECTIFIED",
+                  "WORLD_SCALED",
+                  "RECTIFIED_DISPLAY_PIXELS",
+                  "NONE"
+                ]
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "NON_FINITE_SCALAR",
+                    "NON_FINITE_POINT",
+                    "NON_FINITE_VECTOR",
+                    "NON_FINITE_LINE",
+                    "NON_FINITE_SEGMENT",
+                    "NON_FINITE_POLYGON",
+                    "NON_FINITE_DIMENSION",
+                    "NON_FINITE_TRANSFORM_RESULT",
+                    "NON_FINITE_DERIVED_VALUE",
+                    "ZERO_LENGTH_VECTOR",
+                    "ZERO_LENGTH_SEGMENT",
+                    "DEHOMOGENIZATION_UNSTABLE",
+                    "HOMOGRAPHY_SINGULAR",
+                    "HOMOGRAPHY_ILL_CONDITIONED",
+                    "SPACE_MISMATCH",
+                    "PLANE_MISMATCH",
+                    "INVALID_NUMERIC_DOMAIN",
+                    "PREMISE_UNESTABLISHED",
+                    "EVIDENCE_CONFLICT",
+                    "DEGENERATE_GEOMETRY",
+                    "SEMANTIC_BINDING_UNRESOLVED",
+                    "STALE_EVIDENCE",
+                    "NONE"
+                  ]
+                }
+              },
+              "must_preserve": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "must_not_contain": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notes": {
+                "type": "string"
+              },
+              "persist": {
+                "type": "boolean"
+              },
+              "reload": {
+                "type": "boolean"
+              },
+              "state_after_reload": {
+                "enum": [
+                  "FINITE",
+                  "ESTABLISHED",
+                  "WEAK",
+                  "PARTIALLY_RECOVERED",
+                  "UNRESOLVED",
+                  "NON_FINITE",
+                  "DEGENERATE",
+                  "INCOMPARABLE",
+                  "BLOCKED",
+                  "NOT_APPLICABLE",
+                  "CONTESTED"
+                ]
+              },
+              "must_not_strengthen": {
+                "const": true
+              }
+            }
+          },
+          "ifc_expectation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "export_state",
+              "errors",
+              "must_not_export"
+            ],
+            "properties": {
+              "export_state": {
+                "enum": [
+                  "IFC_EXPORTABLE",
+                  "IFC_BLOCKED_NON_FINITE",
+                  "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+                  "IFC_BLOCKED_SEMANTIC_BINDING",
+                  "IFC_BLOCKED_EVIDENCE",
+                  "IFC_BLOCKED_COORDINATE_SPACE",
+                  "IFC_UNRESOLVED",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "NON_FINITE_SCALAR",
+                    "NON_FINITE_POINT",
+                    "NON_FINITE_VECTOR",
+                    "NON_FINITE_LINE",
+                    "NON_FINITE_SEGMENT",
+                    "NON_FINITE_POLYGON",
+                    "NON_FINITE_DIMENSION",
+                    "NON_FINITE_TRANSFORM_RESULT",
+                    "NON_FINITE_DERIVED_VALUE",
+                    "ZERO_LENGTH_VECTOR",
+                    "ZERO_LENGTH_SEGMENT",
+                    "DEHOMOGENIZATION_UNSTABLE",
+                    "HOMOGRAPHY_SINGULAR",
+                    "HOMOGRAPHY_ILL_CONDITIONED",
+                    "SPACE_MISMATCH",
+                    "PLANE_MISMATCH",
+                    "INVALID_NUMERIC_DOMAIN",
+                    "PREMISE_UNESTABLISHED",
+                    "EVIDENCE_CONFLICT",
+                    "DEGENERATE_GEOMETRY",
+                    "SEMANTIC_BINDING_UNRESOLVED",
+                    "STALE_EVIDENCE",
+                    "NONE"
+                  ]
+                }
+              },
+              "must_not_export": {
+                "type": "boolean"
+              }
+            }
+          },
+          "ask_go_expectation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "errors",
+              "must_contain",
+              "must_not_contain"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "FACTUAL",
+                  "QUALIFIED",
+                  "UNRESOLVED",
+                  "SUPPRESSED",
+                  "HISTORICAL_ONLY",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "NON_FINITE_SCALAR",
+                    "NON_FINITE_POINT",
+                    "NON_FINITE_VECTOR",
+                    "NON_FINITE_LINE",
+                    "NON_FINITE_SEGMENT",
+                    "NON_FINITE_POLYGON",
+                    "NON_FINITE_DIMENSION",
+                    "NON_FINITE_TRANSFORM_RESULT",
+                    "NON_FINITE_DERIVED_VALUE",
+                    "ZERO_LENGTH_VECTOR",
+                    "ZERO_LENGTH_SEGMENT",
+                    "DEHOMOGENIZATION_UNSTABLE",
+                    "HOMOGRAPHY_SINGULAR",
+                    "HOMOGRAPHY_ILL_CONDITIONED",
+                    "SPACE_MISMATCH",
+                    "PLANE_MISMATCH",
+                    "INVALID_NUMERIC_DOMAIN",
+                    "PREMISE_UNESTABLISHED",
+                    "EVIDENCE_CONFLICT",
+                    "DEGENERATE_GEOMETRY",
+                    "SEMANTIC_BINDING_UNRESOLVED",
+                    "STALE_EVIDENCE",
+                    "NONE"
+                  ]
+                }
+              },
+              "must_contain": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "must_not_contain": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "pass_fail_assertions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "provenance_requirements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

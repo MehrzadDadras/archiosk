@@ -1,0 +1,278 @@
+{
+  "schema_version": "1.0.0",
+  "suite_id": "GO_RULE7_GEOMETRY_FIXTURE_MAP",
+  "entries": [
+    {
+      "id": "R7-FIN-POS-001",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "a0c9ed0df8f0a97dc7a8597016cf3534018754c78d2489b088a5900af90bd3f4"
+    },
+    {
+      "id": "R7-FIN-POS-002",
+      "category": "thickness",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "b36a67e79d267b7ff56564fa2cbd20ced51a7e158eaf12ec1fb5b0e63528d9a5"
+    },
+    {
+      "id": "R7-FIN-POS-003",
+      "category": "point",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "2bd092824da830b8921ed79657243dd968ba741830320bf25ad0daecdd807837"
+    },
+    {
+      "id": "R7-FIN-NF-001",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "8121dbf26b76c58334b4c4b758176576237149d6b5d8e4cf89fe6a87ddb3f0ef"
+    },
+    {
+      "id": "R7-FIN-NF-002",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "d0cd9f1655d51c6fcc2e55a930e8d24f8323b362f1f95208b49345220c89bd2d"
+    },
+    {
+      "id": "R7-FIN-NF-003",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "511e0b12f524c2ef12dde200fb17abd36aec83e2504b811623bddc48b0eca4d2"
+    },
+    {
+      "id": "R7-FIN-NF-004",
+      "category": "endpoint",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "be5caedd0252fb2bd6c521aab8c5953b8fa08523fb3fb1bef837e8c50b8bef7b"
+    },
+    {
+      "id": "R7-FIN-NF-005",
+      "category": "polygon",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "5e20da09f0ba96426269f999f5341da0f50621845547ace6b3c91b241d1ea0e9"
+    },
+    {
+      "id": "R7-FIN-ZERO-001",
+      "category": "vector",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.1.0",
+      "status": "ACTIVE",
+      "sha256": "f2275a626220d3ac469c0bc9220fecc32ba9a6457f2b846ed11c206e5aa2ecf5"
+    },
+    {
+      "id": "R7-FIN-ZERO-002",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "723c54cbace6e8df5ff54b4a1881d7e2edd5704cfa3d67dbdba0d74f531404e4"
+    },
+    {
+      "id": "R7-FIN-DOM-001",
+      "category": "domain",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.1.0",
+      "status": "ACTIVE",
+      "sha256": "45672c2c432c6e16f925cc07c299b75f2667b8ed4feaa72675fbd8ff54ae8cea"
+    },
+    {
+      "id": "R7-FIN-DOM-002",
+      "category": "domain",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "287003b5af532433e6972fbba7855acce7fd4af9a05ee936582e5cd86a58b72f"
+    },
+    {
+      "id": "R7-FIN-TR-001",
+      "category": "homography",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "9dd69a36b8aa7d968b661e1777981739683afd13ce63d6c379520d5aa03c0313"
+    },
+    {
+      "id": "R7-FIN-TR-002",
+      "category": "homography",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "621ca74af5de142defaec530e04d3490917dec9f7bd5e2b6e0a91b1293503949"
+    },
+    {
+      "id": "R7-FIN-TR-003",
+      "category": "homography",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "4a91276af40b11589cbfc4f617045cde3f47589ffaba4e51ca6017494becd216"
+    },
+    {
+      "id": "R7-FIN-TR-004",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "81d504242a817784a40b6530391a5ede1b6c067a0cbf4e7c1f0d694910900955"
+    },
+    {
+      "id": "R7-FIN-TR-005",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "e95e1f4c3134b853eac841bb50c79bf1d8e3081f2a79e283e5444d0877692934"
+    },
+    {
+      "id": "R7-FIN-PROV-001",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "30f764a66552c9ff61c241ff45c01efc506fac3acbdaecf68e9b6de2ee92319f"
+    },
+    {
+      "id": "R7-FIN-PROV-002",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "f5e2e6083b6f3554e2603cdb27a3f4f39069cf2907bc61c3681240bb58f20ce9"
+    },
+    {
+      "id": "R7-FIN-PROV-003",
+      "category": "weak_binding",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.1.0",
+      "status": "ACTIVE",
+      "sha256": "d8403b45abe1b5cf11938c7b43071bcb52faa853096e9b228f80439d341e9cf9"
+    },
+    {
+      "id": "R7-FIN-PROV-004",
+      "category": "contested",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.1.0",
+      "status": "ACTIVE",
+      "sha256": "d25a70272ade9b7051d98de41520bd595090f106676089defdb230ad79076bff"
+    },
+    {
+      "id": "R7-FIN-IFC-001",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "6b576d3dcfebd0542fb7af606de87995fdaed5634833e991ea4d4d7f4c07a772"
+    },
+    {
+      "id": "R7-FIN-IFC-002",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "9764045fddce0006b7bcedb5cb910fc94cf8d113ff185d86ee12c39ff1118045"
+    },
+    {
+      "id": "R7-FIN-IFC-003",
+      "category": "zero_area",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "9af8ccdfc96667713a73eaa61629d9496addd13adc5bf288abc208cbdf2b1b56"
+    },
+    {
+      "id": "R7-FIN-IFC-004",
+      "category": "unbound",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "d1f9bf754f102e93c339585baae8ccbc9cff39a56dbef585d00d3867dd8129ca"
+    },
+    {
+      "id": "R7-FIN-IFC-005",
+      "category": "stale",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "89efce45498ca23957d530a5a1bfae0713bfbdcec115e54d9bea32a0f17c3008"
+    },
+    {
+      "id": "R7-FIN-ASK-001",
+      "category": "height",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "afa13e068d1d83ba05167dd3c4079d0b9b0f3647f0a670eeda8bb1d8abc0ba60"
+    },
+    {
+      "id": "R7-PROJ-POS-001",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "46f5a388ee054b4248eb069130775113be52b636dc666777b102d0f5814d14ce"
+    },
+    {
+      "id": "R7-PROJ-LARGE-001",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "2c59f225fb2dc257a414fc66e41eed7ebad50d68ac98274fad058186292fbc80"
+    },
+    {
+      "id": "R7-PROJ-ZERO-001",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "9d187c0cc453f112b008ab7f4277ffec7a9a03bafba7f73e6862bc7b907bb83a"
+    },
+    {
+      "id": "R7-PROJ-NF-001",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "0edeb0f0146de9b055e69dceb6f0a4310543569028b7a2e65bbf44322fc7236e"
+    },
+    {
+      "id": "R7-PROJ-WALL-001",
+      "category": "wall",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "5c25bb32e977b1505b03aaeb6526436801b48ec3b8399945b48f66fdd48809ff"
+    },
+    {
+      "id": "R7-PROJ-SPACE-001",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "bd090b52659473f2464ebe4f7eab11656c4d4e11dd8e4e238b43ee301368d61c"
+    },
+    {
+      "id": "R7-PROJ-PLANE-001",
+      "category": "projection",
+      "introduced_version": "1.0.0",
+      "fixture_version": "1.0.0",
+      "status": "ACTIVE",
+      "sha256": "e6df8580e0df222d5bce0023b16a4970296640f4564e7173a043a1f7413a7a23"
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "project_name": "IFC Test Project",
+  "source": {
+    "filename": "synthetic-ifc-region",
+    "fixture_version": "2.0.0"
+  },
+  "label_containment": [
+    {
+      "label": "ENTRY/LOBBY",
+      "space_id": "SPACE-ENTRY",
+      "source": {
+        "filename": "synthetic-ifc-region",
+        "fixture_version": "2.0.0"
+      },
+      "read_certainty": "RECOVERED",
+      "bind_certainty": "RECOVERED",
+      "bind_basis": "structural",
+      "relation": {
+        "point": [
+          10,
+          10
+        ],
+        "coordinate_space": "PDF_USER_POINTS",
+        "plane_id": "sheet:1"
+      }
+    }
+  ],
+  "levels": [
+    {
+      "name": "LEVEL 1",
+      "elevation": 0.0
+    }
+  ],
+  "spaces": [
+    {
+      "id": "SPACE-ENTRY",
+      "name": "ENTRY/LOBBY",
+      "level": "LEVEL 1",
+      "height": 144.0,
+      "geometry_context": {
+        "coordinate_space": "PDF_USER_POINTS",
+        "plane_id": "sheet:1",
+        "geometry_level": "PROJECTIVE",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "bind_basis": "structural",
+        "provenance": "synthetic fixture v2"
+      },
+      "boundary_polygon_2d": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 120,
+          "y": 0
+        },
+        {
+          "x": 120,
+          "y": 80
+        },
+        {
+          "x": 0,
+          "y": 80
+        },
+        {
+          "x": 0,
+          "y": 0
+        }
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "id": "WALL-01",
+      "baseline": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 120,
+          "y": 0
+        }
+      ],
+      "thickness": 6.0,
+      "height": 144.0,
+      "openings": [
+        {
+          "id": "DOOR-01",
+          "offset": 30.0,
+          "width": 36.0,
+          "height": 84.0
+        }
+      ]
+    }
+  ]
+}

@@ -271,6 +271,73 @@ def _semantic_binding_established(model, space):
 class IFCVolumeValidator:
     """Validate parametric spaces/walls and emit a minimal IFC4X3 STEP file."""
 
+    def export_evidence(self, model, store, workspace, evidence_item_id):
+        """Apply one scoped, governed result, then use the existing IFC gate.
+
+        This adapter is for evidence-backed callers. Trust is re-read here;
+        neither a caller's cached approval nor EvidenceItem storage authorizes
+        export. The supplied candidate is copied, never repaired in place.
+        """
+        import copy
+        from engine.spatial_compiler import SpatialCompiler, SpatialCompilationError
+
+        governed = store.project_geometry_evidence(workspace, evidence_item_id)
+        record = governed["record"]
+        def refuse(errors, state=None):
+            codes = set(errors)
+            if codes & {"EVIDENCE_CONFLICT", "STALE_EVIDENCE"}:
+                export_state = "IFC_BLOCKED_EVIDENCE"
+            elif codes & {"SPACE_MISMATCH", "PLANE_MISMATCH"}:
+                export_state = "IFC_BLOCKED_COORDINATE_SPACE"
+            elif codes & {"NON_FINITE_DIMENSION", "NON_FINITE_POINT", "NON_FINITE_SEGMENT", "NON_FINITE_POLYGON"}:
+                export_state = "IFC_BLOCKED_NON_FINITE"
+            elif codes & {"ZERO_LENGTH_SEGMENT", "DEGENERATE_GEOMETRY"}:
+                export_state = "IFC_BLOCKED_DEGENERATE_GEOMETRY"
+            elif codes & {"SEMANTIC_BINDING_UNRESOLVED", "PREMISE_UNESTABLISHED"}:
+                export_state = "IFC_BLOCKED_SEMANTIC_BINDING"
+            else:
+                export_state = "IFC_BLOCKED_EVIDENCE"
+            raise IFCValidationError("Scoped geometry evidence does not authorize IFC export",
+                diagnostic={"state": state or governed["state"], "errors": list(errors),
+                            "export_state": export_state, "evidence_item_id": evidence_item_id})
+        if governed["state"] not in ("FINITE", "ESTABLISHED") or governed["errors"]:
+            refuse(governed["errors"] or ["PREMISE_UNESTABLISHED"])
+        candidate = copy.deepcopy(model)
+        field = record.get("field")
+        owners = [row for row in candidate.get("spaces", []) + candidate.get("walls", [])
+                  if row.get("id") == record.get("object_id")]
+        if len(owners) != 1:
+            refuse(["SEMANTIC_BINDING_UNRESOLVED"])
+        owner = owners[0]
+        context = owner.get("geometry_context") or {}
+        if context.get("coordinate_space") != record.get("coordinate_space"):
+            refuse(["SPACE_MISMATCH"])
+        if context.get("plane_id") != record.get("plane_id"):
+            refuse(["PLANE_MISMATCH"])
+        value = governed["value"]
+        if field in ("height", "thickness"):
+            owner[field] = value
+        elif field in ("point", "endpoint"):
+            owner["baseline"][0 if field == "point" else 1] = dict(zip(("x", "y"), value))
+        elif field == "polygon":
+            owner["boundary_polygon_2d"] = [dict(zip(("x", "y"), point)) for point in value]
+        elif field in ("projection", "wall"):
+            premises = (record.get("derivation") or {}).get("premises") or {}
+            baseline = [[p["x"], p["y"]] for p in owner.get("baseline", [])]
+            if baseline != premises.get("segment") or not owner.get("openings"):
+                refuse(["PREMISE_UNESTABLISHED"])
+            try:
+                host, offset, shift = SpatialCompiler._host_wall(
+                    premises["point"], [owner], owner["openings"][0]["width"])
+            except SpatialCompilationError as error:
+                refuse([(error.diagnostic or {}).get("error", "PREMISE_UNESTABLISHED")])
+            if host is None:
+                refuse(["PREMISE_UNESTABLISHED"])
+            owner["openings"][0]["offset"] = offset
+        else:
+            refuse(["PREMISE_UNESTABLISHED"])
+        return self.export(candidate)
+
     def validate(self, model: dict[str, Any]) -> None:
         if not isinstance(model, dict) or not isinstance(model.get("project_name"), str):
             raise IFCValidationError("project_name must be a string")

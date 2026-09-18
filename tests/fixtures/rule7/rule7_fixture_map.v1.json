@@ -1,0 +1,3657 @@
+{
+  "schema_version": "1.1.0",
+  "suite_id": "GO_RULE7_GEOMETRY_FIXTURE_MAP",
+  "suite_version": "1.1.0",
+  "fixtures": [
+    {
+      "fixture_id": "R7-FIN-POS-001",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "finite height",
+      "inputs": {
+        "kind": "height",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-POS-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-POS-002",
+      "fixture_version": "1.0.0",
+      "category": "thickness",
+      "description": "finite wall thickness",
+      "inputs": {
+        "kind": "thickness",
+        "value": 6,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-POS-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-POS-003",
+      "fixture_version": "1.0.0",
+      "category": "point",
+      "description": "finite point",
+      "inputs": {
+        "kind": "point",
+        "value": [
+          5,
+          3
+        ],
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-POS-003",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-NF-001",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "NaN height",
+      "inputs": {
+        "kind": "height",
+        "value": "NaN",
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-NF-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_contain": [
+          "Height could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-NF-002",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "+Infinity height",
+      "inputs": {
+        "kind": "height",
+        "value": "+Infinity",
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-NF-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_contain": [
+          "Height could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-NF-003",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "-Infinity height",
+      "inputs": {
+        "kind": "height",
+        "value": "-Infinity",
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-NF-003",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_contain": [
+          "Height could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-NF-004",
+      "fixture_version": "1.0.0",
+      "category": "endpoint",
+      "description": "non-finite segment endpoint",
+      "inputs": {
+        "kind": "endpoint",
+        "value": [
+          "+Infinity",
+          0
+        ],
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-NF-004",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_SEGMENT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_SEGMENT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_SEGMENT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_SEGMENT"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_SEGMENT"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-NF-005",
+      "fixture_version": "1.0.0",
+      "category": "polygon",
+      "description": "polygon with non-finite vertex",
+      "inputs": {
+        "kind": "polygon",
+        "value": [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            "NaN"
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-NF-005",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_POLYGON"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_POLYGON"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_POLYGON"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_POLYGON"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_POLYGON"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-ZERO-001",
+      "fixture_version": "1.1.0",
+      "category": "vector",
+      "description": "near-zero vector",
+      "inputs": {
+        "kind": "vector",
+        "value": [
+          1e-200,
+          0
+        ],
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-ZERO-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "DEGENERATE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-ZERO-002",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "near-zero segment",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            0,
+            0
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            1e-200,
+            0
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-ZERO-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "DEGENERATE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-DOM-001",
+      "fixture_version": "1.1.0",
+      "category": "domain",
+      "description": "legitimate floating-point domain drift",
+      "inputs": {
+        "kind": "domain",
+        "value": {
+          "operation": "acos",
+          "value": 1.0000000000000002,
+          "error_bound": 1e-15
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-DOM-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "WEAK",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "WEAK",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "WEAK",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "WEAK",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_UNRESOLVED",
+        "errors": [],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "QUALIFIED",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-DOM-002",
+      "fixture_version": "1.0.0",
+      "category": "domain",
+      "description": "genuinely invalid numeric domain",
+      "inputs": {
+        "kind": "domain",
+        "value": {
+          "operation": "acos",
+          "value": 2,
+          "error_bound": 1e-15
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-DOM-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "INVALID_NUMERIC_DOMAIN"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "INVALID_NUMERIC_DOMAIN"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "INVALID_NUMERIC_DOMAIN"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "UNRESOLVED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_EVIDENCE",
+        "errors": [
+          "INVALID_NUMERIC_DOMAIN"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "INVALID_NUMERIC_DOMAIN"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-TR-001",
+      "fixture_version": "1.0.0",
+      "category": "homography",
+      "description": "well-conditioned transform",
+      "inputs": {
+        "kind": "homography",
+        "value": {
+          "matrix": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "point": [
+            2,
+            3,
+            1
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-TR-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "homography",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": true
+      },
+      "persistence_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "ESTABLISHED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-TR-002",
+      "fixture_version": "1.0.0",
+      "category": "homography",
+      "description": "point near projective infinity",
+      "inputs": {
+        "kind": "homography",
+        "value": {
+          "matrix": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              1,
+              0,
+              -1
+            ]
+          ],
+          "point": [
+            1,
+            3,
+            1
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-TR-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEHOMOGENIZATION_UNSTABLE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEHOMOGENIZATION_UNSTABLE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "homography",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": true
+      },
+      "persistence_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEHOMOGENIZATION_UNSTABLE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "DEGENERATE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+        "errors": [
+          "DEHOMOGENIZATION_UNSTABLE"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "DEHOMOGENIZATION_UNSTABLE"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-TR-003",
+      "fixture_version": "1.0.0",
+      "category": "homography",
+      "description": "singular homography",
+      "inputs": {
+        "kind": "homography",
+        "value": {
+          "matrix": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ],
+          "point": [
+            2,
+            3,
+            1
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-TR-003",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "HOMOGRAPHY_SINGULAR"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "HOMOGRAPHY_SINGULAR"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "homography",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": true
+      },
+      "persistence_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "HOMOGRAPHY_SINGULAR"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "DEGENERATE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+        "errors": [
+          "HOMOGRAPHY_SINGULAR"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "HOMOGRAPHY_SINGULAR"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-TR-004",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "coordinate-space mismatch",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ],
+          "segment_space": "SOURCE_PIXELS"
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-TR-004",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "INCOMPARABLE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_COORDINATE_SPACE",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-TR-005",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "plane mismatch",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ],
+          "segment_plane": "facade"
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-TR-005",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "INCOMPARABLE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_COORDINATE_SPACE",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-001",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "observed value provenance",
+      "inputs": {
+        "kind": "height",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-PROV-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-002",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "derived-value provenance",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-PROV-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "ESTABLISHED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-003",
+      "fixture_version": "1.1.0",
+      "category": "weak_binding",
+      "description": "weak bind certainty",
+      "inputs": {
+        "kind": "weak_binding",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "PARTIALLY_RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-PROV-003",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "PARTIALLY_RECOVERED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PREMISE_UNESTABLISHED"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PREMISE_UNESTABLISHED"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "PARTIALLY_RECOVERED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PREMISE_UNESTABLISHED"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "PARTIALLY_RECOVERED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_SEMANTIC_BINDING",
+        "errors": [
+          "PREMISE_UNESTABLISHED"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "QUALIFIED",
+        "errors": [
+          "PREMISE_UNESTABLISHED"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-004",
+      "fixture_version": "1.1.0",
+      "category": "contested",
+      "description": "confirmed contradiction",
+      "inputs": {
+        "kind": "contested",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-PROV-004",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "CONTESTED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "EVIDENCE_CONFLICT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "EVIDENCE_CONFLICT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "CONTESTED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "EVIDENCE_CONFLICT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "CONTESTED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_EVIDENCE",
+        "errors": [
+          "EVIDENCE_CONFLICT"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "EVIDENCE_CONFLICT"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-001",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "valid IFC candidate",
+      "inputs": {
+        "kind": "height",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-IFC-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "FINITE",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-002",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "NaN height IFC",
+      "inputs": {
+        "kind": "height",
+        "value": "NaN",
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-IFC-002",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_contain": [
+          "Height could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-003",
+      "fixture_version": "1.0.0",
+      "category": "zero_area",
+      "description": "zero-area IFC geometry",
+      "inputs": {
+        "kind": "zero_area",
+        "value": [
+          [
+            0,
+            0
+          ],
+          [
+            5,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-IFC-003",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "DEGENERATE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "DEGENERATE_GEOMETRY"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-004",
+      "fixture_version": "1.0.0",
+      "category": "unbound",
+      "description": "unresolved semantic binding",
+      "inputs": {
+        "kind": "unbound",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-IFC-004",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SEMANTIC_BINDING_UNRESOLVED"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SEMANTIC_BINDING_UNRESOLVED"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SEMANTIC_BINDING_UNRESOLVED"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "UNRESOLVED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_SEMANTIC_BINDING",
+        "errors": [
+          "SEMANTIC_BINDING_UNRESOLVED"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "SEMANTIC_BINDING_UNRESOLVED"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-005",
+      "fixture_version": "1.0.0",
+      "category": "stale",
+      "description": "stale/contested evidence",
+      "inputs": {
+        "kind": "stale",
+        "value": 144,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-IFC-005",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "STALE_EVIDENCE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "STALE_EVIDENCE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "STALE_EVIDENCE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "UNRESOLVED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_EVIDENCE",
+        "errors": [
+          "STALE_EVIDENCE"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "STALE_EVIDENCE"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-FIN-ASK-001",
+      "fixture_version": "1.0.0",
+      "category": "height",
+      "description": "NaN blocked from factual Ask GO output",
+      "inputs": {
+        "kind": "height",
+        "value": "NaN",
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-FIN-ASK-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "NON_FINITE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "NON_FINITE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_NON_FINITE",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DIMENSION"
+        ],
+        "must_contain": [
+          "Height could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-POS-001",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "ordinary interior projection",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-POS-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "ESTABLISHED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-LARGE-001",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "large origin local difference",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            1000000000005,
+            1000000000003
+          ],
+          "a": [
+            1000000000000,
+            1000000000000
+          ],
+          "b": [
+            1000000000010,
+            1000000000000
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-LARGE-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "ESTABLISHED",
+        "value_expected": true,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "ESTABLISHED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_EXPORTABLE",
+        "errors": [],
+        "must_not_export": false
+      },
+      "ask_go_expectation": {
+        "state": "FACTUAL",
+        "errors": [],
+        "must_contain": [],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-ZERO-001",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "exact zero segment",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            0,
+            0
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            0,
+            0
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-ZERO-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "ZERO_LENGTH_SEGMENT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "ZERO_LENGTH_SEGMENT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "DEGENERATE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "ZERO_LENGTH_SEGMENT"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "DEGENERATE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_DEGENERATE_GEOMETRY",
+        "errors": [
+          "ZERO_LENGTH_SEGMENT"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "ZERO_LENGTH_SEGMENT"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-NF-001",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "finite inputs overflow squared norm",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5e+199,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            1e+200,
+            0
+          ]
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-NF-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "UNRESOLVED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_EVIDENCE",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-WALL-001",
+      "fixture_version": "1.0.0",
+      "category": "wall",
+      "description": "wall-host shift cannot be infinite",
+      "inputs": {
+        "kind": "wall",
+        "value": {
+          "point": [
+            1e+200,
+            0
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            1e+200,
+            0
+          ],
+          "width": 10
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-WALL-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "IFCVolumeValidator",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "UNRESOLVED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "UNRESOLVED",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_EVIDENCE",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "NON_FINITE_DERIVED_VALUE"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-SPACE-001",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "point/segment chart mismatch",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ],
+          "segment_space": "SOURCE_PIXELS"
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-SPACE-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "INCOMPARABLE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_COORDINATE_SPACE",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "SPACE_MISMATCH"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    },
+    {
+      "fixture_id": "R7-PROJ-PLANE-001",
+      "fixture_version": "1.0.0",
+      "category": "projection",
+      "description": "point/segment plane mismatch",
+      "inputs": {
+        "kind": "projection",
+        "value": {
+          "point": [
+            5,
+            3
+          ],
+          "a": [
+            0,
+            0
+          ],
+          "b": [
+            10,
+            0
+          ],
+          "segment_plane": "facade"
+        },
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "plane_id": "sheet",
+        "geometry_level": "EUCLIDEAN",
+        "read_certainty": "RECOVERED",
+        "bind_certainty": "RECOVERED",
+        "provenance": {
+          "fixture_id": "R7-PROJ-PLANE-001",
+          "source": "synthetic same-plane qualification",
+          "occurrence": "1"
+        }
+      },
+      "validator_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation."
+      },
+      "transform_expectation": {
+        "state": "BLOCKED",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "consumer": "project_point_to_segment",
+        "target_space": "EUCLIDEAN_RECTIFIED",
+        "transform_required": false
+      },
+      "persistence_expectation": {
+        "state": "INCOMPARABLE",
+        "value_expected": false,
+        "coordinate_space": "EUCLIDEAN_RECTIFIED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_preserve": [
+          "provenance",
+          "read_certainty",
+          "bind_certainty"
+        ],
+        "must_not_contain": [],
+        "notes": "Expected contract, not proof of implementation.",
+        "persist": true,
+        "reload": true,
+        "state_after_reload": "INCOMPARABLE",
+        "must_not_strengthen": true
+      },
+      "ifc_expectation": {
+        "export_state": "IFC_BLOCKED_COORDINATE_SPACE",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_not_export": true
+      },
+      "ask_go_expectation": {
+        "state": "UNRESOLVED",
+        "errors": [
+          "PLANE_MISMATCH"
+        ],
+        "must_contain": [
+          "could not be established"
+        ],
+        "must_not_contain": [
+          "NaN",
+          "Infinity"
+        ]
+      },
+      "pass_fail_assertions": [
+        "R7-MAP-07",
+        "R7-MAP-08",
+        "R7-MAP-09",
+        "R7-MAP-10"
+      ],
+      "provenance_requirements": [
+        "provenance",
+        "read_certainty",
+        "bind_certainty"
+      ]
+    }
+  ]
+}

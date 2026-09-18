@@ -1,0 +1,237 @@
+{
+  "inventory_version": "1.0.0",
+  "baseline_head": "0475ad5e49a22a1b48137787e3a180d96a135f10",
+  "failures": [
+    {
+      "fixture_id": "R7-FIN-POS-003",
+      "failure": "UNWIRED_VALIDATOR: point",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "engine.ifc_volume_validator.numeric_validity",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-NF-004",
+      "failure": "UNWIRED_VALIDATOR: endpoint",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "engine.ifc_volume_validator.numeric_validity",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-NF-005",
+      "failure": "UNWIRED_VALIDATOR: polygon",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "engine.ifc_volume_validator.numeric_validity; polygon_region",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-ZERO-001",
+      "failure": "UNWIRED_VALIDATOR: vector",
+      "classification": "MISSING_DETERMINISTIC_OPERATOR",
+      "existing_symbol": null,
+      "required_adapter": "None until operator qualification",
+      "missing_operator": "vector_usability",
+      "eligible": false
+    },
+    {
+      "fixture_id": "R7-FIN-ZERO-002",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-DOM-001",
+      "failure": "UNWIRED_VALIDATOR: domain",
+      "classification": "MISSING_DETERMINISTIC_OPERATOR",
+      "existing_symbol": null,
+      "required_adapter": "None until operator qualification",
+      "missing_operator": "bounded_inverse_trigonometric_domain",
+      "eligible": false
+    },
+    {
+      "fixture_id": "R7-FIN-DOM-002",
+      "failure": "UNWIRED_VALIDATOR: domain",
+      "classification": "MISSING_DETERMINISTIC_OPERATOR",
+      "existing_symbol": null,
+      "required_adapter": "None until operator qualification",
+      "missing_operator": "bounded_inverse_trigonometric_domain",
+      "eligible": false
+    },
+    {
+      "fixture_id": "R7-FIN-TR-001",
+      "failure": "UNWIRED_VALIDATOR: homography",
+      "classification": "MISSING_DETERMINISTIC_OPERATOR",
+      "existing_symbol": null,
+      "required_adapter": "None until operator qualification",
+      "missing_operator": "homography_validation_and_point_transform",
+      "eligible": false
+    },
+    {
+      "fixture_id": "R7-FIN-TR-002",
+      "failure": "UNWIRED_VALIDATOR: homography",
+      "classification": "MISSING_DETERMINISTIC_OPERATOR",
+      "existing_symbol": null,
+      "required_adapter": "None until operator qualification",
+      "missing_operator": "homography_validation_and_point_transform",
+      "eligible": false
+    },
+    {
+      "fixture_id": "R7-FIN-TR-003",
+      "failure": "UNWIRED_VALIDATOR: homography",
+      "classification": "MISSING_DETERMINISTIC_OPERATOR",
+      "existing_symbol": null,
+      "required_adapter": "None until operator qualification",
+      "missing_operator": "homography_validation_and_point_transform",
+      "eligible": false
+    },
+    {
+      "fixture_id": "R7-FIN-TR-004",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-TR-005",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-002",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-003",
+      "failure": "UNWIRED_VALIDATOR: weak_binding",
+      "classification": "FIXTURE_EXPECTATION_MISMATCH",
+      "existing_symbol": "services.binding.bound_certainty",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-004",
+      "failure": "UNWIRED_VALIDATOR: contested",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "CaseWorkspaceStore.explain_evidence_trust",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-003",
+      "failure": "UNWIRED_VALIDATOR: zero_area",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "engine.ifc_volume_validator.polygon_region",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-004",
+      "failure": "UNWIRED_VALIDATOR: unbound",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "engine.ifc_volume_validator._semantic_binding_established",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-005",
+      "failure": "UNWIRED_VALIDATOR: stale",
+      "classification": "ADAPTER_TO_EXISTING_CAPABILITY",
+      "existing_symbol": "CaseWorkspaceStore.resolve_anchor_currentness",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-POS-001",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-LARGE-001",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-ZERO-001",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-NF-001",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-WALL-001",
+      "failure": "UNWIRED_VALIDATOR: wall",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "SpatialCompiler._host_wall",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-SPACE-001",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    },
+    {
+      "fixture_id": "R7-PROJ-PLANE-001",
+      "failure": "UNWIRED_TRANSFORM_CONSUMER: projection",
+      "classification": "EXISTING_OPERATOR_NOT_WIRED",
+      "existing_symbol": "engine.spatial_compiler.project_point_to_segment",
+      "required_adapter": "Validator result -> calculated EvidenceItem -> reviewed trust -> scoped IFC and examination",
+      "missing_operator": null,
+      "eligible": true
+    }
+  ],
+  "fixture_corrections": {
+    "R7-FIN-DOM-001": "WEAK cannot become FACTUAL at Ask GO. Operator remains blocked, not implemented.",
+    "R7-FIN-PROV-003": "Governing state preserves binding/trust weakness rather than scalar finiteness or generic unresolved; original blocking expectation retained.",
+    "R7-FIN-PROV-004": "Governing state preserves binding/trust weakness rather than scalar finiteness or generic unresolved; original blocking expectation retained.",
+    "R7-FIN-ZERO-001": "1e-200 is nonzero: geometric unusability is DEGENERATE_GEOMETRY, not exact ZERO_LENGTH_VECTOR. The vector operator remains blocked."
+  }
+}
