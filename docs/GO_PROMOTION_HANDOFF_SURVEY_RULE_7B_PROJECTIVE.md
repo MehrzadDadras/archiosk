@@ -121,7 +121,8 @@ newly unblocked fixtures passed individually before the full map was run.
   10,177 subtests passed in 786.45s (13m06s)**, exit 0. Eight-worker
   `--dist loadfile` mode, repository default selection. All 2,168 captured
   file hashes matched after completion; HEAD remained the baseline above.
-- Implementation SHA: pending successful gates and commit.
+- Implementation SHA: `c0e7f72320024e4d422c03083e79ce75bb5c9a1c`.
+  This final SHA entry is a subsequent documentation-only commit.
 
 API-path qualification does not establish ordinary live ingestion, automatic
 compiler-output evidence registration, UI reachability or provider answers.
