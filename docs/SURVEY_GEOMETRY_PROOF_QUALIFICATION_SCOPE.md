@@ -207,6 +207,18 @@ qualified, not the complete kernel and not LIVE_REACHABLE proof. The inventory's
 missing general types/projective operations remain missing; the tolerance
 context currently covers boundary exclusion only.
 
+Polygon qualification update: `engine/ifc_volume_validator.py::polygon_region`
+reuses that tolerance for region validity (area band = boundary distance times
+perimeter). Closed zero-area/collinear/collapsed/self-intersecting candidates
+refuse. IFC admission now independently rechecks semantic label binding and
+retains unknown geometry premises. Final focused 78 passed (including native
+vector/text premise propagation); compiler/IFC/document lane 152 passed,
+6 subtests; boundary regressions 49 passed. See
+`GO_PROMOTION_HANDOFF_SURVEY_RULE_7_POLYGON.md`. The existing IFC `_cross`,
+`_segments_intersect`, and `_close` also belong in the reuse inventory; none is
+a typed general proof API, and their older local epsilons are not new kernel
+defaults. No protected datum, Rule 6, or boundary-classifier behavior changed.
+
 Further inventory findings to qualify before reuse: `derive_points_per_foot`
 selects majority datum spacing with reported conflicts; that policy cannot be
 imported as a generic uncontested-scale proof. `boundary_closure` reports node

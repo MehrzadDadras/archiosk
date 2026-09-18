@@ -83,6 +83,110 @@ class PDFVolumeValidator:  # compatibility alias is intentionally not exported
     pass
 
 
+def polygon_region(space, *, tolerance=None):
+    """Classify, without repairing, an explicitly closed same-plane polygon.
+
+    Reuse compiler boundary validation and its centralized chart tolerance.
+    A valid region establishes geometry only, never a semantic space identity.
+    """
+    from engine.spatial_compiler import ToleranceContext, classify_point_in_polygon, signed_area
+    from services import binding, deterministic_spatial
+    tolerance = ToleranceContext() if tolerance is None else tolerance
+    context = space.get("geometry_context") or {}
+    result = {"state": "UNRESOLVED", "operator": "polygon_region@1", "context": context,
+              "signed_area": None, "absolute_area": None, "area_tolerance": None,
+              "distance_tolerance": tolerance.boundary_distance, "error": None}
+    def finish(state, error=None):
+        result.update(state=state, error=error)
+        return result
+    if (binding.bound_certainty(context) != "RECOVERED" or not context.get("provenance")
+            or context.get("contested") or context.get("unresolved_counterevidence")):
+        return finish("UNRESOLVED", "PREMISE_UNESTABLISHED")
+    raw = space.get("boundary_polygon_2d")
+    if not isinstance(raw, list) or any(not isinstance(p, dict) for p in raw):
+        return finish("UNRESOLVED", "INVALID_GEOMETRY")
+    if not context.get("coordinate_space") or not context.get("plane_id"):
+        return finish("UNRESOLVED", "PREMISE_UNESTABLISHED")
+    for p in raw:
+        if any(p.get(k, context.get(k)) != "RECOVERED" for k in ("read_certainty", "bind_certainty")):
+            return finish("UNRESOLVED", "PREMISE_UNESTABLISHED")
+        if p.get("coordinate_space", context["coordinate_space"]) != context["coordinate_space"]:
+            return finish("UNRESOLVED", "INCOMPARABLE_COORDINATE_SPACES")
+        if p.get("plane_id", context["plane_id"]) != context["plane_id"]:
+            return finish("UNRESOLVED", "PLANE_MISMATCH")
+    if any(not all(isinstance(p.get(k), (int, float)) and not isinstance(p.get(k), bool)
+                   and math.isfinite(p[k]) for k in ("x", "y")) for p in raw):
+        return finish("UNRESOLVED", "INVALID_GEOMETRY")
+    polygon = [(p["x"], p["y"]) for p in raw]
+    if len(set(polygon)) < 3:
+        return finish("INSUFFICIENT_VERTICES")
+    if polygon[0] != polygon[-1]:
+        return finish("UNRESOLVED", "POLYGON_NOT_CLOSED")
+    ring = polygon[:-1]
+    if len(set(ring)) != len(ring):
+        return finish("DEGENERATE", "DUPLICATE_VERTEX")
+    # Reuse the boundary classifier for chart/level/tolerance and simple-region checks.
+    check = classify_point_in_polygon(ring[0], polygon,
+        point_space=context["coordinate_space"], polygon_space=context["coordinate_space"],
+        point_plane=context["plane_id"], polygon_plane=context["plane_id"],
+        geometry_level=context.get("geometry_level"), tolerance=tolerance)
+    if check["error"] not in (None, "DEGENERATE_POLYGON"):
+        return finish("UNRESOLVED", check["error"])
+    edges = list(zip(ring, ring[1:] + ring[:1]))
+    band = tolerance.boundary_distance
+    origin = ring[0]
+    relative = [(x - origin[0], y - origin[1]) for x, y in ring]
+    area = signed_area(relative)
+    perimeter = sum(math.dist(a, b) for a, b in edges)
+    result.update(signed_area=area, absolute_area=abs(area), area_tolerance=band * perimeter)
+    if not math.isfinite(area) or not math.isfinite(perimeter):
+        return finish("UNRESOLVED", "NUMERICAL_DEGENERACY")
+    far = max(ring, key=lambda p: math.dist(origin, p))
+    baseline = math.dist(origin, far)
+    if baseline <= band or any(math.dist(a, b) <= band for a, b in edges):
+        return finish("DEGENERATE", "ZERO_EXTENT_OR_EDGE")
+    if all(abs(signed_area([(0, 0), (far[0] - origin[0], far[1] - origin[1]), p])) * 2
+           <= band * baseline for p in relative):
+        return finish("COLLINEAR")
+    for i, edge in enumerate(edges):
+        for j in range(i + 1, len(edges)):
+            if j == i + 1 or (i == 0 and j == len(edges) - 1):
+                continue
+            if deterministic_spatial._segments_cross(*edge, *edges[j]):
+                return finish("SELF_INTERSECTING")
+    if area == 0:
+        return finish("ZERO_AREA")
+    if abs(area) <= result["area_tolerance"] or check["state"] != "ON_BOUNDARY":
+        return finish("DEGENERATE")
+    return finish("VALID_REGION")
+
+
+def _semantic_binding_established(model, space):
+    """Recompute strict label binding from retained occurrence evidence."""
+    from engine.spatial_compiler import classify_point_in_polygon
+    from services import binding
+    context = space["geometry_context"]
+    polygon = [_point(p) for p in space["boundary_polygon_2d"]]
+    inside = []
+    for evidence in model.get("label_containment", []):
+        if evidence.get("space_id") != space.get("id"):
+            continue
+        if (not model.get("source") or evidence.get("source") != model["source"]
+                or binding.bound_certainty(evidence) != "RECOVERED"
+                or evidence.get("contested") or evidence.get("unresolved_counterevidence")):
+            return False
+        relation = evidence.get("relation") or {}
+        check = classify_point_in_polygon(relation.get("point"), polygon,
+            point_space=relation.get("coordinate_space"), polygon_space=context["coordinate_space"],
+            point_plane=relation.get("plane_id"), polygon_plane=context["plane_id"],
+            geometry_level=context.get("geometry_level"))
+        if check["state"] in ("ON_BOUNDARY", "UNRESOLVED"):
+            return False
+        if check["state"] == "INSIDE":
+            inside.append(evidence.get("label"))
+    return len(inside) == 1 and bool(inside[0]) and inside[0] == space.get("name")
+
+
 class IFCVolumeValidator:
     """Validate parametric spaces/walls and emit a minimal IFC4X3 STEP file."""
 
@@ -91,20 +195,15 @@ class IFCVolumeValidator:
             raise IFCValidationError("project_name must be a string")
         levels = {level.get("name") for level in model.get("levels", [])}
         for space in model.get("spaces", []):
-            polygon = [_point(p) for p in space.get("boundary_polygon_2d", [])]
-            if len(polygon) < 4 or not _close(polygon[0], polygon[-1]):
-                raise IFCValidationError(f"space {space.get('id')} boundary polygon must be closed")
+            region = polygon_region(space)
+            if region["state"] != "VALID_REGION":
+                raise IFCValidationError(f"space {space.get('id')} boundary must be a valid closed region: {region['state']} / {region['error']}")
+            if not _semantic_binding_established(model, space):
+                raise IFCValidationError(f"space {space.get('id')} semantic binding UNRESOLVED")
             if float(space.get("height", 0)) <= 0:
                 raise IFCValidationError(f"space {space.get('id')} extrusion height must be positive")
             if space.get("level") not in levels:
                 raise IFCValidationError(f"space {space.get('id')} references unknown level")
-            edges = list(zip(polygon, polygon[1:]))
-            for i, edge in enumerate(edges):
-                for j, other in enumerate(edges):
-                    if j <= i or j in (i - 1, i + 1) or (i == 0 and j == len(edges) - 1):
-                        continue
-                    if _segments_intersect(*edge, *other):
-                        raise IFCValidationError(f"space {space.get('id')} boundary polygon self-intersects")
         for wall in model.get("walls", []):
             baseline = [_point(p) for p in wall.get("baseline", [])]
             if len(baseline) != 2:

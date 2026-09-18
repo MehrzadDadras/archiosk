@@ -437,6 +437,25 @@ class TestAssumptionsAreDeclared:
 # ---------------------------------------------------------------------------
 
 class TestEndToEndToIFC:
+    @pytest.mark.parametrize("component", ["page", "vector", "label", "label_bind", "label_contested"])
+    def test_rule7_weak_native_input_cannot_become_an_exportable_space(self, document, component):
+        import copy
+        candidate = copy.deepcopy(document)
+        plan = SpatialCompiler._find_plan(candidate)
+        if component == "page":
+            plan["read_certainty"] = "PARTIALLY_RECOVERED"
+        elif component == "vector":
+            plan["vectors"][0]["bind_certainty"] = "UNRESOLVED"
+        else:
+            for span in plan["text"]:
+                if component == "label_contested":
+                    span["contested"] = True
+                else:
+                    span["bind_certainty" if component == "label_bind" else "read_certainty"] = "PARTIALLY_RECOVERED"
+        model = SpatialCompiler().compile(candidate)
+        with pytest.raises(IFCValidationError):
+            IFCVolumeValidator().export(model)
+
     def test_the_compiled_model_satisfies_the_validator(self, compiled):
         # The contract between the two stages. If this fails the compiler is
         # emitting geometry the exporter cannot represent.

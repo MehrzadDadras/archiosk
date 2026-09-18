@@ -1,5 +1,12 @@
 # MANIFEST
 
+Rule 7 polygon validity: `engine/ifc_volume_validator.py::polygon_region` reuses
+the compiler tolerance/geometry predicates and gates IFC spaces on both valid
+regions and rechecked semantic label binding. Compiler models retain explicit
+geometry context; `tests/test_ifc_volume_validator.py` qualifies degeneracy and
+premise refusals. `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_7_POLYGON.md` records
+the implementation, gates and outstanding Claude persistence/live obligations.
+
 Rule 7 boundary repair extends `engine/spatial_compiler.py` with
 `ToleranceContext`, `classify_point_in_polygon` and retained compiler
 `label_containment`; the legacy Boolean API remains strict-inside only.

@@ -407,6 +407,24 @@ class SpatialCompiler:
         labels = self._room_labels(plan, lift)
 
         spaces, bound_labels, label_containment = [], set(), []
+        # Native vector/text extraction supplies coordinates in one page frame.
+        # Unknown or explicitly weakened source premises cannot gain export eligibility.
+        native = (document.get("schema_version") == "pdf_geometry_semantics_v1"
+                  and plan.get("coordinate_system") == "top_left_origin_y_down")
+        geometry_context = {"coordinate_space": "PDF_USER_POINTS",
+            "plane_id": "source-page:%s" % plan["page_number"], "geometry_level": "PROJECTIVE",
+            "read_certainty": plan.get("read_certainty", "RECOVERED" if native else "UNRESOLVED"),
+            "bind_certainty": plan.get("bind_certainty", "RECOVERED" if native else "UNRESOLVED"),
+            "bind_basis": "structural", "provenance": document.get("source", {}),
+            "contested": plan.get("contested", False),
+            "unresolved_counterevidence": plan.get("unresolved_counterevidence", False)}
+        from services import binding
+        for vector in plan["vectors"]:
+            for component in ("read_certainty", "bind_certainty"):
+                geometry_context[component] = binding.weaker(geometry_context[component],
+                    vector.get(component, geometry_context[component]))
+            geometry_context["contested"] |= bool(vector.get("contested"))
+            geometry_context["unresolved_counterevidence"] |= bool(vector.get("unresolved_counterevidence"))
         for index, loop in enumerate(loops):
             inside = []
             for label_index, (name, point) in enumerate(labels):
@@ -414,8 +432,22 @@ class SpatialCompiler:
                 relation = classify_point_in_polygon(point, loop,
                     point_space="PDF_USER_POINTS", polygon_space="PDF_USER_POINTS",
                     point_plane=plane, polygon_plane=plane, geometry_level="PROJECTIVE")
+                label_certainty = geometry_context["read_certainty"]
+                label_binding = geometry_context["bind_certainty"]
+                label_contested = geometry_context["contested"]
+                label_unresolved_counter = geometry_context["unresolved_counterevidence"]
+                for span in plan["text"]:
+                    if span["content"].strip() == name:
+                        label_certainty = binding.weaker(label_certainty, span.get("read_certainty", label_certainty))
+                        label_binding = binding.weaker(label_binding, span.get("bind_certainty", label_binding))
+                        label_contested |= bool(span.get("contested"))
+                        label_unresolved_counter |= bool(span.get("unresolved_counterevidence"))
                 label_containment.append({"label": name, "label_occurrence": label_index,
                     "space_id": "SPACE-%02d" % (index + 1), "source": document.get("source", {}),
+                    "read_certainty": label_certainty,
+                    "bind_certainty": label_binding, "bind_basis": "structural",
+                    "contested": label_contested,
+                    "unresolved_counterevidence": label_unresolved_counter,
                     "page_number": plan["page_number"], "relation": relation})
                 if relation["state"] == "INSIDE":
                     inside.append(name)
@@ -435,6 +467,7 @@ class SpatialCompiler:
                 "level": base["name"],
                 "height": storey_height,
                 "boundary_polygon_2d": [{"x": x, "y": y} for x, y in loop + [loop[0]]],
+                "geometry_context": dict(geometry_context),
             })
         for name, _point in labels:
             if name not in bound_labels:
