@@ -54,6 +54,10 @@ _ELEVATION_RE = re.compile(r"(-?\d+)'-(\d+)\"")
 class SpatialCompilationError(ValueError):
     """Raised when the drawing cannot be compiled into a coherent volume."""
 
+    def __init__(self, message, *, diagnostic=None):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
 
 # --------------------------------------------------------------------------
 # geometry primitives
@@ -83,6 +87,7 @@ class ToleranceContext:
     charts require calibrated tolerances; numerical precision is not certainty.
     """
     boundary_distance: float = 0.000001
+    segment_length: float = 0.000001
 
 
 def classify_point_in_polygon(point, polygon, *, point_space=None, polygon_space=None,
@@ -163,16 +168,82 @@ def point_in_polygon(point, polygon) -> bool:
         geometry_level="EUCLIDEAN")["state"] == "INSIDE"
 
 
+def project_point_to_segment(point, a, b, *, point_space=None, segment_space=None,
+                             point_plane=None, segment_plane=None, geometry_level=None,
+                             tolerance=ToleranceContext(), source=None):
+    """Local Euclidean projection, or an explicit refusal; distances use chart units.
+
+    The finite raw parameter is checked BEFORE constraining it to the segment.
+    No physical scale or evidentiary authority is earned by this calculation.
+    """
+    from engine.ifc_volume_validator import numeric_validity
+    result = dict(state="UNRESOLVED", error=None, operator="segment_projection@1",
+                  coordinate_space=point_space, segment_space=segment_space,
+                  plane_id=point_plane, segment_plane_id=segment_plane,
+                  geometry_level=geometry_level, tolerance=tolerance.segment_length,
+                  source=source or {}, point=None, parameter=None, distance=None,
+                  distance_along=None, length=None)
+    def refuse(code, state="UNRESOLVED"):
+        result.update(error=code, state=state)
+        return result
+    if not all((point_space, segment_space, point_plane, segment_plane)):
+        return refuse("PREMISE_UNESTABLISHED")
+    if point_space != segment_space:
+        return refuse("INCOMPARABLE_COORDINATE_SPACES", "INCOMPARABLE")
+    if point_plane != segment_plane:
+        return refuse("PLANE_MISMATCH", "INCOMPARABLE")
+    if geometry_level not in ("EUCLIDEAN", "METRIC_SCALED"):
+        return refuse("PREMISE_UNESTABLISHED")
+    if numeric_validity(tolerance.segment_length) != "FINITE" or tolerance.segment_length < 0:
+        return refuse("INVALID_TOLERANCE")
+    for p in (point, a, b):
+        if not isinstance(p, (tuple, list)) or len(p) != 2:
+            return refuse("INVALID_GEOMETRY")
+        if any(numeric_validity(v) != "FINITE" for v in p):
+            return refuse("INVALID_GEOMETRIC_NUMBER")
+    try:
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        px, py = point[0] - a[0], point[1] - a[1]
+        if any(numeric_validity(v) != "FINITE" for v in (dx, dy, px, py)):
+            return refuse("NON_FINITE_DERIVED_VALUE")
+        length = math.hypot(dx, dy)
+        if length == 0:
+            return refuse("ZERO_LENGTH_SEGMENT", "DEGENERATE")
+        if length <= tolerance.segment_length:
+            return refuse("DEGENERATE_GEOMETRY", "DEGENERATE")
+        length_sq = math.fsum((dx * dx, dy * dy))
+        if numeric_validity(length_sq) != "FINITE":
+            return refuse("NON_FINITE_DERIVED_VALUE")
+        if length_sq == 0:  # Underflow even with a caller's smaller tolerance.
+            return refuse("DEGENERATE_GEOMETRY", "DEGENERATE")
+        numerator = math.fsum((px * dx, py * dy))
+        if numeric_validity(numerator) != "FINITE":
+            return refuse("NON_FINITE_DERIVED_VALUE")
+        raw_t = numerator / length_sq
+        if numeric_validity(raw_t) != "FINITE":
+            return refuse("NON_FINITE_DERIVED_VALUE")
+        t = max(0.0, min(1.0, raw_t))
+        foot = (a[0] + t * dx, a[1] + t * dy)
+        distance = math.dist(point, foot)
+        along = t * length
+        if any(numeric_validity(v) != "FINITE" for v in (*foot, distance, along, length)):
+            return refuse("NON_FINITE_DERIVED_VALUE")
+    except (ArithmeticError, ValueError):
+        return refuse("NUMERIC_DERIVATION_FAILED")
+    result.update(state="ESTABLISHED", point=list(foot), parameter=t,
+                  raw_parameter=raw_t, distance=distance, distance_along=along, length=length,
+                  premises={"point": list(point), "segment": [list(a), list(b)]})
+    return result
+
+
 def _distance_point_to_segment(point, a, b):
-    """Perpendicular distance, plus how far along the segment the foot lands."""
-    (px, py), (ax, ay), (bx, by) = point, a, b
-    dx, dy = bx - ax, by - ay
-    length_sq = dx * dx + dy * dy
-    if length_sq == 0:
-        return math.dist(point, a), 0.0
-    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length_sq))
-    foot = (ax + t * dx, ay + t * dy)
-    return math.dist(point, foot), t * math.sqrt(length_sq)
+    """Compatibility for compiler callers already in one local Euclidean chart."""
+    result = project_point_to_segment(point, a, b, point_space="LOCAL_CARTESIAN",
+        segment_space="LOCAL_CARTESIAN", point_plane="local", segment_plane="local",
+        geometry_level="EUCLIDEAN")
+    if result["state"] != "ESTABLISHED":
+        raise SpatialCompilationError("Segment projection refused: " + result["error"], diagnostic=result)
+    return result["distance"], result["distance_along"]
 
 
 def assemble_loops(segments: Iterable, tolerance: float = 0.5) -> list[list[tuple]]:
@@ -601,6 +672,10 @@ class SpatialCompiler:
 
     @staticmethod
     def _host_wall(point, walls, width, max_distance=24.0):
+        from engine.ifc_volume_validator import numeric_validity
+        if any(numeric_validity(v) != "FINITE" for v in (width, max_distance)) or width <= 0 or max_distance < 0:
+            raise SpatialCompilationError("Invalid wall placement parameters",
+                diagnostic={"state": "UNRESOLVED", "error": "INVALID_GEOMETRIC_NUMBER"})
         best, best_distance, best_offset = None, None, 0.0
         for wall in walls:
             a = (wall["baseline"][0]["x"], wall["baseline"][0]["y"])
@@ -617,7 +692,12 @@ class SpatialCompiler:
         length = math.dist(a, b)
         ideal = best_offset - width / 2.0
         offset = min(max(ideal, 0.0), length - width)
-        return best, offset, abs(offset - ideal)
+        shift = abs(offset - ideal)
+        if any(numeric_validity(v) != "FINITE" for v in (length, ideal, offset, shift)):
+            raise SpatialCompilationError("Wall placement refused",
+                diagnostic={"state": "UNRESOLVED", "error": "NON_FINITE_DERIVED_VALUE",
+                            "wall_id": best.get("id")})
+        return best, offset, shift
 
 
 def compile_to_ifc(document, *, schedule=None, project_name="ARCHIOSK Compiled Model",

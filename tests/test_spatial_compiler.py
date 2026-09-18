@@ -28,10 +28,96 @@ never from the declared scale - which on this corpus is the wrong one.
 from __future__ import annotations
 
 import csv
+import math
 import re
 from pathlib import Path
 
 import pytest
+
+
+class TestRule7ProjectionNumericQualification:
+    """Finite same-plane Euclidean fixtures; refuse or return the proven foot."""
+
+    @staticmethod
+    def project(p, a=(0., 0.), b=(10., 0.), **kwargs):
+        from engine.spatial_compiler import project_point_to_segment
+        context = dict(point_space="EUCLIDEAN_RECTIFIED", segment_space="EUCLIDEAN_RECTIFIED",
+                       point_plane="sheet", segment_plane="sheet", geometry_level="EUCLIDEAN",
+                       source={"fixture": "R7-PROJ"})
+        context.update(kwargs)
+        return project_point_to_segment(p, a, b, **context)
+
+    @pytest.mark.parametrize("point,along,distance", [((5., 3.), 5., 3.), ((-2., 0.), 0., 2.), ((12., 0.), 10., 2.)])
+    def test_finite_projection(self, point, along, distance):
+        result = self.project(point)
+        assert result["state"] == "ESTABLISHED"
+        assert result["distance_along"] == along
+        assert result["distance"] == distance
+        assert result["source"] == {"fixture": "R7-PROJ"}
+
+    def test_large_origin_modest_local_difference(self):
+        result = self.project((1e12 + 5, 1e12 + 3), (1e12, 1e12), (1e12 + 10, 1e12))
+        assert result["state"] == "ESTABLISHED"
+        assert (result["distance"], result["distance_along"]) == (3., 5.)
+
+    @pytest.mark.parametrize("length,error", [(0., "ZERO_LENGTH_SEGMENT"), (5e-7, "DEGENERATE_GEOMETRY"), (1e-200, "DEGENERATE_GEOMETRY")])
+    def test_degenerate_segment(self, length, error):
+        result = self.project((0., 0.), b=(length, 0.))
+        assert result["state"] == "DEGENERATE"
+        assert result["error"] == error
+        assert result["point"] is None
+
+    @pytest.mark.parametrize("scale", [1., 1000., 0.001])
+    def test_just_above_calibrated_tolerance(self, scale):
+        from engine.spatial_compiler import ToleranceContext
+        length = 1.01e-6 * scale
+        result = self.project((length / 2, 0.), b=(length, 0.),
+                              tolerance=ToleranceContext(segment_length=1e-6 * scale))
+        assert result["state"] == "ESTABLISHED"
+        assert result["distance_along"] == pytest.approx(length / 2, abs=0)
+
+    @pytest.mark.parametrize("kwargs,error", [({"segment_space": "SOURCE_PIXELS"}, "INCOMPARABLE_COORDINATE_SPACES"),
+        ({"segment_plane": "facade"}, "PLANE_MISMATCH"), ({"geometry_level": "AFFINE"}, "PREMISE_UNESTABLISHED")])
+    def test_context_refusal(self, kwargs, error):
+        result = self.project((1., 0.), **kwargs)
+        assert result["error"] == error
+        assert result["point"] is None
+
+    def test_nonfinite_parameter_is_not_clipped_to_endpoint(self):
+        from engine.spatial_compiler import ToleranceContext
+        result = self.project((1e308, 0.), b=(1e-100, 0.), tolerance=ToleranceContext(segment_length=0))
+        assert result["error"] == "NON_FINITE_DERIVED_VALUE"
+        assert result["point"] is None
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+    def test_nonfinite_point_refused(self, value):
+        result = self.project((value, 0.))
+        assert result["error"] == "INVALID_GEOMETRIC_NUMBER"
+        assert result["point"] is None
+
+    @pytest.mark.parametrize("length,height", [(10.0, 3.0), (1e200, 3.0), (1e-200, 0.0)])
+    def test_projection_never_silently_loses_a_representable_foot(self, length, height):
+        from engine.spatial_compiler import _distance_point_to_segment
+
+        try:
+            distance, along = _distance_point_to_segment(
+                (length / 2, height), (0.0, 0.0), (length, 0.0))
+        except SpatialCompilationError:
+            return  # Explicit numeric abstention is permitted; guessing is not.
+        assert math.isfinite(distance) and math.isfinite(along)
+        assert distance == pytest.approx(height, rel=1e-12, abs=0)
+        assert along == pytest.approx(length / 2, rel=1e-12, abs=0)
+
+    def test_wall_host_must_not_return_nonfinite_placement_diagnostics(self):
+        wall = {"id": "finite-long-wall", "baseline": [
+            {"x": 0.0, "y": 0.0}, {"x": 1e200, "y": 0.0}]}
+        try:
+            host, offset, shift = SpatialCompiler._host_wall((1e200, 0.0), [wall], 10.0)
+        except SpatialCompilationError:
+            return
+        assert math.isfinite(offset) and math.isfinite(shift)
+        if host is not None:
+            assert 0 <= offset <= 1e200
 
 from engine.ifc_volume_validator import IFCValidationError, IFCVolumeValidator
 from engine.pdf_extractor import PDFVectorExtractor

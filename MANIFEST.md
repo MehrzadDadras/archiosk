@@ -1,5 +1,10 @@
 # MANIFEST
 
+Rule 7 projection: `engine/spatial_compiler.py::project_point_to_segment` owns
+finite, tolerance-aware, explicit-frame projection and wall-placement refusal.
+`docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_7_PROJECTION.md` records the capability,
+controls and outstanding end-to-end/live obligations.
+
 Rule 7 numeric validity: `engine/ifc_volume_validator.py` owns strict finite
 numeric admission for input geometry, derived values and STEP emission.
 Structured refusals preserve source/field/stage provenance without mutating
