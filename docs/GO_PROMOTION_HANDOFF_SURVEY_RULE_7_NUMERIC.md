@@ -1,6 +1,6 @@
 # Claude Promotion Handoff: finite geometric quantities
 
-Implementation SHA: pending green milestone gate and implementation commit.
+Implementation SHA: `7978949bcec223c4e64956c67484a7ebd88e2ee4`.
 **NOT_PROMOTED** until Claude proves ordinary LIVE_REACHABLE behavior.
 QUALIFIED / DISTILLED / IMPLEMENTED / GATED locally; focused, affected and
 milestone full gates green. Runtime consumer: existing IFC admission/export.
