@@ -1,7 +1,7 @@
 # Claude Promotion Handoff: current governing height datum
 
 **NOT_PROMOTED.** Local qualification is not live promotion. No push or deployment.
-Implementation SHA: recorded in the follow-up handoff commit after this increment.
+Implementation SHA: `f6b6ecc9e4be3ef3eeb5fdf93e0fab476e4c230e`.
 QUALIFIED / DISTILLED / IMPLEMENTED / GATED / RUNTIME_WIRED locally.
 LIVE_REACHABLE remains unproven.
 
