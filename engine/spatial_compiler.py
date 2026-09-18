@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Any, Iterable, Optional
 
 _MM_PER_FOOT = 304.8
@@ -88,6 +88,432 @@ class ToleranceContext:
     """
     boundary_distance: float = 0.000001
     segment_length: float = 0.000001
+    vector_length: float = 0.000001
+    homogeneous_w: float = 1e-12
+    matrix_pivot: float = 1e-14
+    homography_weak_condition: float = 1e8
+    homography_max_condition: float = 1e10
+    round_trip: float = 1e-9
+    parallel_degrees: float = 0.25
+    finite_degrees: float = 1.0
+    vp_good_condition: float = 20.0
+    vp_degenerate_condition: float = 100.0
+    horizon_consistent: float = 0.001
+    horizon_weak: float = 0.003
+
+
+PROJECTIVE_SPACES = ("SOURCE_PIXELS", "NORMALIZED_IMAGE", "AFFINE_RECTIFIED",
+                     "EUCLIDEAN_RECTIFIED", "WORLD_SCALED", "RECTIFIED_DISPLAY_PIXELS")
+GEOMETRY_LEVELS = ("PROJECTIVE", "AFFINE", "EUCLIDEAN", "METRIC_SCALED")
+
+
+def _geometry_result(operator, *, source_space=None, target_space=None,
+                     source_plane=None, target_plane=None, geometry_level=None,
+                     tolerance=ToleranceContext(), uncertainty=None, source=None):
+    """Operator payload within the existing geometry owner, not an evidence store."""
+    from engine.ifc_volume_validator import numeric_validity
+    result = dict(operator=operator, state="UNRESOLVED", error=None, value=None,
+        source_space=source_space, target_space=target_space, source_plane=source_plane,
+        target_plane=target_plane, geometry_level=geometry_level, conditioning=None,
+        uncertainty=uncertainty if uncertainty is not None else {"state": "UNRESOLVED"},
+        source=source if source is not None else {}, tolerance_context=asdict(tolerance))
+    if source_space not in PROJECTIVE_SPACES or target_space not in PROJECTIVE_SPACES:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if not isinstance(source_plane, str) or not source_plane or not isinstance(target_plane, str) or not target_plane:
+        return _geometry_refuse(result, "PREMISE_UNESTABLISHED")
+    if geometry_level not in GEOMETRY_LEVELS:
+        return _geometry_refuse(result, "PREMISE_UNESTABLISHED")
+    bands = asdict(tolerance)
+    if (any(numeric_validity(v) != "FINITE" or v <= 0 for v in bands.values())
+            or not tolerance.matrix_pivot < 1
+            or not tolerance.homogeneous_w < 1
+            or not 1 < tolerance.homography_weak_condition < tolerance.homography_max_condition
+            or not 0 < tolerance.parallel_degrees < tolerance.finite_degrees < 90
+            or not 1 < tolerance.vp_good_condition < tolerance.vp_degenerate_condition
+            or not tolerance.horizon_consistent < tolerance.horizon_weak):
+        return _geometry_refuse(result, "INVALID_TOLERANCE")
+    return result
+
+
+def _geometry_refuse(result, error, state="UNRESOLVED"):
+    result.update(state=state, error=error, value=None)
+    return result
+
+
+def _finite_coordinates(values, size):
+    from engine.ifc_volume_validator import numeric_validity
+    return (isinstance(values, (tuple, list)) and len(values) == size
+            and all(numeric_validity(v) == "FINITE" for v in values))
+
+
+def vector_usability(vector, **context):
+    """Normalize only a usable same-chart Euclidean vector; retain exact zero."""
+    result = _geometry_result("vector_usability@1", **context)
+    if result["error"]:
+        return result
+    if result["source_space"] != result["target_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if result["source_plane"] != result["target_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    if result["geometry_level"] not in ("EUCLIDEAN", "METRIC_SCALED"):
+        return _geometry_refuse(result, "PREMISE_UNESTABLISHED")
+    if not any(_finite_coordinates(vector, size) for size in (2, 3)):
+        return _geometry_refuse(result, "NON_FINITE_VECTOR")
+    length = math.hypot(*vector)
+    if not math.isfinite(length):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE")
+    if length == 0:
+        return _geometry_refuse(result, "ZERO_LENGTH_VECTOR", "DEGENERATE")
+    if length <= result["tolerance_context"]["vector_length"]:
+        return _geometry_refuse(result, "DEGENERATE_GEOMETRY", "DEGENERATE")
+    result.update(state="ESTABLISHED", value=[v / length for v in vector],
+                  length=length, conditioning=1.0, premises={"vector": list(vector)})
+    return result
+
+
+def bounded_acos(value, error_bound, **context):
+    """Explicit domain intersection gives an interval, never a coerced scalar.
+
+    An error interval crossing the domain boundary is only a conditional weak
+    result. The original number and full uncertainty remain in the derivation.
+    """
+    from engine.ifc_volume_validator import numeric_validity
+    result = _geometry_result("bounded_acos@1", **context)
+    if result["error"]:
+        return result
+    if result["source_space"] != result["target_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if result["source_plane"] != result["target_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    if result["geometry_level"] not in ("EUCLIDEAN", "METRIC_SCALED"):
+        return _geometry_refuse(result, "PREMISE_UNESTABLISHED")
+    if any(numeric_validity(v) != "FINITE" for v in (value, error_bound)) or error_bound < 0:
+        return _geometry_refuse(result, "INVALID_NUMERIC_DOMAIN")
+    lower, upper = value - error_bound, value + error_bound
+    if not all(math.isfinite(v) for v in (lower, upper)):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE")
+    result["premises"] = {"input": value, "error_bound": error_bound}
+    if lower > 1 or upper < -1:
+        return _geometry_refuse(result, "INVALID_NUMERIC_DOMAIN")
+    # Intersection is recorded explicitly; `value` itself is never clamped.
+    interval = [max(-1.0, lower), min(1.0, upper)]
+    angles = [math.acos(interval[1]), math.acos(interval[0])]
+    result.update(state="ESTABLISHED" if error_bound == 0 else "WEAK",
+        value=angles, conditioning=None,
+        uncertainty={"input_uncertainty": result["uncertainty"], "input_interval": [lower, upper],
+                     "admissible_interval": interval, "angle_interval_radians": angles,
+                     "conditional_on_domain": lower < -1 or upper > 1})
+    return result
+
+
+def _inverse_projective_matrix(matrix, tolerance):
+    """Three-column elimination on a bounded representative; no external kernel."""
+    scale = max(abs(v) for row in matrix for v in row)
+    if scale == 0:
+        raise ValueError("HOMOGRAPHY_SINGULAR")
+    a = [[v / scale for v in row] + [float(i == j) for j in range(3)]
+         for i, row in enumerate(matrix)]
+    for column in range(3):
+        pivot_row = max(range(column, 3), key=lambda i: abs(a[i][column]))
+        pivot = a[pivot_row][column]
+        if pivot == 0:
+            raise ValueError("HOMOGRAPHY_SINGULAR")
+        if abs(pivot) <= tolerance.matrix_pivot:
+            raise ValueError("HOMOGRAPHY_ILL_CONDITIONED")
+        a[column], a[pivot_row] = a[pivot_row], a[column]
+        a[column] = [v / pivot for v in a[column]]
+        for i in range(3):
+            if i != column:
+                factor = a[i][column]
+                a[i] = [x - factor * y for x, y in zip(a[i], a[column])]
+        if not all(math.isfinite(v) for row in a for v in row):
+            raise ValueError("NON_FINITE_DERIVED_VALUE")
+    inverse = [row[3:] for row in a]
+    condition = max(sum(abs(v / scale) for v in row) for row in matrix) * max(
+        sum(abs(v) for v in row) for row in inverse)
+    if not math.isfinite(condition):
+        raise ValueError("NON_FINITE_DERIVED_VALUE")
+    return inverse, condition
+
+
+def validate_homography(matrix, **context):
+    """Typed source-to-target map; infinity-norm conditioning is scale invariant.
+
+    Canonicalization changes a homogeneous representative, never input evidence.
+    Matrix shape alone cannot earn rectification or increase geometry level.
+    """
+    result = _geometry_result("homography_validation@1", **context)
+    if result["error"]:
+        return result
+    if not isinstance(matrix, (list, tuple)) or len(matrix) != 3 or not all(
+            _finite_coordinates(row, 3) for row in matrix):
+        return _geometry_refuse(result, "INVALID_HOMOGRAPHY", "DEGENERATE")
+    tolerance = context.get("tolerance", ToleranceContext())
+    scale = max(abs(v) for row in matrix for v in row)
+    if scale == 0:
+        return _geometry_refuse(result, "HOMOGRAPHY_SINGULAR", "DEGENERATE")
+    bounded = [[v / scale for v in row] for row in matrix]
+    divisor = bounded[2][2]
+    if abs(divisor) <= tolerance.homogeneous_w:
+        norm = math.sqrt(math.fsum(v * v for row in bounded for v in row))
+        first = next(v for row in bounded for v in row if v != 0)
+        divisor = math.copysign(norm, first)
+    canonical = [[v / divisor for v in row] for row in bounded]
+    try:
+        _, condition = _inverse_projective_matrix(canonical, tolerance)
+    except ValueError as error:
+        return _geometry_refuse(result, str(error), "DEGENERATE")
+    result["conditioning"] = condition
+    if condition >= tolerance.homography_max_condition:
+        return _geometry_refuse(result, "HOMOGRAPHY_ILL_CONDITIONED", "DEGENERATE")
+    level = result["geometry_level"]
+    ceiling = "PROJECTIVE"
+    if canonical[2][0] == canonical[2][1] == 0:
+        ceiling = "AFFINE"
+        a, b, c, d = canonical[0][0], canonical[0][1], canonical[1][0], canonical[1][1]
+        if a * b + c * d == 0 and a * a + c * c == b * b + d * d:
+            ceiling = "METRIC_SCALED" if a * a + c * c == 1 else "EUCLIDEAN"
+    result.update(state="WEAK" if condition >= tolerance.homography_weak_condition else "ESTABLISHED",
+        matrix=canonical, value=canonical, input_geometry_level=level,
+        geometry_level=GEOMETRY_LEVELS[min(GEOMETRY_LEVELS.index(level), GEOMETRY_LEVELS.index(ceiling))],
+        conditioning_measure="infinity_norm", premises={"matrix": [list(row) for row in matrix]})
+    return result
+
+
+def _recheck_homography(transform, tolerance):
+    """Stored result flags never substitute for revalidation at an operator boundary."""
+    if not isinstance(transform, dict):
+        return _geometry_result("homography_validation@1", tolerance=tolerance)
+    result = validate_homography(transform.get("matrix"), tolerance=tolerance,
+        **{key: transform.get(key) for key in ("source_space", "target_space", "source_plane",
+            "target_plane", "geometry_level", "uncertainty", "source")})
+    if transform.get("error"):
+        return _geometry_refuse(result, transform["error"], transform.get("state", "UNRESOLVED"))
+    if not result["error"] and transform.get("state") not in ("ESTABLISHED", "WEAK"):
+        return _geometry_refuse(result, "PREMISE_UNESTABLISHED")
+    if not result["error"] and transform.get("state") == "WEAK":
+        result["state"] = "WEAK"
+    return result
+
+
+def dehomogenize(point, **context):
+    """Scale-invariant W guard; never divides an infinite or near-infinite point."""
+    result = _geometry_result("dehomogenization@1", **context)
+    if result["error"]:
+        return result
+    if result["source_space"] != result["target_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if result["source_plane"] != result["target_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    if not _finite_coordinates(point, 3):
+        return _geometry_refuse(result, "NON_FINITE_POINT")
+    scale = max(abs(v) for v in point)
+    if scale == 0:
+        result["point_kind"] = "DEGENERATE"
+        return _geometry_refuse(result, "DEHOMOGENIZATION_UNSTABLE", "DEGENERATE")
+    homogeneous = [v / scale for v in point]
+    w = homogeneous[2]
+    result.update(homogeneous=homogeneous, premises={"homogeneous_point": list(point)})
+    if abs(w) <= result["tolerance_context"]["homogeneous_w"]:
+        result["point_kind"] = "INFINITE" if w == 0 else "NEAR_INFINITY"
+        return _geometry_refuse(result, "DEHOMOGENIZATION_UNSTABLE", "DEGENERATE")
+    value = [homogeneous[i] / w for i in (0, 1)]
+    if not _finite_coordinates(value, 2):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE")
+    result.update(state="ESTABLISHED", value=value, point_kind="FINITE", conditioning=1 / abs(w))
+    return result
+
+
+def transform_homogeneous_point(transform, point, *, point_space=None, point_plane=None,
+                                tolerance=ToleranceContext()):
+    result = _recheck_homography(transform, tolerance)
+    result["operator"] = "homography_point@1"
+    if result["error"]:
+        return result
+    if point_space != result["source_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if point_plane != result["source_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    if not _finite_coordinates(point, 3):
+        return _geometry_refuse(result, "NON_FINITE_POINT")
+    scale = max(abs(v) for v in point)
+    normalized = [v / scale for v in point] if scale else [0., 0., 0.]
+    try:
+        homogeneous = [math.fsum(a * b for a, b in zip(row, normalized)) for row in result["matrix"]]
+    except (ArithmeticError, ValueError):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE")
+    projected = dehomogenize(homogeneous, tolerance=tolerance,
+        source_space=result["target_space"], target_space=result["target_space"],
+        source_plane=result["target_plane"], target_plane=result["target_plane"],
+        **{key: result[key] for key in ("geometry_level", "uncertainty", "source")})
+    result.update(point_kind=projected.get("point_kind"), homogeneous=projected.get("homogeneous"),
+                  dehomogenization_conditioning=projected["conditioning"],
+                  premises={"transform": transform, "homogeneous_point": list(point)})
+    if projected["error"]:
+        return _geometry_refuse(result, projected["error"], projected["state"])
+    result["value"] = projected["value"]
+    return result
+
+
+def _projective_product(left, right):
+    result = [[math.fsum(left[i][k] * right[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+    if not all(_finite_coordinates(row, 3) for row in result):
+        raise ValueError("NON_FINITE_DERIVED_VALUE")
+    return result
+
+
+def invert_homography(transform, *, tolerance=ToleranceContext()):
+    original = _recheck_homography(transform, tolerance)
+    if original["error"]:
+        original["operator"] = "homography_inverse@1"
+        return original
+    context = dict(source_space=original["target_space"], target_space=original["source_space"],
+        source_plane=original["target_plane"], target_plane=original["source_plane"],
+        geometry_level=original["geometry_level"], uncertainty=original["uncertainty"],
+        source=original["source"], tolerance=tolerance)
+    try:
+        inverse, _ = _inverse_projective_matrix(original["matrix"], tolerance)
+        result = validate_homography(inverse, **context)
+        result["operator"] = "homography_inverse@1"
+        if result["error"]:
+            return result
+        identity = _projective_product(result["matrix"], original["matrix"])
+        if identity[2][2] == 0:
+            return _geometry_refuse(result, "HOMOGRAPHY_ILL_CONDITIONED", "DEGENERATE")
+        residual = max(abs(identity[i][j] / identity[2][2] - float(i == j))
+                       for i in range(3) for j in range(3))
+        result["round_trip_residual"] = residual
+        if not math.isfinite(residual) or residual > tolerance.round_trip:
+            return _geometry_refuse(result, "HOMOGRAPHY_ILL_CONDITIONED", "DEGENERATE")
+    except (ArithmeticError, ValueError):
+        return _geometry_refuse(_geometry_result("homography_inverse@1", **context),
+                                "NON_FINITE_DERIVED_VALUE", "DEGENERATE")
+    result.update(premises={"transform": transform}, conditioning_history=[original["conditioning"]])
+    if original["state"] == "WEAK":
+        result["state"] = "WEAK"
+    return result
+
+
+def compose_homographies(first, second, *, tolerance=ToleranceContext()):
+    """AB then BC gives H2 H1; endpoint checks prohibit reversed chart order."""
+    a, b = (_recheck_homography(t, tolerance) for t in (first, second))
+    result = dict(a, operator="homography_composition@1", value=None,
+                  target_space=b["target_space"], target_plane=b["target_plane"])
+    for operand in (a, b):
+        if operand["error"]:
+            return _geometry_refuse(result, operand["error"], operand["state"])
+    if a["target_space"] != b["source_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if a["target_plane"] != b["source_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    try:
+        matrix = _projective_product(b["matrix"], a["matrix"])
+    except (ArithmeticError, ValueError):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE")
+    result = validate_homography(matrix, source_space=a["source_space"], target_space=b["target_space"],
+        source_plane=a["source_plane"], target_plane=b["target_plane"], tolerance=tolerance,
+        geometry_level=GEOMETRY_LEVELS[min(GEOMETRY_LEVELS.index(t["geometry_level"]) for t in (a, b))],
+        uncertainty={"premises": [a["uncertainty"], b["uncertainty"]]},
+        source={"premises": [a["source"], b["source"]]})
+    result.update(operator="homography_composition@1", premises={"first": first, "second": second},
+                  conditioning_history=[a["conditioning"], b["conditioning"]])
+    if not result["error"] and any(t["state"] == "WEAK" for t in (a, b)):
+        result["state"] = "WEAK"
+    return result
+
+
+def transform_homogeneous_line(transform, line, *, line_space=None, line_plane=None,
+                               tolerance=ToleranceContext()):
+    """Dual action H^-T l. A line is never passed to the point transform."""
+    result = _recheck_homography(transform, tolerance)
+    result["operator"] = "homography_line@1"
+    if result["error"]:
+        return result
+    if line_space != result["source_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if line_plane != result["source_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    if not _finite_coordinates(line, 3):
+        return _geometry_refuse(result, "INVALID_LINE")
+    scale = max(abs(v) for v in line)
+    if scale == 0:
+        return _geometry_refuse(result, "DEGENERATE_GEOMETRY", "DEGENERATE")
+    normalized = [v / scale for v in line]
+    try:
+        inverse, _ = _inverse_projective_matrix(result["matrix"], tolerance)
+        dual = [math.fsum(inverse[j][i] * normalized[j] for j in range(3)) for i in range(3)]
+    except (ArithmeticError, ValueError):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE")
+    scale = max(abs(v) for v in dual)
+    if not _finite_coordinates(dual, 3) or scale == 0:
+        return _geometry_refuse(result, "DEGENERATE_GEOMETRY", "DEGENERATE")
+    result.update(value=[v / scale for v in dual], premises={"transform": transform, "line": list(line)},
+                  line_kind="INFINITE" if dual[0] == dual[1] == 0 else "FINITE")
+    return result
+
+
+def classify_vanishing_direction(normal, direction, **context):
+    """Classify a direction relative to a picture-plane normal, not a camera fit.
+
+    No station/plane origin is invented, so no finite VP position is claimed.
+    A tolerance-band infinity classification is distinct from exact parallelism.
+    """
+    result = _geometry_result("vanishing_direction@1", **context)
+    if result["error"]:
+        return result
+    if not _finite_coordinates(normal, 3) or not _finite_coordinates(direction, 3):
+        return _geometry_refuse(result, "NON_FINITE_VECTOR")
+    n, v = vector_usability(normal, **context), vector_usability(direction, **context)
+    for operand in (n, v):
+        if operand["error"]:
+            return _geometry_refuse(result, operand["error"], operand["state"])
+    dot = abs(math.fsum(a * b for a, b in zip(n["value"], v["value"])))
+    if not math.isfinite(dot) or dot > 1:
+        return _geometry_refuse(result, "INVALID_NUMERIC_DOMAIN")
+    degrees = math.degrees(math.asin(dot))
+    bands = result["tolerance_context"]
+    kind = ("INFINITE" if degrees <= bands["parallel_degrees"] else
+            "NEAR_INFINITY" if degrees < bands["finite_degrees"] else "FINITE")
+    result.update(direction_kind=kind, exact_parallel=dot == 0, angle_to_plane_degrees=degrees,
+                  premises={"normal": list(normal), "direction": list(direction)}, finite_vp=None)
+    if dot == 0:
+        # A valid projective direction at infinity, not an unusable zero vector.
+        result.update(state="ESTABLISHED", homogeneous_direction=[*v["value"], 0.0])
+        return result
+    condition = 1 / dot
+    if not math.isfinite(condition):
+        return _geometry_refuse(result, "NON_FINITE_DERIVED_VALUE", "DEGENERATE")
+    result["conditioning"] = condition
+    if condition >= bands["vp_degenerate_condition"]:
+        return _geometry_refuse(result, "VANISHING_DIRECTION_UNSTABLE", "DEGENERATE")
+    result.update(state="ESTABLISHED" if condition < bands["vp_good_condition"] else "WEAK",
+                  value=v["value"] if kind == "FINITE" else None)
+    return result
+
+
+def classify_horizon_residual(residual, *, residual_units=None, **context):
+    """Qualification of an observed horizon residual in explicit diagonal units."""
+    from engine.ifc_volume_validator import numeric_validity
+    result = _geometry_result("horizon_residual@1", **context)
+    if result["error"]:
+        return result
+    if result["source_space"] != result["target_space"]:
+        return _geometry_refuse(result, "SPACE_MISMATCH", "INCOMPARABLE")
+    if result["source_plane"] != result["target_plane"]:
+        return _geometry_refuse(result, "PLANE_MISMATCH", "INCOMPARABLE")
+    if residual_units != "IMAGE_DIAGONAL":
+        return _geometry_refuse(result, "PREMISE_UNESTABLISHED")
+    if numeric_validity(residual) != "FINITE" or residual < 0:
+        return _geometry_refuse(result, "INVALID_NUMERIC_DOMAIN")
+    bands = result["tolerance_context"]
+    result["premises"] = {"residual": residual, "units": residual_units}
+    if residual > bands["horizon_weak"]:
+        result["consistency"] = "INCONSISTENT"
+        return _geometry_refuse(result, "HORIZON_INCONSISTENT")
+    weak = residual > bands["horizon_consistent"]
+    result.update(state="WEAK" if weak else "ESTABLISHED", value=residual,
+                  consistency="WEAK" if weak else "CONSISTENT")
+    return result
 
 
 def classify_point_in_polygon(point, polygon, *, point_space=None, polygon_space=None,

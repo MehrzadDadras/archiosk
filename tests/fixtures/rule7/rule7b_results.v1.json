@@ -1,0 +1,148 @@
+{
+  "status": "PASS",
+  "counts": {
+    "PASS": 34,
+    "FAIL": 0,
+    "BLOCKED_MISSING_OPERATOR": 0,
+    "NOT_APPLICABLE": 0
+  },
+  "end_to_end_proven": true,
+  "results": [
+    {
+      "fixture_id": "R7-FIN-POS-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-POS-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-POS-003",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-NF-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-NF-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-NF-003",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-NF-004",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-NF-005",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-ZERO-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-ZERO-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-DOM-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-DOM-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-TR-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-TR-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-TR-003",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-TR-004",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-TR-005",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-003",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-PROV-004",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-002",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-003",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-004",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-IFC-005",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-FIN-ASK-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-POS-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-LARGE-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-ZERO-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-NF-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-WALL-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-SPACE-001",
+      "status": "PASS"
+    },
+    {
+      "fixture_id": "R7-PROJ-PLANE-001",
+      "status": "PASS"
+    }
+  ]
+}

@@ -15215,7 +15215,8 @@ class CaseWorkspaceStore:
         citation = self.resolve_region_citation(workspace, evidence.get("region_id"))
         scoped = (isinstance(derivation, dict) and derivation.get("operator") in (
                     "numeric_validity@1", "segment_projection@1", "polygon_region@1",
-                    "semantic_binding@1", "wall_host@1")
+                    "semantic_binding@1", "wall_host@1", "vector_usability@1", "bounded_acos@1",
+                    "homography_point@1")
                   and isinstance(premise_ids, list) and bool(premise_ids)
                   and all(isinstance(p, str) for p in premise_ids)
                   and isinstance(source_ids, list) and bool(source_ids)

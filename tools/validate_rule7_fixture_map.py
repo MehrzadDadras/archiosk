@@ -149,11 +149,7 @@ def decode(value):
 
 # These are absent mathematical capabilities, not failed adapters. Keep this
 # explicit and narrow: an unknown kind still fails qualification.
-MISSING_OPERATORS = {
-    "vector": "vector_usability",
-    "domain": "bounded_inverse_trigonometric_domain",
-    "homography": "homography_validation_and_point_transform",
-}
+MISSING_OPERATORS = {}
 
 
 class MissingOperator(QualificationFailure):
@@ -171,11 +167,11 @@ def candidate_for(inputs):
     model["label_containment"][0]["relation"].update(
         coordinate_space=inputs["coordinate_space"], plane_id=inputs["plane_id"])
     field = {"weak_binding": "height", "contested": "height", "stale": "height",
-             "unbound": "height", "zero_area": "polygon"}.get(kind, kind)
+             "unbound": "height", "zero_area": "polygon", "homography": "point"}.get(kind, kind)
     owner = model["spaces"][0] if field in ("height", "polygon") else model["walls"][0]
     if field in ("height", "thickness"):
         owner[field] = value
-    elif field in ("point", "endpoint"):
+    elif field in ("point", "endpoint") and kind != "homography":
         owner["baseline"][0 if field == "point" else 1] = dict(zip(("x", "y"), value))
     elif field == "polygon":
         owner["boundary_polygon_2d"] = [dict(zip(("x", "y"), point)) for point in value]
@@ -201,6 +197,28 @@ def run_validator(inputs, *, store=None, workspace=None, source_evidence=None, m
             derivation=derivation or {"operator": "numeric_validity@1", "operator_version": "1",
                 "tolerance_context": {"policy": "strict_finiteness", "tolerance": None}})
         return record
+    if kind == "homography":
+        from engine.spatial_compiler import validate_homography, transform_homogeneous_point
+        # These map controls declare a same-chart/same-plane transformation.
+        # Cross-chart operator controls supply both endpoints explicitly.
+        transform = validate_homography(value["matrix"], source_space=inputs["coordinate_space"],
+            target_space=inputs["coordinate_space"], source_plane=inputs["plane_id"],
+            target_plane=inputs["plane_id"], geometry_level=inputs["geometry_level"],
+            uncertainty=inputs.get("uncertainty"), source=inputs["provenance"])
+        result = transform_homogeneous_point(transform, value["point"],
+            point_space=inputs["coordinate_space"], point_plane=inputs["plane_id"])
+        return finish(result["state"], result["value"], [result["error"]] if result["error"] else [], result)
+    if kind in ("vector", "domain"):
+        from engine.spatial_compiler import vector_usability, bounded_acos
+        operation = vector_usability if kind == "vector" else bounded_acos
+        arguments = (value,) if kind == "vector" else (value["value"], value["error_bound"])
+        if kind == "domain" and value.get("operation") != "acos":
+            raise QualificationFailure("UNWIRED_DOMAIN_OPERATION")
+        result = operation(*arguments, source_space=inputs["coordinate_space"],
+            target_space=inputs["coordinate_space"], source_plane=inputs["plane_id"],
+            target_plane=inputs["plane_id"], geometry_level=inputs["geometry_level"],
+            source=inputs["provenance"], uncertainty=inputs.get("uncertainty"))
+        return finish(result["state"], result["value"], [result["error"]] if result["error"] else [], result)
     if kind in ("height", "thickness", "weak_binding", "contested", "stale", "unbound"):
         state = numeric_validity(value)
         if state != "FINITE":
@@ -315,7 +333,12 @@ def run_fixture(fixture, directory):
             diagnostic = error.diagnostic or {}
             if "export_state" not in diagnostic:
                 raise QualificationFailure("UNCLASSIFIED_IFC_REFUSAL: " + str(error)) from error
-            transform = dict(retained, state="BLOCKED", value=None, errors=diagnostic["errors"], diagnostic=diagnostic)
+            if governed["state"] == "WEAK" and not governed["errors"]:
+                # Retain the conditional interval, never promote it to a usable
+                # measurement merely because IFC has made its refusal decision.
+                transform = dict(retained, state="WEAK", diagnostic=diagnostic)
+            else:
+                transform = dict(retained, state="BLOCKED", value=None, errors=diagnostic["errors"], diagnostic=diagnostic)
             ifc = {"export_state": diagnostic["export_state"], "errors": diagnostic["errors"]}
         seen["transform"] = transform
         assert_hop(transform, fixture["transform_expectation"], "transform")

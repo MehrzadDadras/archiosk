@@ -291,7 +291,8 @@ class IFCVolumeValidator:
                 export_state = "IFC_BLOCKED_COORDINATE_SPACE"
             elif codes & {"NON_FINITE_DIMENSION", "NON_FINITE_POINT", "NON_FINITE_SEGMENT", "NON_FINITE_POLYGON"}:
                 export_state = "IFC_BLOCKED_NON_FINITE"
-            elif codes & {"ZERO_LENGTH_SEGMENT", "DEGENERATE_GEOMETRY"}:
+            elif codes & {"ZERO_LENGTH_SEGMENT", "DEGENERATE_GEOMETRY", "HOMOGRAPHY_SINGULAR",
+                          "HOMOGRAPHY_ILL_CONDITIONED", "DEHOMOGENIZATION_UNSTABLE"}:
                 export_state = "IFC_BLOCKED_DEGENERATE_GEOMETRY"
             elif codes & {"SEMANTIC_BINDING_UNRESOLVED", "PREMISE_UNESTABLISHED"}:
                 export_state = "IFC_BLOCKED_SEMANTIC_BINDING"
@@ -300,8 +301,16 @@ class IFCVolumeValidator:
             raise IFCValidationError("Scoped geometry evidence does not authorize IFC export",
                 diagnostic={"state": state or governed["state"], "errors": list(errors),
                             "export_state": export_state, "evidence_item_id": evidence_item_id})
+        if governed["state"] == "WEAK" and not governed["errors"]:
+            raise IFCValidationError("Conditional geometry is not an established IFC measurement",
+                diagnostic={"state": "WEAK", "errors": [], "export_state": "IFC_UNRESOLVED",
+                            "evidence_item_id": evidence_item_id})
         if governed["state"] not in ("FINITE", "ESTABLISHED") or governed["errors"]:
             refuse(governed["errors"] or ["PREMISE_UNESTABLISHED"])
+        derivation = record.get("derivation") or {}
+        if (derivation.get("operator") == "homography_point@1"
+                and derivation.get("geometry_level") not in ("EUCLIDEAN", "METRIC_SCALED")):
+            refuse(["PREMISE_UNESTABLISHED"])
         candidate = copy.deepcopy(model)
         field = record.get("field")
         owners = [row for row in candidate.get("spaces", []) + candidate.get("walls", [])

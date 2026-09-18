@@ -14,7 +14,8 @@ from tools import validate_rule7_fixture_map as harness
 
 SUITE = harness.load_suite()
 ELIGIBLE = [f for f in SUITE["fixtures"] if f["inputs"]["kind"] not in harness.MISSING_OPERATORS]
-BLOCKED = [f for f in SUITE["fixtures"] if f["inputs"]["kind"] in harness.MISSING_OPERATORS]
+FORMER_BLOCKERS = {"R7-FIN-ZERO-001", "R7-FIN-DOM-001", "R7-FIN-DOM-002",
+                   "R7-FIN-TR-001", "R7-FIN-TR-002", "R7-FIN-TR-003"}
 
 
 @pytest.mark.parametrize("fixture", ELIGIBLE, ids=lambda f: f["fixture_id"])
@@ -27,11 +28,9 @@ def test_existing_capability_entire_evidence_route(tmp_path, fixture):
         assert code not in seen["ask_go"]["text"]
 
 
-@pytest.mark.parametrize("fixture", BLOCKED, ids=lambda f: f["fixture_id"])
-def test_missing_math_is_blocked_not_a_pass(tmp_path, fixture):
-    with pytest.raises(harness.MissingOperator):
-        harness.run_fixture(fixture, tmp_path)
-    assert list(tmp_path.iterdir()) == []
+def test_rule7b_resolves_all_recorded_operator_blockers():
+    assert harness.MISSING_OPERATORS == {}
+    assert len(ELIGIBLE) == 34
 
 
 @pytest.fixture
@@ -182,5 +181,7 @@ def test_inventory_accounts_for_all_original_failures_and_exact_missing_set():
     inventory = json.loads((harness.DIRECTORY / "rule7_adapter_inventory.v1.json").read_text())
     assert len(inventory["failures"]) == 25
     blocked = {f["fixture_id"] for f in inventory["failures"] if not f["eligible"]}
-    assert blocked == {f["fixture_id"] for f in BLOCKED}
+    # This inventory is the immutable adapter-tranche baseline, not a claim
+    # that the mathematical operators implemented in Rule 7B remain missing.
+    assert blocked == FORMER_BLOCKERS
     assert len(blocked) == 6

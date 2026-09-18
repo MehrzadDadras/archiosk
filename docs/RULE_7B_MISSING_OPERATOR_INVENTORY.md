@@ -1,5 +1,13 @@
 # Rule 7B: projective / homography qualification inventory
 
+Historical starting inventory below is preserved. Rule 7B subsequently qualified
+all six listed blockers: the current report is
+`tests/fixtures/rule7/rule7b_results.v1.json` (34 PASS, zero blocked/failures).
+See [the Rule 7B handoff](GO_PROMOTION_HANDOFF_SURVEY_RULE_7B_PROJECTIVE.md) for
+implemented operators, gates and remaining scope. Image-normalization conversion,
+camera/rectification estimation and horizon fitting are not claimed by that
+increment. Promotion remains NOT_PROMOTED.
+
 Status: read-only mathematical and ownership inventory. No new mathematical
 operator is implemented or promoted by the Rule 7 adapter tranche. The governing
 contract remains [the accepted Rule 7 scope](SURVEY_GEOMETRY_PROOF_QUALIFICATION_SCOPE.md).

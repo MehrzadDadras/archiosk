@@ -728,13 +728,14 @@ def _calculated_geometry_lines(workspace, source_id):
         derivation = record.get("derivation") or {}
         if not isinstance(derivation, dict) or derivation.get("operator") not in (
                 "numeric_validity@1", "segment_projection@1", "polygon_region@1",
-                "semantic_binding@1", "wall_host@1"):
+                "semantic_binding@1", "wall_host@1", "vector_usability@1", "bounded_acos@1",
+                "homography_point@1"):
             continue
         field = record.get("field")
         label = {"height": "Height", "thickness": "Wall thickness",
                  "projection": "Segment projection", "point": "Point",
                  "endpoint": "Segment endpoint", "polygon": "Polygon",
-                 "wall": "Wall placement"}.get(field)
+                 "wall": "Wall placement", "vector": "Direction vector", "domain": "Angle"}.get(field)
         if not label:
             continue
         store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
@@ -743,7 +744,8 @@ def _calculated_geometry_lines(workspace, source_id):
         qualified = governed["state"] in ("PARTIALLY_RECOVERED", "WEAK")
         text = str(governed["value"]) if usable else label + " could not be established."
         if qualified:
-            text += " The evidence is only partially recovered."
+            text += (" The calculation remains uncertain." if governed["state"] == "WEAK"
+                     else " The evidence is only partially recovered.")
         rows.append(("interpretation" if usable or qualified else "not_established", {
             "label": label,
             "value": text,

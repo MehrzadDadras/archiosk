@@ -7,12 +7,16 @@ controls and outstanding end-to-end/live obligations.
 Rule 7 evidence adapters reuse calculated EvidenceItems and reviewed relationships:
 `CaseWorkspaceStore.project_geometry_evidence` recomputes trust/currentness for
 the existing document-examination rows and `IFCVolumeValidator.export_evidence`.
-`tools/validate_rule7_fixture_map.py` qualifies 28 eligible routes and explicitly
-reports six missing-operator blockers among 34 versioned fixtures under
+`tools/validate_rule7_fixture_map.py` qualifies all 34 versioned fixture routes under
 `tests/fixtures/rule7/`. No parallel evidence graph or Ask GO context channel.
 `tests/test_rule7_evidence_routing.py` defends reload and consumer monotonicity.
-`docs/RULE_7B_MISSING_OPERATOR_INVENTORY.md` isolates unimplemented vector/domain/
-projective contracts for the next read-only qualification inventory.
+Rule 7B extends the existing compiler geometry owner and `ToleranceContext` with
+typed vector/domain and homogeneous point/line, validation, inverse/composition,
+direction and horizon-residual operators. `tests/test_rule7b_projective.py`
+qualifies the kernel; `tests/fixtures/rule7/rule7b_results.v1.json` records 34 PASS.
+`docs/RULE_7B_MISSING_OPERATOR_INVENTORY.md` preserves the read-only starting
+inventory; `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_7B_PROJECTIVE.md` records the
+implemented scope, gates and NOT_PROMOTED live-proof boundary.
 
 Rule 7 numeric validity: `engine/ifc_volume_validator.py` owns strict finite
 numeric admission for input geometry, derived values and STEP emission.
