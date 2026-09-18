@@ -43,6 +43,8 @@ from engine.spatial_compiler import (
     derive_points_per_foot,
     ensure_ccw,
     point_in_polygon,
+    classify_point_in_polygon,
+    ToleranceContext,
     signed_area,
 )
 
@@ -150,6 +152,116 @@ class TestPointInPolygon:
         el = [(0, 0), (10, 0), (10, 4), (4, 4), (4, 10), (0, 10)]
         assert point_in_polygon((2, 2), el)
         assert not point_in_polygon((8, 8), el)
+
+
+class TestRule7ContainmentProof:
+    """Exact synthetic geometry; a boundary occurrence cannot earn room binding.
+
+    Qualification only: exercise the existing operator and actual compiler.
+    No model, new geometry library, physical measurement or ownership claim.
+    """
+    RING = [(0, 0), (10, 0), (10, 10), (0, 10)]
+
+    def classify(self, point, polygon=None, **overrides):
+        context = dict(point_space="PDF_USER_POINTS", polygon_space="PDF_USER_POINTS",
+                       point_plane="sheet:1", polygon_plane="sheet:1", geometry_level="PROJECTIVE")
+        context.update(overrides)
+        return classify_point_in_polygon(point, self.RING if polygon is None else polygon, **context)
+
+    @pytest.mark.parametrize("point,state", [((5, 5), "INSIDE"), ((15, 5), "OUTSIDE"),
+        ((5, 0), "ON_BOUNDARY"), ((0, 0), "ON_BOUNDARY"),
+        ((0.0000005, 5), "ON_BOUNDARY"), ((-0.0000005, 5), "ON_BOUNDARY"),
+        ((0.000002, 5), "INSIDE"), ((-0.000002, 5), "OUTSIDE")])
+    def test_explicit_states_and_centralized_tolerance(self, point, state):
+        result = self.classify(point)
+        assert result["state"] == state
+        assert result["tolerance"] == ToleranceContext().boundary_distance
+        assert result["operator"] == "strict_point_in_polygon@1"
+        assert result["plane_id"] == "sheet:1"
+
+    def test_calibrated_tolerance_has_an_inclusive_boundary(self):
+        for x in (-0.125, 0.125):
+            assert self.classify((x, 5), tolerance=ToleranceContext(0.125))["state"] == "ON_BOUNDARY"
+        assert self.classify((0.25, 5), tolerance=ToleranceContext(0.125))["state"] == "INSIDE"
+        assert self.classify((-0.25, 5), tolerance=ToleranceContext(0.125))["state"] == "OUTSIDE"
+
+    @pytest.mark.parametrize("polygon", [[], [(0, 0)], [(0, 0), (1, 1)],
+        [(0, 0), (1, 0), (2, 0)], [(0, 0), (10, 10), (0, 10), (10, 0)],
+        [(0, 0), (10, 0), (10, 0), (0, 10)], [(0, 0), (float("nan"), 0), (0, 10)]])
+    def test_degenerate_geometry_remains_unresolved(self, polygon):
+        assert self.classify((0, 0), polygon)["state"] == "UNRESOLVED"
+        assert not point_in_polygon((0, 0), polygon)
+
+    @pytest.mark.parametrize("overrides,error", [
+        ({"polygon_space": "SOURCE_PIXELS"}, "INCOMPARABLE_COORDINATE_SPACES"),
+        ({"polygon_plane": "sheet:2"}, "PLANE_MISMATCH"),
+        ({"point_plane": None}, "PREMISE_UNESTABLISHED"),
+        ({"geometry_level": "UNRESOLVED"}, "PREMISE_UNESTABLISHED"),
+        ({"tolerance": ToleranceContext(-1)}, "INVALID_TOLERANCE")])
+    def test_missing_or_incompatible_premises_refuse(self, overrides, error):
+        result = self.classify((5, 5), **overrides)
+        assert result["state"] == "UNRESOLVED"
+        assert result["error"] == error
+
+    @pytest.mark.parametrize("point", [(5, 0), (10, 5), (5, 10), (0, 5),
+                                       (0, 0), (10, 0), (10, 10), (0, 10)])
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_boundary_occurrence_does_not_prove_strict_containment(self, point, reverse):
+        ring = list(reversed(self.RING)) if reverse else self.RING
+        assert not point_in_polygon(point, ring), "Edge/vertex evidence must remain unbound"
+        assert self.classify(point, ring)["state"] == "ON_BOUNDARY"
+
+    @staticmethod
+    def document_for(point, rings):
+        def span(text, x, y):
+            return {"content": text, "centroid_points": {"x": x, "y": y}}
+        return {"source": {"filename": "rule7-boundary-label-synthetic", "fixture_version": "1.1.0"},
+            "pages": [
+                {"page_number": 1, "height_points": 100, "text": [span("OFFICE", *point)],
+                 "vectors": [{"geometry_type": "rect", "points": ring} for ring in rings]},
+                {"page_number": 2, "height_points": 100,
+                 "text": [span('BASE / EL. 0\'-0"', 0, 80), span('ABOVE / EL. 10\'-0"', 0, 20)],
+                 "vectors": [{"geometry_type": "line", "points": [(0, y), (400, y)]} for y in (80, 20)]},
+            ]}
+
+    @pytest.mark.parametrize("x,expected", [(10, 0), (10 - 0.0000004, 0),
+        (10 + 0.0000004, 0), (10 - 0.000002, 1), (10 + 0.000002, 1)])
+    def test_shared_wall_does_not_bind_until_beyond_boundary_tolerance(self, x, expected):
+        import json
+        adjacent = [(10, 0), (20, 0), (20, 10), (10, 10)]
+        document = self.document_for((x, 5), [self.RING, adjacent])
+        compiled = SpatialCompiler().compile(document, plan_page=1, section_page=2)
+        assert len(compiled["spaces"]) == 2
+        assert sum(s["name"] == "OFFICE" for s in compiled["spaces"]) == expected
+        # Existing compiled JSON can retain the proof without a new storage model.
+        reloaded = json.loads(json.dumps(compiled))
+        relations = reloaded["label_containment"]
+        assert len(relations) == 2
+        assert sum(r["relation"]["state"] == "INSIDE" for r in relations) == expected
+        if expected == 0:
+            assert all(r["relation"]["state"] == "ON_BOUNDARY" for r in relations)
+            assert any("ON_BOUNDARY" in warning for warning in reloaded["warnings"])
+        assert all(r["source"] == document["source"] for r in relations)
+
+    @pytest.mark.parametrize("point,established", [((5, 5), True), ((15, 5), False),
+                                                   ((0, 5), False)])
+    def test_containment_premise_constrains_actual_compiler_binding(self, point, established):
+        def span(text, x, y):
+            return {"content": text, "centroid_points": {"x": x, "y": y}}
+
+        document = {"source": {"filename": "rule7-boundary-label-synthetic", "fixture_version": "1.0.0"},
+            "pages": [
+                {"page_number": 1, "height_points": 100, "text": [span("OFFICE", *point)],
+                 "vectors": [{"geometry_type": "rect", "points": self.RING}]},
+                {"page_number": 2, "height_points": 100,
+                 "text": [span('BASE / EL. 0\'-0"', 0, 80), span('ABOVE / EL. 10\'-0"', 0, 20)],
+                 "vectors": [{"geometry_type": "line", "points": [(0, y), (400, y)]} for y in (80, 20)]},
+            ]}
+        compiled = SpatialCompiler().compile(document, plan_page=1, section_page=2)
+        assert len(compiled["spaces"]) == 1
+        assert (compiled["spaces"][0]["name"] == "OFFICE") is established
+        if not established:
+            assert any("'OFFICE' falls inside no compiled loop" in w for w in compiled["warnings"])
 
 
 class TestScaleDerivation:

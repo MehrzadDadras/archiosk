@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
 _MM_PER_FOOT = 304.8
@@ -74,20 +75,92 @@ def ensure_ccw(polygon):
     return list(polygon) if signed_area(polygon) > 0 else list(reversed(polygon))
 
 
+@dataclass(frozen=True)
+class ToleranceContext:
+    """Boundary band in declared chart units, not physical or survey uncertainty.
+
+    Default matches the compiler's six-decimal point representation. Other
+    charts require calibrated tolerances; numerical precision is not certainty.
+    """
+    boundary_distance: float = 0.000001
+
+
+def classify_point_in_polygon(point, polygon, *, point_space=None, polygon_space=None,
+                              point_plane=None, polygon_plane=None, geometry_level=None,
+                              tolerance=ToleranceContext()):
+    """Strict containment in one declared chart/plane; no implicit conversion.
+
+    Vertices describe a polygon, not an unverified chain of strokes. A valid
+    nonsingular planar chart is a caller premise. No metric/physical claim is
+    derived from chart distances used for numerical boundary exclusion.
+    """
+    from services import deterministic_spatial as spatial
+    result = {"state": "UNRESOLVED", "operator": "strict_point_in_polygon@1",
+              "coordinate_space": point_space, "polygon_space": polygon_space,
+              "plane_id": point_plane, "polygon_plane_id": polygon_plane,
+              "geometry_level": geometry_level, "minimum_level": "PROJECTIVE",
+              "tolerance": getattr(tolerance, "boundary_distance", None),
+              "boundary_distance": None, "accuracy": "UNRESOLVED", "error": None}
+    def refuse(code):
+        result["error"] = code
+        return result
+    if not point_space or not polygon_space or not point_plane or not polygon_plane:
+        return refuse("PREMISE_UNESTABLISHED")
+    if point_space != polygon_space:
+        return refuse("INCOMPARABLE_COORDINATE_SPACES")
+    if point_plane != polygon_plane:
+        return refuse("PLANE_MISMATCH")
+    if geometry_level not in ("PROJECTIVE", "AFFINE", "EUCLIDEAN", "METRIC_SCALED"):
+        return refuse("PREMISE_UNESTABLISHED")
+    band = result["tolerance"]
+    if isinstance(band, bool) or not isinstance(band, (float, int)) or not math.isfinite(band) or band < 0:
+        return refuse("INVALID_TOLERANCE")
+    def valid_point(p):
+        return (isinstance(p, (tuple, list)) and len(p) == 2
+                and all(isinstance(v, (float, int)) and not isinstance(v, bool)
+                        and math.isfinite(v) for v in p))
+    if not valid_point(point) or not isinstance(polygon, (tuple, list)) or not all(valid_point(p) for p in polygon):
+        return refuse("INVALID_GEOMETRY")
+    ring = [tuple(p) for p in polygon]
+    if len(ring) > 1 and ring[0] == ring[-1]:
+        ring.pop()
+    if len(ring) < 3 or len(set(ring)) != len(ring):
+        return refuse("DEGENERATE_POLYGON")
+    edges = list(zip(ring, ring[1:] + ring[:1]))
+    if any(math.dist(a, b) <= band for a, b in edges):
+        return refuse("DEGENERATE_POLYGON")
+    for i, (a, b) in enumerate(edges):
+        for j in range(i + 1, len(edges)):
+            if j == i + 1 or (i == 0 and j == len(edges) - 1):
+                continue
+            if spatial._segments_cross(a, b, *edges[j]):
+                return refuse("DEGENERATE_POLYGON")
+    # Translate to avoid large-origin cancellation in shoelace arithmetic.
+    area = abs(signed_area([(x - ring[0][0], y - ring[0][1]) for x, y in ring]))
+    perimeter = sum(math.dist(a, b) for a, b in edges)
+    if not math.isfinite(area) or not math.isfinite(perimeter) or area <= band * perimeter:
+        return refuse("DEGENERATE_POLYGON")
+    distance = min(spatial._distance_point_to_segment(point, a, b) for a, b in edges)
+    if not math.isfinite(distance):
+        return refuse("INVALID_GEOMETRY")
+    result.update(point=list(point), polygon=[list(p) for p in ring], boundary_distance=distance,
+                  accuracy="EXACT" if distance == 0 else "APPROXIMATE")
+    if distance <= band:
+        result["state"] = "ON_BOUNDARY"
+    else:
+        result["state"] = "INSIDE" if spatial._point_in_ring(point, ring + [ring[0]]) else "OUTSIDE"
+    return result
+
+
 def point_in_polygon(point, polygon) -> bool:
-    """Ray casting. A label exactly on an edge is deliberately NOT contained -
-    an ambiguous binding should surface as an unbound label, not a coin flip."""
-    x, y = point
-    inside = False
-    ring = list(polygon)
-    if ring and _key(ring[0]) == _key(ring[-1]):
-        ring = ring[:-1]
-    for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
-        if (y0 > y) != (y1 > y):
-            crossing = (x1 - x0) * (y - y0) / (y1 - y0) + x0
-            if x < crossing:
-                inside = not inside
-    return inside
+    """Legacy local Cartesian polygon predicate: only strict INSIDE is true.
+
+    Existing callers supply one local XY frame. New cross-view callers must
+    use the explicit-space classifier, not this compatibility wrapper.
+    """
+    return classify_point_in_polygon(point, polygon, point_space="LOCAL_CARTESIAN",
+        polygon_space="LOCAL_CARTESIAN", point_plane="local", polygon_plane="local",
+        geometry_level="EUCLIDEAN")["state"] == "INSIDE"
 
 
 def _distance_point_to_segment(point, a, b):
@@ -333,9 +406,22 @@ class SpatialCompiler:
                  for loop in assemble_loops(_segments_of(plan))]
         labels = self._room_labels(plan, lift)
 
-        spaces, bound_labels = [], set()
+        spaces, bound_labels, label_containment = [], set(), []
         for index, loop in enumerate(loops):
-            inside = [name for name, point in labels if point_in_polygon(point, loop)]
+            inside = []
+            for label_index, (name, point) in enumerate(labels):
+                plane = "source-page:%s" % plan["page_number"]
+                relation = classify_point_in_polygon(point, loop,
+                    point_space="PDF_USER_POINTS", polygon_space="PDF_USER_POINTS",
+                    point_plane=plane, polygon_plane=plane, geometry_level="PROJECTIVE")
+                label_containment.append({"label": name, "label_occurrence": label_index,
+                    "space_id": "SPACE-%02d" % (index + 1), "source": document.get("source", {}),
+                    "page_number": plan["page_number"], "relation": relation})
+                if relation["state"] == "INSIDE":
+                    inside.append(name)
+                elif relation["state"] in ("ON_BOUNDARY", "UNRESOLVED"):
+                    warnings.append("room label %r containment %s for loop %d; not bound (tolerance %s PDF points)"
+                                    % (name, relation["state"], index, relation["tolerance"]))
             bound_labels.update(inside)
             if len(inside) > 1:
                 warnings.append("loop %d contains %d room labels (%s) - binding is ambiguous"
@@ -410,6 +496,7 @@ class SpatialCompiler:
             "schema_version": self.schema_version,
             "levels": levels,
             "spaces": spaces,
+            "label_containment": label_containment,
             "walls": walls,
             "source": document.get("source", {}),
             "derived": {

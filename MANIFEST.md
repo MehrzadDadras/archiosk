@@ -1,5 +1,17 @@
 # MANIFEST
 
+Rule 7 boundary repair extends `engine/spatial_compiler.py` with
+`ToleranceContext`, `classify_point_in_polygon` and retained compiler
+`label_containment`; the legacy Boolean API remains strict-inside only.
+`docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_7_BOUNDARY.md` records qualification,
+consumer wiring and outstanding Claude live/persistence obligations.
+
+Rule 7's read-first operator/type inventory is recorded in
+`docs/SURVEY_GEOMETRY_PROOF_QUALIFICATION_SCOPE.md`, including active protected
+components and reuse limits. `tests/test_spatial_compiler.py::TestRule7ContainmentProof`
+qualifies exact boundary occurrences through the existing containment operator
+and actual room-binding consumer before any kernel implementation is admitted.
+
 Survey Rule 6: `services/height_datum_governance.py` owns the unpinned review
 projection from candidate centerline evidence to a governing height datum.
 It reuses binding, existing evidence/relationship review, planning authority,

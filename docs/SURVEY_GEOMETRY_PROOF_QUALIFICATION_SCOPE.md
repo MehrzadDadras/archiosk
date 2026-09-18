@@ -150,3 +150,67 @@ interest, regulatory authority or measurement precedence from geometry.
 
 Every green capability requires its implementation commit, gates and Claude
 Promotion Handoff; this scope record alone establishes no capability.
+
+## Rule 7 reuse inventory after Rule 6 reconciliation
+
+Baseline: Rule 6 implementation `f6b6ecc9e4be3ef3eeb5fdf93e0fab476e4c230e`,
+handoff `b6d4a86`. Inventory is not qualification or production promotion.
+The active lifecycle digest guard protects `services/datum_corroboration.py`
+and `services/perception_worker.py`: **PROTECTED_DO_NOT_TOUCH**. Historical
+whole-tree hash snapshots are evidence of prior runs, not permission to repin an
+active verification record. No protected implementation is changed here.
+
+| Operator/type | Existing implementation and current consumer | Geometry level / gap | Qualification fixture | Classification |
+| --- | --- | --- | --- | --- |
+| Point-on-line / segment | `deterministic_spatial._segments_cross` has local collinearity/on-segment arithmetic; `_distance_point_to_segment` supplies distance | Incidence is projective; distance is Euclidean; no typed public incidence proof | Interior, endpoint, collinear extension, zero segment | EXTEND_UNPINNED, reuse arithmetic |
+| Segment intersection | `deterministic_spatial._segments_cross`, `_rings_cross`; planning `relate`, survey containment | Projective same-plane predicate; Boolean does not prove a unique intersection point | Proper crossing, shared endpoint, coincident overlap, near-parallel | REUSE_AS_IS predicate; unique-point result MISSING |
+| Point/polygon containment | Spatial `_point_in_ring`, `_point_in_polygon`; compiler `point_in_polygon`; Rule 1 `footprint_containment` | Same-plane topology; boundary conventions differ and require explicit guards | Inside, outside, edge/vertex, concave exclusion, hole | REUSE_AS_IS spatial/Rule 1; qualify compiler before reuse |
+| Polygon containment / overlap | `deterministic_spatial.relate`; GO-PDZ/planning consumers; `survey_graph.footprint_containment` | Provenance/CRS and boundary-tolerance gates already exist; do not fake a CRS for image coordinates | Crossing versus containment; near boundary; wrong CRS | REUSE_AS_IS |
+| Closure / shared endpoints | `spatial_compiler.assemble_loops`; compiler spaces; `survey_graph.boundary_closure`, `solve_traverse` | Topological degree alone is not one simple closed parcel; metric traverse has stronger premises | Open chain, two disconnected loops, branch, self-crossing | REUSE_AS_IS bounded operators; stronger proof EXTEND_UNPINNED |
+| Collinearity | Local orientation in `_segments_cross`; PDF vector endpoints | Exact predicate exists, typed tolerant relation absent | Collinear triple, small deviation, zero direction | EXTEND_UNPINNED |
+| Parallelism | No general proof operator found | AFFINE required; raw pixel likeness insufficient | Established A parallel B; near-parallel band | MISSING |
+| Perpendicularity / angle | `survey_graph._azimuth_of`, printed `_bearing`; `survey_north` angle reconciliation | These are survey/North semantics, not generic Euclidean angle proofs | A parallel B and C perpendicular A; weak/contested premise blocks consequence | MISSING generic operator; reuse semantic guards |
+| Point-to-line/segment distance | `deterministic_spatial._distance_point_to_segment`; compiler helper of same name | Clamped segment distance exists, not infinite-line distance; declared Euclidean space needed | Foot inside, before endpoint, zero length | REUSE_AS_IS segment arithmetic behind guards |
+| Projection / alignment | Compiler `_distance_point_to_segment` returns distance and along-segment position; `_host_wall` uses it | Euclidean projection; host heuristics are not proof of intended alignment | Interior foot versus endpoint clamp; candidate near two walls | REUSE_AS_IS arithmetic, not host inference |
+| Midpoint / ratios | No general qualified operator found; Rule 6 retains documented reference only | AFFINE midpoint; image pixel midpoint not established survey midpoint | Affine transform preserves midpoint; projective one need not | MISSING |
+| Offset / parallel locus | Compiler wall thickness is declared assumption, not observed offset | Euclidean constraints required; equal distances alone can select multiple loci | Same signed offset on one side; opposite-side counterexample | MISSING |
+| Radius/chord/arc | `survey_graph.curve_constraints`; `build_primitives`; `_arc_from_chord_and_radius` refuses unrectified placement | Conditional Euclidean scalar family, no unique branch/placement | c <= 2r; impossible chord; weak binding; missing branch | REUSE_AS_IS |
+| Tangency | No qualified general operator found | Euclidean, established circle and contact point | Radius perpendicular tangent; near contact does not prove tangency | MISSING |
+| Tolerance-aware equality | Compiler `_key` rounding, spatial boundary tolerance, survey/North tolerances | Scope-specific policies, no shared numerical/evidence tolerance record | Threshold edges; changing units; numerical precision versus evidence | EXTEND_UNPINNED; ToleranceContext MISSING |
+| Signed area / handedness | Compiler `signed_area`, `ensure_ccw`, y-up `lift`; PDF extractor supplies y-down coordinates | Orientation/topology versus Euclidean/physical area must be separated | Mirrored/rotated loop; no physical area without scale | REUSE_AS_IS |
+| Display transform / inverse | `drawing_intelligence.transform_point_to_display/original`, rectangle variants; MM4 viewer; `derived_view.to_view_coordinates/to_source_coordinates` | Quarter-turn/mirror or rigid view transform only; not projective rectification | All existing rotation/mirror round trips; missing rotation refuses | REUSE_AS_IS |
+| Pixel comparison | `region_comparison.region_to_pixel_box`, `compare_region`; drawing analysis | Pixel difference only; neither geometric correspondence nor metric proof | Cropping/rotation differences cannot establish geometry | REUSE_AS_IS within original scope |
+| Vector acquisition | `PDFVectorExtractor.extract_document/_extract_page`; sheet vision and spatial compiler | PDF points and declared handedness exist; no observed geometry => legal geometry inference | Native lines versus scanned photograph | REUSE_AS_IS |
+| Datum corroboration | `datum_corroboration.corroborate`, `record_corroborations`, `datum_register` | Provisional named-level correspondence only; no governing-datum authority | Same named datum/exact value; mismatch abstains | PROTECTED_DO_NOT_TOUCH |
+| CoordinateSpace / PlaneScope / GeometryState | DerivedView has source/region/rotation/scale/North; vector page has coordinate system; spatial engine has CRS | No unified explicit earned projective/affine/Euclidean levels or plane-safe composition | Space/plane mismatch must refuse | EXTEND_UNPINNED existing view metadata; typed operation contract MISSING |
+| Point2/HPoint2, directions, Line2, Segment2, Polygon2 | Existing tuples/dicts in vector, graph and spatial modules | Reuse coordinates; homogeneous state, explicit plane/space and infinity handling absent | Zero vectors; finite/infinite points; wrong plane | MISSING typed wrappers; no duplicate arithmetic library |
+| GeometricPremise / DerivationRecord | EvidenceItem, AddressableRegion, relationship review, `explain_evidence_trust`, binding certainty | Reuse authority/trust and provenance; operator/version/tolerance/space derivation payload absent | Confirmed support plus active contradiction refuses proof | EXTEND_UNPINNED existing evidence substrate |
+| VP / Horizon / Homography2D / MetricConstraint | No implementation found in services or engine | Full projective contract remains unqualified | Cube one-point, level corner two-point, pitched three-point, horizon consistency | MISSING |
+| RectificationResult / transforms / validation errors | No equivalent found; display transforms are not an equivalent | Earn stages; retain weaker success; line inverse-transpose; typed composition | One orthogonality constraint, contradictory G, known length, round trip, singular region | MISSING |
+
+Initial bounded qualification uses the existing compiler and test file, not a
+second geometry library: inside/outside/edge/vertex label occurrence -> geometric
+containment predicate -> actual compiled room binding. Exact edge evidence must
+not earn strict containment. Existing `point_in_polygon` explicitly documents
+that edge labels remain unbound; the control checks every edge/vertex and both
+windings, then the real compiler consumer. This does not change Rule 1.
+
+Boundary qualification update: the original 7-failure gate exposed an
+IMPLEMENTATION_DEFECT, not a stale expectation. The existing compiler now owns
+`classify_point_in_polygon` and a centralized `ToleranceContext`; its Boolean
+wrapper admits only INSIDE. `SpatialCompiler.compile` retains explicit
+label/space classifications, provenance and warnings. Focused controls: 49
+passed. Affected compiler/document-binding lane: 243 passed, 18 subtests after
+an explicitly recorded sandbox temporary-directory permission error. See
+`GO_PROMOTION_HANDOFF_SURVEY_RULE_7_BOUNDARY.md`. This bounded component is locally
+qualified, not the complete kernel and not LIVE_REACHABLE proof. The inventory's
+missing general types/projective operations remain missing; the tolerance
+context currently covers boundary exclusion only.
+
+Further inventory findings to qualify before reuse: `derive_points_per_foot`
+selects majority datum spacing with reported conflicts; that policy cannot be
+imported as a generic uncontested-scale proof. `boundary_closure` reports node
+degree gaps and does not by itself prove a connected simple ring. Existing
+display rotation floors to quarter-turns by contract; it cannot normalize an
+arbitrary photographed-sheet perspective. None of these observations authorizes
+silently strengthening the existing operators or duplicating them elsewhere.
