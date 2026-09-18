@@ -1,6 +1,6 @@
 # Claude Promotion Handoff: strict boundary semantics
 
-Implementation SHA: pending implementation commit.
+Implementation SHA: `a5bee2c685b63f7ea9b06cb6c77d8ffac82818af`.
 **NOT_PROMOTED** until Claude verifies ordinary runtime incorporation and proves
 LIVE_REACHABLE. No push or deployment. This is one bounded Rule 7 capability,
 not the complete Euclidean/projective kernel.
