@@ -1,5 +1,16 @@
 # MANIFEST
 
+Survey Rule 6: `services/height_datum_governance.py` owns the unpinned review
+projection from candidate centerline evidence to a governing height datum.
+It reuses binding, existing evidence/relationship review, planning authority,
+and `CaseWorkspaceStore.resolve_anchor_currentness`; it contains no datum math.
+The protected `services/datum_corroboration.py` remains byte-identical to its
+verified lifecycle record. Visual examination/registration, Document Shop and
+Ask GO consume six separately reviewed premises and retain unresolved states.
+`tests/test_survey_reference_01.py::SurveyHeightDatumQualification` exercises
+Source/region currentness, contradictions and consumer boundaries.
+`docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_6.md` records gates and live obligations.
+
 Survey Rule 5 extends `services/survey_graph.py` with separate access occurrences,
 proposal EvidenceItems and existing relationship-review projections. The visual
 worker, examination consumer and Ask GO prompt preserve access uncertainty;

@@ -14698,6 +14698,56 @@ class CaseWorkspaceStore:
             return None
         return record
 
+    def resolve_anchor_currentness(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> dict:
+        """Currentness follows exact anchors, never a successor's existence alone.
+
+        Historical objects remain readable. A regionless EvidenceItem still
+        inherits its Source; a replaced region affects its descendants, not
+        sibling regions. Supersession records are authoritative; Source pointers
+        are also conservative staleness signals. No automatic successor binding.
+        """
+        anchors, pending, seen = [], [(object_type, object_id)], set()
+        unavailable = False
+        while pending:
+            kind, identifier = pending.pop()
+            if (kind, identifier) in seen:
+                continue
+            seen.add((kind, identifier))
+            row = self._resolve_mm6_endpoint(workspace, kind, identifier)
+            if row is None:
+                unavailable = True
+                continue
+            anchors.append({"object_type": kind, "object_id": identifier})
+            if kind == OBJECT_KIND_EVIDENCE_ITEM:
+                pending.append((OBJECT_KIND_SOURCE, row.get("source_id")))
+                if row.get("region_id"):
+                    pending.append((OBJECT_KIND_ADDRESSABLE_REGION, row["region_id"]))
+                    citation = self.resolve_region_citation(workspace, row["region_id"])
+                    if citation.get("source_id") != row.get("source_id"):
+                        unavailable = True
+            elif kind == OBJECT_KIND_ADDRESSABLE_REGION:
+                unit = self._find(workspace.structural_units, row.get("structural_unit_id"))
+                if unit is None or unit.get("project_id") != workspace.project_id:
+                    unavailable = True
+                else:
+                    anchors.append({"object_type": OBJECT_KIND_STRUCTURAL_UNIT, "object_id": unit["id"]})
+                    pending.append((OBJECT_KIND_SOURCE, unit["source_id"]))
+                if row.get("parent_region_id"):
+                    parent = (OBJECT_KIND_ADDRESSABLE_REGION, row["parent_region_id"])
+                    if parent in seen:
+                        unavailable = True  # malformed cyclic region ancestry
+                    else:
+                        pending.append(parent)
+            elif kind == OBJECT_KIND_SOURCE and row.get("removed_at"):
+                unavailable = True
+        keys = {(a["object_type"], a["object_id"]) for a in anchors}
+        lineage = [s for s in workspace.supersessions
+                   if (s.get("predecessor_type"), s.get("predecessor_id")) in keys]
+        pointer_stale = any(s.get("superseded_by_source_id") for s in workspace.sources
+                            if (OBJECT_KIND_SOURCE, s["id"]) in keys)
+        return {"status": "unavailable" if unavailable else "stale" if lineage or pointer_stale else "current",
+                "anchors": anchors, "supersession_ids": [s["id"] for s in lineage]}
+
     def _resolve_mm6_endpoint_status(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> dict:
         """Shared by resolve_relationship_status and resolve_claim_status
         (CLAUDE-MM7) - the SAME "does this endpoint still resolve, and is
@@ -14725,6 +14775,11 @@ class CaseWorkspaceStore:
             info["stale"] = bool(record.get("superseded_by_source_id"))
         else:
             info["stale"] = False
+        if object_type in (OBJECT_KIND_SOURCE, OBJECT_KIND_EVIDENCE_ITEM, OBJECT_KIND_ADDRESSABLE_REGION):
+            currentness = self.resolve_anchor_currentness(workspace, object_type, object_id)
+            info["currentness"] = currentness
+            info["stale"] = currentness["status"] == "stale"
+            info["resolved"] = currentness["status"] != "unavailable"
         return info
 
     def record_evidence_relationship(
@@ -15104,6 +15159,7 @@ class CaseWorkspaceStore:
             "contradicting_relationships": contradicting,
             "other_relationships": other,
             "has_contradictions": len(contradicting) > 0,
+            "currentness": self.resolve_anchor_currentness(workspace, OBJECT_KIND_EVIDENCE_ITEM, evidence_item_id),
             # Counterevidence is never netted against support. Consumers must
             # still establish exact scope and authority independently. Retain
             # inactive edges above so a changed projection does not erase history.

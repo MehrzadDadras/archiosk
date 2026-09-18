@@ -198,6 +198,10 @@ def _qualified_reference(reference):
     for group in ("recovered", "partially_recovered"):
         admitted = []
         for item in qualified.get(group, []):
+            from services.height_datum_governance import is_height_datum_claim
+            if is_height_datum_claim(item):
+                unresolved.append("Regulatory datum UNRESOLVED from recovered text alone; observed %s: %s" % (item.get("label"), item.get("value")))
+                continue
             if survey_north.directional_observation(item) and not survey_north.admits_true_direction(item, resolution):
                 unresolved.append("Directional conclusion UNRESOLVED; observed %s: %s [reference %s]" % (
                     item.get("label"), item.get("value"), item.get("directional_reference", "UNRESOLVED")))

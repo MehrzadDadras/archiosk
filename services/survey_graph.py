@@ -1060,8 +1060,9 @@ def normalise_graph(raw) -> dict:
 
     subject = raw.get("subject_parcel") or {}
     subject = subject if isinstance(subject, dict) else {}
-    from services import survey_north
+    from services import survey_north, height_datum_governance
     graph = {"graph_version": GRAPH_VERSION, "nodes": nodes, "segments": segments,
+            "height_datums": height_datum_governance.normalise_height_datums(raw.get("height_datums")),
             "north_candidates": survey_north.normalise_candidates(raw.get("north_candidates")),
             "access_occurrences": _access_occurrences(raw.get("access_occurrences")),
             "bearing_reference": raw.get("bearing_reference") if raw.get("bearing_reference") in survey_north.REFERENCE_TYPES else "UNRESOLVED",

@@ -263,6 +263,11 @@ def visual_reading(workspace, source_id: str):
         from services.case_workspace import CaseWorkspaceStore
         from services.survey_graph import resolve_access_interpretations
         resolve_access_interpretations(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
+    if visual and (visual.get("graph") or {}).get("height_datums"):
+        from flask import current_app
+        from services.case_workspace import CaseWorkspaceStore
+        from services.height_datum_governance import resolve_height_datums
+        resolve_height_datums(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
     return visual
 
 
@@ -314,6 +319,10 @@ def _visual_lines(visual) -> tuple[list, list, list]:
         admitted = []
         for observation in observations:
             import re
+            from services.height_datum_governance import is_height_datum_claim
+            if is_height_datum_claim(observation):
+                directional_unresolved.append("Regulatory datum UNRESOLVED from recovered text alone; observed %s; use independently established authority/applicability/alignment premises" % _phrase(observation))
+                continue
             if observation.get("key") not in ("address", "streets") and re.search(
                     r"\b(?:primary frontage|building front|primary access|main entr(?:y|ance))\b", observation.get("value", ""), re.I):
                 directional_unresolved.append("Access interpretation UNRESOLVED from free-form text alone; observed %s [directional reference %s; true North %s]; use scoped reviewed access evidence" % (
@@ -340,6 +349,19 @@ def _visual_lines(visual) -> tuple[list, list, list]:
     if survey:
         from services import survey_graph
         graph = visual.get("graph") or {}
+        from services.height_datum_governance import height_datum_projection
+        for datum in height_datum_projection(graph):
+            geometry = datum["street_centerline_geometry"] or {}
+            review = datum["review"]
+            phrase = "Height datum %s: %s; subject %s; street %s; geometry provenance %s; premises %s; authority evidence %s" % (
+                datum["candidate_id"], datum["datum_status"], datum["subject_id"], geometry.get("street_name"), geometry.get("note"),
+                "; ".join("%s=%s [evidence %s]" % (axis, p["state"], ",".join(p["evidence_ids"])) for axis, p in review.get("premises", {}).items()),
+                ",".join(a["evidence_id"] for a in review.get("authorities", [])))
+            (recovered if datum["datum_status"] in ("GOVERNING_DATUM_ESTABLISHED", "GEOMETRY_ONLY") else unresolved).append(phrase)
+            for axis in ("street_centerline_geometry", "regulatory_requirement", "applicability", "selected_governing_street", "building_reference_alignment_or_midpoint"):
+                value = datum.get(axis) or {}
+                partial.append("Datum observation %s / %s: %s; read %s; binding %s; provenance %s" % (
+                    datum["candidate_id"], axis, value.get("value"), value.get("read_certainty"), binding.bound_certainty(value), value.get("note")))
         accesses = survey_graph.access_interpretations(graph)
         if not accesses:
             unresolved.append("Primary public access UNRESOLVED: street adjacency does not establish access or building front")

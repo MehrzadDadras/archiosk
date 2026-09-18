@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 # `visual_classification.VISUAL_VERSION`, tied to this by test). Bumping this
 # without bumping that is the defect that kept the parametric reconstruction
 # off every live record.
-VISUAL_PROMPT_VERSION = "visual-examination-09"
+VISUAL_PROMPT_VERSION = "visual-examination-10"
 VISUAL_EVENT_TYPE = "visual_examination_request"
 
 #: The evidence record this produces, as stored by the perception worker.
@@ -307,6 +307,8 @@ DOCUMENT CATEGORY, exactly one:
 Do NOT call something a survey because it is a plan. A floor plan is a drawing. A photograph OF a survey lying on a desk is a survey only if the survey itself is legible.
 
 GEOMETRY - A GRAPH, NOT A POLYGON. You identify and bind; the application constructs the drawing from what you report. Coordinates are fractions of the image, 0.0-1.0, origin top-left.
+
+- Preserve graph.height_datums per observed street/datum candidate, including geometry-only candidates. Each has id, subject_id (the established parcel identity, or empty), and six independent objects: street_centerline_geometry, regulatory_requirement, authority, applicability, selected_governing_street, building_reference_alignment_or_midpoint. Each object preserves value, read_certainty, bind_certainty, bind_basis, bound_to, provenance, source_region {x,y,w,h}, printed text/locator and any observed points [{x,y}]. Unknown fields stay empty/UNRESOLVED. Geometry additionally names kind (STREET_CENTERLINE, CURB, ROAD_EDGE, SIDEWALK, ROAD_ALLOWANCE, PROPERTY_BOUNDARY, BOULEVARD or UNRESOLVED), street_id and street_name. Curb/road edge cannot substitute for centerline. Rule value may propose CENTERLINE_HEIGHT_DATUM only when explicitly printed. Applicability value is APPLIES/DOES_NOT_APPLY/UNRESOLVED with subject_id; recognition does not establish applicability. Selected street value/bound_to is an exact street_id, never chosen by proximity. Alignment preserves building_id, street_id, bound_to=building_id, and kind DOCUMENTED_MIDPOINT or DOCUMENTED_REFERENCE_AXIS only when explicitly documented; do not calculate a midpoint from page appearance. Preserve corner candidates separately. Authority is always an unestablished proposal: acquisition and independent governed review are required outside this reading. Never supply height_review, datum_status, or authority evidence IDs. No geometry or recovered statement alone establishes a regulatory height datum.
 
 - "nodes": every property corner, monument or curve endpoint you can actually locate. Give each a short id you then refer to. Coordinates are fractions of the WHOLE IMAGE as supplied, including any margin, desk or background around the sheet - do not rescale them to the drawing area yourself.
 - "segments": the boundary, one segment per run between two nodes. "kind" is "straight" or "arc".

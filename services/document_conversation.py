@@ -114,6 +114,11 @@ a curb, or an observed frontage label does not establish primary public access
 or the building front. Keep corner-site candidates and service access distinct.
 An UNRESOLVED access premise prevents selecting a primary access edge. Access
 interpretations never establish legal frontage, ownership or a zoning datum.
+For height datums, use HEIGHT DATUM PREMISES. Only GOVERNING_DATUM_ESTABLISHED
+authorizes a governing datum statement. GEOMETRY_ONLY describes geometry;
+recovered regulatory text does not prove applicability. CONTESTED or unresolved
+authority, applicability, street selection or building alignment blocks a
+governing conclusion. Do not reconstruct a missing premise from quoted text.
 Everything above describes what the RECOVERED TEXT can support. Where the
 material below carries a VISUAL EXAMINATION, GO has already looked at this
 document once and recorded what it saw, and that record is yours to use.
@@ -218,7 +223,7 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
     visual = dx.visual_reading(workspace, source_id) if source_id else None
     reference = dx.survey_reference_of(workspace, source_id) if source_id else None
     visual_recovered, visual_partial, visual_unresolved = dx._visual_lines(visual)
-    from services import survey_north
+    from services import survey_north, height_datum_governance
     north = survey_north.resolve_true_north((visual or {}).get("graph") or {})
 
     return {
@@ -235,6 +240,7 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
         "visual_partially_recovered": visual_partial,
         "visual_unresolved": visual_unresolved,
         "true_north_premise": north if (visual or {}).get("document_category") == "survey" else None,
+        "height_datum_premises": height_datum_governance.height_datum_projection((visual or {}).get("graph") or {}),
         "survey_reference": bool(reference),
         "survey_reference_note": (reference or {}).get("source_note") or "",
         # the examination result as the customer sees it
@@ -262,6 +268,9 @@ def render_prompt(context: dict[str, Any]) -> str:
     # CLAUDE-SURVEY-REFERENCE-01. Placed BEFORE the recovered text, because on
     # a survey image it is the substantive answer and the text is fragments.
     if context.get("visual_ran"):
+        if context.get("height_datum_premises"):
+            import json
+            parts.append("HEIGHT DATUM PREMISES (govern regulatory datum conclusions): " + json.dumps(context["height_datum_premises"], sort_keys=True))
         if context.get("true_north_premise"):
             import json
             parts.append("TRUE NORTH PREMISE (governs all directional semantics): " + json.dumps(context["true_north_premise"], sort_keys=True))

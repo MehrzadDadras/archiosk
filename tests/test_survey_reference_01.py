@@ -720,6 +720,202 @@ class TrueNorthQualification(SurveyReferenceCase):
                          "Unresolved true North must gate directional setback claims beyond the renderer")
 
 
+class SurveyHeightDatumQualification(SurveyReferenceCase):
+    """Rule 6: observed geometry is not regulatory authority."""
+
+    def datum_reading(self):
+        payload = SubjectContainmentQualification.containment_reading(self, "inside")
+        subject = payload["graph"]["subject_parcel"]["identity"]
+        def premise(value, **fields):
+            return dict(value=value, read_certainty="RECOVERED", bind_certainty="RECOVERED",
+                bind_basis="declared", provenance="Explicit synthetic source detail", source_region={"x": .1, "y": .1, "w": .4, "h": .4}, **fields)
+        payload["graph"]["height_datums"] = [{"id": "D1", "subject_id": subject,
+            "street_centerline_geometry": premise("Printed centerline", kind="STREET_CENTERLINE", street_id="ST1", street_name="First Street",
+                bound_to="ST1", points=[{"x": .1, "y": .9}, {"x": .9, "y": .9}]),
+            "regulatory_requirement": premise("CENTERLINE_HEIGHT_DATUM", locator="fixture clause 4", text="Height datum is the selected street centerline at the documented building reference axis."),
+            "authority": premise("INDEPENDENT_SOURCE_REQUIRED"),
+            "applicability": premise("APPLIES", subject_id=subject),
+            "selected_governing_street": premise("ST1", bound_to="ST1"),
+            "building_reference_alignment_or_midpoint": premise("Explicit alignment", kind="DOCUMENTED_REFERENCE_AXIS",
+                building_id="B1", street_id="ST1", bound_to="B1", points=[{"x": .5, "y": .5}, {"x": .5, "y": .9}])}]
+        return payload
+
+    def review_datums(self, project_id, *, currentness="CURRENT", skip_axis=None, counter_axis=None, link_authority=True, supersede=False, region_mode=None):
+        from services import height_datum_governance as datum, planning_authority
+        from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
+        result, document, workspace = self.result_for(project_id)
+        proposals = [e for e in workspace.evidence_items if e.get("content_type") == datum.HEIGHT_PREMISE_TYPE]
+        source = self.store.add_source(workspace, "Synthetic authority", "fixture-authority.txt", "document")
+        clause = self.datum_reading()["graph"]["height_datums"][0]["regulatory_requirement"]["text"]
+        acquired = planning_authority.acquire("https://www.toronto.ca/synthetic-qualification-only", fetcher=lambda url: clause,
+            authority_id="FIXTURE-AUTH", issuing_authority="Synthetic authority fixture", official_title="Synthetic qualification, not a real bylaw",
+            retrieved_at="2026-09-17", applicability=currentness, provision_locator="fixture clause 4", retained_representation=clause)
+        self.assertTrue(acquired["acquired"])
+        if region_mode == "successor":
+            self.store.register_evidence_item(workspace, source["id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+                json.dumps(acquired["record"]), "planning_authority", actor="cust")
+            source, _, _ = self.store.register_source_revision(workspace, source["id"], "Current successor authority", "successor.txt",
+                actor="cust", reason="Explicit whole-document replacement, not a clause amendment")
+        region = None
+        if region_mode and region_mode != "successor":
+            unit = self.store.create_structural_unit(workspace, source["id"], "page", 0, actor="cust")
+            region = self.store.create_addressable_region(workspace, unit["id"], "paragraph", {"paragraph_index": 0}, actor="cust")
+        authority = self.store.register_evidence_item(workspace, source["id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+            json.dumps(acquired["record"]), "planning_authority", region_id=region["id"] if region else None, actor="cust")
+        for proposal in proposals:
+            axis = json.loads(proposal["content"])["axis"]
+            edge = next(e for e in workspace.relationships if e.get("from_id") == proposal["id"] and e["relationship_type"] == "supports")
+            if axis != skip_axis:
+                self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+            if axis == "authority" and link_authority:
+                link = self.store.record_evidence_relationship(workspace, "evidence_item", authority["id"], "evidence_item", proposal["id"],
+                    "supports", provisional=True, created_by="cust", reason="Independent acquired authority for this exact clause and scope")
+                self.store.confirm_relationship(workspace, link["id"], actor="cust")
+            if axis == counter_axis:
+                counter = self.store.register_evidence_item(workspace, source["id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+                    "Synthetic confirmed conflicting datum evidence", "text", actor="cust")
+                link = self.store.record_evidence_relationship(workspace, "evidence_item", counter["id"], "evidence_item", proposal["id"],
+                    "contradicts", provisional=True, created_by="cust", reason="Confirmed material counterevidence to exact datum premise")
+                self.store.confirm_relationship(workspace, link["id"], actor="cust")
+        if supersede:
+            self.store.register_source_revision(workspace, source["id"], "Explicit replacement authority", "replacement.txt",
+                actor="cust", reason="Synthetic control: whole authority document explicitly replaced")
+        if region_mode in ("affected_clause", "unrelated_clause", "affected_evidence"):
+            amended = region if region_mode == "affected_clause" else self.store.create_addressable_region(
+                workspace, unit["id"], "paragraph", {"paragraph_index": 1}, actor="cust")
+            successor_region = self.store.create_addressable_region(workspace, unit["id"], "paragraph", {"paragraph_index": 2}, actor="cust")
+            if region_mode == "affected_evidence":
+                successor_evidence = self.store.register_evidence_item(workspace, source["id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+                    "Explicit replacement datum clause", "text", region_id=successor_region["id"], actor="cust")
+                self.store.record_supersession(workspace, "evidence_item", authority["id"], "evidence_item", successor_evidence["id"],
+                    actor="cust", reason="Accepted exact datum evidence replacement", authority_class="human_acceptance")
+            else:
+                self.store.record_supersession(workspace, "addressable_region", amended["id"], "addressable_region", successor_region["id"],
+                    actor="cust", reason="Accepted exact clause replacement; source not replaced", authority_class="human_acceptance")
+        return authority
+
+    def test_currentness_scope_history_and_contested_successor(self):
+        from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
+        for mode in ("current_region", "whole_region", "whole_regionless", "affected_clause", "unrelated_clause", "affected_evidence", "successor"):
+            with self.subTest(mode=mode):
+                project_id = self.upload(survey_jpeg(), "datum-currentness.jpg", name="Rule 6 currentness " + mode)
+                self.run_worker(self.datum_reading())
+                authority = self.review_datums(project_id, region_mode=None if mode == "whole_regionless" else mode,
+                    supersede=mode in ("whole_region", "whole_regionless"))
+                self.store = CaseWorkspaceStore(str(self.tmp))
+                result, document, workspace = self.result_for(project_id)
+                currentness = self.store.explain_evidence_trust(workspace, authority["id"])["currentness"]
+                stale = mode in ("whole_region", "whole_regionless", "affected_clause", "affected_evidence")
+                self.assertEqual(currentness["status"], "stale" if stale else "current")
+                self.assertEqual(self.store.get_evidence_item(workspace, authority["id"])["content"], authority["content"],
+                                 "History remains readable without rewriting its contents")
+                context = dc.build_context(document, workspace, result, "Which datum governs now?")
+                self.assertEqual(context["height_datum_premises"][0]["datum_status"],
+                    "APPLICABILITY_UNRESOLVED" if stale else "GOVERNING_DATUM_ESTABLISHED")
+                if stale:
+                    self.assertTrue(currentness["supersession_ids"])
+                    self.assertFalse(any("GOVERNING_DATUM_ESTABLISHED" in line for line in context["visual_recovered"]))
+                if mode == "successor":
+                    counter = self.store.register_evidence_item(workspace, authority["source_id"], EVIDENCE_CLASS_DIRECT_SOURCE,
+                        "Confirmed evidence contests the successor datum rule's applicability", "text", actor="cust")
+                    edge = self.store.record_evidence_relationship(workspace, "evidence_item", counter["id"], "evidence_item", authority["id"],
+                        "contradicts", provisional=True, created_by="cust", reason="Material challenge to successor")
+                    self.store.confirm_relationship(workspace, edge["id"], actor="cust")
+                    self.store = CaseWorkspaceStore(str(self.tmp))
+                    result, document, workspace = self.result_for(project_id)
+                    context = dc.build_context(document, workspace, result, "Which datum governs now?")
+                    self.assertEqual(context["height_datum_premises"][0]["datum_status"], "CONTESTED")
+                    self.assertFalse(any("GOVERNING_DATUM_ESTABLISHED" in line for line in context["visual_recovered"]))
+
+    def test_independent_premise_chain_controls_through_persistence_and_consumers(self):
+        cases = {
+            "established": "GOVERNING_DATUM_ESTABLISHED", "no_rule": "GEOMETRY_ONLY",
+            "applicability_pending": "APPLICABILITY_UNRESOLVED", "not_applicable": "RULE_RECOVERED_NOT_APPLICABLE",
+            "curb": "UNRESOLVED", "road_edge": "UNRESOLVED", "corner": "UNRESOLVED",
+            "obsolete": "APPLICABILITY_UNRESOLVED", "alignment_pending": "DATUM_CANDIDATE",
+            "contested": "CONTESTED", "weak_geometry_binding": "UNRESOLVED", "wrong_subject": "APPLICABILITY_UNRESOLVED",
+            "authority_not_linked": "APPLICABILITY_UNRESOLVED", "superseded_source": "APPLICABILITY_UNRESOLVED",
+            "authority_contested": "CONTESTED",
+        }
+        for case, expected in cases.items():
+            with self.subTest(case=case):
+                payload = self.datum_reading()
+                candidate = payload["graph"]["height_datums"][0]
+                if case == "no_rule":
+                    candidate["regulatory_requirement"] = {}
+                elif case == "not_applicable":
+                    candidate["applicability"]["value"] = "DOES_NOT_APPLY"
+                elif case in ("curb", "road_edge"):
+                    candidate["street_centerline_geometry"]["kind"] = case.upper()
+                elif case == "weak_geometry_binding":
+                    candidate["street_centerline_geometry"]["bind_certainty"] = "PARTIALLY_RECOVERED"
+                elif case == "wrong_subject":
+                    candidate["applicability"]["subject_id"] = "Different property"
+                elif case == "corner":
+                    candidate["selected_governing_street"] = {}
+                    second = json.loads(json.dumps(candidate))
+                    second["id"] = "D2"
+                    second["street_centerline_geometry"].update(street_id="ST2", street_name="Second Street", bound_to="ST2")
+                    payload["graph"]["height_datums"].append(second)
+                project_id = self.upload(survey_jpeg(), "datum.jpg", name="Rule 6 " + case)
+                self.run_worker(payload)
+                before, document, workspace = self.result_for(project_id)
+                initial = dc.build_context(document, workspace, before, "Which datum governs?")
+                self.assertTrue(all(d["datum_status"] != "GOVERNING_DATUM_ESTABLISHED" for d in initial["height_datum_premises"]))
+                self.review_datums(project_id, currentness="SUPERSEDED" if case == "obsolete" else "CURRENT",
+                    skip_axis={"applicability_pending": "applicability", "alignment_pending": "building_reference_alignment_or_midpoint"}.get(case),
+                    counter_axis={"contested": "selected_governing_street", "authority_contested": "authority"}.get(case),
+                    link_authority=case != "authority_not_linked", supersede=case == "superseded_source")
+                self.store = CaseWorkspaceStore(str(self.tmp))
+                result, document, workspace = self.result_for(project_id)
+                context = dc.build_context(document, workspace, result, "Which datum governs?")
+                self.assertEqual(context["height_datum_premises"][0]["datum_status"], expected)
+                self.assertEqual(len(context["height_datum_premises"][0]["review"]["premises"]), 6)
+                self.assertIn(expected, self.client.get("/document-shop/jobs/" + project_id).get_data(as_text=True))
+                self.assertIn(expected, dc.render_prompt(context))
+                if case != "established":
+                    self.assertFalse(any("GOVERNING_DATUM_ESTABLISHED" in s for s in context["visual_recovered"]))
+                else:
+                    sent = {}
+                    def spy(**kwargs):
+                        sent.update(kwargs)
+                        return _Outcome(parsed={"answer": "The reviewed datum is established."})
+                    with patch.object(llm_gateway, "call_llm_json", spy):
+                        self.assertTrue(dc.ask(document, workspace, result, "Which datum governs?", app=self.app)["ok"])
+                    self.assertIn("HEIGHT DATUM PREMISES", sent["user_prompt"])
+                    self.assertIn("GOVERNING_DATUM_ESTABLISHED", sent["user_prompt"])
+
+    def test_geometry_observation_survives_without_a_governing_rule(self):
+        payload = json.loads(json.dumps(SURVEY_READING))
+        payload["observations"] = [{"key": "notes_legend",
+            "value": "First Street centerline shown as a dashed line", "certainty": "RECOVERED"}]
+        project_id = self.upload(survey_jpeg(), "centerline.jpg", name="Rule 6 geometric observation only")
+        self.run_worker(payload)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertTrue(any(o["value"] == payload["observations"][0]["value"] for o in visual["observations"]))
+        context = dc.build_context(document, workspace, result, "What street geometry is shown?")
+        self.assertTrue(any("First Street centerline shown" in s for s in context["visual_recovered"]))
+        self.assertFalse(any("governing height datum" in s.lower() for s in context["visual_recovered"]))
+
+    def test_regulatory_height_datum_claim_requires_separate_authority(self):
+        payload = json.loads(json.dumps(SURVEY_READING))
+        claim = "Governing height datum: First Street centerline at the building midpoint"
+        payload["observations"] = [{"key": "elevations", "value": claim, "certainty": "RECOVERED"}]
+        project_id = self.upload(survey_jpeg(), "datum-claim.jpg", name="Rule 6 unestablished regulatory premise")
+        self.run_worker(payload)
+        self.store = CaseWorkspaceStore(str(self.tmp))
+        result, document, workspace = self.result_for(project_id)
+        visual = dx.visual_reading(workspace, result["source_id"])
+        self.assertTrue(any(o["value"] == claim for o in visual["observations"]),
+                        "The observed claim must remain evidence, even when its authority is unresolved")
+        context = dc.build_context(document, workspace, result, "Which datum governs building height?")
+        self.assertFalse(any(claim in s for s in context["visual_recovered"]),
+                         "A recovered survey reading cannot establish a regulatory height datum")
+        self.assertTrue(any(claim in s and "UNRESOLVED" in s for s in context["visual_unresolved"]))
+
+
 class SurveyAccessQualification(SurveyReferenceCase):
     def test_confirmed_counterevidence_blocks_reviewed_access_conclusion(self):
         from services import survey_graph

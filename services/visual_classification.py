@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 #
 # Tying the two together means the next prompt generation gets a new identity
 # by construction rather than by someone remembering to bump this line.
-VISUAL_VERSION = "visual-examination@9"
+VISUAL_VERSION = "visual-examination@10"
 
 #: ITS OWN QUEUE DIRECTORY, which is what keeps the deployed perception worker
 #: from ever seeing this work. That worker claims the oldest claimable job in
@@ -101,7 +101,7 @@ VISUAL_JOBS_SUBDIR = "visual_jobs"
 #: simply from an earlier prompt. Re-examination is a deliberate act, not a
 #: side effect of a deploy.
 VISUAL_VERSION_HISTORY = ("visual-examination@1", "visual-examination@2",
-                          "visual-examination@3", "visual-examination@4", "visual-examination@5", "visual-examination@6", "visual-examination@7", "visual-examination@8")
+                          "visual-examination@3", "visual-examination@4", "visual-examination@5", "visual-examination@6", "visual-examination@7", "visual-examination@8", "visual-examination@9")
 VISUAL_VERSIONS = frozenset({VISUAL_VERSION, *VISUAL_VERSION_HISTORY})
 
 #: Why a visual job did not produce a reading. Named, because "processing
@@ -612,6 +612,8 @@ def _store_visual_record(store, job, visual, ocr, governance_log):
                 propose_conversions(store, workspace, row, record.get("graph") or {})
                 from services.survey_graph import propose_access_interpretations
                 propose_access_interpretations(store, workspace, row, record.get("graph") or {})
+                from services.height_datum_governance import propose_height_datums
+                propose_height_datums(store, workspace, row, record.get("graph") or {})
             except Exception:
                 logger.exception("measurement premises remain unresolved for %s", row["id"])
             return row
