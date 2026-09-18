@@ -1,5 +1,12 @@
 # MANIFEST
 
+Rule 7 numeric validity: `engine/ifc_volume_validator.py` owns strict finite
+numeric admission for input geometry, derived values and STEP emission.
+Structured refusals preserve source/field/stage provenance without mutating
+evidence. `tests/test_ifc_volume_validator.py` qualifies non-finite inputs and
+finite-input overflow. `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_7_NUMERIC.md`
+records qualification and Claude's outstanding live-consumer obligations.
+
 Rule 7 polygon validity: `engine/ifc_volume_validator.py::polygon_region` reuses
 the compiler tolerance/geometry predicates and gates IFC spaces on both valid
 regions and rechecked semantic label binding. Compiler models retain explicit

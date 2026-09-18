@@ -13,6 +13,80 @@ from typing import Any
 class IFCValidationError(ValueError):
     """Raised when a supplied volume cannot be represented safely."""
 
+    def __init__(self, message, *, diagnostic=None):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
+def numeric_validity(value):
+    """Strict geometric scalar admission, without coercion or replacement."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "UNRESOLVED"
+    try:
+        return "FINITE" if math.isfinite(value) else "NON_FINITE"
+    except OverflowError:
+        # A mathematical integer may be finite but unusable in this float engine.
+        return "UNRESOLVED"
+
+
+def _require_finite(value, field, *, source=None, stage="input"):
+    state = numeric_validity(value)
+    if state != "FINITE":
+        diagnostic = {"state": "UNRESOLVED", "numeric_state": state,
+                      "code": "INVALID_GEOMETRIC_NUMBER", "field": field,
+                      "stage": stage, "source": source or {}}
+        # Never describe the invalid token as a measured quantity or mutate it.
+        raise IFCValidationError(f"Invalid geometry: {state} at {field} ({stage})",
+                                 diagnostic=diagnostic)
+    return value
+
+
+def _numeric_inputs(model):
+    """One admission boundary for every numeric field used by IFC geometry."""
+    source = model.get("source", {})
+    def scalar(row, key, path):
+        _require_finite(row.get(key) if isinstance(row, dict) else None, path + "." + key, source=source)
+    def points(rows, path):
+        if not isinstance(rows, (list, tuple)):
+            _require_finite(None, path, source=source)
+        for i, point in enumerate(rows):
+            for key in ("x", "y"):
+                scalar(point, key, f"{path}[{i}]")
+    for i, level in enumerate(model.get("levels", [])):
+        scalar(level, "elevation", f"levels[{i}]")
+        for key in ("label_elevation_feet", "measured_elevation_feet"):
+            if level.get(key) is not None:
+                scalar(level, key, f"levels[{i}]")
+    derived = model.get("derived") or {}
+    for key in ("points_per_foot", "declared_points_per_foot", "storey_height_points", "door_head_height_points"):
+        if derived.get(key) is not None:
+            scalar(derived, key, "derived")
+    for i, space in enumerate(model.get("spaces", [])):
+        scalar(space, "height", f"spaces[{i}]")
+        points(space.get("boundary_polygon_2d", []), f"spaces[{i}].boundary_polygon_2d")
+    for i, wall in enumerate(model.get("walls", [])):
+        path = f"walls[{i}]"
+        for key in ("height", "thickness"):
+            scalar(wall, key, path)
+        points(wall.get("baseline", []), path + ".baseline")
+        for j, opening in enumerate(wall.get("openings", [])):
+            for key in ("offset", "width", "height"):
+                scalar(opening, key, f"{path}.openings[{j}]")
+    for i, evidence in enumerate(model.get("label_containment", [])):
+        for j, value in enumerate((evidence.get("relation") or {}).get("point") or []):
+            _require_finite(value, f"label_containment[{i}].point[{j}]", source=source)
+
+
+def _numeric_derivation(operation, field, source):
+    """Arithmetic/domain failure is a refusal with provenance, never a fallback."""
+    try:
+        return operation()
+    except (ArithmeticError, ValueError) as error:
+        raise IFCValidationError(f"Invalid geometry: unresolved numeric derivation at {field}",
+            diagnostic={"state": "UNRESOLVED", "numeric_state": "UNRESOLVED",
+                        "code": "NUMERIC_DERIVATION_FAILED", "field": field,
+                        "stage": "derived", "source": source or {}}) from error
+
 
 def _point(p: dict[str, Any]) -> tuple[float, float]:
     return float(p["x"]), float(p["y"])
@@ -47,6 +121,13 @@ class _Step:
         self.entities: list[tuple[int, str, tuple[Any, ...]]] = []
 
     def add(self, kind: str, *args: Any) -> int:
+        def check(value, path):
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                _require_finite(value, path, stage="STEP emission")
+            elif isinstance(value, (tuple, list)):
+                for index, child in enumerate(value):
+                    check(child, f"{path}[{index}]")
+        check(args, kind)
         ident = len(self.entities) + 1
         self.entities.append((ident, kind, args))
         return ident
@@ -193,12 +274,20 @@ class IFCVolumeValidator:
     def validate(self, model: dict[str, Any]) -> None:
         if not isinstance(model, dict) or not isinstance(model.get("project_name"), str):
             raise IFCValidationError("project_name must be a string")
+        _numeric_inputs(model)
+        source = model.get("source", {})
         levels = {level.get("name") for level in model.get("levels", [])}
         for space in model.get("spaces", []):
-            region = polygon_region(space)
+            region = _numeric_derivation(lambda: polygon_region(space),
+                f"space {space.get('id')} polygon", source)
+            for quantity in ("signed_area", "absolute_area", "area_tolerance"):
+                if region.get(quantity) is not None:
+                    _require_finite(region[quantity], f"space {space.get('id')} {quantity}",
+                                    source=source, stage="derived")
             if region["state"] != "VALID_REGION":
                 raise IFCValidationError(f"space {space.get('id')} boundary must be a valid closed region: {region['state']} / {region['error']}")
-            if not _semantic_binding_established(model, space):
+            if not _numeric_derivation(lambda: _semantic_binding_established(model, space),
+                                       f"space {space.get('id')} semantic containment", source):
                 raise IFCValidationError(f"space {space.get('id')} semantic binding UNRESOLVED")
             if float(space.get("height", 0)) <= 0:
                 raise IFCValidationError(f"space {space.get('id')} extrusion height must be positive")
@@ -209,12 +298,15 @@ class IFCVolumeValidator:
             if len(baseline) != 2:
                 raise IFCValidationError(f"wall {wall.get('id')} baseline must have two points")
             length = math.dist(*baseline)
+            _require_finite(length, f"wall {wall.get('id')} derived length", source=source, stage="derived")
             height = float(wall.get("height", 0))
             if length <= 0 or height <= 0 or float(wall.get("thickness", 0)) <= 0:
                 raise IFCValidationError(f"wall {wall.get('id')} dimensions must be positive")
             for opening in wall.get("openings", []):
                 offset, width, opening_height = (float(opening.get(k, 0)) for k in ("offset", "width", "height"))
-                if offset < 0 or width <= 0 or offset + width > length + 1e-9:
+                extent = _require_finite(offset + width, f"opening {opening.get('id')} derived extent",
+                                         source=source, stage="derived")
+                if offset < 0 or width <= 0 or extent > length + 1e-9:
                     raise IFCValidationError(f"opening {opening.get('id')} exceeds wall length bounds")
                 if opening_height <= 0 or opening_height > height + 1e-9:
                     raise IFCValidationError(f"opening {opening.get('id')} exceeds wall height bounds")

@@ -219,6 +219,15 @@ vector/text premise propagation); compiler/IFC/document lane 152 passed,
 a typed general proof API, and their older local epsilons are not new kernel
 defaults. No protected datum, Rule 6, or boundary-classifier behavior changed.
 
+Numeric admission update: the existing IFC validator now has `numeric_validity`
+and a shared refusal boundary used before geometry, after relevant derivations,
+and before STEP emission. NaN and both infinities never become measurements;
+unknown/nonnumeric values are not coerced. Source/field/stage diagnostics retain
+failure provenance. Focused 61 passed, affected lane 212 passed, polygon/boundary
+regressions 79 passed. See `GO_PROMOTION_HANDOFF_SURVEY_RULE_7_NUMERIC.md` for
+the combined-admission milestone full gate and promotion requirements. Finite
+input remains insufficient to establish conditioning, geometry level or scale.
+
 Further inventory findings to qualify before reuse: `derive_points_per_foot`
 selects majority datum spacing with reported conflicts; that policy cannot be
 imported as a generic uncontested-scale proof. `boundary_closure` reports node
