@@ -33,6 +33,7 @@ new UI/voice architecture, and not an implementation of Voice itself.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import logging
 import re
 from dataclasses import dataclass, field
@@ -113,8 +114,10 @@ class ProjectEvidence:
     milestones: list[dict] = field(default_factory=list)
     additional_document_evidence: list[dict] = field(default_factory=list)
     primary_source_id: Optional[str] = None
+    proposition_admission: list[dict] = field(default_factory=list)
 
 
+@observed
 def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEvidence:
     """`store` is a CaseWorkspaceStore (not type-hinted to avoid a
     services.case_workspace -> services.conversational_turn ->
@@ -137,6 +140,7 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
     )
 
     additional_document_evidence: list[dict] = []
+    admissions_by_id = {}
     if workspace.evidence_items:
         excerpts_by_source: dict[str, list[str]] = {}
         for item in workspace.evidence_items:
@@ -144,6 +148,15 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
             content = item.get("content")
             if not source_id or source_id not in sources_by_id or not content:
                 continue
+            admission = store.admit_proposition(workspace, item["id"])
+            admissions_by_id[item["id"]] = admission
+            if item.get("evidence_class") == "calculated_value":
+                content = "%s: %s%s" % (admission.get("record", {}).get("field", "Calculation"),
+                    admission["state"], " — " + str(admission.get("value")) if admission["admissible"] else " — could not be established.")
+            elif item.get("evidence_class") == "ai_generated_proposal":
+                statements = admission.get("governed_statements")
+                content = ("\n".join(heading+": "+"; ".join(values) for heading,values in statements.items())
+                           if statements else "AI proposal, not source text or project authority: " + content)
             excerpts_by_source.setdefault(source_id, []).append(content)
         for source_id, excerpts in excerpts_by_source.items():
             source = sources_by_id.get(source_id)
@@ -163,6 +176,7 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
                 # registered after the first _MAX_ADDITIONAL_DOCUMENTS_IN_
                 # PROMPT documents regardless of relevance).
                 "source_id": source_id,
+                "proposition_admission": [item for item in admissions_by_id.values() if item.get("source_id") == source_id],
                 "added_at": source.get("added_at"),
                 "document_authority": source.get("document_authority"),
                 "source_type": source.get("kind"),
@@ -181,6 +195,7 @@ def gather_project_evidence(workspace: ProjectWorkspace, store) -> ProjectEviden
         milestones=milestones,
         additional_document_evidence=additional_document_evidence,
         primary_source_id=primary_source.get("id") if primary_source else None,
+        proposition_admission=list(admissions_by_id.values()),
     )
 
 
@@ -757,6 +772,24 @@ class ConversationalTurnResult:
     planning_action: Optional[dict] = None
 
 
+def admitted_project_answer(admission, documents):
+    """One deterministic final-answer boundary for both existing workspace calls."""
+    if not admission:
+        return None
+    lines = ["Evidence admission (not professional certification):"]
+    for item in admission:
+        name = item.get("record", {}).get("field") or "Source material"
+        lines.append(str(name) + ": " + item["state"] +
+            (" — " + str(item.get("value")) if item["admissible"] else " — not established as a project fact."))
+        for heading, statements in item.get("governed_statements", {}).items():
+            qualifier = "Historical / contested reading, not current authority" if item["state"] in ("UNRESOLVED","CONTESTED") else heading
+            lines.extend(qualifier+": "+statement for statement in statements)
+    for doc in documents:
+        lines.append("Source says (reference only): " + str(doc.get("filename")))
+        lines.extend(str(excerpt) for excerpt in doc.get("excerpts", [])[:3])
+    return "\n".join(lines)
+
+
 def _validate_candidate_referents(raw, workspace: ProjectWorkspace) -> list[dict]:
     """Defensive parsing - the model's own JSON is read back, never
     trusted on faith. Each candidate's anchor_id is re-resolved against
@@ -811,6 +844,7 @@ def _default_forced_reflection(intent_class: str, is_consequential: bool, is_amb
     return f"Before I proceed: this looks like a request to {intent_class.replace('_', ' ')} - confirm that's right."
 
 
+@observed
 def run_conversational_turn(
     text: str,
     workspace: ProjectWorkspace,
@@ -867,12 +901,25 @@ def run_conversational_turn(
                 "description": str(raw_action.get("description", "")).strip(),
             }
 
+    reply_text = str(parsed.get("reply_text", "")).strip()
+    admission = envelope.project_evidence.proposition_admission
+    governed_admission = bool(admission) and envelope.planning_study is None
+    if governed_admission:
+        # Provider language is a proposal. Emit existing governed states and
+        # explicitly attributed source material, never a free-prose upgrade.
+        reply_text = admitted_project_answer(admission, envelope.project_evidence.additional_document_evidence)
+        reflection = _default_forced_reflection(intent_class, is_consequential, is_ambiguous) if is_consequential or is_ambiguous else None
+        if proposed_action:
+            proposed_action["description"] = "Proposed action requires the existing review workflow; source readings do not establish its premises."
+    from services.runtime_observation import event
+    event(__name__ + ".run_conversational_turn", "FINAL_ADMISSION", answer=reply_text,
+          evidence_ids=[item["evidence_item_id"] for item in admission])
     return ConversationalTurnResult(
         ran=True,
         intent_class=intent_class,
-        reply_text=str(parsed.get("reply_text", "")).strip(),
+        reply_text=reply_text,
         reflection=reflection,
-        grounded_in=[str(g) for g in parsed.get("grounded_in", [])],
+        grounded_in=[item["evidence_item_id"] for item in admission] if governed_admission else [str(g) for g in parsed.get("grounded_in", [])],
         needs_clarification=bool(parsed.get("needs_clarification", False)),
         candidate_referents=candidate_referents,
         proposed_action=proposed_action,
@@ -957,6 +1004,9 @@ def _build_conversational_turn_prompt(
             lines.append(f"- {m.get('label', '')}")
 
     if evidence.additional_document_evidence:
+        lines.append("Governed proposition states (raw excerpts below remain source reference):")
+        for item in evidence.proposition_admission:
+            lines.append(str(item["evidence_item_id"]) + ": " + item["state"])
         # CLAUDE-GO-GROUNDING-EVIDENCE-SELECTION-01: same relevance-scored
         # selection project_qa.py's own _build_prompt now uses, not a
         # plain registration-order slice - see select_relevant_document_

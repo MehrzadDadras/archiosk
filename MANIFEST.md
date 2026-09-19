@@ -1,5 +1,13 @@
 # MANIFEST
 
+Survey runtime convergence: `services/runtime_observation.py` records actual
+owned calls on opt-in Admin/Developer requests, without resolving domain truth.
+`CaseWorkspaceStore.admit_proposition` is the shared existing-evidence consumer
+projection. `templates/_survey_operations.html` is the shared project/inspection
+form for addressed derivations, human controls and governed IFC. New operators
+remain in `survey_graph.py` and `spatial_compiler.py`. Contract and qualification:
+`docs/SURVEY_RUNTIME_CONVERGENCE.md`; tests: `tests/test_survey_runtime_convergence.py`.
+
 Survey Evaluation activation: `services/survey_evaluation.py` orchestrates the
 existing Survey/evidence/review/consumer owners in an isolated evaluation registry.
 `services/survey_evaluation_geometry.py` shares existing validator adapters with

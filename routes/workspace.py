@@ -2124,6 +2124,107 @@ def show_workspace(project_id):
     )
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/survey/ifc", methods=["POST"])
+@admin_required
+def export_survey_ifc(project_id):
+    _, store, workspace = _load_workspace_or_404(project_id)
+    if not session.get("developer_mode"):
+        abort(403)
+    denied = _require_export_allowed(workspace, project_id)
+    if denied is not None:
+        return denied
+    from engine.ifc_volume_validator import IFCVolumeValidator, IFCValidationError
+    candidate = store.get_evidence_item(workspace, request.form.get("model_evidence_id", ""))
+    try:
+        if not candidate:
+            raise ValueError("Select an existing model candidate in this project")
+        trust = store.explain_evidence_trust(workspace, candidate["id"])
+        if trust.get("currentness", {}).get("status") != "current" or trust.get("has_contradictions"):
+            raise ValueError("Model candidate is stale or contested")
+        model = json.loads(candidate.get("content") or "")
+        text = IFCVolumeValidator().export(model, store=store, workspace=workspace,
+            evidence_ids=request.form.getlist("geometry_evidence_id"))
+    except (ValueError, TypeError, IFCValidationError) as error:
+        flash("IFC REFUSED: " + str(error), "warning")
+        return redirect(url_for("workspace.show_workspace", project_id=project_id))
+    response = current_app.response_class(text, mimetype="application/x-step")
+    response.headers["Content-Disposition"] = 'attachment; filename="governed-survey.ifc"'
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/survey/controls", methods=["POST"])
+@admin_required
+def record_survey_controls(project_id):
+    """Explicit human correspondence observations, not inferred survey authority."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    if not session.get("developer_mode"):
+        abort(403)
+    import math
+    from services.survey_graph import derive_survey_operation as derive
+    try:
+        region_id = request.form.get("region_id", "")
+        citation = store.resolve_region_citation(workspace, region_id)
+        object_id = citation.get("address", {}).get("object_id")
+        source_id = citation.get("source_id")
+        source = store._find(workspace.sources, source_id) or {}
+        frame_id = request.form.get("target_frame_evidence", "")
+        frame_evidence = store.get_evidence_item(workspace, frame_id) or {}
+        frame = json.loads(frame_evidence.get("content") or "{}")
+        if (not object_id or not source.get("file_hash") or not isinstance(frame,dict)
+                or frame.get("survey_role") != "affine_control_frame" or request.form.get("declare") != "yes"):
+            raise ValueError("An addressed image, retained checksum and explicit affine-frame declaration are required")
+        control_ids = [(request.form.get("control_id"+str(i)) or "").strip() for i in range(4)]
+        if not all(control_ids) or len(set(control_ids)) != 4:
+            raise ValueError("Four distinct source/control identities are required")
+        controls = []
+        for i in range(4):
+            values = [float(request.form.get(key+str(i), "")) for key in ("sx", "sy", "tx", "ty")]
+            if not all(math.isfinite(v) for v in values):
+                raise ValueError("Every control coordinate must be finite")
+            controls.append(values)
+        identifiers = []
+        for i, values in enumerate(controls):
+            record = dict(survey_role="control_correspondence", control_id=control_ids[i],
+                image_source_id=source_id, source_sha256=source["file_hash"], point=values[:2], target_point=values[2:],
+                coordinate_space="SOURCE_PIXELS", plane_id=source_id, geometry_level="PROJECTIVE",
+                target_space="AFFINE_RECTIFIED", target_frame_id=frame.get("frame_id"), target_frame_level="AFFINE",
+                target_frame_evidence_id=frame_id,
+                read_certainty="RECOVERED", bind_certainty="RECOVERED", bind_basis="declared",
+                provenance="Human-entered image correspondence; requires independent premise review",
+                physical_scale="NOT_ESTABLISHED", evaluation_only=bool(source.get("evaluation_only")))
+            row = store.register_evidence_item(workspace, source_id, "direct_source_evidence", json.dumps(record),
+                "application/json", region_id=region_id, actor=_reviewer(), governance_log=_log())
+            identifiers.append(row["id"])
+        evidence = derive(store, workspace, source_id=source_id, region_id=region_id, object_id=object_id,
+            operation="rectification", premise_ids=identifiers, actor=_reviewer())
+        flash("Calculated correspondence result awaits review: " + evidence["id"] + ". No physical scale or legal authority granted.", "success")
+    except (ValueError, TypeError) as error:
+        flash("Control calculation refused: " + str(error), "warning")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
+@workspace_bp.route("/projects/<project_id>/workspace/survey/derive", methods=["POST"])
+@admin_required
+def derive_survey_operation(project_id):
+    """Ordinary project operation; inspection links to this same runtime route."""
+    _, store, workspace = _load_workspace_or_404(project_id)
+    if not session.get("developer_mode"):
+        abort(403)
+    from services.survey_graph import derive_survey_operation as derive
+    try:
+        region_id = request.form.get("region_id", "")
+        citation = store.resolve_region_citation(workspace, region_id)
+        evidence = derive(store, workspace, source_id=citation.get("source_id"),
+            region_id=region_id, object_id=citation.get("address", {}).get("object_id"),
+            operation=request.form.get("operation", ""), premise_ids=request.form.getlist("premise_id"), actor=_reviewer())
+    except ValueError as error:
+        flash("Survey derivation refused: " + str(error), "warning")
+    else:
+        flash("Survey derivation recorded for premise review: " + evidence["id"], "success")
+    return redirect(url_for("workspace.show_workspace", project_id=project_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/cases", methods=["POST"])
 @login_required
 def create_case(project_id):

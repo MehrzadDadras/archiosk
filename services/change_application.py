@@ -73,6 +73,7 @@ requirement genealogy later without anything here changing.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import logging
 from typing import Optional
 
@@ -126,6 +127,7 @@ def existing_successor(workspace, requirement_id: str) -> Optional[dict]:
     )
 
 
+@observed
 def apply_accepted_change(store, workspace, assessment_id: str, actor: str,
                           governance_log=None, **overrides) -> dict:
     """Turn ONE accepted, authority-moving B1 assessment into lineage.

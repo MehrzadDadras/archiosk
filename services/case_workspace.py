@@ -31,6 +31,7 @@ Finding. Apply requires a Disposition of "Confirmed" already on record.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 from copy import deepcopy
 
 import hashlib
@@ -14782,6 +14783,7 @@ class CaseWorkspaceStore:
             info["resolved"] = currentness["status"] != "unavailable"
         return info
 
+    @observed
     def record_evidence_relationship(
         self,
         workspace: ProjectWorkspace,
@@ -14898,6 +14900,7 @@ class CaseWorkspaceStore:
             result["superseded_by_relationship_id"] = successor_supersession["successor_id"]
         return result
 
+    @observed
     def dispute_relationship(
         self, workspace: ProjectWorkspace, relationship_id: str, actor: str,
         reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
@@ -14918,6 +14921,7 @@ class CaseWorkspaceStore:
             )
         return relationship
 
+    @observed
     def reject_relationship(
         self, workspace: ProjectWorkspace, relationship_id: str, actor: str,
         reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
@@ -15074,6 +15078,7 @@ class CaseWorkspaceStore:
             summary["status"] = record.get("status")
         return summary
 
+    @observed
     def explain_evidence_trust(self, workspace: ProjectWorkspace, evidence_item_id: str) -> dict:
         """
         Section 10: the Trustworthy Answer Contract's own cross-modal
@@ -15171,6 +15176,7 @@ class CaseWorkspaceStore:
             "authority_boundary": authority_boundary,
         }
 
+    @observed
     def project_geometry_evidence(self, workspace, evidence_item_id, *, _visited=()):
         """Read-time use of a calculated EvidenceItem; no stored trust shortcut.
 
@@ -15217,7 +15223,8 @@ class CaseWorkspaceStore:
                     "numeric_validity@1", "segment_projection@1", "polygon_region@1",
                     "semantic_binding@1", "wall_host@1", "vector_usability@1", "bounded_acos@1",
                     "homography_point@1", "homography_validation@1", "homography_inverse@1",
-                    "homography_composition@1", "homography_line@1", "vanishing_direction@1", "horizon_residual@1")
+                    "homography_composition@1", "homography_line@1", "vanishing_direction@1", "horizon_residual@1",
+                    "monument_correspondence@1", "occupation_comparison@1", "control_homography@1", "relative_traverse@1")
                   and isinstance(premise_ids, list) and bool(premise_ids)
                   and all(isinstance(p, str) for p in premise_ids)
                   and isinstance(source_ids, list) and bool(source_ids)
@@ -15229,6 +15236,13 @@ class CaseWorkspaceStore:
         if not scoped:
             block("PREMISE_UNESTABLISHED")
             return result
+        if derivation.get("operator") in ("monument_correspondence@1", "occupation_comparison@1", "control_homography@1", "relative_traverse@1"):
+            import hashlib
+            digests = record.get("premise_digests") or {}
+            for identifier in premise_ids:
+                premise = self.get_evidence_item(workspace, identifier) or {}
+                if digests.get(identifier) != hashlib.sha256((premise.get("content") or "").encode()).hexdigest():
+                    block("PREMISE_CHANGED")
         trusts = [self.explain_evidence_trust(workspace, identifier)
                   for identifier in [evidence_item_id, *premise_ids]]
         result["trust"] = trusts
@@ -15251,8 +15265,7 @@ class CaseWorkspaceStore:
                 content = json.loads(premise.get("content") or "")
             except (ValueError, TypeError):
                 content = {}
-            if isinstance(content, dict) and "read_certainty" in content:
-                certainty = binding.weaker(certainty, binding.bound_certainty(content))
+            certainty = binding.weaker(certainty, binding.bound_certainty(content if isinstance(content, dict) else {}))
             if premise.get("evidence_class") == EVIDENCE_CLASS_CALCULATED_VALUE:
                 upstream = self.project_geometry_evidence(workspace, identifier,
                     _visited=(*_visited, evidence_item_id))
@@ -15282,6 +15295,73 @@ class CaseWorkspaceStore:
                 block("NON_FINITE_DERIVED_VALUE")
         else:
             result["value"] = None
+        return result
+
+    @observed
+    def admit_proposition(self, workspace, evidence_item_id, *, use="reference"):
+        """Consumer contract over existing trust and scoped geometry projection.
+
+        Raw recovery remains reference material. Neither storage, a readable
+        value nor a confirmed relationship is an independent authority grant.
+        """
+        import json
+        evidence = self.get_evidence_item(workspace, evidence_item_id) or {}
+        trust = self.explain_evidence_trust(workspace, evidence_item_id)
+        try:
+            record = json.loads(evidence.get("content") or "")
+        except (ValueError, TypeError):
+            record = {}
+        if not isinstance(record, dict):
+            record = {}
+        result = dict(evidence_item_id=evidence_item_id, source_id=evidence.get("source_id"),
+            state="SOURCE_REFERENCE", admissible=False, authority="NOT_ESTABLISHED",
+            currentness=trust.get("currentness"), use=use, errors=[], record=record,
+            evaluation_only=bool(record.get("evaluation_only")))
+        source = self._find(workspace.sources, evidence.get("source_id")) or {}
+        result["evaluation_only"] |= bool(source.get("evaluation_only"))
+        if evidence.get("evidence_class") == EVIDENCE_CLASS_AI_GENERATED_PROPOSAL:
+            result["state"] = "PROPOSAL"
+            from services import visual_examination, document_examination
+            if evidence.get("content_type") == visual_examination.VISUAL_CONTENT_TYPE:
+                visual = document_examination.visual_reading(workspace, evidence.get("source_id"), store=self)
+                if visual and visual.get("evidence_item_id") == evidence_item_id:
+                    recovered, partial, unresolved = document_examination._visual_lines(visual)
+                    result["governed_statements"] = {"Recovered reading":recovered,
+                        "Qualified reading":partial, "Unresolved":unresolved}
+        if evidence.get("evidence_class") == EVIDENCE_CLASS_CALCULATED_VALUE:
+            governed = self.project_geometry_evidence(workspace, evidence_item_id)
+            result.update(state=governed["state"], errors=governed["errors"],
+                          value=governed["value"], record=governed["record"])
+            result["admissible"] = governed["state"] in ("FINITE", "ESTABLISHED") and not governed["errors"]
+            result["authority"] = "SCOPED_CALCULATION" if result["admissible"] else "NOT_ESTABLISHED"
+            # Evaluation provenance is transitive; deleting a downstream flag
+            # cannot turn a controlled premise into customer authority.
+            pending = list(record.get("premise_ids") or [])
+            seen = set()
+            while pending:
+                identifier = pending.pop()
+                if identifier in seen:
+                    continue
+                seen.add(identifier)
+                upstream = self.get_evidence_item(workspace, identifier) or {}
+                upstream_source = self._find(workspace.sources, upstream.get("source_id")) or {}
+                result["evaluation_only"] |= bool(upstream_source.get("evaluation_only"))
+                try:
+                    content = json.loads(upstream.get("content") or "")
+                except (ValueError, TypeError):
+                    content = {}
+                if isinstance(content, dict):
+                    result["evaluation_only"] |= bool(content.get("evaluation_only"))
+                    pending.extend(content.get("premise_ids") or [])
+        if trust.get("currentness", {}).get("status") != "current":
+            result.update(state="UNRESOLVED", admissible=False)
+            result["errors"].append("STALE_EVIDENCE")
+        if trust.get("confirmed_counterevidence") or trust.get("unresolved_counterevidence"):
+            result.update(state="CONTESTED", admissible=False)
+            result["errors"].append("EVIDENCE_CONFLICT")
+        if use == "canonical_ifc" and result["evaluation_only"]:
+            result.update(state="REFUSED", admissible=False)
+            result["errors"].append("EVALUATION_INPUT_NOT_PROJECT_AUTHORITY")
         return result
 
     def explain_investigation_answer(self, workspace: ProjectWorkspace, investigation_step_id: str) -> dict:
@@ -15913,6 +15993,7 @@ class CaseWorkspaceStore:
             )
         return thread
 
+    @observed
     def confirm_relationship(
         self, workspace: ProjectWorkspace, relationship_id: str, actor: str,
         governance_log: Optional[GovernanceLog] = None,
@@ -17054,6 +17135,7 @@ class CaseWorkspaceStore:
     def get_addressable_region(self, workspace: ProjectWorkspace, region_id: str) -> Optional[dict]:
         return self._find(workspace.addressable_regions, region_id)
 
+    @observed
     def register_evidence_item(
         self, workspace: ProjectWorkspace, source_id: str, evidence_class: str, content: str, content_type: str,
         region_id: Optional[str] = None, confidence: Optional[float] = None,

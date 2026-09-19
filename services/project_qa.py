@@ -38,6 +38,7 @@ question returns an empty findings array and promotes nothing.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -470,6 +471,7 @@ def answer_orientation_question(
     )
 
 
+@observed
 def answer_project_question(
     question: str,
     document_filename: str,
@@ -541,17 +543,28 @@ def answer_project_question(
     parsed = outcome.parsed
     not_covered = parsed.get("not_covered")
     missing_evidence_summary = parsed.get("missing_evidence_summary")
+    from services.conversational_turn import admitted_project_answer
+    from services.runtime_observation import event
+    admissions = [item for doc in additional_document_evidence or [] for item in doc.get("proposition_admission", [])]
+    admitted = admitted_project_answer(admissions, additional_document_evidence or [])
+    answer = admitted if admitted is not None else str(parsed.get("answer", "")).strip()
+    if admitted is not None:
+        not_covered = None
+        missing_evidence_summary = None
+    event(__name__ + ".answer_project_question", "FINAL_ADMISSION", answer=answer,
+          evidence_ids=[item["evidence_item_id"] for item in admissions])
     return ProjectQAResult(
         ran=True,
-        answer=str(parsed.get("answer", "")).strip(),
-        grounded_in=[str(g) for g in parsed.get("grounded_in", [])],
+        answer=answer,
+        grounded_in=([item["evidence_item_id"] for item in admissions] if admitted is not None
+                     else [str(g) for g in parsed.get("grounded_in", [])]),
         not_covered=(str(not_covered).strip() or None) if not_covered else None,
         missing_evidence_summary=(
             (str(missing_evidence_summary).strip() or None) if missing_evidence_summary else None
         ),
         needs_clarification=bool(parsed.get("needs_clarification", False)),
-        river_actions=_parse_river_actions(parsed.get("river_actions")),
-        findings=_parse_composer_findings(parsed.get("findings")),
+        river_actions=[] if admitted is not None else _parse_river_actions(parsed.get("river_actions")),
+        findings=[] if admitted is not None else _parse_composer_findings(parsed.get("findings")),
         provider=outcome.provider, model=outcome.model, requested_at=outcome.requested_at,
     )
 
@@ -760,7 +773,9 @@ def _build_prompt(
         )
         for doc in shown:
             label = doc.get("relative_path") or doc.get("filename", "")
-            lines.append(f"- {label}:")
+            lines.append(f"- {label} (SOURCE REFERENCE):")
+            for item in doc.get("proposition_admission", []):
+                lines.append(str(item["evidence_item_id"]) + ": " + item["state"])
             for excerpt in doc.get("excerpts", []):
                 lines.append(f"  - {excerpt}")
 

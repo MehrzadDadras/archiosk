@@ -35,6 +35,7 @@ every emitted loop is normalised counter-clockwise for IFC profile convention.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import math
 import re
 from dataclasses import dataclass, asdict
@@ -236,6 +237,7 @@ def _inverse_projective_matrix(matrix, tolerance):
     return inverse, condition
 
 
+@observed
 def validate_homography(matrix, **context):
     """Typed source-to-target map; infinity-norm conditioning is scale invariant.
 
@@ -278,6 +280,62 @@ def validate_homography(matrix, **context):
         geometry_level=GEOMETRY_LEVELS[min(GEOMETRY_LEVELS.index(level), GEOMETRY_LEVELS.index(ceiling))],
         conditioning_measure="infinity_norm", premises={"matrix": [list(row) for row in matrix]})
     return result
+
+
+@observed
+def estimate_control_homography(source_points, target_points, **context):
+    """Four identified coplanar controls, column vectors; no scale estimation.
+
+    Projective frames reuse this owner's 3x3 inverse/product. Correspondence
+    identity and target-frame authority are supplied only by the evidence owner.
+    The numerical result alone earns no legal, Euclidean or metric authority.
+    """
+    result = _geometry_result("control_homography@1", **context)
+    if result["error"]:
+        return result
+    tolerance = context.get("tolerance", ToleranceContext())
+    if (not isinstance(source_points, (list, tuple)) or not isinstance(target_points, (list, tuple))
+            or len(source_points) != 4 or len(target_points) != 4
+            or not all(_finite_coordinates(p, 2) for p in [*source_points, *target_points])):
+        return _geometry_refuse(result, "FOUR_FINITE_CONTROLS_REQUIRED")
+    def frame(points):
+        matrix = [[points[col][row] if row < 2 else 1.0 for col in range(3)] for row in range(3)]
+        inverse, condition = _inverse_projective_matrix(matrix, tolerance)
+        fourth = [*points[3], 1.0]
+        scales = [math.fsum(a*b for a,b in zip(row, fourth)) for row in inverse]
+        if any(not math.isfinite(v) or abs(v) <= tolerance.matrix_pivot for v in scales):
+            raise ValueError("DEGENERATE_CONTROL_FRAME")
+        return [[matrix[row][col]*scales[col] for col in range(3)] for row in range(3)], condition
+    try:
+        source, sc = frame(source_points)
+        target, tc = frame(target_points)
+        inverse, ic = _inverse_projective_matrix(source, tolerance)
+        matrix = _projective_product(target, inverse)
+        validated = validate_homography(matrix, **context)
+        if validated["state"] != "ESTABLISHED":
+            return dict(validated, operator="control_homography@1")
+        residuals = []
+        inverse_transform = invert_homography(validated, tolerance=tolerance)
+        for p, expected in zip(source_points, target_points):
+            transformed = transform_homogeneous_point(validated, [*p, 1],
+                point_space=context.get("source_space"), point_plane=context.get("source_plane"), tolerance=tolerance)
+            if transformed["state"] != "ESTABLISHED":
+                return _geometry_refuse(result, "CONTROL_TRANSFORM_UNRESOLVED")
+            residual = math.dist(transformed["value"], expected)
+            roundtrip = transform_homogeneous_point(inverse_transform, [*transformed["value"], 1],
+                point_space=context.get("target_space"), point_plane=context.get("target_plane"), tolerance=tolerance)
+            if (not math.isfinite(residual) or residual > tolerance.round_trip
+                    or roundtrip["state"] != "ESTABLISHED" or math.dist(roundtrip["value"], p) > tolerance.round_trip):
+                return _geometry_refuse(result, "CONTROL_ROUND_TRIP_FAILED")
+            residuals.append(residual)
+        validated.update(operator="control_homography@1", control_residuals=residuals,
+            control_conditioning=max(sc, tc, ic), physical_scale="NOT_ESTABLISHED",
+            premises={"source_points": source_points, "target_points": target_points})
+        if max(sc, tc, ic) >= tolerance.homography_weak_condition:
+            return _geometry_refuse(validated, "CONTROL_FRAME_ILL_CONDITIONED", "WEAK")
+        return validated
+    except (ValueError, OverflowError, ZeroDivisionError):
+        return _geometry_refuse(result, "DEGENERATE_CONTROL_FRAME", "DEGENERATE")
 
 
 def _recheck_homography(transform, tolerance):
@@ -324,6 +382,7 @@ def dehomogenize(point, **context):
     return result
 
 
+@observed
 def transform_homogeneous_point(transform, point, *, point_space=None, point_plane=None,
                                 tolerance=ToleranceContext()):
     result = _recheck_homography(transform, tolerance)
@@ -362,6 +421,7 @@ def _projective_product(left, right):
     return result
 
 
+@observed
 def invert_homography(transform, *, tolerance=ToleranceContext()):
     original = _recheck_homography(transform, tolerance)
     if original["error"]:
@@ -394,6 +454,7 @@ def invert_homography(transform, *, tolerance=ToleranceContext()):
     return result
 
 
+@observed
 def compose_homographies(first, second, *, tolerance=ToleranceContext()):
     """AB then BC gives H2 H1; endpoint checks prohibit reversed chart order."""
     a, b = (_recheck_homography(t, tolerance) for t in (first, second))
@@ -422,6 +483,7 @@ def compose_homographies(first, second, *, tolerance=ToleranceContext()):
     return result
 
 
+@observed
 def transform_homogeneous_line(transform, line, *, line_space=None, line_plane=None,
                                tolerance=ToleranceContext()):
     """Dual action H^-T l. A line is never passed to the point transform."""
@@ -516,6 +578,7 @@ def classify_horizon_residual(residual, *, residual_units=None, **context):
     return result
 
 
+@observed
 def classify_point_in_polygon(point, polygon, *, point_space=None, polygon_space=None,
                               point_plane=None, polygon_plane=None, geometry_level=None,
                               tolerance=ToleranceContext()):
@@ -594,6 +657,7 @@ def point_in_polygon(point, polygon) -> bool:
         geometry_level="EUCLIDEAN")["state"] == "INSIDE"
 
 
+@observed
 def project_point_to_segment(point, a, b, *, point_space=None, segment_space=None,
                              point_plane=None, segment_plane=None, geometry_level=None,
                              tolerance=ToleranceContext(), source=None):
@@ -1127,10 +1191,10 @@ class SpatialCompiler:
 
 
 def compile_to_ifc(document, *, schedule=None, project_name="ARCHIOSK Compiled Model",
-                   compiler=None):
+                   compiler=None, store=None, workspace=None, evidence_ids=()):
     """Full metabolic bridge: 2D primitives -> model -> IFC 4x3 STEP text."""
     from engine.ifc_volume_validator import IFCVolumeValidator
 
     model = (compiler or SpatialCompiler()).compile(
         document, schedule=schedule, project_name=project_name)
-    return model, IFCVolumeValidator().validate_and_export(model)
+    return model, IFCVolumeValidator().validate_and_export(model, store=store, workspace=workspace, evidence_ids=evidence_ids)

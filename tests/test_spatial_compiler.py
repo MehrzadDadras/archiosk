@@ -158,7 +158,10 @@ def schedule():
 
 @pytest.fixture(scope="module")
 def bridge(document, schedule):
-    return compile_to_ifc(document, schedule=schedule, project_name="Metabolic Bridge")
+    # Numeric bridge qualification; canonical compile_to_ifc now also requires reviewed evidence.
+    from engine.ifc_volume_validator import IFCVolumeValidator
+    model = SpatialCompiler().compile(document, schedule=schedule, project_name="Metabolic Bridge")
+    return model, IFCVolumeValidator().export_numeric_diagnostic(model)
 
 
 @pytest.fixture(scope="module")

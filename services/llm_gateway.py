@@ -24,6 +24,7 @@ purely the mechanical request/response boundary.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import base64
 import binascii
 import json
@@ -200,6 +201,7 @@ def anthropic_client(api_key: str, timeout: float, log_label: str = "LLM call"):
         )
 
 
+@observed
 def call_llm_json(
     user_prompt: str,
     system_prompt: Optional[str] = None,

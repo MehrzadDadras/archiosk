@@ -3714,7 +3714,7 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
             survey_graph.fit_to_frame(survey_graph.build_primitives(graph)))
         self.assertIn("<svg", svg)
 
-    def test_a_computed_run_is_flagged_computed(self):
+    def test_computable_run_does_not_mislabel_source_positions(self):
         from services import survey_graph
 
         graph = self._graph(
@@ -3724,8 +3724,9 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
         lines = [p for p in survey_graph.build_primitives(graph)["primitives"]
                  if p["type"] == survey_graph.P_LINE]
 
-        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_COMPUTED)
-        self.assertEqual(lines[0]["tags"], ("[BINDING PARTIALLY_RECOVERED]",))
+        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_OBSERVED)
+        self.assertIn("[BINDING PARTIALLY_RECOVERED]", lines[0]["tags"])
+        self.assertEqual(lines[0]["coordinate_provenance"], "OBSERVED_SOURCE_POSITIONS")
         self.assertFalse(lines[0]["certain"])
 
     def test_persisted_fully_bound_run_retains_established_binding(self):
@@ -3744,8 +3745,9 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
                                         bind_basis="structural", claimed_bind_certainty="RECOVERED"))
         lines = [p for p in survey_graph.build_primitives(graph)["primitives"]
                  if p["type"] == survey_graph.P_LINE]
-        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_COMPUTED)
-        self.assertEqual(lines[0]["tags"], ())
+        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_OBSERVED)
+        self.assertIn("[SOURCE GEOMETRY; AUTHORITY UNRESOLVED]", lines[0]["tags"])
+        self.assertFalse(lines[0]["certain"])
 
     def test_a_square_traverse_closes_and_a_broken_one_does_not(self):
         from services import survey_graph

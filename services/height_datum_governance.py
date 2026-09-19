@@ -12,6 +12,7 @@ Historical evidence is retained; review state is recomputed rather than cached.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import re
 
 # Survey height datum: independent premises, stored in existing EvidenceItems.
@@ -74,6 +75,7 @@ def propose_height_datums(store, workspace, visual_evidence, graph):
                 "supports", provisional=True, created_by="visual-worker", reason="Proposed height datum premise: " + axis)
 
 
+@observed
 def resolve_height_datums(store, workspace, visual):
     """Read current evidence/relationship state; never write authority or history."""
     import json
@@ -158,6 +160,7 @@ def resolve_height_datums(store, workspace, visual):
     return visual
 
 
+@observed
 def height_datum_projection(graph):
     """A conjunction of independently reviewed premises, not a text classifier."""
     from services import binding, survey_graph

@@ -8,6 +8,7 @@ Historical source evidence is retained and revalidated at point of use.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import logging
 import math
 import re
@@ -232,6 +233,7 @@ def resolve_measurement_premises(store, workspace, visual):
     return visual
 
 
+@observed
 def measurement_genealogy(segment) -> dict:
     """Advisory working dimension from explicit same-object precedence only.
 
@@ -620,6 +622,7 @@ def segment_inputs(segment) -> dict:
     }
 
 
+@observed
 def solve_traverse(graph: dict, *, reference_type=None) -> dict:
     """Relative mathematics is not proof of a true-North reference frame."""
     from services import survey_north
@@ -632,6 +635,21 @@ def solve_traverse(graph: dict, *, reference_type=None) -> dict:
     result = _solve_traverse_relative(graph)
     result["reference_type"] = requested
     result["north_premise"] = north
+    from services import binding
+    certainty = vx.RECOVERED
+    for segment in graph.get("segments", []):
+        if segment.get("boundary") not in BOUNDARY_LAYER_ROLES:
+            continue
+        dimension = measurement_genealogy(segment)["current"] if segment.get("measurements") else segment.get("dimension")
+        certainty = binding.weaker(certainty, binding.bound_certainty(dimension or {}))
+        certainty = binding.weaker(certainty, binding.bound_certainty(segment.get("bearing") or {}))
+    result["bind_certainty"] = certainty
+    result["authority"] = "UNRESOLVED"  # arithmetic never grants legal authority
+    result["geometry_level"] = "RELATIVE_TRAVERSE"
+    result["state"] = "CALCULATED_FROM_QUALIFIED_INPUT" if result["computed"] else "UNRESOLVED"
+    if any(not math.isfinite(v) for point in result["points"].values() for v in point):
+        result.update(computed=False, points={}, state="UNRESOLVED",
+                      error="NON_FINITE_DERIVED_VALUE", misclosure=_no_misclosure("NON_FINITE_DERIVED_VALUE"))
     return result
 
 
@@ -700,6 +718,9 @@ def _solve_traverse_relative(graph: dict) -> dict:
         perimeter += length
 
     linear = math.hypot(cursor[0] - start[0], cursor[1] - start[1])
+    if not math.isfinite(linear) or not math.isfinite(perimeter):
+        return {"computed": False, "points": {}, "segments": reports,
+                "error": "NON_FINITE_DERIVED_VALUE", "misclosure": _no_misclosure("NON_FINITE_DERIVED_VALUE")}
     ratio = (perimeter / linear) if linear > 1e-12 else float("inf")
     closes = (linear <= MISCLOSURE_ABSOLUTE_FLOOR
               or ratio >= MISCLOSURE_RATIO_LIMIT)
@@ -732,6 +753,7 @@ def _no_misclosure(reason: str) -> dict:
             "reason": reason}
 
 
+@observed
 def footprint_containment(graph, footprint) -> dict:
     """Observed image containment, never a legal boundary determination.
 
@@ -927,6 +949,7 @@ def resolve_access_interpretations(store, workspace, visual):
     return visual
 
 
+@observed
 def access_interpretations(graph):
     from services import binding
     candidates = graph.get("access_occurrences", [])
@@ -1122,6 +1145,7 @@ def _arc_from_chord_and_radius(p1, p2, radius_survey, chord_survey, bulge_side):
     return None, "UNRESOLVED: arc branch and Euclidean image frame are not established"
 
 
+@observed
 def build_primitives(graph: dict, include=None) -> dict:
     """The graph resolved into drawable primitives, once, for both renderers.
 
@@ -1164,9 +1188,12 @@ def build_primitives(graph: dict, include=None) -> dict:
             continue
         report = inputs.get(segment["id"]) or {}
         # CLAUDE-SURVEY-STAGE1-02: what this line IS, travelling with the line.
-        provenance = (PROVENANCE_COMPUTED if report.get("computable")
-                      else PROVENANCE_OBSERVED)
+        # These endpoints below are retained image positions, not the solver's
+        # computed coordinates. Computable inputs cannot relabel what is drawn.
+        provenance = PROVENANCE_OBSERVED
         tags = tuple("[%s UNRESOLVED]" % m for m in report.get("missing", ()))
+        if report.get("computable"):
+            tags += ("[ARITHMETIC QUALIFIED; DISPLAY USES SOURCE POSITIONS]",)
         # Computability is not evidence strength. Carry existing binding into
         # the visible primitive instead of losing it behind a computed tag.
         dimension = (measurement_genealogy(segment)["current"] if segment.get("measurements")
@@ -1187,6 +1214,7 @@ def build_primitives(graph: dict, include=None) -> dict:
             if resolved is None:
                 # NO INVENTED CURVATURE. Drawn straight, and said out loud.
                 straights += 1
+                tags += ("[DISPLAY APPROXIMATION; CURVATURE UNRESOLVED]",)
                 primitives.append({"type": P_LINE, "id": segment["id"],
                                    "a": p1, "b": p2, "certain": False,
                                    "provenance": provenance, "tags": tags,
@@ -1280,6 +1308,21 @@ def build_primitives(graph: dict, include=None) -> dict:
             "the boundary chain does not close (%d open %s)"
             % (len(closure["gaps"]), "end" if len(closure["gaps"]) == 1 else "ends"))
 
+    for primitive in primitives:
+        primitive["authority"] = "UNRESOLVED"
+        primitive["coordinate_provenance"] = "OBSERVED_SOURCE_POSITIONS"
+        primitive["arithmetic_state"] = traverse.get("state", "UNRESOLVED")
+        primitive["state"] = ("DISPLAY_APPROXIMATION" if any("DISPLAY APPROXIMATION" in tag for tag in primitive.get("tags", ()))
+            else "CALCULATED_FROM_QUALIFIED_INPUT" if primitive.get("provenance") == PROVENANCE_COMPUTED
+            else "QUALIFIED" if primitive.get("certain") else "UNRESOLVED")
+        primitive["geometry_level"] = traverse.get("geometry_level", "OBSERVED_IMAGE")
+        if primitive.get("provenance") == PROVENANCE_COMPUTED:
+            primitive["bind_certainty"] = traverse.get("bind_certainty", "UNRESOLVED")
+            primitive["certain"] = False
+            primitive["tags"] = tuple(primitive.get("tags", ())) + ("[CALCULATED; AUTHORITY UNRESOLVED]",)
+        if primitive.get("type") in (P_LINE, P_ARC, P_POLYGON):
+            primitive["certain"] = False
+            primitive["tags"] = tuple(primitive.get("tags", ())) + ("[SOURCE GEOMETRY; AUTHORITY UNRESOLVED]",)
     return {"primitives": primitives, "unresolved": unresolved,
             "stats": {"arcs": arcs, "straights": straights,
                       "nodes": len(nodes),
@@ -1293,6 +1336,176 @@ def build_primitives(graph: dict, include=None) -> dict:
                       # `computed` is False and that is an ordinary outcome.
                       "computed": traverse["computed"],
                       "misclosure": traverse["misclosure"]}}
+
+
+@observed
+def derive_survey_operation(store, workspace, *, source_id, region_id, object_id,
+                            operation, premise_ids, actor):
+    """Deterministic survey derivations over identified existing EvidenceItems.
+
+    Registration is a proposal until its existing derived_from relationships
+    are reviewed. Correspondence does not confer monument/legal authority;
+    occupation comparison does not move a record boundary. H has no scale.
+    """
+    import json
+    from services import binding
+    from engine import spatial_compiler as geometry
+    operators = {"monument": "monument_correspondence@1", "occupation": "occupation_comparison@1",
+                 "rectification": "control_homography@1", "traverse":"relative_traverse@1"}
+    if operation not in operators or not premise_ids or len(set(premise_ids)) != len(premise_ids):
+        raise ValueError("Select an operation and distinct existing premise evidence")
+    citation = store.resolve_region_citation(workspace, region_id)
+    if citation.get("source_id") != source_id or citation.get("address", {}).get("object_id") != object_id:
+        raise ValueError("Derivation must address the selected source object")
+    rows, payloads, errors = [], [], []
+    for identifier in premise_ids:
+        row = store.get_evidence_item(workspace, identifier)
+        if not row or row.get("project_id") != workspace.project_id:
+            raise ValueError("Premise does not belong to this project")
+        rows.append(row)
+        try:
+            payload = json.loads(row.get("content") or "")
+        except (ValueError, TypeError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        payloads.append(payload)
+        trust = store.explain_evidence_trust(workspace, identifier)
+        if operation != "traverse" and binding.bound_certainty(payload) != "RECOVERED":
+            errors.append("BINDING_UNESTABLISHED")
+        if trust.get("currentness", {}).get("status") != "current":
+            errors.append("STALE_EVIDENCE")
+        if trust.get("confirmed_counterevidence") or trust.get("unresolved_counterevidence"):
+            errors.append("EVIDENCE_CONFLICT")
+        if operation != "traverse" and (row.get("evidence_class") != "direct_source_evidence" or not row.get("region_id")):
+            errors.append("DIRECT_ADDRESSED_PREMISE_REQUIRED")
+    first = payloads[0]
+    if operation in ("monument", "occupation") and (not first.get("subject_id")
+            or any(p.get("subject_id") != first.get("subject_id") for p in payloads)):
+        errors.append("SUBJECT_BINDING_UNESTABLISHED")
+    frame_record = None
+    if operation == "rectification":
+        frame_ids = {p.get("target_frame_evidence_id") for p in payloads}
+        frame_id = next(iter(frame_ids)) if len(frame_ids) == 1 else None
+        frame_row = store.get_evidence_item(workspace, frame_id) if frame_id else None
+        try:
+            frame_record = json.loads((frame_row or {}).get("content") or "{}")
+        except (ValueError, TypeError):
+            frame_record = {}
+        if not isinstance(frame_record, dict):
+            frame_record = {}
+        frame_trust = store.explain_evidence_trust(workspace, frame_id) if frame_id else {}
+        if (not frame_row or frame_row.get("evidence_class") != "direct_source_evidence" or not frame_row.get("region_id")
+                or not isinstance(frame_record, dict) or frame_record.get("survey_role") != "affine_control_frame"
+                or not isinstance(frame_record.get("controls"), dict)
+                or binding.bound_certainty(frame_record) != "RECOVERED"
+                or frame_trust.get("currentness", {}).get("status") != "current"
+                or frame_trust.get("has_contradictions")
+                or any(p.get("target_frame_id") != frame_record.get("frame_id")
+                       or frame_record.get("controls", {}).get(p.get("control_id")) != p.get("target_point") for p in payloads)):
+            errors.append("AFFINE_FRAME_EVIDENCE_REQUIRED")
+        else:
+            # Its independent target-frame evidence participates in the SAME
+            # review/currentness/genealogy chain as the image correspondences.
+            premise_ids = [*premise_ids, frame_id]
+    space, plane = first.get("coordinate_space"), first.get("plane_id")
+    if operation == "traverse":
+        space, plane = "RELATIVE_TRAVERSE", "source:"+source_id
+    elif not space or not plane or any(p.get("coordinate_space") != space or p.get("plane_id") != plane for p in payloads):
+        errors.append("SPACE_OR_PLANE_MISMATCH")
+    tolerance = geometry.ToleranceContext()
+    state, value = "UNRESOLVED", None
+    detail = dict(operator=operators[operation], tolerance_context=geometry.asdict(tolerance),
+                  geometry_level=first.get("geometry_level", "PROJECTIVE"),
+                  input_certainty=[{k:p.get(k) for k in ("read_certainty","bind_certainty","uncertainty")} for p in payloads])
+    if not errors:
+        if operation == "traverse":
+            if len(rows) != 1 or rows[0].get("content_type") != vx.VISUAL_CONTENT_TYPE or rows[0].get("source_id") != source_id:
+                errors.append("SCOPED_VISUAL_GRAPH_REQUIRED")
+            else:
+                visual = dict(first, evidence_item_id=rows[0]["id"])
+                resolve_measurement_premises(store, workspace, visual)
+                calculation = solve_traverse(visual.get("graph") or {})
+                detail.update(calculation=calculation, geometry_level="RELATIVE_TRAVERSE")
+                state = "PARTIALLY_RECOVERED" if calculation["computed"] else "UNRESOLVED"
+                value = calculation["points"] or None
+        elif operation == "monument":
+            observed = [p for p in payloads if p.get("survey_role") == "found_monument"]
+            recorded = [p for p in payloads if p.get("survey_role") == "recorded_monument"]
+            if (len(observed) != 1 or len(recorded) != 1 or not observed[0].get("monument_id")
+                    or observed[0].get("monument_id") != recorded[0].get("monument_id")
+                    or observed[0].get("record_corner_id") != recorded[0].get("record_corner_id")
+                    or not recorded[0].get("record_corner_id")):
+                errors.append("MONUMENT_IDENTITY_NOT_ESTABLISHED")
+            elif not geometry._finite_coordinates(observed[0].get("point"), 2):
+                errors.append("NON_FINITE_POINT")
+            else:
+                state, value = "ESTABLISHED", observed[0]["point"]
+                detail.update(monument_id=observed[0]["monument_id"], legal_authority="NOT_ESTABLISHED",
+                              comparison="IDENTITY_CORRESPONDENCE_ONLY")
+        elif operation == "occupation":
+            observed = [p for p in payloads if p.get("survey_role") == "observed_occupation"]
+            recorded = [p for p in payloads if p.get("survey_role") == "record_boundary"]
+            if (len(observed) != 1 or len(recorded) != 1
+                    or first.get("geometry_level") not in ("EUCLIDEAN", "METRIC_SCALED")
+                    or any(p.get("geometry_level") != first.get("geometry_level") for p in payloads)
+                    or space not in ("EUCLIDEAN_RECTIFIED", "WORLD_SCALED")):
+                errors.append("COMPARABLE_EUCLIDEAN_PREMISES_REQUIRED")
+            else:
+                segment = recorded[0].get("segment") or []
+                if len(segment) != 2:
+                    errors.append("BOUNDARY_SEGMENT_REQUIRED")
+                else:
+                    projected = geometry.project_point_to_segment(observed[0].get("point"), *segment,
+                        point_space=space, segment_space=space, point_plane=plane, segment_plane=plane,
+                        geometry_level=first["geometry_level"], tolerance=tolerance)
+                    if projected["state"] != "ESTABLISHED":
+                        errors.append(projected.get("error") or "UNRESOLVED_PROJECTION")
+                    else:
+                        value = projected["distance"]
+                        state = "ESTABLISHED"
+                        detail.update(comparison="AGREEMENT" if value <= tolerance.boundary_distance else "DIFFERENCE",
+                            legal_boundary_authority="NOT_ESTABLISHED", projection=projected)
+        else:
+            if (len(payloads) != 4 or any(p.get("survey_role") != "control_correspondence" for p in payloads)
+                    or any(p.get("image_source_id") != source_id for p in payloads)
+                    or len({p.get("control_id") for p in payloads}) != 4
+                    or any(not p.get("control_id") for p in payloads)
+                    or any(p.get("target_space") != "AFFINE_RECTIFIED" or p.get("target_frame_level") != "AFFINE"
+                           or not p.get("target_frame_id") for p in payloads)
+                    or len({p.get("target_frame_id") for p in payloads}) != 1):
+                errors.append("IDENTIFIED_AFFINE_CONTROL_FRAME_REQUIRED")
+            else:
+                source = store._find(workspace.sources, source_id) or {}
+                if not source.get("file_hash"):
+                    errors.append("SOURCE_IMAGE_IDENTITY_REQUIRED")
+                else:
+                    detail = geometry.estimate_control_homography([p.get("point") for p in payloads],
+                        [p.get("target_point") for p in payloads], source_space=space, target_space="AFFINE_RECTIFIED",
+                        source_plane=plane, target_plane=first["target_frame_id"], geometry_level="PROJECTIVE",
+                        source={"source_id": source_id, "sha256": source["file_hash"]},
+                        uncertainty={"state": "CONTROL_DEPENDENT", "control_evidence_ids": premise_ids})
+                    state, value = detail["state"], detail.get("value")
+                    if detail.get("error"):
+                        errors.append(detail["error"])
+                    detail.update(earned_target_frame="AFFINE", physical_scale="NOT_ESTABLISHED")
+    record = dict(state=state, value=value, errors=sorted(set(errors)), derivation=detail,
+        field={"monument":"correspondence", "occupation":"occupation_offset", "rectification":"transform", "traverse":"traverse"}[operation],
+        object_id=object_id, coordinate_space=space or "UNRESOLVED", plane_id=plane or "UNRESOLVED",
+        source_evidence_ids=premise_ids, premise_ids=premise_ids, read_certainty="RECOVERED",
+        bind_certainty="RECOVERED", bind_basis="declared", geometry_level=detail.get("geometry_level"),
+        evaluation_only=any(p.get("evaluation_only") for p in payloads) or bool((frame_record or {}).get("evaluation_only")),
+        uncertainty={"state":"PREMISE_DEPENDENT", "inputs":[p.get("uncertainty",{"state":"UNRESOLVED"}) for p in payloads]},
+        legal_authority="NOT_ESTABLISHED")
+    import hashlib
+    record["premise_digests"] = {identifier:hashlib.sha256(
+        (store.get_evidence_item(workspace,identifier)["content"]).encode()).hexdigest() for identifier in premise_ids}
+    evidence = store.register_evidence_item(workspace, source_id, "calculated_value",
+        json.dumps(record, allow_nan=False), "application/json", region_id=region_id, actor=actor)
+    for identifier in premise_ids:
+        store.record_evidence_relationship(workspace, "evidence_item", evidence["id"], "evidence_item", identifier,
+            "derived_from", provisional=True, created_by=actor, reason="Review addressed survey derivation premise")
+    return evidence
 
 
 def fit_to_frame(resolved: dict, margin: float = 0.06) -> dict:
@@ -1442,6 +1655,9 @@ def emit_svg(resolved: dict, width: int = 560, height: int = 420,
     ]
 
     for item in resolved["primitives"]:
+        parts.append('<g data-state="%s"><title>%s: %s %s</title>' % (
+            escape(item.get("state", "UNRESOLVED")), escape(str(item.get("id") or item.get("for") or "Feature")),
+            escape(item.get("state", "UNRESOLVED")), escape(" ".join(item.get("tags", ())))))
         kind = item["type"]
         if kind == P_POLYGON:
             points = " ".join("%.2f,%.2f" % (sx(p[0]), sy(p[1])) for p in item["points"])
@@ -1488,6 +1704,9 @@ def emit_svg(resolved: dict, width: int = 560, height: int = 420,
             parts.append('<text x="%.1f" y="%.1f" font-size="7" font-weight="bold" '
                          'fill="#1f2933" text-anchor="middle">N</text>'
                          % (cx, cy + r + 8))
+
+        parts.append('</g>')
+    parts.append('<text x="12" y="%d" font-size="8" fill="#6b7785">Dashed: qualified / display approximation. Not legal boundary authority.</text>' % (height-3))
 
     # Footprint labels last, and BELOW the polygon when they will not fit
     # inside it - the same rule the PDF renderer applies, for the same reason:

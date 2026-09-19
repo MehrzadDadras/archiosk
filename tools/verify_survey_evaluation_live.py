@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output",required=True)
+    parser.add_argument("--cases",help="Comma-separated affected cases; omit for the full catalog")
+    parser.add_argument("--operational",action="store_true",help="Observe actual calls and an eligible ordinary document request")
     arguments=parser.parse_args()
     token_url=os.environ.pop("ARCHIOSK_VERIFICATION_URL","")
     parsed=urlparse(token_url)
@@ -48,10 +50,37 @@ def main():
         assert page.goto(base+"/admin/survey-evaluation",wait_until="domcontentloaded").status==200
         page.screenshot(path=str(output/"evaluation-catalog.png"),full_page=True)
         page.on("pageerror",lambda error:proof["browser_errors"].append(str(error)))
-        for case in CASES:
+        if arguments.operational:
+            enabled=page.request.post(base+"/admin/survey-evaluation",form={"csrf_token":csrf,"action":"observe","enabled":"yes"})
+            assert enabled.ok
+            page.goto(base+"/admin/survey-evaluation",wait_until="domcontentloaded")
+            live=page.locator('main.survey-evaluation a[href^="/document-shop/jobs/"]').first
+            assert live.count(), "No eligible real Document Shop source was exposed"
+            live_url=base+live.get_attribute("href")
+            response=page.goto(live_url,wait_until="domcontentloaded")
+            assert response.status==200
+            trace_id=response.headers.get("x-archiosk-observation")
+            assert trace_id, "Ordinary request was not observed"
+            proof["live_project"]={"url":live_url,"observation":trace_id}
+            page.screenshot(path=str(output/"live-project-result.png"),full_page=True)
+            csrf=page.locator('meta[name="csrf-token"]').get_attribute("content")
+            answered=page.request.post(live_url,form={"csrf_token":csrf,"question":"What is established and what remains unresolved in this source?"},max_redirects=0,timeout=120000)
+            assert answered.status==302
+            answer_trace=answered.headers.get("x-archiosk-observation")
+            page.goto(base+"/admin/survey-evaluation?observation="+answer_trace,wait_until="domcontentloaded")
+            assert page.locator('.runtime-event[data-owner="services.document_conversation.ask"][data-phase="INVOKED"]').count()
+            assert page.locator('.runtime-event[data-phase="PROVIDER_INPUT"]').count()
+            assert page.locator('.runtime-event[data-phase="PROVIDER_OUTPUT"]').count()
+            assert page.locator('.runtime-event[data-phase="FINAL_ADMISSION"]').count()
+            proof["live_project"]["ask_observation"]=answer_trace
+            page.screenshot(path=str(output/"live-project-operational-trace.png"),full_page=True)
+        selected=arguments.cases.split(",") if arguments.cases else list(CASES)
+        assert all(case in CASES for case in selected), "Unknown qualification case"
+        for case in selected:
             print(case+": exercising live route",flush=True)
             response=page.request.post(base+"/admin/survey-evaluation",form={"case":case,"csrf_token":csrf},max_redirects=0,timeout=120000)
             assert response.status==302, "Case creation failed: "+case+" / "+str(response.status)
+            creation_trace=response.headers.get("x-archiosk-observation")
             route=response.headers["location"]
             url=base+route if route.startswith("/") else route
             response=page.goto(url,wait_until="domcontentloaded")
@@ -65,6 +94,21 @@ def main():
             text=page.locator("main.survey-evaluation").inner_text()
             assert "EVALUATION_INPUT" in text and "CAPABILITY NOT YET IMPLEMENTED" in text
             result={"case":case,"url":url,"surface":200,"reviewed":True}
+            expected_operations={"monument":"ESTABLISHED","occupation":"ESTABLISHED","earned-h":"ESTABLISHED",
+                                 "missing-monument":"UNRESOLVED","degenerate-controls":"DEGENERATE","traverse":"PARTIALLY_RECOVERED"}
+            if case in expected_operations:
+                operation=page.locator("article").filter(has=page.get_by_text("Survey operation after review/reload",exact=False)).first
+                assert "Actual result: "+expected_operations[case] in operation.inner_text()
+                admission=json.loads(operation.locator("pre").text_content())
+                assert admission["evaluation_only"]
+                result["operation_state"]=admission["state"]
+                if case=="earned-h":
+                    assert admission["record"]["derivation"]["physical_scale"]=="NOT_ESTABLISHED"
+                    assert len(admission["record"]["premise_ids"])==5
+            if arguments.operational:
+                result["observation"]=response.headers.get("x-archiosk-observation")
+                result["creation_observation"]=creation_trace
+                assert result["observation"], "Case execution was not observed"
             if case in ("supersession","whole-source"):
                 for action in ("accept","apply"):
                     assert page.request.post(url,form={"csrf_token":csrf,"action":action}).ok
@@ -117,6 +161,15 @@ def main():
             proof["runs"].append(result)
             (output/"live-proof.json").write_text(json.dumps(proof,indent=2),encoding="utf-8")
             print(case+": live surface and review PASS",flush=True)
+        if arguments.operational:
+            for result in proof["runs"]:
+                page.goto(base+"/admin/survey-evaluation?observation="+result["observation"],wait_until="domcontentloaded")
+                assert page.locator('.runtime-event[data-phase="INVOKED"]').count(), "No actual invocation in retained case trace"
+                if result["case"] in ("earned-h","degenerate-controls","monument","occupation","missing-monument","traverse"):
+                    page.goto(base+"/admin/survey-evaluation?observation="+result["creation_observation"],wait_until="domcontentloaded")
+                    assert page.locator('.runtime-event[data-owner="services.survey_graph.derive_survey_operation"][data-phase="INVOKED"]').count()
+                    if result["case"] in ("earned-h","degenerate-controls"):
+                        assert page.locator('.runtime-event[data-owner="engine.spatial_compiler.estimate_control_homography"][data-phase="INVOKED"]').count()
         assert not proof["browser_errors"], "Browser errors occurred"
         # End the existing verification session through its own revocation route.
         ended=page.request.post(base+"/verification-access/end",form={"csrf_token":csrf})

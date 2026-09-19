@@ -55,6 +55,7 @@ not a feature at all - it is what a Source already is.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import hashlib
 import io
 import logging
@@ -101,6 +102,7 @@ def is_survey_like(visual) -> bool:
             and visual.category_certainty in vx.VALUE_BEARING)
 
 
+@observed
 def derive(visual, *, project_id: str, source_id: str, source_filename: str,
            source_sha256: Optional[str] = None, pages_used=None,
            display_name: str = "", frame_size=None) -> dict:
@@ -449,6 +451,7 @@ def _draw_north(canvas, colors, north, width, height) -> None:
     canvas.drawCentredString(cx, cy - radius - 8, "N")
 
 
+@observed
 def render_pdf(reference: dict) -> bytes:
     """The Survey Reference sheet. Returns PDF bytes.
 
@@ -512,8 +515,8 @@ def render_pdf(reference: dict) -> bytes:
                           "the radius and chord printed on the source, not "
                           "approximated by straight segments.")
         if stats["straights"]:
-            legend.append("Solid lines are boundaries read from the source; "
-                          "dashed lines were only partly legible.")
+            legend.append("Lines retain source positions; dashed geometry is qualified or approximate. "
+                          "It does not establish legal boundary authority.")
         if stats["footprints"]:
             legend.append("Shaded: building footprints, in their relative "
                           "positions on the source.")
@@ -551,6 +554,11 @@ def render_pdf(reference: dict) -> bytes:
             flow.append(Paragraph(_escape(note), small))
 
     _facts_table("Recovered", reference.get("recovered") or [])
+    _facts_table("Geometry qualifications", [
+        {"label": str(item.get("id") or item.get("for") or "Feature"),
+         "value": item.get("state", "UNRESOLVED") + "; " + " ".join(item.get("tags", ())) }
+        for item in resolved["primitives"] if item.get("type") in ("line", "arc", "polygon")],
+        note="Display geometry is not legal boundary authority. Source positions are not a rectified metric frame.")
     _facts_table("Partially recovered", reference.get("partially_recovered") or [],
                  note="Legible in part only. Confirm against the original before use.")
 
@@ -610,14 +618,14 @@ def resolved_plan(reference: dict) -> dict:
         return {"primitives": [], "unresolved": [],
                 "stats": {"arcs": 0, "straights": 0, "nodes": 0,
                           "footprints": 0, "closed": False}}
-    # CLAUDE-SURVEY-STAGE1-01: Stage 1 draws the property boundary and north.
-    # Buildings, setbacks, easements, notes and the auxiliary text layers are
-    # out of scope this phase by Product Owner direction - the DATA is
-    # untouched and still in the record, it is simply not drawn yet.
+    # Operational convergence activates the existing layer resolver. Source
+    # positions, qualification and approximations travel on every primitive;
+    # adding a visible layer grants no legal/metric authority.
     return survey_graph.fit_to_frame(
-        survey_graph.build_primitives(graph, include=survey_graph.STAGE1_LAYERS))
+        survey_graph.build_primitives(graph, include=survey_graph.LAYERS))
 
 
+@observed
 def review_svg(reference: dict, width: int = 560, height: int = 420) -> str:
     """The reconstruction as inline SVG, for the side-by-side review."""
     from services import survey_graph

@@ -73,6 +73,8 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_database(app)
     _register_rate_limiter(app)
     _register_blueprints(app)
+    from services.runtime_observation import install as install_runtime_observation
+    install_runtime_observation(app)
     _register_csrf(app)
     _register_security_headers(app)
     _register_error_handlers(app)

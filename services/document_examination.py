@@ -27,6 +27,7 @@ Three things this deliberately does NOT do:
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 from pathlib import Path
 from typing import Any, Optional
 
@@ -241,33 +242,37 @@ def _decoded_record(workspace, source_id: str, content_type: str):
     return None
 
 
-def visual_reading(workspace, source_id: str):
+def visual_reading(workspace, source_id: str, *, store=None):
     """What GO SAW in this source, or None. The visual counterpart to
     `_recovered`, and read the same way: off the record, never recomputed."""
     from services import visual_examination as vx
 
     visual = _decoded_record(workspace, source_id, vx.VISUAL_CONTENT_TYPE)
+    if visual and store is None and (any(s.get("measurements") for s in (visual.get("graph") or {}).get("segments", []))
+            or any((visual.get("graph") or {}).get(key) for key in ("north_candidates","access_occurrences","height_datums"))):
+        from flask import current_app
+        from services.case_workspace import CaseWorkspaceStore
+        store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
     if visual and any(s.get("measurements") for s in (visual.get("graph") or {}).get("segments", [])):
         from flask import current_app
         from services.case_workspace import CaseWorkspaceStore
         from services.survey_graph import resolve_measurement_premises
-        store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
         resolve_measurement_premises(store, workspace, visual)
     if visual and (visual.get("graph") or {}).get("north_candidates"):
         from flask import current_app
         from services.case_workspace import CaseWorkspaceStore
         from services.survey_north import resolve_conversions
-        resolve_conversions(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
+        resolve_conversions(store, workspace, visual)
     if visual and (visual.get("graph") or {}).get("access_occurrences"):
         from flask import current_app
         from services.case_workspace import CaseWorkspaceStore
         from services.survey_graph import resolve_access_interpretations
-        resolve_access_interpretations(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
+        resolve_access_interpretations(store, workspace, visual)
     if visual and (visual.get("graph") or {}).get("height_datums"):
         from flask import current_app
         from services.case_workspace import CaseWorkspaceStore
         from services.height_datum_governance import resolve_height_datums
-        resolve_height_datums(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), workspace, visual)
+        resolve_height_datums(store, workspace, visual)
     return visual
 
 
@@ -730,7 +735,8 @@ def _calculated_geometry_lines(workspace, source_id):
                 "numeric_validity@1", "segment_projection@1", "polygon_region@1",
                 "semantic_binding@1", "wall_host@1", "vector_usability@1", "bounded_acos@1",
                 "homography_point@1", "homography_validation@1", "homography_inverse@1",
-                "homography_composition@1", "homography_line@1", "vanishing_direction@1", "horizon_residual@1"):
+                "homography_composition@1", "homography_line@1", "vanishing_direction@1", "horizon_residual@1",
+                    "monument_correspondence@1", "occupation_comparison@1", "control_homography@1", "relative_traverse@1"):
             continue
         field = record.get("field")
         label = {"height": "Height", "thickness": "Wall thickness",
@@ -738,7 +744,8 @@ def _calculated_geometry_lines(workspace, source_id):
                  "endpoint": "Segment endpoint", "polygon": "Polygon",
                  "wall": "Wall placement", "vector": "Direction vector", "domain": "Angle",
                  "transform": "Homography", "inverse": "Inverse transform", "composition": "Composed transform",
-                 "line": "Transformed line", "vanishing": "Projective direction", "horizon": "Horizon residual"}.get(field)
+                 "line": "Transformed line", "vanishing": "Projective direction", "horizon": "Horizon residual",
+                 "correspondence": "Monument correspondence", "occupation_offset": "Occupation offset", "traverse": "Qualified relative traverse"}.get(field)
         if not label:
             continue
         store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
@@ -746,6 +753,10 @@ def _calculated_geometry_lines(workspace, source_id):
         usable = governed["state"] in ("FINITE", "ESTABLISHED") and not governed["errors"]
         qualified = governed["state"] in ("PARTIALLY_RECOVERED", "WEAK")
         text = str(governed["value"]) if usable else label + " could not be established."
+        if usable and field in ("correspondence", "occupation_offset"):
+            text += " Identity/geometric comparison only; legal boundary authority is not established."
+        if usable and derivation.get("operator") == "control_homography@1":
+            text += " Calculated from identified controls; physical scale is not established."
         if qualified:
             text += (" The calculation remains uncertain." if governed["state"] == "WEAK"
                      else " The evidence is only partially recovered.")
@@ -759,6 +770,7 @@ def _calculated_geometry_lines(workspace, source_id):
     return rows
 
 
+@observed
 def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[str, Any]:
     """Everything the Document Examination Result page renders.
 

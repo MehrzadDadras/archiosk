@@ -59,6 +59,7 @@ link. Nothing is scored, nothing is tuned, and the abstention is structural.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import logging
 import re
 from typing import Optional
@@ -428,6 +429,7 @@ def discipline_of(token):
                                     DISCIPLINE_UNRESOLVED)
 
 
+@observed
 def sheet_identity_of(source, *, view=None):
     """What sheet this Source is, and which discipline - or honest absence.
 

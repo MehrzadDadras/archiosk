@@ -41,6 +41,7 @@ def route(tmp_path):
     workspace = store.get(fixture["fixture_id"])
     evidence_id = seen["review_trust"]["evidence_item_id"]
     model, _, _ = harness.candidate_for(fixture["inputs"])
+    model["project_name"] = "EVALUATION_INPUT - routing qualification"
     return store, workspace, evidence_id, model, tmp_path
 
 
@@ -97,7 +98,7 @@ def test_changed_review_blocks_previously_finite_result_after_reload(route, chan
     assert projected["value"] is None and projected["errors"]
     assert store.get_evidence_item(reloaded, evidence_id)["content"] == original
     with pytest.raises(IFCValidationError):
-        IFCVolumeValidator().export_evidence(model, store, reloaded, evidence_id)
+        IFCVolumeValidator().export_evidence(model, store, reloaded, evidence_id, evaluation=True)
     result, context, prose = context_for(route)
     assert any(row.get("evidence_item_id") == evidence_id for row in result["not_established"])
     assert "Height could not be established" in prose
@@ -116,7 +117,7 @@ def test_review_confirmation_never_upgrades_stored_weak_state(route, state):
     assert projected["value"] is None
     assert projected["record"]["state"] == state
     with pytest.raises(IFCValidationError):
-        IFCVolumeValidator().export_evidence(model, store, reloaded, row["id"])
+        IFCVolumeValidator().export_evidence(model, store, reloaded, row["id"], evaluation=True)
 
 
 @pytest.mark.parametrize("updates", [
@@ -130,7 +131,7 @@ def test_malformed_or_weakened_record_cannot_earn_export(route, updates):
     projected = store.project_geometry_evidence(store.get(workspace.project_id), row["id"])
     assert projected["value"] is None and projected["errors"]
     with pytest.raises(IFCValidationError):
-        IFCVolumeValidator().export_evidence(model, store, workspace, row["id"])
+        IFCVolumeValidator().export_evidence(model, store, workspace, row["id"], evaluation=True)
 
 
 def test_derived_premise_refusal_propagates_without_mutating_original(route):
@@ -142,14 +143,16 @@ def test_derived_premise_refusal_propagates_without_mutating_original(route):
     assert projected["value"] is None
     assert projected["record"]["state"] == "FINITE"
     with pytest.raises(IFCValidationError):
-        IFCVolumeValidator().export_evidence(model, store, workspace, downstream["id"])
+        IFCVolumeValidator().export_evidence(model, store, workspace, downstream["id"], evaluation=True)
 
 
 def test_positive_evidence_applies_real_value_without_mutating_candidate(route):
     store, workspace, evidence_id, model, _ = route
     model["spaces"][0]["height"] = 99
     original = copy.deepcopy(model)
-    output = IFCVolumeValidator().export_evidence(model, store, workspace, evidence_id)
+    model["project_name"] = "EVALUATION_INPUT - routing qualification"
+    original["project_name"] = model["project_name"]
+    output = IFCVolumeValidator().export_evidence(model, store, workspace, evidence_id, evaluation=True)
     assert "144.0" in output
     assert model == original
 
@@ -159,7 +162,7 @@ def test_ifc_target_context_must_match_evidence(route, key):
     store, workspace, evidence_id, model, _ = route
     model["spaces"][0]["geometry_context"][key] = "different"
     with pytest.raises(IFCValidationError) as caught:
-        IFCVolumeValidator().export_evidence(model, store, workspace, evidence_id)
+        IFCVolumeValidator().export_evidence(model, store, workspace, evidence_id, evaluation=True)
     assert caught.value.diagnostic["export_state"] == "IFC_BLOCKED_COORDINATE_SPACE"
 
 

@@ -744,15 +744,34 @@ def operational_flight_deck():
 def survey_evaluation():
     _require_developer_tools()
     from services import survey_evaluation as evaluation
+    from services import runtime_observation
     if request.method == 'POST':
+        if request.form.get('action') == 'observe':
+            session['survey_observe'] = request.form.get('enabled') == 'yes'
+            return redirect(url_for('portal.survey_evaluation'))
         try:
             identifier = evaluation.create(current_app, request.form.get('case', ''),
                 session.get('username', ''), request.form.get('matrix', ''))
         except (ValueError, TypeError) as error:
             abort(400, description=str(error))
         return redirect(url_for('portal.survey_evaluation_run', run_id=identifier))
+    registry = get_registry(current_app)
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    live_documents = []
+    for identifier in registry.list_ids():
+        workspace = store.get(identifier)
+        if not workspace or workspace.removed_at:
+            continue
+        document = registry.get(identifier)
+        endpoint = ('portal.document_shop_result' if _matches_listing_scope(workspace, LISTING_SCOPE_DOCUMENT_SHOP)
+                    else 'workspace.show_workspace')
+        live_documents.append(dict(name=workspace.display_title or document.filename,
+            url=url_for(endpoint, project_id=identifier), project_id=identifier, workspace=workspace,
+            sources=[dict(id=s['id'], name=s.get('name')) for s in workspace.sources if not s.get('removed_at')]))
+    selected_observation = runtime_observation.read(current_app, request.args.get('observation', ''))
     response = current_app.make_response(render_template('survey_evaluation.html',
-        cases=evaluation.CASES, runs=evaluation.recent(current_app), report=None))
+        cases=evaluation.CASES, runs=evaluation.recent(current_app), report=None,
+        observations=[selected_observation] if selected_observation else runtime_observation.recent(current_app), live_documents=live_documents))
     response.headers['Cache-Control'] = 'private, no-store'
     return response
 

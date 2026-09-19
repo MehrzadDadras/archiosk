@@ -309,7 +309,8 @@ class ConversationRouteTests(unittest.TestCase):
         self._ask(pid, "What does this require?")
         body = self.client.get("/document-shop/jobs/%s" % pid).get_data(as_text=True)
         self.assertIn("What does this require?", body)
-        self.assertIn("Here is what it says.", body)
+        self.assertIn("Source references and governed statements", body)
+        self.assertNotIn("Here is what it says.", body)
 
     def test_turns_survive_a_fresh_session(self):
         """A phone that sleeps and comes back must not lose the thread."""

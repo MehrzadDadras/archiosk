@@ -1,5 +1,17 @@
 # Spare Parts Yard — Components Parked from an Active Surface
 
+## Survey numeric-only IFC export
+
+Original public behavior: `IFCVolumeValidator.export` at `7be48db` allowed numeric
+geometry alone. Classification: **UNSAFE as canonical admission**; replaced by
+current evidence/authority/scale/coverage admission at the same entry point.
+The original serializer is **REQUIRED_FALLBACK as an internal serializer only**,
+named `export_numeric_diagnostic`; it remains used after governed admission and
+by explicitly labelled, isolated evaluation exports. It is not a competing
+canonical route. `compile_to_ifc` now forwards evidence admission parameters.
+Numeric qualification tests call the named diagnostic explicitly. No web route
+offers its direct result as customer/project authority.
+
 **Distinct from `deferred-reserved/reservations.md`** (gaps this project has
 never designed) **and from `specified-unbuilt/`** (concepts fully designed but
 never built). Everything named here was already built, working, tested code

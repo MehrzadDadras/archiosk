@@ -27,7 +27,7 @@ def room_model():
 
 
 def test_room_and_wall_export_to_ifc(room_model):
-    text = IFCVolumeValidator().export(room_model)
+    text = IFCVolumeValidator().export_numeric_diagnostic(room_model)
     assert text.startswith("ISO-10303-21;")
     assert "IFCPROJECT(" in text and "IFCSPACE(" in text
     assert "IFCWALLSTANDARDCASE(" in text and "IFCOPENINGELEMENT(" in text
@@ -35,7 +35,7 @@ def test_room_and_wall_export_to_ifc(room_model):
 
 
 def test_step_headers_relationships_and_coordinate_bounds(room_model):
-    text = IFCVolumeValidator().validate_and_export(room_model)
+    text = IFCVolumeValidator().export_numeric_diagnostic(room_model)
     assert "FILE_SCHEMA(('IFC4X3'));" in text
     assert "IFCRELAGGREGATES(" in text
     assert "IFCRELCONTAINEDINSPATIALSTRUCTURE(" in text
@@ -46,7 +46,7 @@ def test_step_headers_relationships_and_coordinate_bounds(room_model):
 def test_open_bounds_and_self_intersection_are_rejected(room_model):
     room_model["spaces"][0]["boundary_polygon_2d"].pop()
     with pytest.raises(IFCValidationError, match="closed"):
-        IFCVolumeValidator().export(room_model)
+        IFCVolumeValidator().export_numeric_diagnostic(room_model)
 
 
 @pytest.mark.parametrize("points,established", [
@@ -63,10 +63,10 @@ def test_rule7_closed_chain_must_establish_a_region_before_volume_export(room_mo
     """
     room_model["spaces"][0]["boundary_polygon_2d"] = [{"x": x, "y": y} for x, y in points]
     if established:
-        assert "IFCSPACE(" in IFCVolumeValidator().export(room_model)
+        assert "IFCSPACE(" in IFCVolumeValidator().export_numeric_diagnostic(room_model)
     else:
         with pytest.raises(IFCValidationError):
-            IFCVolumeValidator().export(room_model)
+            IFCVolumeValidator().export_numeric_diagnostic(room_model)
 
 
 @pytest.mark.parametrize("points,state", [
@@ -87,7 +87,7 @@ def test_polygon_states_keep_topology_separate_from_area(room_model, points, sta
     assert result["distance_tolerance"] == ToleranceContext().boundary_distance
     if state != "VALID_REGION":
         with pytest.raises(IFCValidationError):
-            IFCVolumeValidator().export(room_model)
+            IFCVolumeValidator().export_numeric_diagnostic(room_model)
 
 
 @pytest.mark.parametrize("mutation,error", [
@@ -114,7 +114,7 @@ def test_polygon_premises_cannot_be_promoted_by_area(room_model, mutation, error
         space.pop("geometry_context")
     assert polygon_region(space)["error"] == error
     with pytest.raises(IFCValidationError):
-        IFCVolumeValidator().export(room_model)
+        IFCVolumeValidator().export_numeric_diagnostic(room_model)
 
 
 @pytest.mark.parametrize("mutation", ["name_only", "edge_label", "uncertain_label", "contested_label", "wrong_plane"])
@@ -132,7 +132,7 @@ def test_valid_geometry_does_not_establish_semantic_identity(room_model, mutatio
     else:
         evidence["relation"]["plane_id"] = "sheet:2"
     with pytest.raises(IFCValidationError, match="semantic binding"):
-        IFCVolumeValidator().export(room_model)
+        IFCVolumeValidator().export_numeric_diagnostic(room_model)
 
 
 @pytest.mark.parametrize("field", ["space_height", "wall_thickness", "wall_endpoint", "wall_height",
@@ -166,7 +166,7 @@ def test_rule7_nonfinite_dimensions_cannot_earn_a_volume(room_model, field, valu
     import json
     before = json.dumps(room_model, sort_keys=True)
     with pytest.raises(IFCValidationError) as failure:
-        IFCVolumeValidator().export(room_model)
+        IFCVolumeValidator().export_numeric_diagnostic(room_model)
     diagnostic = failure.value.diagnostic
     assert diagnostic["numeric_state"] == "NON_FINITE"
     assert diagnostic["state"] == "UNRESOLVED"
@@ -196,7 +196,7 @@ def test_finite_inputs_with_nonfinite_derivation_are_refused(room_model, case):
     else:
         room_model["label_containment"][0]["relation"]["point"] = [1e308, 1e308]
     with pytest.raises(IFCValidationError) as failure:
-        IFCVolumeValidator().export(room_model)
+        IFCVolumeValidator().export_numeric_diagnostic(room_model)
     assert failure.value.diagnostic["stage"] == "derived"
     assert failure.value.diagnostic["source"] == room_model["source"]
 

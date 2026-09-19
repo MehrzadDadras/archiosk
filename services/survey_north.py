@@ -66,6 +66,7 @@ recorded here because they are easy to lose and expensive to rediscover:
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import io
 import logging
 import math
@@ -111,6 +112,7 @@ def propose_conversions(store, workspace, visual_evidence, graph):
             created_by="visual-worker", reason="Proposed North reference conversion")
 
 
+@observed
 def resolve_conversions(store, workspace, visual):
     import json
     evidence = {e["id"]: e for e in workspace.evidence_items}
@@ -174,6 +176,7 @@ def normalise_candidates(raw):
     return candidates
 
 
+@observed
 def resolve_true_north(graph):
     """Resolve typed, applicable, independently measured evidence without averaging."""
     from services import binding, survey_graph

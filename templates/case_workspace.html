@@ -18,6 +18,7 @@
    that template's own note. Nothing left to add here. #}
 
 {% block content %}
+{% if developer_mode %}{% include "_survey_operations.html" %}{% endif %}
 {# CLAUDE-P40-E3A: the full-width top bar and the Lists hierarchy both
    live in base.html now (application-shell level) - not here. See that
    template's own notes at .workspace-topbar and [data-tree-root]. #}

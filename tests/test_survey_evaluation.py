@@ -117,9 +117,9 @@ def test_existing_ask_go_rejects_provider_strengthening(evaluation_app,monkeypat
 def test_binding_qualification_reaches_drawing(evaluation_app):
     report=evaluation.inspect(evaluation_app,evaluation.create(evaluation_app,"survey","reviewer"))
     primitives=row(report,"Actual Survey Reference drawing")["value"]["primitives"]
-    computed=[p for p in primitives if p.get("provenance")==evaluation.sg.PROVENANCE_COMPUTED]
-    assert computed
-    assert all(not p["certain"] and "[BINDING PARTIALLY_RECOVERED]" in p["tags"] for p in computed)
+    qualified=[p for p in primitives if "[BINDING PARTIALLY_RECOVERED]" in p.get("tags", [])]
+    assert qualified
+    assert all(not p["certain"] and p["provenance"]==evaluation.sg.PROVENANCE_OBSERVED for p in qualified)
 
 
 @pytest.mark.parametrize("case,label,expected",[("access","Public access / not legal frontage","PRIMARY_PUBLIC_ACCESS"),

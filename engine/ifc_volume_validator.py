@@ -6,6 +6,7 @@ any STEP text is produced.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import math
 from typing import Any
 
@@ -116,6 +117,9 @@ def _segments_intersect(a, b, c, d):
             or (o3 == 0 and on_segment(c, a, d)) or (o4 == 0 and on_segment(c, b, d)))
 
 
+_DERIVED = object()
+
+
 class _Step:
     def __init__(self):
         self.entities: list[tuple[int, str, tuple[Any, ...]]] = []
@@ -137,6 +141,8 @@ class _Step:
 
     @staticmethod
     def value(value: Any) -> str:
+        if value is _DERIVED:
+            return "*"
         if value is None:
             return "$"
         if isinstance(value, bool):
@@ -271,7 +277,8 @@ def _semantic_binding_established(model, space):
 class IFCVolumeValidator:
     """Validate parametric spaces/walls and emit a minimal IFC4X3 STEP file."""
 
-    def export_evidence(self, model, store, workspace, evidence_item_id):
+    @observed
+    def export_evidence(self, model, store, workspace, evidence_item_id, *, evaluation=False):
         """Apply one scoped, governed result, then use the existing IFC gate.
 
         This adapter is for evidence-backed callers. Trust is re-read here;
@@ -281,6 +288,10 @@ class IFCVolumeValidator:
         import copy
         from engine.spatial_compiler import SpatialCompiler, SpatialCompilationError
 
+        if not evaluation:
+            return self.export(model, store=store, workspace=workspace, evidence_ids=[evidence_item_id])
+        if not model.get("project_name", "").startswith("EVALUATION_INPUT"):
+            raise IFCValidationError("Evaluation IFC must remain explicitly labelled EVALUATION_INPUT")
         governed = store.project_geometry_evidence(workspace, evidence_item_id)
         record = governed["record"]
         def refuse(errors, state=None):
@@ -345,7 +356,7 @@ class IFCVolumeValidator:
             owner["openings"][0]["offset"] = offset
         else:
             refuse(["PREMISE_UNESTABLISHED"])
-        return self.export(candidate)
+        return self.export_numeric_diagnostic(candidate)
 
     def validate(self, model: dict[str, Any]) -> None:
         if not isinstance(model, dict) or not isinstance(model.get("project_name"), str):
@@ -387,7 +398,8 @@ class IFCVolumeValidator:
                 if opening_height <= 0 or opening_height > height + 1e-9:
                     raise IFCValidationError(f"opening {opening.get('id')} exceeds wall height bounds")
 
-    def export(self, model: dict[str, Any]) -> str:
+    @observed
+    def export_numeric_diagnostic(self, model: dict[str, Any]) -> str:
         self.validate(model)
         step = _Step()
         origin = step.add("IFCCARTESIANPOINT", ((0.0, 0.0, 0.0),))
@@ -395,7 +407,8 @@ class IFCVolumeValidator:
         ref = step.add("IFCDIRECTION", ((1.0, 0.0, 0.0),))
         placement = step.add("IFCAXIS2PLACEMENT3D", (step.ref(origin), step.ref(axis), step.ref(ref)))
         context = step.add("IFCGEOMETRICREPRESENTATIONCONTEXT", "Model", 3, 1e-5, step.ref(origin), step.ref(axis), step.ref(ref))
-        units = step.add("IFCUNITASSIGNMENT", ())
+        length_unit = step.add("IFCSIUNIT", _DERIVED, ".LENGTHUNIT.", None, ".METRE.") if model.get("length_unit") == "METRE" else None
+        units = step.add("IFCUNITASSIGNMENT", (step.ref(length_unit),) if length_unit else ())
         project = step.add("IFCPROJECT", "ARCHIOSK-PROJECT", None, model["project_name"], None, None, None, (step.ref(context),), step.ref(units))
         site = step.add("IFCSITE", "ARCHIOSK-SITE", None, model["project_name"] + " Site", None, None, None, None, None, None, None, None, None, None)
         building = step.add("IFCBUILDING", "ARCHIOSK-BUILDING", None, model["project_name"], None, None, None, None, None, None, None, None, None, None)
@@ -432,5 +445,65 @@ class IFCVolumeValidator:
                 step.add("IFCRELVOIDSELEMENT", "REL-VOID-" + opening["id"], None, None, step.ref(wall_entity), step.ref(op))
         return step.render(model["project_name"])
 
-    def validate_and_export(self, model: dict[str, Any]) -> str:
-        return self.export(model)
+    @observed
+    def export(self, model, *, store=None, workspace=None, evidence_ids=()):
+        """Canonical output requires evidence for every numeric model field.
+
+        The former numeric-only serializer is retained explicitly as a diagnostic;
+        ordinary compiler/export callers cannot silently fall back to it.
+        """
+        self.validate(model)
+        def refuse(code):
+            raise IFCValidationError("Canonical IFC refused: " + code,
+                diagnostic={"state": "REFUSED", "errors": [code], "export_state": "IFC_BLOCKED_EVIDENCE"})
+        if store is None or workspace is None or not evidence_ids:
+            refuse("GOVERNED_EVIDENCE_REQUIRED")
+        if model.get("length_unit") != "METRE":
+            refuse("PHYSICAL_UNIT_UNESTABLISHED")
+        workspace = store.get(workspace.project_id)
+        if workspace is None:
+            refuse("PROJECT_UNAVAILABLE")
+        admitted = {}
+        for identifier in evidence_ids:
+            item = store.admit_proposition(workspace, identifier, use="canonical_ifc")
+            if not item["admissible"]:
+                refuse((item["errors"] or ["PREMISE_UNESTABLISHED"])[0])
+            record = item["record"]
+            source = store._find(workspace.sources, item["source_id"]) or {}
+            if source.get("document_authority") not in ("contractual", "project_agreement"):
+                refuse("SOURCE_AUTHORITY_UNESTABLISHED")
+            if record.get("geometry_level") != "METRIC_SCALED" or record.get("coordinate_space") != "WORLD_SCALED":
+                refuse("PHYSICAL_SCALE_UNESTABLISHED")
+            if record.get("length_unit") != model["length_unit"]:
+                refuse("PHYSICAL_UNIT_MISMATCH")
+            if (record.get("uncertainty") or {}).get("state") != "ESTABLISHED":
+                refuse("UNCERTAINTY_NOT_QUALIFIED")
+            key = (record.get("object_id"), record.get("field"))
+            if key in admitted:
+                refuse("AMBIGUOUS_EVIDENCE")
+            admitted[key] = item
+        def quantities(value, prefix=""):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key != "geometry_context":
+                        yield from quantities(child, prefix+"."+key if prefix else key)
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    yield from quantities(child, prefix+"."+str(index))
+            elif isinstance(value, (float, int)) and not isinstance(value, bool):
+                yield prefix, value
+        for collection in ("levels", "spaces", "walls"):
+            for owner in model.get(collection, []):
+                identifier = owner.get("id") or owner.get("name")
+                context = owner.get("geometry_context") or {}
+                if context.get("coordinate_space") != "WORLD_SCALED" or not context.get("plane_id"):
+                    refuse("SPACE_MISMATCH")
+                for field, value in quantities(owner):
+                    item = admitted.get((identifier, field))
+                    if (not item or item.get("value") != value
+                            or item["record"].get("plane_id") != context["plane_id"]):
+                        refuse("MODEL_PREMISE_COVERAGE_UNESTABLISHED")
+        return self.export_numeric_diagnostic(model)
+
+    def validate_and_export(self, model: dict[str, Any], **admission) -> str:
+        return self.export(model, **admission)

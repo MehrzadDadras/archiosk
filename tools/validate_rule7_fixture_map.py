@@ -196,7 +196,8 @@ def run_fixture(fixture, directory):
         seen["review_trust"] = governed
         exported = None
         try:
-            exported = IFCVolumeValidator().export_evidence(model, reloaded_store, reloaded, evidence["id"])
+            model["project_name"] = "EVALUATION_INPUT - Rule 7 qualification"
+            exported = IFCVolumeValidator().export_evidence(model, reloaded_store, reloaded, evidence["id"], evaluation=True)
             transform = dict(retained)
             ifc = {"export_state": "IFC_EXPORTABLE", "errors": [], "text": exported}
         except IFCValidationError as error:

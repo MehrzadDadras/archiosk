@@ -57,6 +57,7 @@ therefore tell which text the model actually saw, and where it came from.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import hashlib
 import json
 import logging
@@ -118,6 +119,7 @@ def visual_store(registry_store_path) -> "perception_jobs.PerceptionJobStore":
                                               subdir=VISUAL_JOBS_SUBDIR)
 
 
+@observed
 def enqueue_for_source(jobs, *, workspace_id: str, source_id: str,
                        source_sha256: str, source_name: str = "",
                        intake_order: Optional[int] = None) -> dict:
@@ -386,6 +388,7 @@ def _local_spatial_digest(source: dict) -> str:
     return sheet_vision.build_egress_digest(geometry)
 
 
+@observed
 def examine_source(app, jobs, job: dict, *, store=None, governance_log=None) -> dict:
     """Run visual examination for one job. NEVER RAISES.
 

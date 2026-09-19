@@ -4,11 +4,20 @@
 {% block content %}
 <main class="survey-evaluation">
 <header><p>Admin · Developer Mode</p><h1>Survey Evaluation</h1>
-<p><strong class="se-state se-EVALUATION_INPUT">EVALUATION_INPUT</strong> Controlled evidence, isolated from customer projects. Nothing here certifies a survey or changes customer authority.</p>
-<p>Survey graph premises and matrices are explicitly supplied evaluation inputs. Title-block recovery and arrow measurement run against the retained source pixels. No automatic survey extraction or homography estimation is implied.</p>
+<p>Inspect ordinary project execution or run clearly isolated <strong class="se-state se-EVALUATION_INPUT">EVALUATION_INPUT</strong> cases. An observation grants no authority and certifies no survey.</p>
+<p>Controlled cases supply labelled premises. The earned-H operation calculates a transform from addressed correspondence evidence; it does not extract controls automatically or establish physical scale.</p>
 <nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav></header>
 <ol class="se-sequence"><li>SITUATE</li><li>BIND</li><li>COMPARE</li><li>REASON</li><li>GOVERN</li><li>CONSUME</li><li>SURFACE</li></ol>
 {% if not report %}
+<section><h2>Observe real execution</h2>
+<p>LIVE PROJECT EXECUTION opens the ordinary project/document route. Observations record calls that actually execute; they do not re-run a resolver or grant authority. Controlled cases remain isolated below.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="observe"><input type="hidden" name="enabled" value="{{ 'no' if session.get('survey_observe') else 'yes' }}"><button>{{ 'Stop observing my requests' if session.get('survey_observe') else 'Observe my real requests' }}</button></form>
+<p>Open a document, use its existing Ask GO or Survey Reference controls, then return here to inspect the recorded execution.</p>
+{% for doc in live_documents|default([]) %}<details><summary><a href="{{ doc.url }}">{{ doc.name }}</a> · LIVE PROJECT EXECUTION</summary><p>Project {{ doc.project_id }}</p>{% for source in doc.sources %}<p>{{ source.name }} · {{ source.id }}</p>{% endfor %}{% with workspace=doc.workspace %}{% include "_survey_operations.html" %}{% endwith %}</details>{% else %}<p>No eligible live project is available to this administrator.</p>{% endfor %}
+</section>
+<section><h2>Actual request observations</h2><p>TRACE ≠ EVIDENCE. Provider input/output may include source text; this inspection is restricted to administrators in Developer Mode.</p>
+{% for trace in observations|default([]) %}<details><summary>{{ trace.request.method }} {{ trace.request.path }} · {{ trace.id }}</summary><p>Request actor: {{ trace.actor }} ? <a href="{{ url_for('portal.survey_evaluation',observation=trace.id) }}">Open this execution</a></p>{% if trace.truncated|default(false) %}<p>Trace reached its recording limit; it is incomplete.</p>{% endif %}
+{% for event in trace.events %}<article class="runtime-event" data-owner="{{ event.owner }}" data-phase="{{ event.phase }}"><h3>{{ event.sequence }} · {{ event.owner }} · {{ event.phase }}</h3><pre>{{ event|tojson(indent=2) }}</pre></article>{% endfor %}</details>{% else %}<p>No observed invocation yet. Enable observation and perform a real request.</p>{% endfor %}</section>
 <section><h2>Run an actual Survey case</h2><p>Uses the current Survey operators, EvidenceItems, relationships, persistence and ordinary consumer services. Review is a separate human action.</p>
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label for="case">Case</label><select id="case" name="case"><optgroup label="Professional Survey cases">{% for key,label in cases.items() if not key.startswith('control:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup><optgroup label="All 34 Rule 7 controls">{% for key,label in cases.items() if key.startswith('control:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup></select>

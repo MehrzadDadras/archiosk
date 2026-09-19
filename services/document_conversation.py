@@ -28,6 +28,7 @@ is reading order, never layout.
 """
 from __future__ import annotations
 
+from services.runtime_observation import observed
 import time
 from typing import Any, Optional
 
@@ -189,6 +190,7 @@ def _evidence_text(workspace, source_id: str) -> str:
     return (recovered.get("preview") or "")[:MAX_EVIDENCE_CHARS], recovered
 
 
+@observed
 def build_context(document, workspace, result: dict, question: str) -> dict[str, Any]:
     """EXACTLY what leaves this host, assembled in one place so it can be read.
 
@@ -225,6 +227,11 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
     visual_recovered, visual_partial, visual_unresolved = dx._visual_lines(visual)
     from services import survey_north, height_datum_governance
     north = survey_north.resolve_true_north((visual or {}).get("graph") or {})
+    from services.case_workspace import CaseWorkspaceStore
+    from flask import current_app, has_app_context
+    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]) if has_app_context() else None
+    admission = [store.admit_proposition(workspace, item["id"]) for item in workspace.evidence_items
+                 if item.get("source_id") == source_id] if store else []
 
     return {
         # identity of THIS document only - never the container id, never a path
@@ -249,6 +256,11 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
         "not_established": _lines("not_established"),
         # the recovered text, and HOW it was recovered
         "recovered_text": evidence,
+        "recovered_text_admission": "SOURCE_REFERENCE; source says, not an established project proposition",
+        "proposition_admission": [dict(state=item["state"], admissible=item["admissible"],
+            authority=item["authority"], currentness=(item.get("currentness") or {}).get("status"),
+            evaluation_only=item["evaluation_only"], proposition=item.get("record", {}).get("field", "Source material"))
+            for item in admission],
         "text_was_read_from_the_image": bool(recovered.get("was_recovered")),
         "read_by": recovered.get("read_by") or [],
         "history": history,
@@ -298,13 +310,16 @@ def render_prompt(context: dict[str, Any]) -> str:
                           % (context.get("survey_reference_note") or ""))
         parts.append("\n".join(visual))
     parts.append("EXAMINATION RESULT (%s)" % context["state"])
+    if context.get("proposition_admission"):
+        import json
+        parts.append("GOVERNED PROPOSITION ADMISSION:\n" + json.dumps(context["proposition_admission"]))
     for label, key in (("Established from the file", "established"),
                        ("GO's reading", "interpretation"),
                        ("Not established", "not_established")):
         if context[key]:
             parts.append("%s:\n%s" % (label, "\n".join("- " + x for x in context[key])))
     if context["recovered_text"]:
-        parts.append("TEXT RECOVERED FROM THIS DOCUMENT:\n%s" % context["recovered_text"])
+        parts.append("SOURCE REFERENCE ONLY - text recovered from this document, not an established project proposition:\n%s" % context["recovered_text"])
     else:
         parts.append("No text was recovered from this document.")
     if context["history"]:
@@ -333,6 +348,7 @@ def _failure_message(parse_status) -> str:
     return UNAVAILABLE_MESSAGE
 
 
+@observed
 def ask(document, workspace, result: dict, question: str, *, app, evaluation_guard=False) -> dict[str, Any]:
     """One question, one answer. Returns {"ok", "answer", "reason"}.
 
@@ -348,7 +364,8 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
         return {"ok": False, "answer": NOT_CONFIGURED_MESSAGE,
                 "reason": "no_api_key"}
 
-    context = build_context(document, workspace, result, question)
+    with app.app_context():
+        context = build_context(document, workspace, result, question)
     outcome = llm_gateway.call_llm_json(
         user_prompt=render_prompt(context),
         system_prompt=SYSTEM_PROMPT,
@@ -376,19 +393,20 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
     governed_geometry = any(row.get("evidence_item_id") and row.get("derivation_record")
                             for group in ("interpretation", "not_established")
                             for row in result.get(group, []))
-    if evaluation_guard or governed_geometry:
-        # The existing Ask GO call remains inspectable, but free prose cannot
-        # upgrade evaluation evidence. Admission uses the actual examination
-        # statements; the provider's proposal is never issued as a finding.
-        admitted = ["EVALUATION INPUT — not project authority or a certified survey." if evaluation_guard
-                    else "Governed geometric evidence — not a certified survey conclusion."]
-        for group, heading in (("interpretation", "Qualified reading"), ("not_established", "Not established")):
-            for row in result.get(group, []):
-                admitted.append("%s — %s: %s" % (heading, row["label"], row["value"]))
-        return {"ok": True, "answer": "\n".join(admitted), "reason": "evaluation_governed_admission" if evaluation_guard else "governed_geometry_admission",
-                "proposed_answer": answer, "qualification_preserved": True,
-                "admission": "Deterministic examination statements; provider proposal not admitted as authority"}
-    return {"ok": True, "answer": answer, "reason": None}
+    # The existing Ask GO call remains inspectable, but free prose cannot
+    # upgrade evaluation evidence. Admission uses the actual examination
+    # statements; the provider's proposal is never issued as a finding.
+    admitted = ["EVALUATION INPUT — not project authority or a certified survey." if evaluation_guard
+                else "Source references and governed statements; not professional certification."]
+    for group, heading in (("interpretation", "Qualified reading"), ("not_established", "Not established")):
+        for row in result.get(group, []):
+            admitted.append("%s — %s: %s" % (heading, row["label"], row["value"]))
+    if context.get("recovered_text"):
+        admitted.append("Source text (quotation only; binding and authority are not established):\n" + context["recovered_text"])
+    return {"ok": True, "answer": "\n".join(admitted), "reason": "evaluation_governed_admission" if evaluation_guard else "governed_geometry_admission" if governed_geometry else "source_reference_admission",
+            "proposed_answer": answer, "qualification_preserved": True,
+            "admission": "Deterministic examination statements; provider proposal not admitted as authority"}
+
 
 
 # How many times a conversation turn will re-read and re-apply before it gives

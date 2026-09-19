@@ -22,6 +22,12 @@ from services import survey_graph as sg, survey_reference as sr, visual_examinat
 from services.survey_evaluation_geometry import evaluation_controls
 
 CASES = {
+    "traverse": "Calculated relative traverse retains qualified premises",
+    "monument": "Declared monument correspondence, not legal authority",
+    "missing-monument": "Expected monument absent: no invented replacement",
+    "occupation": "Observed fence versus record line: geometric difference only",
+    "earned-h": "Calculated H from four addressed correspondence premises",
+    "degenerate-controls": "Collinear control points: rectification refused",
     "survey": "Situated parcel, building and qualified dimensions",
     "unreadable": "Unreadable title block: the view must survive",
     "binding": "Readable dimension, missing binding",
@@ -48,13 +54,12 @@ CASES = {
     "non-finite": "Non-finite height: governed IFC refusal",
     "projection": "Finite segment projection",
     "polygon": "Invalid polygon refusal",
-    "missing-primitives": "Missing monument / occupation / rectification capabilities",
+    "missing-primitives": "Remaining limits: automatic controls and professional certification",
 }
 CONTROLS=evaluation_controls()
 CASES.update({"control:"+key:"Rule 7 control: "+key+" / "+value["category"] for key,value in CONTROLS.items()})
 H_CASES = {"homography", "no-h", "singular", "ill-conditioned", "infinity", "space-mismatch", "projective"}
-UNIMPLEMENTED = ["Qualified monument correspondence", "Occupation-versus-record reconciliation",
-                 "Earned rectification estimation / automatic homography producer"]
+UNIMPLEMENTED = ["Automatic control-point extraction and professional/legal certification"]
 
 
 def root(app):
@@ -190,6 +195,8 @@ def create(app, case, actor, matrix_text=""):
     source.update(file_path=str(path/"source.pdf"), evaluation_only=True)
     store.save(workspace)
     raw=_source_pdf(path,case)
+    source["file_hash"] = hashlib.sha256(raw).hexdigest()
+    store.save(workspace)
     store.register_pdf_page_structure(workspace,source["id"],["EVALUATION_INPUT\n\n100 m annotation; binding is not established."])
     from services import drawing_segmentation, sheet_identity, height_datum_governance as hd
     if case in ("survey", "unreadable"):
@@ -252,8 +259,52 @@ def create(app, case, actor, matrix_text=""):
         record["supersession_proposals"]=package_muscles.register_supersessions(store,workspace,newer["id"],actor=actor)
     if case in H_CASES or case in ("non-finite","projection","polygon") or case.startswith("control:"):
         _geometry(store,workspace,record,path)
+    if case in ("monument", "missing-monument", "occupation", "earned-h", "degenerate-controls", "traverse"):
+        _survey_operation(store, workspace, record)
     _save(path,record)
     return run_id
+
+
+def _survey_operation(store, workspace, record):
+    """Controlled premises only; domain implementation is the project resolver."""
+    source_id = workspace.sources[0]["id"]
+    unit = next(u for u in workspace.structural_units if u["source_id"] == source_id)
+    region = store.create_addressable_region(workspace, unit["id"], "drawing_region", {"object_id":"survey-object"})
+    common = dict(read_certainty="RECOVERED", bind_certainty="RECOVERED", bind_basis="declared",
+        subject_id="evaluation-parcel",
+        coordinate_space="EUCLIDEAN_RECTIFIED", plane_id="survey-plane", geometry_level="EUCLIDEAN",
+        evaluation_only=True, provenance="EVALUATION_INPUT; declared controlled correspondence")
+    case = record["case"]
+    if case == "traverse":
+        evidence=sg.derive_survey_operation(store,workspace,source_id=source_id,region_id=region["id"],object_id="survey-object",
+            operation="traverse",premise_ids=[record["visual_id"]],actor=record["actor"])
+        record["operation_evidence_id"]=evidence["id"]
+        return
+    if case in ("monument", "missing-monument"):
+        operation="monument"
+        inputs=[dict(survey_role="recorded_monument",monument_id="M1",record_corner_id="C1",point=[0,0]),
+                dict(survey_role="found_monument" if case=="monument" else "missing_monument",monument_id="M1",record_corner_id="C1",point=[0,.1])]
+    elif case=="occupation":
+        operation="occupation"
+        inputs=[dict(survey_role="record_boundary",segment=[[0,0],[10,0]]),
+                dict(survey_role="observed_occupation",point=[2,.5])]
+    else:
+        operation="rectification"
+        points=[[0,0],[2,0],[2,1],[0,1]] if case=="earned-h" else [[0,0],[1,0],[2,0],[3,0]]
+        target_points=[[0,0],[1,0],[1,1],[0,1]]
+        frame = store.register_evidence_item(workspace,source_id,"direct_source_evidence",
+            json.dumps(dict(common,survey_role="affine_control_frame",frame_id="affine-control-frame",
+                controls={str(i):p for i,p in enumerate(target_points)})),"application/json",region_id=region["id"],actor=record["actor"])
+        common.update(coordinate_space="SOURCE_PIXELS",geometry_level="PROJECTIVE")
+        inputs=[dict(survey_role="control_correspondence",control_id=str(i),point=p,target_point=q,
+            target_frame_evidence_id=frame["id"],
+            image_source_id=source_id,target_frame_id="affine-control-frame",target_frame_level="AFFINE",target_space="AFFINE_RECTIFIED")
+            for i,(p,q) in enumerate(zip(points,target_points))]
+    premises=[store.register_evidence_item(workspace,source_id,"direct_source_evidence",json.dumps(dict(common,**item)),
+        "application/json",region_id=region["id"],actor=record["actor"])["id"] for item in inputs]
+    evidence=sg.derive_survey_operation(store,workspace,source_id=source_id,region_id=region["id"],object_id="survey-object",
+        operation=operation,premise_ids=premises,actor=record["actor"])
+    record["operation_evidence_id"]=evidence["id"]
 
 
 def _geometry(store,workspace,record,path):
@@ -388,6 +439,9 @@ def inspect(app,run_id):
         surfaced="Computed/observed provenance and qualified placeholders; inspect actual primitives below.",status="INTENTIONALLY SURFACED"),
         dict(boundary="Raw text → Ask GO",governed="Observation is not authority",received=context["recovered_text"],
         surfaced="Evaluation answer admission preserves deterministic statements; provider text is inspectable but not authoritative.",status="GUARDED EVALUATION CONSUMER")]
+    if record.get("operation_evidence_id"):
+        admission = store.admit_proposition(workspace, record["operation_evidence_id"])
+        add("GOVERN", "Survey operation after review/reload", "CaseWorkspaceStore.admit_proposition", admission["state"], admission)
     if record.get("geometry_evidence_id"):
         from engine.ifc_volume_validator import IFCVolumeValidator, IFCValidationError
         from services.survey_evaluation_geometry import candidate_for
@@ -395,7 +449,7 @@ def inspect(app,run_id):
         model["project_name"]="EVALUATION_INPUT - NOT CUSTOMER AUTHORITY - " + run_id
         governed=store.project_geometry_evidence(workspace,record["geometry_evidence_id"])
         add("GOVERN","Calculated evidence after persistence/reload","project_geometry_evidence",governed["state"],governed)
-        for name,call in (("governed",lambda:IFCVolumeValidator().export_evidence(model,store,workspace,record["geometry_evidence_id"])),
+        for name,call in (("governed",lambda:IFCVolumeValidator().export_evidence(model,store,workspace,record["geometry_evidence_id"],evaluation=True)),
                           ("direct",lambda:IFCVolumeValidator().export(model))):
             try:
                 output=call(); status="IFC_EXPORTABLE"; detail={"state":status,"bytes":len(output)}
@@ -403,7 +457,7 @@ def inspect(app,run_id):
             except IFCValidationError as error:
                 status="REFUSED";detail={"state":status,"diagnostic":error.diagnostic,"reason":str(error)}
             add("CONSUME",name.capitalize()+" IFC path","IFCVolumeValidator."+("export_evidence" if name=="governed" else "export"),status,detail)
-        discrepancies.append(dict(boundary="Direct IFC vs governed IFC",governed=governed["state"],received=rows[-1]["value"],surfaced="Direct diagnostic only; only governed IFC can be downloaded.",status="BYPASS CONTAINED IN EVALUATION"))
+        discrepancies.append(dict(boundary="Direct IFC vs governed IFC",governed=governed["state"],received=rows[-1]["value"],surfaced="Direct diagnostic only; only governed IFC can be downloaded.",status="DIRECT CANONICAL PATH NOW REQUIRES EVIDENCE"))
     for name,output in record.get("kernel",{}).items():
         add("REASON","Projective kernel: "+name,output.get("operator",name) if output else name,output.get("state") if output else "UNRESOLVED",output)
     for name, identifier in record.get("kernel_evidence",{}).items():
