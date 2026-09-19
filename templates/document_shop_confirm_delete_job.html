@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Delete job — Document Shop{% endblock %}
+{% block content %}
+<h1 class="np-page-title">Delete this job?</h1>
+<p>{{ name }}</p>
+{% if decision.state == 'BLOCK_DELETE' %}
+<p role="alert">{{ decision.reason }}</p>
+{% else %}
+<p>It will disappear from your documents and active lists.
+{% if decision.state == 'SAFE_TO_ERASE' %}This analysis and its private documents and results will be permanently erased. Shared material belonging to other cases will be preserved.
+{% else %}Retained content will be preserved through governed removal.{% endif %}</p>
+<form method="post" action="{{ url_for('portal.document_shop_delete_job', project_id=project_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="confirm" value="yes">
+    <button class="btn btn-primary" type="submit" data-ui-ref="document-shop.job-delete.confirm">Delete it</button>
+</form>
+{% endif %}
+<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">Back to my documents</a>
+{% endblock %}

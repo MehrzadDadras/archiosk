@@ -113,13 +113,21 @@ class GovernanceLog:
             correlation_id=correlation_id,
         )
 
-        with self._path_for(project_id).open("a", encoding="utf-8") as f:
-            f.write(json.dumps(asdict(event)) + "\n")
+        from contextlib import nullcontext
+        from services.requirements_registry import RequirementsRegistry
+        registry = RequirementsRegistry(self.store_path)
+        with registry.lifecycle_lock(project_id) if project_id else nullcontext():
+            path = self._path_for(project_id)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(asdict(event)) + "\n")
 
         return event
 
     def read(self, project_id: str) -> list[GovernanceEvent]:
         """All events for a project, in append (chronological) order."""
+        from services.requirements_registry import RequirementsRegistry
+        if project_id and RequirementsRegistry(self.store_path).is_deleted(project_id):
+            return []
         path = self._path_for(project_id)
         if not path.exists():
             return []

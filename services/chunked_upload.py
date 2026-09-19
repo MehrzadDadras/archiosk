@@ -158,6 +158,16 @@ class ChunkedUploadStore:
 
     def save_chunk(self, project_id: str, upload_id: str, chunk_index,
                    total_chunks, filename: str, data: bytes) -> dict:
+        if not project_id:
+            raise ChunkedUploadError("project is required")
+        from services.requirements_registry import RequirementsRegistry
+        registry = RequirementsRegistry(self.dir.parent)
+        with registry.lifecycle_lock(project_id):
+            registry.require_live(project_id)
+            return self._save_live_chunk(project_id, upload_id, chunk_index, total_chunks, filename, data)
+
+    def _save_live_chunk(self, project_id: str, upload_id: str, chunk_index,
+                         total_chunks, filename: str, data: bytes) -> dict:
         """Persist one chunk. Returns {received, total}."""
         if not project_id:
             raise ChunkedUploadError("project is required")
@@ -217,6 +227,13 @@ class ChunkedUploadStore:
 
     def assemble(self, project_id: str, upload_id: str, filename: str,
                  total_chunks, destination: Path, max_total_bytes: int) -> dict:
+        from services.requirements_registry import RequirementsRegistry
+        registry = RequirementsRegistry(self.dir.parent)
+        with registry.lifecycle_lock(project_id):
+            registry.require_live(project_id)
+            return self._assemble_live(project_id, upload_id, filename, total_chunks, destination, max_total_bytes)
+
+    def _assemble_live(self, project_id, upload_id, filename, total_chunks, destination, max_total_bytes):
         """Stream the parts into `destination`. Returns {sha256, size_bytes}.
 
         Streamed rather than concatenated in memory: the entire point is files

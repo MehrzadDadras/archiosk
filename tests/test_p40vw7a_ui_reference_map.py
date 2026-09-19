@@ -123,6 +123,7 @@ _PLANNING_ZONING_RESULT_HTML_PATH = (
     _REPO_ROOT / "templates" / "planning_zoning_result.html")
 _DOCUMENT_SHOP_JOBS_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_jobs.html"
 _DOCUMENT_SHOP_RESULT_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_result.html"
+_DOCUMENT_SHOP_DELETE_JOB_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_confirm_delete_job.html"
 # CLAUDE-SURVEY-REFERENCE-03: the delete confirmation. Joining the scan in the
 # same commit that introduces it, which is the discipline the comments above
 # record - and which caught this exact omission: thirteen registry rows were
@@ -322,7 +323,7 @@ def _all_template_refs() -> set[str]:
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
         _DIAGNOSTICS_HTML_PATH, _DEVELOPER_TOOLS_HTML_PATH,
         _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
-        _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH,
+        _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH, _DOCUMENT_SHOP_DELETE_JOB_HTML_PATH,
         _DOCUMENT_SHOP_CONFIRM_REMOVE_HTML_PATH,
         _PLANNING_ZONING_HTML_PATH, _PLANNING_ZONING_RESULT_HTML_PATH,
     ):

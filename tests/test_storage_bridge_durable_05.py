@@ -96,6 +96,42 @@ class AnyWorkerSeesWhatAnotherWrote(_Queue):
 
 
 class ClaimingIsAtomicAcrossRealProcesses(_Queue):
+    def test_committed_claim_retries_retiring_a_pending_file_held_by_a_reader(self):
+        from unittest.mock import patch
+        record = self.queue.enqueue(_PROJECT, "drawings/A-101.pdf", PURPOSE_REGISTER_SOURCE)
+        pending = self.queue.root / "pending" / (record["id"] + ".json")
+        unlink = Path.unlink
+        attempts = []
+        def held_once(path, *args, **kwargs):
+            if path == pending:
+                attempts.append(path)
+                if len(attempts) == 1:
+                    raise PermissionError("simulated Windows sharing violation")
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, "unlink", held_once), patch("services.bridge_queue.time.sleep"):
+            claimed = self.queue.claim_pending(_PROJECT)
+        self.assertEqual([item["id"] for item in claimed], [record["id"]])
+        self.assertEqual(len(attempts), 2)
+        self.assertFalse(pending.exists())
+        self.assertEqual(self.queue.claim_pending(_PROJECT), [])
+
+    def test_persistent_cleanup_fault_is_not_reported_as_success(self):
+        from unittest.mock import patch
+        record = self.queue.enqueue(_PROJECT, "drawings/A-101.pdf", PURPOSE_REGISTER_SOURCE)
+        pending = self.queue.root / "pending" / (record["id"] + ".json")
+        unlink = Path.unlink
+        def denied(path, *args, **kwargs):
+            if path == pending:
+                raise PermissionError("persistent filesystem fault")
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, "unlink", denied), patch("services.bridge_queue.time.sleep") as sleep:
+            with self.assertRaises(PermissionError):
+                self.queue.claim_pending(_PROJECT)
+        self.assertEqual(sleep.call_count, 19)
+        self.assertTrue(pending.exists())
+        self.assertEqual([item["id"] for item in self.queue.claimed_for(_PROJECT)], [record["id"]])
+        self.assertEqual(self.queue.claim_pending(_PROJECT), [])
+
     def test_exactly_one_of_four_processes_wins_a_single_request(self):
         record = self.queue.enqueue(_PROJECT, "drawings/A-101.pdf", PURPOSE_REGISTER_SOURCE)
         results = multiprocessing.Queue()

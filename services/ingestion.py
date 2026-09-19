@@ -1131,7 +1131,6 @@ def attach_document_shop_sources(app, workspace, files, *, owner: str,
     limit = app.config.get("MAX_CONTENT_LENGTH") or 0
 
     sources_dir = Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / workspace.project_id
-    sources_dir.mkdir(parents=True, exist_ok=True)
 
     results: list[dict] = []
     order = starting_order
@@ -1194,7 +1193,11 @@ def attach_document_shop_sources(app, workspace, files, *, owner: str,
         try:
             stored_path = sources_dir / ("%s_%s" % (uuid.uuid4().hex,
                                                     secure_filename(filename)))
-            stored_path.write_bytes(raw_bytes)
+            registry = RequirementsRegistry(app.config["REGISTRY_STORE_PATH"])
+            with registry.lifecycle_lock(workspace.project_id):
+                registry.require_live(workspace.project_id)
+                sources_dir.mkdir(parents=True, exist_ok=True)
+                stored_path.write_bytes(raw_bytes)
         except Exception as exc:
             # One storage failure must not take its siblings with it.
             results.append({"filename": filename, "status": "rejected",
@@ -1822,6 +1825,12 @@ class PendingReconcileStore:
         self, project_id: str, report: dict, new_eligible_files: list[tuple[str, str, bytes]],
         actor: Optional[str], role: Optional[str],
     ) -> str:
+        registry = RequirementsRegistry(self.dir.parent)
+        with registry.lifecycle_lock(project_id):
+            registry.require_live(project_id)
+            return self._create_live(project_id, report, new_eligible_files, actor, role)
+
+    def _create_live(self, project_id, report, new_eligible_files, actor, role):
         self._sweep_expired()
         staging_id = uuid.uuid4().hex
         staged_dir = self.dir / staging_id

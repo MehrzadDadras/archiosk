@@ -178,7 +178,7 @@ def _accessible_documents(registry, store, include_removed: bool = False,
             allowed = can_access_project(workspace, username, admin)
             removed = bool(workspace.removed_at)
             in_scope = _matches_listing_scope(workspace, scope)
-        except TypeError:
+        except (TypeError, CaseWorkspaceError):
             allowed = False
             removed = False
             in_scope = False
@@ -2147,7 +2147,9 @@ def delete_project(project_id):
     # session always passes this gate -- kept here anyway for defense in
     # depth and consistency with every other project-scoped route, not
     # because a non-admin could otherwise reach this route at all.
-    _require_project_access_or_404(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
+    workspace = _require_project_access_or_404(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
+    if workspace.container_state == CONTAINER_STATE_BLACK_BOX:
+        return document_shop_delete_job(project_id)
 
     confirm = request.form.get('confirm')
     if confirm == 'no':
@@ -3321,6 +3323,7 @@ def document_shop_jobs():
             document, workspace,
             display_name=_document_display_name(document, store),
             project_id=document.project_id, jobs=job_store))
+        jobs[-1]['can_delete'] = workspace.owner == session.get('username') or is_admin()
     # The intake call-to-action renders only for an account that could
     # actually use it - a button that answers 403 is a worse surface than
     # no button.
@@ -3473,6 +3476,29 @@ def document_shop_status(project_id):
         pending=result['pending'],
         done=not result['pending'],
     )
+
+
+@portal_bp.route('/document-shop/jobs/<project_id>/delete', methods=['POST'])
+@login_required
+@limiter.limit("30 per hour")
+def document_shop_delete_job(project_id):
+    document, store, workspace = _document_shop_workspace_or_404(project_id)
+    if session.get('username') != workspace.owner and not is_admin():
+        abort(403)
+    decision = store.document_shop_deletion_state(workspace)
+    if request.form.get('confirm') != 'yes':
+        return render_template('document_shop_confirm_delete_job.html',
+            project_id=project_id, name=workspace.display_title or document.filename,
+            decision=decision)
+    try:
+        store.delete_document_shop_job(workspace, actor=session.get('username', ''),
+            actor_role=session.get('role') or '', governance_log=get_governance_log(current_app))
+    except CaseWorkspaceError as exc:
+        return render_template('document_shop_confirm_delete_job.html',
+            project_id=project_id, name=workspace.display_title or document.filename,
+            decision=dict(state='BLOCK_DELETE', reason=str(exc))), 409
+    flash('Job deleted.', 'success')
+    return redirect(url_for('portal.document_shop_jobs'), code=303)
 
 
 @portal_bp.route('/document-shop/jobs/<project_id>/sources/<source_id>/remove',

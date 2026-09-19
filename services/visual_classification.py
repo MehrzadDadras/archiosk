@@ -737,11 +737,15 @@ def _build_survey_reference(app, store, job, visual, governance_log, *,
     sources_dir = (Path(app.config["REGISTRY_STORE_PATH"]) / "workspace_sources"
                    / job["workspace_id"])
     try:
-        sources_dir.mkdir(parents=True, exist_ok=True)
-        artifact_path = sources_dir / ("%s_%s" % (uuid.uuid4().hex,
-                                                  secure_filename(artifact_name)))
-        artifact_path.write_bytes(pdf_bytes)
-    except OSError as exc:
+        from services.requirements_registry import RequirementsRegistry
+        registry = RequirementsRegistry(app.config["REGISTRY_STORE_PATH"])
+        with registry.lifecycle_lock(job["workspace_id"]):
+            registry.require_live(job["workspace_id"])
+            sources_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = sources_dir / ("%s_%s" % (uuid.uuid4().hex,
+                                                      secure_filename(artifact_name)))
+            artifact_path.write_bytes(pdf_bytes)
+    except (OSError, ValueError) as exc:
         logger.warning("survey reference could not be stored for %s (%s)",
                        job["source_id"], exc)
         return None

@@ -454,6 +454,11 @@ def get_csp_nonce() -> str:
 def _register_security_headers(app: Flask) -> None:
     @app.after_request
     def set_csp_header(response):
+        from flask import session
+        # Authenticated lists and document pages must revalidate after deletion.
+        # An old browser/cache response is not current container state.
+        if session.get("username"):
+            response.cache_control.no_store = True
         nonce = get_csp_nonce()
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'self'; form-action 'self'; "
@@ -1244,7 +1249,7 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
     from flask import session
 
     from services.auth import is_admin
-    from services.case_workspace import CaseWorkspaceStore
+    from services.case_workspace import CaseWorkspaceStore, CaseWorkspaceError
     from services.governance import GovernanceLog
     from services.ingestion import get_registry
     from services.project_access import can_access_project, ensure_owner_backfilled, known_usernames
@@ -1294,7 +1299,7 @@ def _nav_recent_projects(app: Flask, limit: int = 15) -> list:
                        and not workspace.removed_at
                        and getattr(workspace, "container_state", None)
                            != CONTAINER_STATE_BLACK_BOX)
-        except TypeError:
+        except (TypeError, CaseWorkspaceError):
             allowed = False
         if allowed:
             accessible_documents.append(d)

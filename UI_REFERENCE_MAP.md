@@ -1397,6 +1397,9 @@ model.
 | Reference | Kind | Label / content | What it does, and why it is here | Condition | Status |
 |---|---|---|---|---|---|
 | `document-shop.jobs.page-title` | `<h1>` | "Document Shop" | Names the operating line, not the container mechanism | Always | active |
+| `document-shop.jobs.reload` | `<a>` | "Reload" | GET the latest persisted job list; never reruns examination | Always | active |
+| `document-shop.jobs.delete` | `<button>` | "Delete" | Opens the governed job deletion confirmation, including failed empty jobs | Owner or admin | active |
+| `document-shop.job-delete.confirm` | `<button>` | "Delete it" | Invokes CaseWorkspaceStore deletion classification and committed erasure or governed removal | Deletion is not blocked | active |
 | `document-shop.jobs.intro` | `<p>` | "Documents you have brought in for examination…" | States privacy and, in its last clause, that nothing here has to become anything else — BLACK BOX PRECEDES CLASSIFICATION expressed as a sentence rather than as jargon | Always | active |
 | `document-shop.jobs.list` | `<ul>` | — | The listing itself | Only when at least one job is accessible | active |
 | `document-shop.jobs.item` | `<li>` | — | One job | Per accessible job | active |

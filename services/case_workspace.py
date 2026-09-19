@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Optional
 
 from services.governance import GovernanceLog
+from services.requirements_registry import RequirementsRegistry
 
 # An ingested RFQ/RFP document is registered as its Project's first Source
 # automatically (see get_or_create) — the RFQ/RFP pipeline is the beginning of
@@ -6628,7 +6629,9 @@ class CaseWorkspaceStore:
     def _patch_view_state(self, project_id: str, mutate) -> None:
         """Read-modify-write the sidecar, atomically. Never the workspace."""
         path = self._view_state_path_for(project_id)
-        with self._save_lock:
+        registry = RequirementsRegistry(self.store_path)
+        with self._save_lock, registry.lifecycle_lock(project_id):
+            registry.require_live(project_id)
             state = self._read_view_state(project_id)
             mutate(state)
             tmp_path = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
@@ -6636,6 +6639,8 @@ class CaseWorkspaceStore:
             _replace_with_retry(tmp_path, path)
 
     def get(self, project_id: str) -> Optional[ProjectWorkspace]:
+        if RequirementsRegistry(self.store_path).is_deleted(project_id):
+            return None
         path = self._path_for(project_id)
         if not path.exists():
             return None
@@ -6919,7 +6924,10 @@ class CaseWorkspaceStore:
         path = self._path_for(workspace.project_id)
         expected = workspace.version if expected_version is None else expected_version
 
-        with self._save_lock:
+        registry = RequirementsRegistry(self.store_path)
+        with self._save_lock, registry.lifecycle_lock(workspace.project_id):
+            if registry.is_deleted(workspace.project_id):
+                raise CaseWorkspaceError("This container was permanently deleted.")
             if path.exists():
                 on_disk_version = json.loads(path.read_text(encoding="utf-8")).get("version", 0)
                 if on_disk_version != expected:
@@ -9608,12 +9616,144 @@ class CaseWorkspaceStore:
     def removed_sources(workspace: ProjectWorkspace) -> list[dict]:
         return [s for s in workspace.sources if s.get("removed_at")]
 
+    def document_shop_deletion_state(self, workspace: ProjectWorkspace) -> dict:
+        """Disposable analysis owns its private content; established projects do not."""
+        if workspace.container_state != CONTAINER_STATE_BLACK_BOX:
+            return dict(state="REQUIRES_GOVERNED_DELETE", reason="Use the governed project lifecycle.")
+        try:
+            self._document_shop_cleanup_paths(workspace.project_id)
+        except (OSError, ValueError, CaseWorkspaceError):
+            return dict(state="BLOCK_DELETE", reason="Owned storage cannot be safely verified for cleanup.")
+        return dict(state="SAFE_TO_ERASE", reason="Delete the disposable analysis and its private content; preserve shared material.")
+
+    @observed
+    def delete_document_shop_job(self, workspace: ProjectWorkspace, actor: str,
+                                 actor_role: str = "", governance_log=None) -> dict:
+        """Erase a disposable analysis through its existing workspace owner."""
+        if actor != workspace.owner and actor_role != "admin":
+            raise CaseWorkspaceError("Only the owner or an admin may delete this job.")
+        if workspace.container_state != CONTAINER_STATE_BLACK_BOX:
+            raise CaseWorkspaceError("Use the existing governed project removal action.")
+        registry = RequirementsRegistry(self.store_path)
+        with registry.lifecycle_lock(workspace.project_id):
+            current = self.get(workspace.project_id)
+            if current is None:
+                if registry.is_deleted(workspace.project_id):
+                    marker = json.loads(registry.deletion_path(workspace.project_id).read_text(encoding="utf-8"))
+                    if actor != marker['actor'] and actor_role != 'admin':
+                        raise CaseWorkspaceError("Only the deleting owner or an admin may resume cleanup.")
+                    self._erase_document_shop_files(workspace.project_id)
+                    return dict(state="SAFE_TO_ERASE", reason="Committed deletion cleanup completed.")
+                raise CaseWorkspaceError("This job no longer exists.")
+            if actor != current.owner and actor_role != "admin":
+                raise CaseWorkspaceError("Only the owner or an admin may delete this job.")
+            decision = self.document_shop_deletion_state(current)
+            if decision["state"] != "SAFE_TO_ERASE":
+                raise CaseWorkspaceError(decision["reason"])
+            if decision["state"] == "SAFE_TO_ERASE":
+                marker = registry.deletion_path(current.project_id)
+                marker.parent.mkdir(exist_ok=True)
+                temporary = marker.with_suffix(".tmp")
+                temporary.write_text(json.dumps(dict(project_id=current.project_id,
+                    actor=actor, deleted_at=_now(), state="SAFE_TO_ERASE")), encoding="utf-8")
+                _replace_with_retry(temporary, marker)
+                # Commit first. Stale readers/writers reject this ID even if
+                # cleanup is interrupted; the marker is internal, non-navigable.
+                self._erase_document_shop_files(current.project_id)
+                return decision
+
+    def _document_shop_cleanup_paths(self, project_id: str) -> list[Path]:
+        """Resolve the entire owned cleanup set before permitting any erasure."""
+        root = self.store_path.resolve()
+        paths = [self.store_path / (project_id + suffix) for suffix in (".json", ".workspace.json")]
+        for directory in ("workspace_sources", "workspace_artifacts", "_view_state"):
+            paths.append(self.store_path / directory / (project_id + ".json" if directory == "_view_state" else project_id))
+        for subdir in ("perception_jobs", "visual_jobs", "founding_jobs"):
+            for path in (self.store_path / subdir).glob("*.json"):
+                if json.loads(path.read_text(encoding="utf-8")).get("workspace_id") == project_id:
+                    paths.append(path)
+        for path in (self.store_path / "pending_chunk_uploads").glob("*/manifest.json"):
+            if json.loads(path.read_text(encoding="utf-8")).get("project_id") == project_id:
+                paths.append(path.parent)
+        for path in (self.store_path / "pending_reconciles").glob("*.json"):
+            if json.loads(path.read_text(encoding="utf-8")).get("project_id") == project_id:
+                paths.extend((path, path.with_suffix('')))
+        protected = set()
+        referenced_ids = set()
+        def collect(value):
+            if isinstance(value, dict):
+                for entry in value.values():
+                    collect(entry)
+            elif isinstance(value, list):
+                for entry in value:
+                    collect(entry)
+            elif isinstance(value, str):
+                referenced_ids.add(value)
+                if value.startswith(('{', '[')):
+                    try:
+                        collect(json.loads(value))
+                    except ValueError:
+                        pass
+                if '/' in value or '\\' in value:
+                    try:
+                        candidate = Path(value).resolve()
+                        if root in candidate.parents:
+                            protected.add(candidate)
+                    except (OSError, ValueError):
+                        pass
+        for foreign in self.store_path.glob('*.json'):
+            if foreign.name not in (project_id + '.json', project_id + '.workspace.json'):
+                collect(json.loads(foreign.read_text(encoding='utf-8')))
+        own = self._path_for(project_id)
+        if own.exists():
+            data = json.loads(own.read_text(encoding="utf-8"))
+            for source in data.get("sources", []):
+                if source.get("id") in referenced_ids and source.get("file_path"):
+                    protected.add(Path(source["file_path"]).resolve())
+        def shared(path):
+            return any(path == p or p in path.parents for p in protected)
+        private = []
+        for path in paths:
+            if path.is_dir() and any(path.resolve() == p or path.resolve() in p.parents for p in protected):
+                private.extend(p for p in path.rglob('*') if p.is_file() and not shared(p.resolve()))
+            elif path.name in (project_id + ".json", project_id + ".workspace.json") or not shared(path.resolve()):
+                private.append(path)
+        paths = private
+        for path in paths:
+            resolved = path.resolve()
+            if root not in resolved.parents or path.is_symlink():
+                raise CaseWorkspaceError("Cleanup path is outside the owned registry.")
+            if path.is_dir() and any(p.is_symlink() or resolved not in p.resolve().parents
+                                      for p in path.rglob("*")):
+                raise CaseWorkspaceError("Cleanup refuses linked storage.")
+        return paths
+
+    def _erase_document_shop_files(self, project_id: str) -> None:
+        """Retryable physical cleanup after the deletion marker has committed."""
+        import shutil
+        paths = self._document_shop_cleanup_paths(project_id)
+        from flask import current_app, has_app_context
+        if has_app_context() and Path(current_app.config["REGISTRY_STORE_PATH"]).resolve() == self.store_path.resolve():
+            from services.runtime_observation import remove_case
+            remove_case(current_app, project_id)
+        # Delete content first so interrupted retries retain shared-source identities.
+        paths.sort(key=lambda path: path.name in (project_id + ".json", project_id + ".workspace.json"))
+        for path in paths:
+            if path.is_dir():
+                shutil.rmtree(path)
+            elif path.exists():
+                path.unlink()
+        # The append-only audit retains its single physical home. GovernanceLog
+        # excludes erased IDs from normal reads. Moving it during retry could
+        # overwrite a late audit append after an interrupted cleanup.
+
     def remove_source(
         self, workspace: ProjectWorkspace, source_id: str, actor: str, actor_role: str = "",
         reason: Optional[str] = None, governance_log: Optional[GovernanceLog] = None,
     ) -> dict:
-        """CLAUDE-P40-E2, Section C: "Remove Document" - recoverable,
-        never a deletion. Only ever sets removed_at/removed_by/
+        """The final disposable analysis source deletes its case and private content.
+
+        Established projects retain CLAUDE-P40-E2 recoverable document removal. Only ever sets removed_at/removed_by/
         removal_reason on the existing record; the id, file_path,
         checksum-bearing content on disk, and every dependent
         Finding/Artifact/Requirement reference are completely
@@ -9628,6 +9768,14 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError(f"Source {source_id} was not found.")
         if source.get("removed_at"):
             raise CaseWorkspaceError(f"Source {source_id} is already removed.")
+
+        final_shop_source = (workspace.container_state == CONTAINER_STATE_BLACK_BOX
+            and all(s["id"] == source_id or s.get("removed_at") or
+                    (s.get("origin_type") in GENERATED_SOURCE_ORIGIN_TYPES and
+                     s.get("origin_reference") == source_id) for s in workspace.sources))
+        if final_shop_source:
+            self.delete_document_shop_job(workspace, actor, actor_role, governance_log)
+            return source
 
         removed_at = _now()
         source["removed_at"] = removed_at

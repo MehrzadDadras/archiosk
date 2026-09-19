@@ -15,6 +15,7 @@
    The full container-presentation work is D2's, not this tranche's. This page
    exists so the boundary above does not orphan the containers it excludes. #}
 <h1 class="np-page-title" data-ui-ref="document-shop.jobs.page-title">My documents</h1>
+<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}" data-ui-ref="document-shop.jobs.reload">Reload</a>
 
 <p class="mono" data-ui-ref="document-shop.jobs.intro">
     Documents you have brought in for examination. Each one is governed and
@@ -43,6 +44,10 @@
             {{ job.source_count }} document{{ '' if job.source_count == 1 else 's' }}
             &middot; <time datetime="{{ job.added_at }}">{{ job.added_at[:10] }}</time>
         </span>
+        {% if job.can_delete %}<form method="post" action="{{ url_for('portal.document_shop_delete_job', project_id=job.project_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn" type="submit" data-ui-ref="document-shop.jobs.delete">Delete</button>
+        </form>{% endif %}
     </li>
     {% endfor %}
 </ul>

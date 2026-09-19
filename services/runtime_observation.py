@@ -78,8 +78,9 @@ def observed(fn):
                 folder = directory(current_app)
                 folder.mkdir(parents=True, exist_ok=True)
                 parent = _active.get()
-                (folder / ("_job-"+_job_key(bound)+".json")).write_text(json.dumps(
-                    dict(id=parent["id"], actor=parent["actor"], expires=time.time()+900)),encoding="utf-8")
+                _retain(current_app, dict(id=parent["id"], actor=parent["actor"], expires=time.time()+900,
+                    request=dict(arguments=dict(workspace_id=bound.get("workspace_id")))),
+                    filename="_job-" + _job_key(bound) + ".json")
             except OSError:
                 current_app.logger.exception("Background observation could not be linked")
         event(owner, "INVOKED", inputs={k: summary(v) for k,v in bound.items()
@@ -116,11 +117,48 @@ def _job_key(values):
     return hashlib.sha256(json.dumps([values.get(k) for k in ("workspace_id","source_id","source_sha256")]).encode()).hexdigest()
 
 
+def case_id(record):
+    arguments = record.get("request", {}).get("arguments", {})
+    return arguments.get("project_id") or arguments.get("workspace_id")
+
+
+def deleted_case(app, record):
+    from services.requirements_registry import RequirementsRegistry
+    identifier = case_id(record)
+    return bool(identifier and RequirementsRegistry(app.config["REGISTRY_STORE_PATH"]).is_deleted(identifier))
+
+
+def remove_case(app, project_id):
+    """Remove only observations owned by this case; evaluation runs have independent owners."""
+    from services.perception_jobs import PerceptionJobStore
+    for job in PerceptionJobStore(app.config["REGISTRY_STORE_PATH"], subdir="visual_jobs").for_workspace(project_id):
+        (directory(app) / ("_job-" + _job_key(job) + ".json")).unlink(missing_ok=True)
+    for path in directory(app).glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if case_id(record) == project_id:
+            path.unlink(missing_ok=True)
+
+
+def _retain(app, record, filename=None):
+    from contextlib import nullcontext
+    from services.requirements_registry import RequirementsRegistry
+    registry = RequirementsRegistry(app.config["REGISTRY_STORE_PATH"])
+    identifier = case_id(record)
+    with registry.lifecycle_lock(identifier) if identifier else nullcontext():
+        if deleted_case(app, record):
+            return False
+        directory(app).mkdir(parents=True, exist_ok=True)
+        (directory(app) / (filename or record["id"] + ".json")).write_text(json.dumps(
+            {k: v for k, v in record.items() if k != "started"}, default=str), encoding="utf-8")
+        return True
+
+
 def _finish_worker(app, record, token):
     try:
-        directory(app).mkdir(parents=True,exist_ok=True)
-        (directory(app)/(record["id"]+".json")).write_text(json.dumps(
-            {k:v for k,v in record.items() if k!="started"},default=str),encoding="utf-8")
+        _retain(app, record)
     except OSError:
         app.logger.exception("Background observation could not be retained")
     finally:
@@ -145,15 +183,13 @@ def install(app):
     @app.after_request
     def finish(response):
         record = getattr(g, "survey_observation", None)
-        if record is not None:
+        if record is not None and not deleted_case(app, record):
             event("flask", "SURFACED", http_status=response.status_code,
                   content_type=response.content_type, location=response.headers.get("Location"))
             payload = {k:v for k,v in record.items() if k != "started"}
             try:
-                folder = directory(app)
-                folder.mkdir(parents=True, exist_ok=True)
-                (folder / (record["id"]+".json")).write_text(json.dumps(payload, default=str), encoding="utf-8")
-                response.headers["X-ARCHIOSK-Observation"] = record["id"]
+                if _retain(app, payload):
+                    response.headers["X-ARCHIOSK-Observation"] = record["id"]
             except OSError:
                 app.logger.exception("Operational observation could not be retained")
             response.headers["Cache-Control"] = "private, no-store"
@@ -179,6 +215,7 @@ def read(app, identifier):
     if len(identifier) != 32 or any(c not in "0123456789abcdef" for c in identifier):
         return None
     try:
-        return json.loads((directory(app)/(identifier+".json")).read_text(encoding="utf-8"))
+        record = json.loads((directory(app)/(identifier+".json")).read_text(encoding="utf-8"))
+        return None if deleted_case(app, record) else record
     except (OSError, ValueError):
         return None

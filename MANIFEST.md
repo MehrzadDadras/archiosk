@@ -1,5 +1,15 @@
 # MANIFEST
 
+Document Shop deletion lifecycle: `CaseWorkspaceStore.delete_document_shop_job`
+erases disposable analysis cases and their private content, preserving shared
+material. Final source removal deletes its disposable Black Box container.
+`RequirementsRegistry` owns internal deletion markers and lifecycle locks;
+workspace, registry, job, view-state, chunk, and audit writers respect them.
+`templates/document_shop_confirm_delete_job.html` exposes the existing owner
+through `routes/portal.py`; My Documents exposes Delete and GET-only Reload.
+Regression: `tests/test_document_shop_deletion.py`; actual browser invocation:
+`tools/verify_document_shop_deletion.py`. Details: `docs/DOCUMENT_SHOP_DELETION.md`.
+
 Stage 1 Product Owner corrections: `document_examination` owns append-only
 anchored transcription review and explicit consumer re-evaluation in the existing
 EvidenceItem store. `image_intake.rectify_document_preview` uses spatial_compiler's

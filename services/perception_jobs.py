@@ -118,6 +118,13 @@ class PerceptionJobStore:
         return self.root / ("%s.json" % job_id)
 
     def _write(self, record: dict) -> dict:
+        from services.requirements_registry import RequirementsRegistry
+        registry = RequirementsRegistry(self.root.parent)
+        with registry.lifecycle_lock(record["workspace_id"]):
+            registry.require_live(record["workspace_id"])
+            return self._write_live(record)
+
+    def _write_live(self, record: dict) -> dict:
         self.root.mkdir(parents=True, exist_ok=True)
         path = self._path(record["job_id"])
         handle, temporary = tempfile.mkstemp(dir=str(self.root), suffix=".tmp")

@@ -192,7 +192,18 @@ class BridgeQueueStore:
             # so the next poll simply loses the O_EXCL and moves on, and the
             # stray is swept by request_ttl. The opposite order would lose the
             # request outright.
-            path.unlink(missing_ok=True)
+            # Windows cannot unlink while another claimant reads the pending
+            # file. The exclusive claim has already committed: wait briefly
+            # for that reader instead of losing the winner's return value.
+            # Persistent permission faults still raise; no success is invented.
+            for attempt in range(20):
+                try:
+                    path.unlink(missing_ok=True)
+                    break
+                except PermissionError:
+                    if attempt == 19:
+                        raise
+                    time.sleep(0.01 * (attempt + 1))
             claimed.append(record)
         return claimed
 
