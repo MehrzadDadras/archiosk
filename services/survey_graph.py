@@ -1167,9 +1167,17 @@ def build_primitives(graph: dict, include=None) -> dict:
         provenance = (PROVENANCE_COMPUTED if report.get("computable")
                       else PROVENANCE_OBSERVED)
         tags = tuple("[%s UNRESOLVED]" % m for m in report.get("missing", ()))
+        # Computability is not evidence strength. Carry existing binding into
+        # the visible primitive instead of losing it behind a computed tag.
+        dimension = (measurement_genealogy(segment)["current"] if segment.get("measurements")
+                     else segment.get("dimension"))
+        bound = binding.weaker(binding.bound_certainty(dimension or {}),
+                               binding.bound_certainty(segment.get("bearing") or {}))
+        if report.get("computable") and bound != vx.RECOVERED:
+            tags += ("[BINDING %s]" % bound,)
         p1 = (nodes[segment["from"]]["x"], nodes[segment["from"]]["y"])
         p2 = (nodes[segment["to"]]["x"], nodes[segment["to"]]["y"])
-        certain = segment["certainty"] == vx.RECOVERED
+        certain = segment["certainty"] == vx.RECOVERED and (not report.get("computable") or bound == vx.RECOVERED)
 
         if segment["kind"] == "arc":
             radius = (segment.get("radius") or {}).get("value")
@@ -1226,7 +1234,7 @@ def build_primitives(graph: dict, include=None) -> dict:
             primitives.append({
                 "type": P_LABEL, "kind": "bearing", "text": bearing["text"],
                 "at": ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0),
-                "certain": bearing["certainty"] == vx.RECOVERED,
+                "certain": binding.bound_certainty(bearing) == vx.RECOVERED,
                 "for": segment["id"]})
 
     for footprint in (graph.get("footprints") or []

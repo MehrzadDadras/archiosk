@@ -729,13 +729,16 @@ def _calculated_geometry_lines(workspace, source_id):
         if not isinstance(derivation, dict) or derivation.get("operator") not in (
                 "numeric_validity@1", "segment_projection@1", "polygon_region@1",
                 "semantic_binding@1", "wall_host@1", "vector_usability@1", "bounded_acos@1",
-                "homography_point@1"):
+                "homography_point@1", "homography_validation@1", "homography_inverse@1",
+                "homography_composition@1", "homography_line@1", "vanishing_direction@1", "horizon_residual@1"):
             continue
         field = record.get("field")
         label = {"height": "Height", "thickness": "Wall thickness",
                  "projection": "Segment projection", "point": "Point",
                  "endpoint": "Segment endpoint", "polygon": "Polygon",
-                 "wall": "Wall placement", "vector": "Direction vector", "domain": "Angle"}.get(field)
+                 "wall": "Wall placement", "vector": "Direction vector", "domain": "Angle",
+                 "transform": "Homography", "inverse": "Inverse transform", "composition": "Composed transform",
+                 "line": "Transformed line", "vanishing": "Projective direction", "horizon": "Horizon residual"}.get(field)
         if not label:
             continue
         store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])

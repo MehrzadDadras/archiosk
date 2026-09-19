@@ -1,5 +1,16 @@
 # MANIFEST
 
+Survey Evaluation activation: `services/survey_evaluation.py` orchestrates the
+existing Survey/evidence/review/consumer owners in an isolated evaluation registry.
+`services/survey_evaluation_geometry.py` shares existing validator adapters with
+`tools/validate_rule7_fixture_map.py`; no new mathematical engine is introduced.
+Admin + Developer Mode routes in `routes/portal.py` serve
+`templates/survey_evaluation.html` and `static/css/survey_evaluation.css`.
+`tests/test_survey_evaluation.py` qualifies reachability, refusal and isolation;
+`tools/verify_survey_evaluation_live.py` performs authorized HTTPS browser proof.
+`docs/SURVEY_EVALUATION.md` records the input/authority boundary, consumers,
+retained discrepancies and missing primitives.
+
 Rule 7 projection: `engine/spatial_compiler.py::project_point_to_segment` owns
 finite, tolerance-aware, explicit-frame projection and wall-placement refusal.
 `docs/GO_PROMOTION_HANDOFF_SURVEY_RULE_7_PROJECTION.md` records the capability,

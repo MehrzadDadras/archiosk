@@ -3725,6 +3725,26 @@ class ZDimensionOnlySheets(SurveyReferenceCase):
                  if p["type"] == survey_graph.P_LINE]
 
         self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_COMPUTED)
+        self.assertEqual(lines[0]["tags"], ("[BINDING PARTIALLY_RECOVERED]",))
+        self.assertFalse(lines[0]["certain"])
+
+    def test_persisted_fully_bound_run_retains_established_binding(self):
+        from services import survey_graph
+        graph = self._graph(
+            dimension={"text": "100", "value": 100.0, "certainty": "RECOVERED",
+                       "bind_basis": "declared", "bind_certainty": "RECOVERED"},
+            bearing={"text": "N 45 E", "value_degrees": 45.0, "certainty": "RECOVERED",
+                     "bind_basis": "declared", "bind_certainty": "RECOVERED"})
+        # Extraction itself cannot establish attachment. This consumer control
+        # supplies an already-established binding using the existing owner.
+        from services import binding
+        for field in ("dimension", "bearing"):
+            reading = graph["segments"][0][field]
+            reading.update(binding.bind(reading["value"], read_certainty="RECOVERED",
+                                        bind_basis="structural", claimed_bind_certainty="RECOVERED"))
+        lines = [p for p in survey_graph.build_primitives(graph)["primitives"]
+                 if p["type"] == survey_graph.P_LINE]
+        self.assertEqual(lines[0]["provenance"], survey_graph.PROVENANCE_COMPUTED)
         self.assertEqual(lines[0]["tags"], ())
 
     def test_a_square_traverse_closes_and_a_broken_one_does_not(self):

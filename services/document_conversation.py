@@ -333,7 +333,7 @@ def _failure_message(parse_status) -> str:
     return UNAVAILABLE_MESSAGE
 
 
-def ask(document, workspace, result: dict, question: str, *, app) -> dict[str, Any]:
+def ask(document, workspace, result: dict, question: str, *, app, evaluation_guard=False) -> dict[str, Any]:
     """One question, one answer. Returns {"ok", "answer", "reason"}.
 
     NEVER raises for a provider problem - an outage is an outcome the customer
@@ -373,6 +373,21 @@ def ask(document, workspace, result: dict, question: str, *, app) -> dict[str, A
         # A well-formed reply carrying no answer is also something that came
         # back and could not be used - not an absent service.
         return {"ok": False, "answer": MALFORMED_MESSAGE, "reason": "empty_answer"}
+    governed_geometry = any(row.get("evidence_item_id") and row.get("derivation_record")
+                            for group in ("interpretation", "not_established")
+                            for row in result.get(group, []))
+    if evaluation_guard or governed_geometry:
+        # The existing Ask GO call remains inspectable, but free prose cannot
+        # upgrade evaluation evidence. Admission uses the actual examination
+        # statements; the provider's proposal is never issued as a finding.
+        admitted = ["EVALUATION INPUT — not project authority or a certified survey." if evaluation_guard
+                    else "Governed geometric evidence — not a certified survey conclusion."]
+        for group, heading in (("interpretation", "Qualified reading"), ("not_established", "Not established")):
+            for row in result.get(group, []):
+                admitted.append("%s — %s: %s" % (heading, row["label"], row["value"]))
+        return {"ok": True, "answer": "\n".join(admitted), "reason": "evaluation_governed_admission" if evaluation_guard else "governed_geometry_admission",
+                "proposed_answer": answer, "qualification_preserved": True,
+                "admission": "Deterministic examination statements; provider proposal not admitted as authority"}
     return {"ok": True, "answer": answer, "reason": None}
 
 

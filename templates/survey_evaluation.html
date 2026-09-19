@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Survey Evaluation — ARCHIOSK{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
+{% block content %}
+<main class="survey-evaluation">
+<header><p>Admin · Developer Mode</p><h1>Survey Evaluation</h1>
+<p><strong class="se-state se-EVALUATION_INPUT">EVALUATION_INPUT</strong> Controlled evidence, isolated from customer projects. Nothing here certifies a survey or changes customer authority.</p>
+<p>Survey graph premises and matrices are explicitly supplied evaluation inputs. Title-block recovery and arrow measurement run against the retained source pixels. No automatic survey extraction or homography estimation is implied.</p>
+<nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav></header>
+<ol class="se-sequence"><li>SITUATE</li><li>BIND</li><li>COMPARE</li><li>REASON</li><li>GOVERN</li><li>CONSUME</li><li>SURFACE</li></ol>
+{% if not report %}
+<section><h2>Run an actual Survey case</h2><p>Uses the current Survey operators, EvidenceItems, relationships, persistence and ordinary consumer services. Review is a separate human action.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label for="case">Case</label><select id="case" name="case"><optgroup label="Professional Survey cases">{% for key,label in cases.items() if not key.startswith('control:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup><optgroup label="All 34 Rule 7 controls">{% for key,label in cases.items() if key.startswith('control:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup></select>
+<label for="matrix">Explicit evaluation H (used by the explicit-homography case only)</label>
+<textarea id="matrix" name="matrix" rows="3" maxlength="2000">[[1,0,4],[0,1,5],[0,0,1]]</textarea>
+<p>Column-vector convention. Source and target: EUCLIDEAN_RECTIFIED, plane sheet. Other cases expose deliberate mismatch, projective level and missing-H refusal.</p>
+<button type="submit">Run isolated evaluation</button></form></section>
+<section><h2>Retained evaluations</h2>{% for run in runs %}<p><a href="{{ url_for('portal.survey_evaluation_run', run_id=run.id) }}">{{ run.title }}</a> · {{ run.actor }} · {{ run.id }}</p>{% else %}<p>No evaluation has been run.</p>{% endfor %}</section>
+{% else %}
+<h2>{{ report.record.title }}</h2><p>Run {{ report.record.id }} · Created by {{ report.record.actor }}</p>
+<p>Executed: retained inputs → actual operators → EvidenceItems → reload → trust/review → examination and consumer output. Ask GO is invoked by its separate button below; its provider outcome is shown explicitly.</p>
+<section><h2>Source and actual outputs</h2><div class="se-links">
+{% for artifact,label in [('source.pdf','Controlled source PDF'),('reference.pdf','Actual Survey Reference PDF')] %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact=artifact) }}">{{ label }}</a>{% endfor %}
+{% if report.ifc_exportable %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact='governed.ifc') }}">Governed evaluation IFC</a>{% endif %}
+{% if report.record.case in ['north','ambiguous-north'] %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact='north-0.png') }}">Measured evaluation arrow</a>{% endif %}</div>
+<div class="se-comparison"><figure><img src="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact='source.png') }}" alt="Retained controlled source page"><figcaption>Original evaluation source pixels</figcaption></figure><figure><div class="se-drawing">{{ report.svg|safe }}</div><figcaption>Actual Survey Reference drawing</figcaption></figure></div><p>Unresolved curvature may appear as a qualified straight placeholder; this is not established boundary geometry. IFC cases test admission of a supplied evaluation candidate; they do not infer a building or physical scale from H.</p></section>
+<section><h2>Human evaluation review</h2><p>These actions invoke the existing review and application services inside this evaluation registry only. Confirming premises is an explicit evaluation assumption, never customer approval.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button name="action" value="confirm">Confirm supplied evaluation premises</button>
+{% if report.assessments %}<button name="action" value="accept">Accept scoped proposal</button><button name="action" value="reject">Reject scoped proposal</button><button name="action" value="apply">Apply accepted evaluation replacement</button>{% endif %}
+{% if report.record.case == 'missing-sheet' %}<button name="action" value="arrival">Supply the expected evaluation sheet</button>{% endif %}</form></section>
+{% for stage in ['SITUATE','BIND','COMPARE','REASON','GOVERN','CONSUME','SURFACE'] %}<section><h2>{{ stage }}</h2>
+{% for row in report.rows if row.stage==stage %}<article><h3>{{ row.label }} <span class="se-state se-{{ row.state }}">{{ row.state }}</span></h3>
+<p>Actual result: <strong>{{ row.raw_state }}</strong></p>{% if row.summary %}<p>{{ row.summary }}</p>{% endif %}<details><summary>Value, premises, provenance and refusal details</summary><p>{{ row.operator }}</p><pre>{{ row.value|tojson(indent=2) }}</pre></details></article>{% else %}<p>No operation at this stage applies to the selected case.</p>{% endfor %}</section>{% endfor %}
+<section><h2>Consumer boundary comparison</h2>{% for item in report.discrepancies %}<article><h3>{{ item.boundary }}</h3><p>{{ item.status }}</p>
+<dl><dt>Source / governed state</dt><dd><pre>{{ item.governed|tojson(indent=2) }}</pre></dd><dt>Consumer received</dt><dd><pre>{{ item.received|tojson(indent=2) }}</pre></dd><dt>Surfaced result</dt><dd>{{ item.surfaced }}</dd></dl></article>{% endfor %}</section>
+<section><h2>Ask GO — existing path</h2><p>The actual context and provider proposal are inspectable. The issued evaluation answer is admitted from deterministic examination statements, so generated prose cannot strengthen them.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="ask"><label for="question">Question</label><input id="question" name="question" maxlength="2000" value="What is established and what remains unresolved?"><button>Ask GO about this evaluation</button></form>
+{% if report.record.answer %}<h3>Issued answer</h3><pre>{{ report.record.answer.answer }}</pre><p>Qualification preservation: {{ report.record.answer.qualification_preserved|default('No admitted provider answer') }}</p><details><summary>Provider proposal — not admitted as project authority</summary><pre>{{ report.record.answer.proposed_answer|default('Provider unavailable or did not return a usable answer.') }}</pre></details>{% endif %}
+<details><summary>Actual context passed / prepared</summary><pre>{{ report.record.answer_context|default(report.prompt) }}</pre></details></section>
+<section><h2>Evidence and relationships</h2>{% for key,label in [('sources','Sources and filenames'),('units','Pages'),('regions','Regions / objects'),('evidence','EvidenceItems'),('relationships','Reviewed relationships'),('supersessions','Predecessor / successor lineage'),('assessments','Scoped proposals')] %}<details><summary>{{ label }}</summary><pre>{{ report[key]|tojson(indent=2) }}</pre></details>{% endfor %}</section>
+<section><h2>Capability not yet implemented</h2>{% for missing in report.record.capabilities_not_implemented %}<p><span class="se-state se-UNRESOLVED">UNRESOLVED</span> {{ missing }} — CAPABILITY NOT YET IMPLEMENTED. No substitute conclusion is invented.</p>{% endfor %}</section>
+{% endif %}</main>{% endblock %}

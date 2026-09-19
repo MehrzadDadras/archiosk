@@ -15216,7 +15216,8 @@ class CaseWorkspaceStore:
         scoped = (isinstance(derivation, dict) and derivation.get("operator") in (
                     "numeric_validity@1", "segment_projection@1", "polygon_region@1",
                     "semantic_binding@1", "wall_host@1", "vector_usability@1", "bounded_acos@1",
-                    "homography_point@1")
+                    "homography_point@1", "homography_validation@1", "homography_inverse@1",
+                    "homography_composition@1", "homography_line@1", "vanishing_direction@1", "horizon_residual@1")
                   and isinstance(premise_ids, list) and bool(premise_ids)
                   and all(isinstance(p, str) for p in premise_ids)
                   and isinstance(source_ids, list) and bool(source_ids)

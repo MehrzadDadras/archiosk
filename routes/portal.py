@@ -739,6 +739,69 @@ def operational_flight_deck():
     return response
 
 
+@portal_bp.route('/admin/survey-evaluation', methods=['GET', 'POST'])
+@admin_required
+def survey_evaluation():
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation
+    if request.method == 'POST':
+        try:
+            identifier = evaluation.create(current_app, request.form.get('case', ''),
+                session.get('username', ''), request.form.get('matrix', ''))
+        except (ValueError, TypeError) as error:
+            abort(400, description=str(error))
+        return redirect(url_for('portal.survey_evaluation_run', run_id=identifier))
+    response = current_app.make_response(render_template('survey_evaluation.html',
+        cases=evaluation.CASES, runs=evaluation.recent(current_app), report=None))
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@portal_bp.route('/admin/survey-evaluation/<run_id>', methods=['GET', 'POST'])
+@admin_required
+def survey_evaluation_run(run_id):
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation
+    from services.case_workspace import CaseWorkspaceError
+    from services.change_application import ChangeApplicationError
+    try:
+        if request.method == 'POST':
+            try:
+                evaluation.action(current_app, run_id, request.form.get('action', ''),
+                    session.get('username', ''), request.form.get('question', '')[:2000])
+            except (ValueError, CaseWorkspaceError, ChangeApplicationError) as error:
+                flash('Evaluation refused: ' + str(error), 'warning')
+            return redirect(url_for('portal.survey_evaluation_run', run_id=run_id))
+        report = evaluation.inspect(current_app, run_id)
+    except ValueError:
+        abort(404)
+    response = current_app.make_response(render_template('survey_evaluation.html',
+        cases=evaluation.CASES, runs=[], report=report))
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@portal_bp.route('/admin/survey-evaluation/<run_id>/artifact/<artifact>')
+@admin_required
+def survey_evaluation_artifact(run_id, artifact):
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation
+    from flask import send_file
+    if artifact not in ('source.pdf', 'source.png', 'reference.pdf', 'governed.ifc', 'north-0.png', 'north-1.png'):
+        abort(404)
+    try:
+        path = evaluation.location(current_app, run_id) / artifact
+        if artifact == 'governed.ifc' and not evaluation.inspect(current_app, run_id)['ifc_exportable']:
+            abort(404)
+    except ValueError:
+        abort(404)
+    if not path.is_file():
+        abort(404)
+    response = send_file(path, as_attachment=True, download_name='EVALUATION_ONLY-' + artifact)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @portal_bp.route('/admin/developer-tools/reset-analysis', methods=['POST'])
 @admin_required
 def developer_reset_analysis():
