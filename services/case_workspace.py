@@ -17099,6 +17099,7 @@ class CaseWorkspaceStore:
     def get_structural_unit(self, workspace: ProjectWorkspace, unit_id: str) -> Optional[dict]:
         return self._find(workspace.structural_units, unit_id)
 
+    @observed
     def create_addressable_region(
         self, workspace: ProjectWorkspace, structural_unit_id: str, region_type: str, address: dict,
         parent_region_id: Optional[str] = None, actor: str = "system",

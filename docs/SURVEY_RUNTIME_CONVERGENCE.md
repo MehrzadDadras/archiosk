@@ -77,6 +77,14 @@ CSRF, administrator/Developer inspection and export policy apply. The same
 There is no live-mode interpreter. Controlled cases call the same domain owner
 in their isolated registry, retaining EVALUATION_INPUT through review.
 
+The same project form can register explicit human observations against an
+existing source page: situated object, recorded/found/missing monument, occupation
+point, record segment, or an independently evidenced affine frame. It uses the
+existing AddressableRegion/EvidenceItem registration methods. Defaults are
+UNRESOLVED; source checksum, source region, separate read/bind declarations and
+provenance are retained. Input registration grants no authority or physical scale.
+No missing monument point, correspondence identity or target control is inferred.
+
 Protected `perception_worker.py` and `datum_corroboration.py` remain untouched.
 No migration or unrelated Planning/Feasibility changes are included.
 

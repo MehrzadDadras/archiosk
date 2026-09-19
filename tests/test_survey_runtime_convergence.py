@@ -183,17 +183,27 @@ def test_ordinary_project_route_invokes_same_resolver(tmp_path):
     workspace=store.get_or_create("live",register_document_source={"filename":"survey.pdf"})
     RequirementsRegistry(store.store_path).save(ParsedDocument("live","survey.pdf","2026-09-19"))
     source_id=workspace.sources[0]["id"]
+    workspace.sources[0]["file_hash"]="retained-source-checksum";store.save(workspace)
     store.register_pdf_page_structure(workspace,source_id,["Found M1; recorded M1 at C1"])
-    region=store.create_addressable_region(workspace,workspace.structural_units[0]["id"],"drawing_region",{"object_id":"corner"})
-    identifiers=[]
-    for role in ("recorded_monument","found_monument"):
-        content=dict(survey_role=role,subject_id="parcel",monument_id="M1",record_corner_id="C1",point=[1,2],
-            coordinate_space="EUCLIDEAN_RECTIFIED",plane_id="plan",geometry_level="EUCLIDEAN",
-            read_certainty="RECOVERED",bind_certainty="RECOVERED",bind_basis="declared")
-        identifiers.append(store.register_evidence_item(workspace,source_id,"direct_source_evidence",json.dumps(content),"application/json",region_id=region["id"])["id"])
     client=app.test_client()
     with client.session_transaction() as session:
         session.update(user_id=1,username="reviewer",role="admin",developer_mode=True,survey_observe=True)
+    for role in ("recorded_monument","found_monument"):
+        form=dict(unit_id=workspace.structural_units[0]["id"],survey_role=role,object_id="corner",subject_id="parcel",
+            monument_id="M1",record_corner_id="C1",point_x="1",point_y="2",region_x="0",region_y="0",region_width="1",region_height="1",
+            coordinate_space="EUCLIDEAN_RECTIFIED",plane_id="plan",geometry_level="EUCLIDEAN",declare="yes",provenance="Explicit test source observation",
+            read_certainty="RECOVERED",bind_certainty="RECOVERED")
+        response=client.post("/projects/live/workspace/survey/premises",data=form)
+        assert response.status_code==302
+    workspace=store.get("live")
+    identifiers=[e["id"] for e in workspace.evidence_items if e["content_type"]=="application/json"]
+    assert len(identifiers)==2
+    assert all(store.admit_proposition(workspace,key)["state"]=="SOURCE_REFERENCE" for key in identifiers)
+    region=workspace.addressable_regions[-1]
+    count=len(workspace.evidence_items)
+    form["point_x"]="nan"
+    assert client.post("/projects/live/workspace/survey/premises",data=form).status_code==302
+    assert len(store.get("live").evidence_items)==count
     response=client.post("/projects/live/workspace/survey/derive",data={"region_id":region["id"],"operation":"monument","premise_id":identifiers})
     assert response.status_code==302
     derived=[e for e in store.get("live").evidence_items if e["evidence_class"]=="calculated_value"]
@@ -202,6 +212,19 @@ def test_ordinary_project_route_invokes_same_resolver(tmp_path):
     trace=json.loads((tmp_path/"runtime_observations"/(response.headers["X-ARCHIOSK-Observation"]+".json")).read_text())
     assert any(e["owner"]=="services.survey_graph.derive_survey_operation" and e["phase"]=="INVOKED" for e in trace["events"])
     assert trace["request"]["endpoint"]=="workspace.derive_survey_operation"
+    form.update(point_x="2",point_y="0.5",end_x="10",end_y="0")
+    for role in ("observed_occupation","record_boundary","missing_monument","affine_control_frame"):
+        form["survey_role"]=role
+        if role=="affine_control_frame":
+            form.update(coordinate_space="AFFINE_RECTIFIED",geometry_level="AFFINE",plane_id="independent-frame")
+            for i,(x,y) in enumerate(((0,0),(1,0),(1,1),(0,1))):
+                form.update({"frame_control"+str(i):str(i),"frame_x"+str(i):str(x),"frame_y"+str(i):str(y)})
+        assert client.post("/projects/live/workspace/survey/premises",data=form).status_code==302
+        fresh=store.get("live");item=fresh.evidence_items[-1];record=json.loads(item["content"])
+        assert record["survey_role"]==role and not store.admit_proposition(fresh,item["id"])["admissible"]
+        if role=="missing_monument":assert "point" not in record
+        if role=="affine_control_frame":assert len(record["controls"])==4
+    assert client.get("/admin/survey-evaluation").status_code==200
 
 
 def test_worker_records_execution_not_just_enqueue(tmp_path):

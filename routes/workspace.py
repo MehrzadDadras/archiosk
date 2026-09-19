@@ -2153,6 +2153,78 @@ def export_survey_ifc(project_id):
     return response
 
 
+@workspace_bp.route("/projects/<project_id>/workspace/survey/premises", methods=["POST"])
+@admin_required
+def record_survey_premise(project_id):
+    """Human source reading through the existing addressing/evidence owners.
+
+    This is input registration, not a resolver or authority decision. A typed
+    observation remains SOURCE_REFERENCE; derivation review is separate.
+    """
+    _, store, workspace = _load_workspace_or_404(project_id)
+    if not session.get("developer_mode"):
+        abort(403)
+    import math
+    try:
+        unit = store._find(workspace.structural_units, request.form.get("unit_id", ""))
+        source = store._find(workspace.sources, (unit or {}).get("source_id"))
+        if not unit or not source or source.get("removed_at") or not source.get("file_hash"):
+            raise ValueError("Select an existing source page with retained source identity")
+        role = request.form.get("survey_role", "")
+        if role not in ("situated_object", "recorded_monument", "found_monument", "missing_monument",
+                        "observed_occupation", "record_boundary", "affine_control_frame"):
+            raise ValueError("Select a supported source observation")
+        def required(key):
+            value = request.form.get(key, "").strip()
+            if not value or len(value) > 500:
+                raise ValueError("Supply " + key.replace("_", " "))
+            return value
+        def number(key):
+            value = float(required(key))
+            if not math.isfinite(value):
+                raise ValueError("Coordinates must be finite")
+            return value
+        object_id, subject_id, plane = required("object_id"), required("subject_id"), required("plane_id")
+        if request.form.get("declare") != "yes":
+            raise ValueError("Confirm that this records your source reading, not an authority grant")
+        read, bound = required("read_certainty"), required("bind_certainty")
+        if read not in ("RECOVERED", "PARTIALLY_RECOVERED", "UNRESOLVED") or bound not in ("RECOVERED", "PARTIALLY_RECOVERED", "UNRESOLVED"):
+            raise ValueError("Select explicit read and bind certainties")
+        space, level = required("coordinate_space"), required("geometry_level")
+        if space not in ("SOURCE_PIXELS", "NORMALIZED_IMAGE", "AFFINE_RECTIFIED", "EUCLIDEAN_RECTIFIED") or level not in ("PROJECTIVE", "AFFINE", "EUCLIDEAN"):
+            raise ValueError("Select an explicit coordinate contract; this input cannot grant physical scale")
+        x,y,w,h = (number(key) for key in ("region_x","region_y","region_width","region_height"))
+        if not (0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1-x and 0 < h <= 1-y):
+            raise ValueError("The source region must lie within normalized page bounds")
+        record = dict(survey_role=role, object_id=object_id, subject_id=subject_id,
+            coordinate_space=space, plane_id=plane, geometry_level=level,
+            read_certainty=read, bind_certainty=bound, bind_basis="declared",
+            provenance=required("provenance"), source_id=source["id"], source_sha256=source["file_hash"],
+            evaluation_only=bool(source.get("evaluation_only")), legal_authority="NOT_ESTABLISHED",
+            uncertainty={"state":"USER_DECLARED_NOT_INDEPENDENTLY_VERIFIED"})
+        if role in ("recorded_monument", "found_monument", "missing_monument"):
+            record.update(monument_id=required("monument_id"), record_corner_id=required("record_corner_id"))
+        if role in ("found_monument", "observed_occupation"):
+            record["point"] = [number("point_x"), number("point_y")]
+        if role == "record_boundary":
+            record["segment"] = [[number("point_x"),number("point_y")],[number("end_x"),number("end_y")]]
+        if role == "affine_control_frame":
+            controls = [(required("frame_control"+str(i)), [number("frame_x"+str(i)),number("frame_y"+str(i))]) for i in range(4)]
+            if len({key for key,_ in controls}) != 4 or space != "AFFINE_RECTIFIED" or level != "AFFINE":
+                raise ValueError("An affine frame needs four distinct identified controls and an explicit affine coordinate contract")
+            record.update(frame_id=plane, controls=dict(controls))
+        # No registry mutation occurs until the complete input passes syntax
+        # and source-scope checks. Domain sufficiency remains the resolver's job.
+        region = store.create_addressable_region(workspace, unit["id"], "drawing_region",
+            {"object_id":object_id,"x":x,"y":y,"width":w,"height":h},actor=_reviewer(),governance_log=_log())
+        evidence = store.register_evidence_item(workspace,source["id"],"direct_source_evidence",
+            json.dumps(record,allow_nan=False),"application/json",region_id=region["id"],actor=_reviewer(),governance_log=_log())
+        flash("SOURCE_REFERENCE recorded: " + evidence["id"] + ". Reading and binding remain as declared; no authority or scale granted.","success")
+    except (ValueError,TypeError) as error:
+        flash("Observation REFUSED: " + str(error),"warning")
+    return redirect(url_for("workspace.show_workspace",project_id=project_id))
+
+
 @workspace_bp.route("/projects/<project_id>/workspace/survey/controls", methods=["POST"])
 @admin_required
 def record_survey_controls(project_id):
