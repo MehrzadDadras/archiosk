@@ -1,12 +1,15 @@
 """Authorized live-browser proof for the protected Survey Evaluation surface.
 
 Uses a maintainer-issued existing verification-access link from the environment.
-Never creates credentials or logs the bearer link. Writes only evaluation runs
-and local proof artifacts. Requires the existing local Playwright installation.
+Never creates credentials or logs the bearer link. Writes controlled evaluation
+runs, local proof artifacts and, with --operational, the explicitly requested
+ordinary document conversation. Does not change source authority. Requires the
+existing local Playwright installation.
 """
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import sys
 from urllib.parse import urlparse
@@ -54,14 +57,17 @@ def main():
             enabled=page.request.post(base+"/admin/survey-evaluation",form={"csrf_token":csrf,"action":"observe","enabled":"yes"})
             assert enabled.ok
             page.goto(base+"/admin/survey-evaluation",wait_until="domcontentloaded")
-            live=page.locator('main.survey-evaluation a[href^="/document-shop/jobs/"]').first
+            candidates=page.locator('main.survey-evaluation a[href^="/document-shop/jobs/"]')
+            survey=candidates.filter(has_text=re.compile("survey|castille",re.I))
+            live=survey.first if survey.count() else candidates.first
             assert live.count(), "No eligible real Document Shop source was exposed"
+            live_name=live.inner_text()
             live_url=base+live.get_attribute("href")
             response=page.goto(live_url,wait_until="domcontentloaded")
             assert response.status==200
             trace_id=response.headers.get("x-archiosk-observation")
             assert trace_id, "Ordinary request was not observed"
-            proof["live_project"]={"url":live_url,"observation":trace_id}
+            proof["live_project"]={"name":live_name,"url":live_url,"observation":trace_id}
             page.screenshot(path=str(output/"live-project-result.png"),full_page=True)
             csrf=page.locator('meta[name="csrf-token"]').get_attribute("content")
             answered=page.request.post(live_url,form={"csrf_token":csrf,"question":"What is established and what remains unresolved in this source?"},max_redirects=0,timeout=120000)
@@ -73,7 +79,11 @@ def main():
             assert page.locator('.runtime-event[data-phase="PROVIDER_OUTPUT"]').count()
             assert page.locator('.runtime-event[data-phase="FINAL_ADMISSION"]').count()
             proof["live_project"]["ask_observation"]=answer_trace
-            page.screenshot(path=str(output/"live-project-operational-trace.png"),full_page=True)
+            section=page.locator("section").filter(has=page.get_by_text("Actual request observations",exact=True))
+            section.locator("details > summary").first.click()
+            page.locator('.runtime-event[data-phase="FINAL_ADMISSION"]').scroll_into_view_if_needed()
+            page.screenshot(path=str(output/"live-project-operational-trace.png"))
+            (output/"live-proof.json").write_text(json.dumps(proof,indent=2),encoding="utf-8")
         selected=arguments.cases.split(",") if arguments.cases else list(CASES)
         assert all(case in CASES for case in selected), "Unknown qualification case"
         for case in selected:
@@ -95,13 +105,17 @@ def main():
             assert "EVALUATION_INPUT" in text and "CAPABILITY NOT YET IMPLEMENTED" in text
             result={"case":case,"url":url,"surface":200,"reviewed":True}
             expected_operations={"monument":"ESTABLISHED","occupation":"ESTABLISHED","earned-h":"ESTABLISHED",
-                                 "missing-monument":"UNRESOLVED","degenerate-controls":"DEGENERATE","traverse":"PARTIALLY_RECOVERED"}
+                                 "missing-monument":"UNRESOLVED","degenerate-controls":"DEGENERATE","traverse":"UNRESOLVED"}
             if case in expected_operations:
                 operation=page.locator("article").filter(has=page.get_by_text("Survey operation after review/reload",exact=False)).first
-                assert "Actual result: "+expected_operations[case] in operation.inner_text()
+                assert "Actual result: "+expected_operations[case] in operation.inner_text(), "Unexpected admitted operation state: "+case
                 admission=json.loads(operation.locator("pre").text_content())
                 assert admission["evaluation_only"]
                 result["operation_state"]=admission["state"]
+                if case=="traverse":
+                    assert admission["record"]["state"]=="PARTIALLY_RECOVERED"
+                    assert admission["record"]["derivation"]["calculation"]["state"]=="CALCULATED_FROM_QUALIFIED_INPUT"
+                    assert not admission["admissible"]
                 if case=="earned-h":
                     assert admission["record"]["derivation"]["physical_scale"]=="NOT_ESTABLISHED"
                     assert len(admission["record"]["premise_ids"])==5
