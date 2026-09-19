@@ -62,6 +62,30 @@ def main():
             text=page.locator("main.survey-evaluation").inner_text()
             assert "EVALUATION_INPUT" in text and "CAPABILITY NOT YET IMPLEMENTED" in text
             result={"case":case,"url":url,"surface":200,"reviewed":True}
+            if case in ("supersession","whole-source"):
+                for action in ("accept","apply"):
+                    assert page.request.post(url,form={"csrf_token":csrf,"action":action}).ok
+                page.goto(url,wait_until="domcontentloaded")
+                lineage=page.locator("details").filter(has=page.get_by_text("Predecessor / successor lineage",exact=True))
+                links=json.loads(lineage.locator("pre").text_content())
+                assert len(links)==1 and links[0]["predecessor_type"]==("source" if case=="whole-source" else "evidence_item")
+                result["accepted_and_applied"]=True
+            if case=="missing-predecessor":
+                assert page.request.post(url,form={"csrf_token":csrf,"action":"accept"}).ok
+                page.goto(url,wait_until="domcontentloaded")
+                assessments=page.locator("details").filter(has=page.get_by_text("Scoped proposals",exact=True))
+                records=json.loads(assessments.locator("pre").text_content())
+                assert records and all(record["state"]=="proposed" for record in records)
+                assert page.request.post(url,form={"csrf_token":csrf,"action":"reject"}).ok
+                page.goto(url,wait_until="domcontentloaded")
+                records=json.loads(assessments.locator("pre").text_content())
+                assert all(record["state"]=="rejected" for record in records)
+                result["acceptance_refused_and_rejection_retained"]=True
+            if case=="missing-sheet":
+                assert page.request.post(url,form={"csrf_token":csrf,"action":"arrival"}).ok
+                page.goto(url,wait_until="domcontentloaded")
+                assert "ESTABLISHED" in page.locator("article").filter(has_text="Expected-but-absent sheet / retained history").inner_text()
+                result["arrival_consumed"]=True
             if case in ("homography","no-h","survey","unreadable","non-finite","curve"):
                 page.screenshot(path=str(output/(case+".png")),full_page=True)
                 result["screenshot"]=case+".png"

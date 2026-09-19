@@ -102,6 +102,9 @@ isolation, actual rendering, authority, supersession, Ask GO admission, protecte
 routes and downloads. Existing Rule 7 map, projective, IFC, Survey Reference,
 conversation, sheet identity and activation lanes remain regression gates.
 The deployment gate is the full suite on the clean committed activation worktree.
+The existing Nipigon suite requires its ignored rendered assets: generate them
+with the unchanged `tools/render_nipigon_assets.py` from the retained source
+drawings. These are test prerequisites, not Survey code or deploy payload.
 
 `tools/verify_survey_evaluation_live.py` uses an existing maintainer-issued
 verification-access URL from `ARCHIOSK_VERIFICATION_URL`. It runs Chromium against
@@ -114,3 +117,5 @@ Deploy only the exact qualified commit using `deploy/DEPLOYMENT.md`, preserving
 the existing live code backup and persistent paths. No existing public/project
 workflow is removed. The old direct IFC and generic prose paths are retained;
 their broader replacement has not been qualified for retirement.
+Preserve the live generated `static/nipigon/` directory as well as the standard
+persistent-path exclusions; a Git archive intentionally does not contain it.
