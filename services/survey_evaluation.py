@@ -20,8 +20,10 @@ from services.case_workspace import CaseWorkspaceStore
 from services import binding, document_examination as dx, document_conversation as dc
 from services import survey_graph as sg, survey_reference as sr, visual_examination as vx
 from services.survey_evaluation_geometry import evaluation_controls
+from services.runtime_observation import observed
 
 CASES = {
+    "source-review": "Photographed document frame and anchored transcription review",
     "traverse": "Calculated relative traverse retains qualified premises",
     "monument": "Declared monument correspondence, not legal authority",
     "missing-monument": "Expected monument absent: no invented replacement",
@@ -261,7 +263,15 @@ def create(app, case, actor, matrix_text=""):
         _geometry(store,workspace,record,path)
     if case in ("monument", "missing-monument", "occupation", "earned-h", "degenerate-controls", "traverse"):
         _survey_operation(store, workspace, record)
+    if case == 'source-review':
+        source.update(file_path=str(path/'source.png'), name='EVALUATION photographed sheet.png',
+            file_hash=hashlib.sha256((path/'source.png').read_bytes()).hexdigest())
+        store.save(workspace)
+        region = next(r for r in workspace.addressable_regions)
+        store.register_evidence_item(workspace, source['id'], 'extracted_evidence',
+            'Sheet: A-2O3', 'positioned_text', region_id=region['id'], actor='evaluation-machine-reading')
     _save(path,record)
+    evaluate(app, run_id)
     return run_id
 
 
@@ -388,7 +398,27 @@ def state(value):
     return "UNRESOLVED"
 
 
+@observed
 def inspect(app,run_id):
+    """Reload reads a persisted consumer snapshot; it never runs producers."""
+    path=location(app,run_id); record=_read(path)
+    snapshot=path/'inspection.json'
+    store=CaseWorkspaceStore(str(path/'registry')); workspace=store.get(record['project_id'])
+    if snapshot.is_file():
+        report=json.loads(snapshot.read_text(encoding='utf-8'))
+        if report.get('inspection_format') == 1 and report.get('workspace_version') == workspace.version:
+            report['record']=record
+            return report
+    return dict(record=record, rows=[], result={}, context={}, prompt='', reference={},
+        ifc_exportable=False, svg='', discrepancies=[], evidence=workspace.evidence_items,
+        relationships=workspace.relationships, supersessions=workspace.supersessions,
+        assessments=workspace.change_arrival_assessments, sources=workspace.sources,
+        regions=workspace.addressable_regions, units=workspace.structural_units,
+        reevaluation_required=True)
+
+
+@observed
+def evaluate(app,run_id):
     path=location(app,run_id); record=_read(path)
     store=CaseWorkspaceStore(str(path/"registry")); workspace=store.get(record["project_id"])
     document=SimpleNamespace(project_id=workspace.project_id,filename=workspace.sources[0]["name"])
@@ -466,17 +496,25 @@ def inspect(app,run_id):
     for group in ("interpretation","not_established"):
         for line in result[group]:
             add("SURFACE",line["label"],"document_examination.build_result",line.get("state","UNRESOLVED" if group=="not_established" else "QUALIFIED"),line)
-    return dict(record=record,rows=rows,result=result,context=context,prompt=dc.render_prompt(context),reference=reference,
+    report = dict(record=record,rows=rows,result=result,context=context,prompt=dc.render_prompt(context),reference=reference,
         ifc_exportable=any(r["label"]=="Governed IFC path" and r["raw_state"]=="IFC_EXPORTABLE" for r in rows),
         svg=sr.review_svg(reference),discrepancies=discrepancies,evidence=workspace.evidence_items,relationships=workspace.relationships,
         supersessions=workspace.supersessions,assessments=workspace.change_arrival_assessments,
         sources=workspace.sources,regions=workspace.addressable_regions,units=workspace.structural_units)
+    report['workspace_version']=workspace.version
+    report['inspection_format']=1
+    temp=path/(uuid.uuid4().hex+'.tmp')
+    temp.write_text(json.dumps(report, allow_nan=False), encoding='utf-8')
+    temp.replace(path/'inspection.json')
+    return report
 
 
 def action(app,run_id,action_name,actor,question=""):
     path=location(app,run_id); record=_read(path)
     store=CaseWorkspaceStore(str(path/"registry")); workspace=store.get(record["project_id"])
-    if action_name=="confirm":
+    if action_name=='reevaluate':
+        pass
+    elif action_name=="confirm":
         for edge in list(workspace.relationships):
             if edge.get("provisional"):
                 store.confirm_relationship(workspace,edge["id"],actor=actor)
@@ -490,6 +528,8 @@ def action(app,run_id,action_name,actor,question=""):
         source["sheet_number"]="A777";store.save(workspace)
     elif action_name=="ask":
         report=inspect(app,run_id)
+        if report.get('reevaluation_required'):
+            raise ValueError('Explicitly re-evaluate this legacy or changed case before asking GO.')
         document=SimpleNamespace(project_id=workspace.project_id,filename=workspace.sources[0]["name"])
         with isolated(app,path) as child:
             answer=dc.ask(document,workspace,report["result"],question or "What is established?",app=child,evaluation_guard=True)
@@ -499,3 +539,5 @@ def action(app,run_id,action_name,actor,question=""):
     else: raise ValueError("Unknown evaluation action")
     record["history"].append(dict(action=action_name,actor=actor))
     _save(path,record)
+    if action_name != 'ask':
+        evaluate(app,run_id)

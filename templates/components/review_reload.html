@@ -2,3 +2,4 @@
   {% for key, value in request.args.items(multi=True) %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
   <button type="submit">Reload view</button>
 </form>
+{% if g.survey_observation is defined %}<p><a href="{{ url_for('portal.survey_evaluation', observation=g.survey_observation.id) }}">Runtime trace for this request</a> · Trace is observational, not evidence.</p>{% endif %}

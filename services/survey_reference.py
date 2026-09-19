@@ -135,6 +135,11 @@ def derive(visual, *, project_id: str, source_id: str, source_filename: str,
 
     geometry = dict(visual.geometry or {})
     graph = dict(getattr(visual, "graph", None) or {})
+    from services.image_intake import is_supported_image
+    if is_supported_image(source_filename) and not graph.get('frame_qualification'):
+        graph['frame_qualification'] = dict(state='UNRESOLVED', document_frame='UNRECTIFIED',
+            angles='UNRESOLVED', metric_scale='NOT_ESTABLISHED', geometry_level='PROJECTIVE',
+            reason='Capture-frame positions do not establish survey angles or metric scale.')
     unresolved = list(visual.unresolved or [])
 
     # CLAUDE-SURVEY-REFERENCE-02: the geometry is COMPUTED here, once, and the
@@ -630,9 +635,13 @@ def review_svg(reference: dict, width: int = 560, height: int = 420) -> str:
     """The reconstruction as inline SVG, for the side-by-side review."""
     from services import survey_graph
 
-    return survey_graph.emit_svg(resolved_plan(reference), width=width,
+    svg = survey_graph.emit_svg(resolved_plan(reference), width=width,
                                  height=height,
                                  frame_size=(reference or {}).get("frame_size"))
+    if (reference.get('graph') or {}).get('frame_qualification'):
+        svg = svg.replace('</svg>', '<rect x="0" y="0" width="100%" height="24" fill="white"/>'
+            '<text x="8" y="17" font-size="11" fill="#852900">QUALIFIED IMAGE FRAME — angles / metric / legal authority unresolved</text></svg>')
+    return svg
 
 
 def artifact_filename(display_name: str = "") -> str:

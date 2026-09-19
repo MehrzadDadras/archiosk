@@ -612,6 +612,37 @@ def _require_approval(action_class: str, description: str, project_id: str, case
     )
 
 
+@workspace_bp.route('/projects/<project_id>/sources/<source_id>/review', methods=['GET', 'POST'])
+@admin_required
+def source_review(project_id, source_id):
+    from routes.portal import _require_developer_tools
+    from services import document_examination as dx
+    from services.runtime_observation import event
+    _require_developer_tools()
+    document, store, workspace = _load_workspace_or_404(project_id)
+    # Whole-source inspection has the same case-visibility gate as kernel mapping.
+    if store.inspect_kernel_mapping(workspace, _reviewer(), 'sources:' + source_id)['state'] != 'AVAILABLE':
+        abort(404)
+    if request.method == 'POST':
+        try:
+            record = dx.apply_source_review_action(store, workspace, source_id, request.form, _reviewer())
+            event('source_review.html', 'CONSUMED', evidence_id=record['id'], action=request.form.get('action'))
+            flash('Recorded. Reload only refreshes; Re-evaluate explicitly updates consumers.', 'success')
+        except (ValueError, OSError, CaseWorkspaceError) as exc:
+            flash(str(exc), 'error')
+        return redirect(url_for('workspace.source_review', project_id=project_id, source_id=source_id))
+    report = dx.inspect_source_review(workspace, source_id)
+    response = current_app.make_response(render_template('source_review.html', report=report,
+        image_url=url_for('workspace.source_image', project_id=project_id, source_id=source_id),
+        rectified_url=url_for('workspace.source_image', project_id=project_id,
+            source_id=report['review']['frame']['derived_source_id']) if report['review']['frame'] else None,
+        back_url=url_for('workspace.kernel_mapping', project_id=project_id, item='sources:'+source_id),
+        evaluation_only=False))
+    response.headers['Cache-Control'] = 'private, no-store'
+    event('source_review.html', 'CONSUMED', source_id=source_id, state='PARTIAL')
+    return response
+
+
 @workspace_bp.route("/projects/<project_id>/kernel")
 @admin_required
 def kernel_mapping(project_id):

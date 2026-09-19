@@ -1,7 +1,8 @@
 """CLAUDE-DOCUMENT-SHOP-RESULT-01 - what the customer is actually handed.
 
-A PRESENTATION layer over governed state that already exists. It runs no
-analysis, calls no provider, writes nothing, and introduces no second
+A presentation layer and explicit human review commands over existing owners.
+GET inspection calls no producer and review commands persist in EvidenceItems.
+The original result builder introduces no second
 As-Read: `ingest_upload` already parses every accepted document and already
 runs local OCR over an accepted image, and every fact below is read back from
 what those two paths recorded. The defect this closes was never missing
@@ -30,6 +31,375 @@ from __future__ import annotations
 from services.runtime_observation import observed
 from pathlib import Path
 from typing import Any, Optional
+from copy import deepcopy
+import hashlib
+import json
+import uuid
+import difflib
+
+
+REVIEW_CORRECTION = 'reviewed_transcription'
+REVIEW_ACTION = 'transcription_review_action'
+REVIEW_RESULT = 'document_review_result'
+DOCUMENT_FRAME = 'document_frame'
+
+
+def _review_records(workspace, source_id, content_type):
+    rows = []
+    for evidence in getattr(workspace, 'evidence_items', []) or []:
+        if evidence.get('source_id') != source_id or evidence.get('content_type') != content_type:
+            continue
+        try:
+            payload = json.loads(evidence['content'])
+        except (ValueError, TypeError):
+            continue
+        if isinstance(payload, dict):
+            rows.append(dict(payload, id=evidence['id'], reviewer=evidence.get('created_by'),
+                             timestamp=evidence.get('created_at')))
+    return rows
+
+
+def _review_signature(workspace, source_id):
+    # A consumer result is not a new premise for itself. This fingerprint only
+    # detects stale consumption; it cannot establish authority or currentness.
+    evidence = [e for e in getattr(workspace, 'evidence_items', []) if e.get('source_id') == source_id
+                and e.get('content_type') != REVIEW_RESULT]
+    source = next((s for s in getattr(workspace, 'sources', []) if s['id'] == source_id), {})
+    return hashlib.sha256(json.dumps([source, evidence, getattr(workspace, 'relationships', []),
+        getattr(workspace, 'supersessions', [])], sort_keys=True, default=str).encode()).hexdigest()
+
+
+def source_review_state(workspace, source_id):
+    corrections = _review_records(workspace, source_id, REVIEW_CORRECTION)
+    actions = _review_records(workspace, source_id, REVIEW_ACTION)
+    for correction in corrections:
+        related = [a for a in actions if a.get('correction_id') == correction['id']]
+        correction['status'] = related[-1]['action'].upper() if related else 'PROPOSED'
+        correction['review_action_id'] = related[-1]['id'] if related else None
+        correction['review_history'] = related
+        correction['diff'] = list(difflib.ndiff(str(correction['before']).splitlines(),
+                                               str(correction['after']).splitlines()))
+    results = _review_records(workspace, source_id, REVIEW_RESULT)
+    result = results[-1] if results else None
+    frames = _review_records(workspace, source_id, DOCUMENT_FRAME)
+    return dict(corrections=corrections, result=result, frame=frames[-1] if frames else None,
+        stale=bool(result and result.get('premise_signature') != _review_signature(workspace, source_id)),
+        pending=bool(corrections or frames) and not result)
+
+
+def review_text_fields(workspace, source_id):
+    """An allowlist of actual machine-read text fields, never arbitrary JSON edits."""
+    from services.visual_examination import VISUAL_CONTENT_TYPE
+    fields = []
+    current_visual = _decoded_record(workspace, source_id, VISUAL_CONTENT_TYPE) or {}
+    regions = {r['id']:r for r in workspace.addressable_regions}
+    def add(evidence, path, value, label, object_id=None):
+        if not isinstance(value, (str, int, float)) or isinstance(value, bool) or not str(value).strip():
+            return
+        region = regions.get(evidence.get('region_id'), {})
+        fields.append(dict(key=evidence['id']+'|'+path, evidence_id=evidence['id'], path=path,
+            value=value, label=label, anchor=dict(source_id=source_id, region_id=evidence.get('region_id'),
+            structural_unit_id=region.get('structural_unit_id'), address=region.get('address'),
+            object_id=object_id, field_path=path)))
+    for evidence in workspace.evidence_items:
+        if evidence.get('source_id') != source_id:
+            continue
+        if evidence.get('content_type') == 'positioned_text':
+            add(evidence, 'content', evidence.get('content'), 'Positioned text / label / note')
+        elif evidence.get('content_type') == VISUAL_CONTENT_TYPE:
+            if evidence['id'] != current_visual.get('evidence_item_id'):
+                continue
+            try:
+                visual = json.loads(evidence['content'])
+            except (ValueError, TypeError):
+                continue
+            for index, row in enumerate(visual.get('observations', [])):
+                add(evidence, f'observations/{index}/value', row.get('value'), row.get('label') or row.get('key'), row.get('key'))
+            for index, segment in enumerate((visual.get('graph') or {}).get('segments', [])):
+                for kind in ('dimension', 'bearing'):
+                    for key in ('text', 'value'):
+                        add(evidence, f'graph/segments/{index}/{kind}/{key}',
+                            (segment.get(kind) or {}).get(key), kind.title()+' '+str(segment.get('id')), segment.get('id'))
+    # Meaningful title/dimension/label regions precede stray OCR glyphs. The
+    # complete immutable read remains accessible; this ordering grants no trust.
+    import re
+    fields.sort(key=lambda f: (not bool(re.search(r'dat(?:e|ed)|survey|prepared|plan|bearing|dimension|\d{2}',
+        str(f['label'])+' '+str(f['value']), re.I)), len(str(f['value']).strip()) < 3))
+    return fields
+
+
+def _store_review(store, workspace, source_id, content_type, payload, actor, region_id=None):
+    evidence_class = 'normalized_evidence' if content_type == REVIEW_RESULT else 'user_entered_evidence'
+    return store.register_evidence_item(workspace, source_id, evidence_class,
+        json.dumps(payload, allow_nan=False), content_type, region_id=region_id, actor=actor)
+
+
+@observed
+def propose_text_correction(store, workspace, source_id, key, after, reason, actor):
+    field = next((f for f in review_text_fields(workspace, source_id) if f['key'] == key), None)
+    if not field or not reason.strip() or not after.strip() or len(after) > 4000:
+        raise ValueError('Select an existing structured reading and supply a correction and source-based reason.')
+    if isinstance(field['value'], (int, float)):
+        import math
+        after = float(after)
+        if not math.isfinite(after):
+            raise ValueError('Corrected numeric reading must be finite.')
+    if after == field['value']:
+        raise ValueError('The corrected reading is unchanged.')
+    machine = store.get_evidence_item(workspace, field['evidence_id'])
+    payload = dict(machine_evidence_id=machine['id'], machine_hash=hashlib.sha256(machine['content'].encode()).hexdigest(),
+        field_path=field['path'], anchor=field['anchor'], before=field['value'], after=after,
+        reason=reason.strip(), read_certainty='RECOVERED', binding='UNCHANGED', authority='UNCHANGED',
+        applicability='UNCHANGED', precedence='UNCHANGED', currentness='UNCHANGED')
+    # Duplicate submission is not new evidence.
+    for existing in _review_records(workspace, source_id, REVIEW_CORRECTION):
+        if all(existing.get(k) == v for k,v in payload.items()):
+            return store.get_evidence_item(workspace, existing['id'])
+    return _store_review(store, workspace, source_id, REVIEW_CORRECTION, payload, actor, machine.get('region_id'))
+
+
+@observed
+def review_text_correction(store, workspace, source_id, correction_id, action, actor):
+    correction = next((c for c in source_review_state(workspace, source_id)['corrections'] if c['id'] == correction_id), None)
+    if not correction or action not in ('accept', 'revert'):
+        raise ValueError('Unknown correction or review action.')
+    machine = store.get_evidence_item(workspace, correction['machine_evidence_id'])
+    if not machine or hashlib.sha256(machine['content'].encode()).hexdigest() != correction['machine_hash']:
+        raise ValueError('Machine reading changed; the correction must be reviewed against its original premise.')
+    if correction['status'] == action.upper():
+        return store.get_evidence_item(workspace, correction['review_action_id'])
+    return _store_review(store, workspace, source_id, REVIEW_ACTION,
+        dict(correction_id=correction_id, machine_evidence_id=machine['id'], action=action,
+             anchor=correction['anchor'], reason='Explicit human transcription review; downstream re-evaluation remains separate.'),
+        actor, machine.get('region_id'))
+
+
+def review_source_bytes(store, workspace, source_id, *, allowed_root=None):
+    source = next((s for s in workspace.sources if s['id'] == source_id and not s.get('removed_at')), None)
+    if not source or not source.get('file_path'):
+        raise ValueError('Original source file is unavailable.')
+    path = Path(source['file_path']).resolve()
+    try:
+        path.relative_to(Path(allowed_root or store.store_path).resolve())
+    except ValueError:
+        raise ValueError('Source path is outside its governed storage boundary.') from None
+    raw = path.read_bytes()
+    if source.get('file_hash') and hashlib.sha256(raw).hexdigest() != source['file_hash']:
+        raise ValueError('Source bytes no longer match the recorded hash.')
+    return source, raw, path.name
+
+
+@observed
+def create_document_frame(store, workspace, source_id, corners, aspect, rotation, reason, actor, *, allowed_root=None):
+    from services.image_intake import rectify_document_preview
+    if not reason.strip():
+        raise ValueError('Record why these four corners identify the document frame.')
+    source, raw, filename = review_source_bytes(store, workspace, source_id, allowed_root=allowed_root)
+    signature = dict(corners=corners, aspect=aspect, rotation=rotation, reason=reason,
+                     source_sha256=hashlib.sha256(raw).hexdigest())
+    frames = _review_records(workspace, source_id, DOCUMENT_FRAME)
+    if frames and frames[-1].get('input') == signature:
+        return store.get_evidence_item(workspace, frames[-1]['id'])
+    preview, frame = rectify_document_preview(raw, filename, corners, aspect_ratio=aspect, rotation=rotation)
+    directory = Path(store.store_path) / 'workspace_sources' / workspace.project_id
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / (uuid.uuid4().hex + '_document_preview.png')
+    path.write_bytes(preview)
+    derived = store.add_source(workspace, name='Qualified rectified document preview', file_path=str(path),
+        kind='drawing', file_hash=hashlib.sha256(preview).hexdigest(), origin_type='derived_reference',
+        origin_reference=source_id, actor=actor)
+    frame.update(input=signature, source_id=source_id, derived_source_id=derived['id'],
+        source_sha256=signature['source_sha256'], reason=reason,
+        evaluation_only=bool(source.get('evaluation_only')))
+    return _store_review(store, workspace, source_id, DOCUMENT_FRAME, frame, actor)
+
+
+def _apply_reviewed_fields(workspace, source_id, store):
+    from services.visual_examination import VISUAL_CONTENT_TYPE
+    visual = visual_reading(workspace, source_id, store=store, use_review=False)
+    texts = {}
+    accepted = [c for c in source_review_state(workspace, source_id)['corrections'] if c['status'] == 'ACCEPT']
+    slots = {}
+    for correction in accepted:
+        slot = (correction['machine_evidence_id'], correction['field_path'])
+        if slot in slots and slots[slot]['after'] != correction['after']:
+            raise ValueError('Conflicting accepted corrections; revert one before re-evaluation.')
+        slots[slot] = correction
+    for correction in slots.values():
+        machine = next((e for e in workspace.evidence_items if e['id'] == correction['machine_evidence_id']), None)
+        if not machine or hashlib.sha256(machine['content'].encode()).hexdigest() != correction['machine_hash']:
+            raise ValueError('Correction premise changed; re-review is required.')
+        if correction['field_path'] == 'content':
+            texts[machine['id']] = correction['after']
+        elif visual and machine['id'] == visual.get('evidence_item_id'):
+            parts = correction['field_path'].split('/')
+            target = visual
+            for part in parts[:-1]:
+                target = target[int(part)] if isinstance(target, list) else target[part]
+            target[parts[-1]] = correction['after']
+            # Reading alone cannot upgrade the old effective binding ceiling.
+            from services.binding import bound_certainty, weaker
+            ceiling = bound_certainty(target)
+            target['read_certainty'] = 'RECOVERED'
+            target['certainty'] = weaker('RECOVERED', ceiling)
+            target['correction_evidence_id'] = correction['id']
+        else:
+            raise ValueError('The accepted correction targets a superseded machine reading; re-review the current anchored reading.')
+    return visual, texts, [c['id'] for c in accepted]
+
+
+def frame_qualification(workspace, source_id):
+    source = next((s for s in getattr(workspace, 'sources', []) or [] if s['id'] == source_id), {})
+    from services.image_intake import is_supported_image
+    if not is_supported_image(source.get('file_path') or source.get('name') or ''):
+        return None
+    frames = _review_records(workspace, source_id, DOCUMENT_FRAME)
+    frame = frames[-1] if frames else None
+    return dict(state='QUALIFIED' if frame else 'UNRESOLVED', frame_evidence_id=(frame or {}).get('id'),
+        capture_frame='EXIF_DISPLAY', document_frame='PROJECTIVE_PREVIEW' if frame else 'UNRECTIFIED',
+        sheet_reading_orientation=(frame or {}).get('sheet_reading_rotation', 'UNRESOLVED'),
+        geometry_level='PROJECTIVE', angles='UNRESOLVED', metric_scale='NOT_ESTABLISHED',
+        reason='Image positions are not survey angles. A display rectangle does not establish a Euclidean or metric frame.')
+
+
+@observed
+def reevaluate_source_review(store, workspace, source_id, actor):
+    """Explicit deterministic consumption of reviewed premises; never OCR/LLM."""
+    from services import survey_reference as sr, survey_north
+    visual, texts, corrections = _apply_reviewed_fields(workspace, source_id, store)
+    signature = _review_signature(workspace, source_id)
+    current = source_review_state(workspace, source_id)['result']
+    if current and current.get('premise_signature') == signature:
+        return store.get_evidence_item(workspace, current['id'])
+    frame = frame_qualification(workspace, source_id)
+    if visual and frame:
+        visual.setdefault('graph', {})['frame_qualification'] = frame
+    recovered, partial, unresolved = _visual_lines(visual)
+    reference = _decoded_record(workspace, source_id, sr.REFERENCE_CONTENT_TYPE)
+    source = next(s for s in workspace.sources if s['id'] == source_id)
+    if visual:
+        reference = reference or dict(source_filename=source.get('name',''), source_sha256=source.get('file_hash',''))
+        previous_derived_id = reference.get('derived_source_id')
+        from types import SimpleNamespace
+        reference = sr.derive(SimpleNamespace(**dict(visual, geometry=visual.get('geometry') or {})),
+            project_id=workspace.project_id, source_id=source_id,
+            source_filename=reference.get('source_filename',''), source_sha256=reference.get('source_sha256',''),
+            pages_used=reference.get('pages_used'), frame_size=reference.get('frame_size'),
+            display_name=reference.get('display_name'))
+        reference['unresolved'] = list(dict.fromkeys(reference['unresolved'] + unresolved))
+        reference['source_note'] = 'Reconstructed from retained source positions; not an angle-faithful or legal survey.'
+        reference['authority_note'] = ('EVALUATION_INPUT. No canonical authority. ' if source.get('evaluation_only') else '') + 'QUALIFIED DISPLAY. Observed image positions, calculated constraints and unresolved placeholders are not legal survey authority.'
+        directory = Path(store.store_path) / 'workspace_sources' / workspace.project_id
+        directory.mkdir(parents=True, exist_ok=True)
+        pdf = sr.render_pdf(reference)
+        path = directory / (uuid.uuid4().hex + '_reviewed_survey_reference.pdf')
+        path.write_bytes(pdf)
+        derived = store.add_source(workspace, name='Reviewed Survey Reference', file_path=str(path),
+            kind='drawing', file_hash=hashlib.sha256(pdf).hexdigest(), origin_type='derived_reference',
+            origin_reference=source_id, actor=actor)
+        reference['derived_source_id'] = derived['id']
+        reference['artifact_sha256'] = hashlib.sha256(pdf).hexdigest()
+        reference['artifact_filename'] = path.name
+        reference['review_consumer_svg'] = sr.review_svg(reference)
+        reference['review_consumer_stats'] = sr.resolved_plan(reference)['stats']
+        reference['review_correction_ids'] = corrections
+        reference.pop('evidence_item_id', None)
+        from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
+        reference_record = store.register_evidence_item(workspace, source_id,
+            EVIDENCE_CLASS_AI_GENERATED_PROPOSAL, json.dumps(reference, allow_nan=False),
+            sr.REFERENCE_CONTENT_TYPE, actor=actor)
+        reference['evidence_item_id'] = reference_record['id']
+        # Same derivative revision convention as visual_classification. Historical
+        # downloads remain retained; the normal reference owner selects this one.
+        old = next((s for s in workspace.sources if s['id'] == previous_derived_id), None)
+        new = next(s for s in workspace.sources if s['id'] == derived['id'])
+        if old:
+            old['superseded_by_source_id'] = derived['id']
+            new['supersedes_source_id'] = old['id']
+            store.save(workspace)
+    rows = survey_north.orientation_propositions(visual or {}, frame)
+    groups = unresolved_by_stage(unresolved, source_id=source_id,
+        evidence_id=(visual or {}).get('evidence_item_id'), orientation=rows, frame=frame)
+    payload = dict(premise_signature=_review_signature(workspace, source_id), visual=visual, text_overrides=texts,
+        correction_ids=corrections, frame=frame, orientation=rows, unresolved_groups=groups,
+        recovered=recovered, partially_recovered=partial, unresolved=unresolved,
+        reference=reference, reference_svg=reference.get('review_consumer_svg', '') if reference else '',
+        qualification='Reviewed transcription is not binding, authority, applicability, precedence or currentness.',
+        state='PARTIAL' if unresolved or frame else 'RECORDED')
+    return _store_review(store, workspace, source_id, REVIEW_RESULT, payload, actor)
+
+
+def unresolved_by_stage(items, *, source_id, evidence_id=None, orientation=(), frame=None):
+    """Presentation grouping of owned refusal text; no state is recomputed."""
+    stages = ['Document frame','Sheet identity','Orientation/North','Building front/frontage',
+              'Parcel/geometry','Measurements','Measurement genealogy','Authority/currentness','Access','Structure containment']
+    groups = {s:[] for s in stages}
+    rules = [('Structure containment', ('containment','footprint')), ('Measurement genealogy', ('genealogy','current_value','historical')),
+        ('Building front/frontage', ('frontage','building front','entrance')), ('Orientation/North', ('north','direction','bearing reference')),
+        ('Document frame', ('frame','rectif','distort')), ('Sheet identity', ('title','sheet','plan number','surveyor','date')),
+        ('Authority/currentness', ('authority','datum','currentness','applicab')), ('Access', ('access','street')),
+        ('Measurements', ('dimension','measurement','bearing','radius','length'))]
+    next_steps = {'Document frame':'Identify document corners and reading orientation; obtain independent frame/scale evidence for angular or metric use.',
+        'Sheet identity':'Review the anchored title block and supply a legible source region.',
+        'Orientation/North':'Supply an applicable north reference and independently justified angular frame.',
+        'Building front/frontage':'Review entry evidence separately from functional designation and applicable municipal front-lot-line rules.',
+        'Parcel/geometry':'Supply bound boundary observations and the missing geometric premises.',
+        'Measurements':'Review the exact annotation and its object binding separately.',
+        'Measurement genealogy':'Review competing readings, explicit supersession and precedence evidence.',
+        'Authority/currentness':'Supply the governing authority, applicability and revision evidence.',
+        'Access':'Review the street, entry and access relationship at their source regions.',
+        'Structure containment':'Supply a traceable footprint and a qualified parcel boundary in the same frame.'}
+    missing = {'Document frame':'Document-plane controls, flatness and independent angular/metric calibration.',
+        'Sheet identity':'An unambiguous legible field bound to this sheet/view.',
+        'Orientation/North':'An applicable North reference in an independently established angular frame.',
+        'Building front/frontage':'Independent entry/use designation or applicable municipal front-lot-line rule and parcel context.',
+        'Parcel/geometry':'The missing bound boundary / closure / curve / common-frame premise described in the finding.',
+        'Measurements':'A legible value, its units and a justified binding to the measured object.',
+        'Measurement genealogy':'Evidence of precedence and applicability between the competing measurements.',
+        'Authority/currentness':'Established authority, applicability and explicit revision/currentness evidence.',
+        'Access':'Reviewed entry, street and building/parcel relationships.',
+        'Structure containment':'Qualified footprint and parcel boundary with traceable identity in a common frame.'}
+    findings = [(next((s for s,words in rules if any(word in str(item).lower() for word in words)), 'Parcel/geometry'), str(item),
+        'REFUSED' if 'REFUSED' in str(item) else 'UNRESOLVED') for item in items]
+    if frame:
+        findings.append(('Document frame', frame['reason'], frame['state']))
+    for row in orientation:
+        if row['state'] in ('UNRESOLVED','CANDIDATE','QUALIFIED'):
+            findings.append(('Building front/frontage' if 'front' in row['proposition'].lower() or 'entrance' in row['proposition'].lower() else 'Orientation/North', row['reason'], row['state']))
+    for stage, reason, state in findings:
+        groups[stage].append(dict(state=state, reason=reason,
+            evidence_available=[v for v in (source_id,evidence_id) if v],
+            missing_premise=missing[stage], next_step=next_steps[stage]))
+    return [dict(stage=s, items=groups[s]) for s in stages]
+
+
+@observed
+def inspect_source_review(workspace, source_id):
+    """Read persisted review/consumer records. No producer runs on Reload."""
+    source = next((s for s in workspace.sources if s['id'] == source_id and not s.get('removed_at')), None)
+    if not source:
+        raise ValueError('Source unavailable.')
+    review = source_review_state(workspace, source_id)
+    result = review['result'] or {}
+    return dict(source=source, review=review, fields=review_text_fields(workspace, source_id),
+        result=result, project_id=workspace.project_id,
+        frame=frame_qualification(workspace, source_id))
+
+
+def apply_source_review_action(store, workspace, source_id, form, actor, *, allowed_root=None):
+    action = form.get('action')
+    if action == 'propose':
+        return propose_text_correction(store, workspace, source_id, form.get('field',''),
+            form.get('after',''), form.get('reason',''), actor)
+    if action in ('accept','revert'):
+        return review_text_correction(store, workspace, source_id, form.get('correction_id'), action, actor)
+    if action == 'rectify':
+        return create_document_frame(store, workspace, source_id, json.loads(form.get('corners','[]')),
+            float(form.get('aspect','1.414214')), int(form.get('rotation','0')), form.get('reason',''), actor,
+            allowed_root=allowed_root)
+    if action == 'reevaluate':
+        return reevaluate_source_review(store, workspace, source_id, actor)
+    raise ValueError('Unknown source review action.')
 
 # What a person is told about their job, and the only three outcomes a stored
 # record can support. Ordered worst-last so a listing can sort by concern.
@@ -202,6 +572,14 @@ def _recovered(workspace, source_id: str) -> dict:
 
     items.sort(key=_address)
     passages = [e["content"] for e in items]
+    review = source_review_state(workspace, source_id)
+    if review['result'] and not review['stale']:
+        overrides = review['result'].get('text_overrides') or {}
+        if overrides:
+            # Region text does not silently rewrite the whole-page OCR stream.
+            # Consumers see explicitly attributed reviewed readings first.
+            passages.insert(0, 'Reviewed anchored transcription (binding and authority unchanged):\n' +
+                '\n'.join(f'{identifier}: {value}' for identifier, value in overrides.items()))
     classes = {e.get("evidence_class") for e in items if e.get("evidence_class")}
     engines = {e.get("extractor_version") for e in items if e.get("extractor_version")}
     return {
@@ -242,12 +620,18 @@ def _decoded_record(workspace, source_id: str, content_type: str):
     return None
 
 
-def visual_reading(workspace, source_id: str, *, store=None):
+def visual_reading(workspace, source_id: str, *, store=None, use_review=True):
     """What GO SAW in this source, or None. The visual counterpart to
     `_recovered`, and read the same way: off the record, never recomputed."""
     from services import visual_examination as vx
 
     visual = _decoded_record(workspace, source_id, vx.VISUAL_CONTENT_TYPE)
+    reviewed = source_review_state(workspace, source_id)
+    if use_review and reviewed['result'] and not reviewed['stale']:
+        visual = deepcopy(reviewed['result'].get('visual'))
+    frame = frame_qualification(workspace, source_id)
+    if visual and frame:
+        visual.setdefault('graph', {})['frame_qualification'] = frame
     if visual and store is None and (any(s.get("measurements") for s in (visual.get("graph") or {}).get("segments", []))
             or any((visual.get("graph") or {}).get(key) for key in ("north_candidates","access_occurrences","height_datums"))):
         from flask import current_app
@@ -281,6 +665,15 @@ def survey_reference_of(workspace, source_id: str):
     from services import survey_reference as sr
 
     reference = _decoded_record(workspace, source_id, sr.REFERENCE_CONTENT_TYPE)
+    reviewed = source_review_state(workspace, source_id)
+    if reviewed['stale']:
+        return None  # Retained download is history, not a current consumer result.
+    if reviewed['result'] and not reviewed['stale']:
+        reference = deepcopy(reviewed['result'].get('reference'))
+    frame = frame_qualification(workspace, source_id)
+    if reference and frame:
+        reference.setdefault('graph', {})['frame_qualification'] = frame
+        reference['authority_note'] = 'QUALIFIED DISPLAY: source positions are not angle-faithful survey geometry or legal authority.'
     if reference and (reference.get("graph") or {}).get("north_candidates"):
         from flask import current_app
         from services.case_workspace import CaseWorkspaceStore
@@ -1052,6 +1445,10 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         for group, entry in _calculated_geometry_lines(workspace, source["id"]):
             (interpretation if group == "interpretation" else not_established).append(entry)
 
+    review = source_review_state(workspace, (source or {}).get('id'))
+    if review['pending'] or review['stale']:
+        not_established.append(dict(label='Reviewed source requires re-evaluation',
+            value='Review premises changed. Accepted corrections have not been consumed by a current result. Retained machine readings are historical; explicitly re-evaluate before relying on affected conclusions.'))
     return {
         "name": display_name,
         "fragmentary": fragmentary,
@@ -1064,6 +1461,9 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         "established": established,
         "interpretation": interpretation,
         "not_established": not_established,
+        "unresolved_groups": unresolved_by_stage(visual_unresolved if visual else [],
+            source_id=(source or {}).get('id'), evidence_id=(visual or {}).get('evidence_item_id'),
+            frame=frame_qualification(workspace, (source or {}).get('id'))),
         "preview_text": recovered["preview"],
         "sources": _source_rows(document, workspace, jobs=jobs),
         # While anything is still queued or running, the page must not present
@@ -1099,8 +1499,12 @@ def _reference_view(reference, *, source_id=None) -> Optional[dict[str, Any]]:
     # itself - not a second rendering that could agree with the PDF today and
     # drift from it tomorrow.
     try:
-        svg = sr.review_svg(reference)
-        stats = sr.resolved_plan(reference)["stats"]
+        if 'review_consumer_svg' in reference:
+            svg = reference['review_consumer_svg']
+            stats = reference['review_consumer_stats']
+        else:
+            svg = sr.review_svg(reference)
+            stats = sr.resolved_plan(reference)["stats"]
     except Exception:  # noqa: BLE001 - a review drawing is never worth a 500
         svg, stats = "", {}
 

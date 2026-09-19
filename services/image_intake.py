@@ -29,8 +29,78 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 from pathlib import Path
 from typing import Optional
+from services.runtime_observation import observed
+
+
+@observed
+def rectify_document_preview(raw_bytes, filename, corners, *, aspect_ratio=1.414214, rotation=0):
+    """Explicit four-point display rectification, not a survey geometry upgrade.
+
+    Controls are normalized browser/EXIF-display coordinates in sheet TL, TR,
+    BR, BL order. The target rectangle/aspect is an explicit display premise.
+    Homography and its inverse belong to spatial_compiler; Pillow only samples.
+    """
+    from PIL import Image, ImageOps
+    from engine import spatial_compiler as geometry
+    checked = verify_image_bytes(raw_bytes, filename)
+    if checked['status'] != VERIFIED:
+        raise ValueError(checked['reason'])
+    if (not isinstance(corners, list) or len(corners) != 4
+            or any(not isinstance(p, (list, tuple)) or len(p) != 2
+                   or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                          or not math.isfinite(v) or not 0 <= v <= 1 for v in p) for p in corners)):
+        raise ValueError('Four finite, normalized document corners are required.')
+    if not math.isfinite(aspect_ratio) or not .2 <= aspect_ratio <= 5 or rotation not in (0, 90, 180, 270):
+        raise ValueError('Invalid display aspect or sheet-reading rotation.')
+    polygon = geometry.classify_point_in_polygon(corners[0], corners,
+        point_space='NORMALIZED_IMAGE', polygon_space='NORMALIZED_IMAGE',
+        point_plane='capture', polygon_plane='capture', geometry_level='PROJECTIVE')
+    if polygon.get('error'):
+        raise ValueError('Document control polygon refused: ' + polygon['error'])
+    transform = geometry.estimate_control_homography(corners, [[0,0],[1,0],[1,1],[0,1]],
+        source_space='NORMALIZED_IMAGE', target_space='AFFINE_RECTIFIED',
+        source_plane='capture', target_plane='document-preview', geometry_level='PROJECTIVE')
+    if transform['state'] != 'ESTABLISHED':
+        raise ValueError('Document rectification refused: ' + str(transform.get('error')))
+    inverse = geometry.invert_homography(transform)
+    if inverse['state'] != 'ESTABLISHED':
+        raise ValueError('Inverse document transform is unresolved.')
+    # EXIF display is exactly what the browser's original view shows. Do not run
+    # OCR/OSD here or silently rotate away from the user's supplied controls.
+    with Image.open(io.BytesIO(raw_bytes)) as original:
+        image = ImageOps.exif_transpose(original).convert('RGB')
+    width = round(1600 * min(1, aspect_ratio))
+    height = round(width / aspect_ratio)
+    matrix = inverse['matrix']
+    scale = matrix[2][2]
+    if abs(scale) < 1e-12:
+        raise ValueError('Preview crosses a projective horizon.')
+    a,b,c = [v/scale for v in matrix[0]]
+    d,e,f = [v/scale for v in matrix[1]]
+    g,h,_ = [v/scale for v in matrix[2]]
+    # Refuse a horizon through the output rectangle; never fill it with fiction.
+    if min(1, 1+g, 1+h, 1+g+h) <= 1e-8:
+        raise ValueError('Preview crosses a projective horizon.')
+    sw, sh = image.size
+    coefficients = (sw*a/width, sw*b/height, sw*c,
+                    sh*d/width, sh*e/height, sh*f, g/width, h/height)
+    preview = image.transform((width,height), Image.Transform.PERSPECTIVE,
+        coefficients, resample=Image.Resampling.BICUBIC, fillcolor='white')
+    if rotation:
+        preview = preview.rotate(-rotation, expand=True)
+    buffer = io.BytesIO()
+    preview.save(buffer, 'PNG')
+    return buffer.getvalue(), dict(state='QUALIFIED', geometry_level='PROJECTIVE',
+        coordinate_space='DOCUMENT_PREVIEW', capture_frame='EXIF_DISPLAY',
+        source_size=[sw,sh], preview_size=list(preview.size), corners=corners,
+        transform=transform, display_aspect_ratio=aspect_ratio,
+        sheet_reading_rotation=rotation, north_orientation='UNRESOLVED',
+        survey_geometry='NOT_ESTABLISHED', authority='NOT_ESTABLISHED',
+        qualification='Rectangle/aspect and reading orientation are human display premises. '
+                      'Angles, distances, north and legal survey authority are not established.')
 
 logger = logging.getLogger(__name__)
 

@@ -185,6 +185,10 @@ def resolve_true_north(graph):
               "candidates": candidates, "conversions": [], "premises": [],
               "reason": "No established true-North direction for this view",
               "tolerance_degrees": CORROBORATION_DELTA_DEGREES}
+    frame = graph.get("frame_qualification")
+    if frame and frame.get("angles") != "ESTABLISHED":
+        result["reason"] = "Capture-frame arrow observations retained; no independently established angular document frame. Rectification for display does not establish survey North."
+        return result
     measured = []
     blocking = False
     for candidate in candidates:
@@ -233,6 +237,28 @@ def resolve_true_north(graph):
                 "operator": "difference_of_established_same_view_directions", "state": "ESTABLISHED",
                 "scope": "observed_image_directions_only", "numerical_status": "APPROXIMATE"})
     return result
+
+
+def orientation_propositions(visual, frame=None):
+    """Expose separate propositions using the existing North/access owners."""
+    from services import survey_graph
+    graph = visual.get('graph') or {}
+    north = resolve_true_north(graph)
+    access = survey_graph.access_interpretations(graph)
+    primary = [row for row in access if row['state'] == 'PRIMARY_PUBLIC_ACCESS']
+    return [
+        dict(proposition='Sheet reading orientation', state='QUALIFIED' if frame and isinstance(frame.get('sheet_reading_orientation'), int) else 'UNRESOLVED',
+             reason='Human reading rotation is a display premise, independent of geographic North.', evidence=frame or {}),
+        dict(proposition='True / north orientation', state=north['state'], reason=north['reason'], evidence=north),
+        dict(proposition='Observed / main entrance orientation', state='UNRESOLVED',
+             reason='Retained access observations require their own entry identity and directional reference.', evidence=access),
+        dict(proposition='Candidate building front', state='CANDIDATE' if len(primary) == 1 else 'UNRESOLVED',
+             reason='Reviewed primary public access supports a candidate building front only; geographic orientation and regulatory frontage remain separate.' if len(primary) == 1 else 'An entrance may support a candidate front; the scoped interpretation must be reviewed explicitly.', evidence=access),
+        dict(proposition='Functional front', state='UNRESOLVED',
+             reason='Functional designation requires independent use and access evidence.', evidence=access),
+        dict(proposition='Regulatory frontage / front lot line', state='UNRESOLVED',
+             reason='Applicable municipal rules and parcel context are required, especially for corner lots. A different building front is not a contradiction.', evidence=access),
+    ]
 
 
 def directional_observation(observation):

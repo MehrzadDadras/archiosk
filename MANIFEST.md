@@ -1,5 +1,19 @@
 # MANIFEST
 
+Stage 1 Product Owner corrections: `document_examination` owns append-only
+anchored transcription review and explicit consumer re-evaluation in the existing
+EvidenceItem store. `image_intake.rectify_document_preview` uses spatial_compiler's
+control homography and preserves original bytes; its output is a qualified display
+derivative, not angular, metric or legal authority. `survey_north` separates six
+orientation/frontage propositions and refuses photographic-frame angular claims.
+Existing Survey Reference derive/render/persistence remains the consumer path.
+`templates/source_review.html` is shared by real project and isolated evaluation
+routes; `static/js/source_review.js` only collects human corner controls.
+Survey Evaluation GET reads its persisted inspection snapshot; explicit actions
+produce artifacts. Source review, kernel, Survey Evaluation and Document Shop
+expose GET-only Reload. Tests: `tests/test_source_review.py`; browser exercise:
+`tools/verify_source_review_ui.py`. Review package: `docs/STAGE_1_PO_CORRECTIONS.md`.
+
 Generic kernel mapping (Intelligence Programme Stage 1):
 `CaseWorkspaceStore.inspect_kernel_mapping` projects existing records and owned
 admission/currentness/relationship results without a schema or persistence change.

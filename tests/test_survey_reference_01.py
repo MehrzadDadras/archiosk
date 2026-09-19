@@ -546,13 +546,15 @@ class TrueNorthQualification(SurveyReferenceCase):
         self.store = CaseWorkspaceStore(str(self.tmp))
         result, document, workspace = self.result_for(project_id)
         context = dc.build_context(document, workspace, result, "Where is true North?")
-        self.assertEqual(context["true_north_premise"]["state"], "ESTABLISHED")
-        self.assertEqual(context["true_north_premise"]["degrees"], 30)
+        # Reviewing reference conversion cannot rectify a photographed angular frame.
+        self.assertEqual(context["true_north_premise"]["state"], "UNRESOLVED")
+        self.assertIsNone(context["true_north_premise"]["degrees"])
         visual = dx.visual_reading(workspace, result["source_id"])
-        self.assertTrue(any(p["type"] == "north" and p["degrees"] == 30
+        self.assertEqual(visual['graph']['north_candidates'][0]['validated_conversion']['state'], 'ESTABLISHED')
+        self.assertFalse(any(p["type"] == "north" and p["degrees"] == 30
                             for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
         reference = dx.survey_reference_of(workspace, result["source_id"])
-        self.assertTrue(any(p["type"] == "north" for p in sr.resolved_plan(reference)["primitives"]))
+        self.assertFalse(any(p["type"] == "north" for p in sr.resolved_plan(reference)["primitives"]))
         from services.case_workspace import EVIDENCE_CLASS_DIRECT_SOURCE
         counter = self.store.register_evidence_item(workspace, result["source_id"], EVIDENCE_CLASS_DIRECT_SOURCE,
             "Independent confirmed bearing reference conflicts with this grid-to-true conversion.", "text", actor="cust")
@@ -571,7 +573,7 @@ class TrueNorthQualification(SurveyReferenceCase):
         context = dc.build_context(document, workspace, result, "Where is true North?")
         self.assertEqual(context["true_north_premise"]["state"], "UNRESOLVED")
 
-    def test_measured_typed_north_survives_reload_renderer_and_ask_boundary(self):
+    def test_capture_frame_measurement_survives_without_claiming_survey_north(self):
         import math
         from services import survey_graph, survey_north
         for degrees in (30, 120):
@@ -597,9 +599,9 @@ class TrueNorthQualification(SurveyReferenceCase):
                 result, document, workspace = self.result_for(project_id)
                 visual = dx.visual_reading(workspace, result["source_id"])
                 north = survey_north.resolve_true_north(visual["graph"])
-                self.assertEqual(north["state"], "ESTABLISHED")
-                self.assertLess(survey_north.angular_delta(north["degrees"], degrees), 10)
-                self.assertTrue(any(p["type"] == "north" for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
+                self.assertEqual(north["state"], "UNRESOLVED")
+                self.assertLess(survey_north.angular_delta(north['candidates'][0]['measured_degrees'], degrees), 10)
+                self.assertFalse(any(p["type"] == "north" for p in survey_graph.build_primitives(visual["graph"])["primitives"]))
                 html = self.client.get("/document-shop/jobs/" + project_id).get_data(as_text=True)
                 self.assertIn("North setback: 5 m", html)
                 sent = {}
@@ -609,7 +611,7 @@ class TrueNorthQualification(SurveyReferenceCase):
                 with patch.object(llm_gateway, "call_llm_json", spy):
                     self.assertTrue(dc.ask(document, workspace, result, "North setback?", app=self.app)["ok"])
                 self.assertIn("TRUE NORTH PREMISE", sent["user_prompt"])
-                self.assertIn("ESTABLISHED", sent["user_prompt"])
+                self.assertIn("Capture-frame arrow observations retained", sent["user_prompt"])
                 row = next(e for e in workspace.evidence_items if e.get("content_type") == vx.VISUAL_CONTENT_TYPE)
                 stored = json.loads(row["content"])
                 stored["graph"]["north_candidates"][0]["bind_certainty"] = "PARTIALLY_RECOVERED"
@@ -3324,7 +3326,7 @@ class VQuietPage(SurveyReferenceCase):
         notice = body[body.index('data-ui-ref="document-shop.conversation.disclosure"'):]
         notice = notice[:notice.index("</p>")]
 
-        self.assertIn("The file itself is never sent", notice,
+        self.assertIn("The original file is not sent", notice,
                       "the claim that matters left the visible line")
         self.assertNotIn("Everything already found above", notice,
                          "the long form is still inline")

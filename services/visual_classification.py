@@ -600,6 +600,10 @@ def _store_visual_record(store, job, visual, ocr, governance_log):
         if workspace is None:
             return None
         try:
+            from services.document_examination import frame_qualification
+            frame = frame_qualification(workspace, job['source_id'])
+            if frame:
+                record.setdefault('graph', {})['frame_qualification'] = frame
             row = store.register_evidence_item(
                 workspace, source_id=job["source_id"],
                 evidence_class=EVIDENCE_CLASS_AI_GENERATED_PROPOSAL,
