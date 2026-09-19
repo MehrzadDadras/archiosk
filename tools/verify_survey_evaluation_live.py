@@ -29,7 +29,10 @@ def main():
     proof={"base_url":base,"runs":[],"browser_errors":[]}
     with sync_playwright() as driver:
         browser=driver.chromium.launch(headless=True)
-        context=browser.new_context(viewport={"width":1440,"height":1000})
+        # APIRequestContext posts must carry the same-origin Referer that a
+        # real HTTPS form submission supplies; keep production CSRF intact.
+        context=browser.new_context(viewport={"width":1440,"height":1000},
+                                    extra_http_headers={"Referer":base+"/"})
         page=context.new_page();page.set_default_timeout(120000)
         public=page.request.get(base+"/admin/survey-evaluation",max_redirects=0)
         assert public.status==302, "Public request reached the evaluation surface"

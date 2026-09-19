@@ -119,3 +119,51 @@ workflow is removed. The old direct IFC and generic prose paths are retained;
 their broader replacement has not been qualified for retirement.
 Preserve the live generated `static/nipigon/` directory as well as the standard
 persistent-path exclusions; a Git archive intentionally does not contain it.
+
+## Qualified deployment and live proof
+
+* Preserved Survey stack: `727eb1074bdadca130efa7855832c742d1f0bfab`, pushed without
+  unrelated working-tree changes.
+* Application implementation and controlled deployment:
+  `3dfe1f8849949122fca60e5d33fbe1f48af25e7a` (activation increment `71260c5`
+  followed by token integration `3dfe1f8`).
+* Focused geometry/activation gate: 416 passed. Correction/surface/prerequisite
+  gate: 123 passed, 12 subtests. Contrast pairings passed.
+* Authoritative full gate on the clean committed application tree: 9,494 passed,
+  3 skipped, 10,022 subtests passed, 14 warnings, `PYTEST_EXIT=0`, 803.16 seconds.
+  The initial full run was red on five absent ignored Nipigon assets and the
+  new stylesheet's raw colors; both causes were qualified and corrected before
+  this green run. No failing test was skipped or weakened.
+* Exact exported archive SHA-256:
+  `d7fa9f423a75efb2b8566f8565574310c124e91dcf2cd8a14e80b1eacd893abe`.
+  All 1,118 deployed archive files outside preserved `.claude/` tooling state
+  matched byte-for-byte. Git's declared CRLF archive conversion is distinct from
+  raw Git blob bytes. Deployment dry run had zero deletions and zero protected
+  path changes. All three services were active; public HTTPS health returned 200.
+* Live Chromium proof: 61/61 catalog cases reached the actual surface and review
+  path, including all 34 Rule 7 controls. Zero browser errors. Scoped clause and
+  whole-document acceptance/application, missing-predecessor refusal/rejection,
+  and missing-sheet arrival were exercised over HTTPS. Anonymous access returned
+  302; authenticated admin without Developer Mode returned 403.
+* The verification client initially omitted the HTTPS same-origin Referer on its
+  API-driven form posts; existing CSRF protection correctly refused them. Only
+  the local proof client was corrected. Application code and CSRF enforcement
+  remained unchanged. This verification/documentation follow-up does not replace
+  the qualified deployed application SHA above.
+* The live provider-backed Ask GO control admitted the deterministic height
+  refusal. The provider proposal and exact context remain inspectable. Temporary
+  verification access was revoked; residue check found zero account rows.
+
+Retained admin-only demonstrations (Developer Mode required):
+
+* [Survey Reference](https://archiosk.com/admin/survey-evaluation/f3c0207c6e27495f844d8e37b9197150)
+* [Explicit H and governed IFC](https://archiosk.com/admin/survey-evaluation/61272dd562cf47e5b76303aa3f31cdda)
+* [No H refusal](https://archiosk.com/admin/survey-evaluation/c32a4420c8cd49a5a82d6c811ecacff1)
+* [Ask GO height refusal](https://archiosk.com/admin/survey-evaluation/fde160a172af48cd95217b7fb6832d34)
+
+Live proof artifacts are retained in the activation worktree's ignored
+`instance/live-survey-3dfe1f8-referer/` directory. The prior live code/environment
+is retained at `/var/www/archiosk-backup-a20fe3c-before-survey-3dfe1f8`.
+Evaluation reachability is proven; automatic customer homography production,
+professional certification and a universally enforced survey sequence are not
+claimed.
