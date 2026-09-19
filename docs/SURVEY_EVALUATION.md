@@ -1,5 +1,12 @@
 # Survey Evaluation
 
+This document records the original controlled-evaluation baseline. For the current
+live-project observation, consumer admission, deterministic producers and deployed
+proof, see [Survey runtime convergence](SURVEY_RUNTIME_CONVERGENCE.md). Statements
+below about absent project selection or retained consumer bypasses describe that
+earlier baseline; the convergence increment supersedes them. Controlled runs still
+use isolated evaluation registries and never acquire customer authority.
+
 Entry: `/admin/survey-evaluation`, also linked from Developer Tools.
 Both the existing admin role and Developer Mode are required. The surface is
 for Product Owner evaluation; it is not a public or customer workflow.
