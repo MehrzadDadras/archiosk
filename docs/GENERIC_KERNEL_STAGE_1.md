@@ -104,6 +104,70 @@ deployment; record result and immutable SHA in the delivery closeout. Live brows
 proof must operate the real forms; a fixture invocation alone is insufficient.
 Product Owner approval and progression remain pending until that use/review.
 
+## Delivery checkpoint — 2026-09-19
+
+Implementation and deployed SHA:
+`900a48c1490f67b93a7a543ebc6d9fa850b9c2d6`.
+This closeout text is documentation after that implementation commit.
+
+The authoritative full gate ran in parallel (`-n 8 --dist loadfile`) on the
+frozen implementation, with **9,530 passed, 5 skipped, 14 warnings, 10,035 subtests
+passed, PYTEST_EXIT=0**, in 744.04 seconds. All eleven frozen file hashes matched
+after the gate. Two additional skips versus the baseline were confirmed as
+sandbox-denied symlink creation; both containment tests passed when rerun with
+the required filesystem access (2 passed in 4.62 seconds). No test or production
+implementation was changed to make them pass. The remaining three skips match
+the baseline count. Focused qualification includes 132 passing tests before the
+reload amendment, 131 passing plus an over-strict reflected-query assertion in
+the amended run, then all 12 kernel tests passing after correcting that assertion.
+The final full gate includes that correction and the complete reload amendment.
+The first full run was stopped at 61% for the Product Owner's reload amendment;
+it is not counted as qualification, and edits began only after its workers exited.
+
+Retained local records: `instance/kernel-focused-03.log`,
+`instance/kernel-focused-04.log`, `instance/kernel-focused-05.log`,
+`instance/kernel-full-02.log`, `instance/kernel-frozen-02-hashes.csv`,
+`instance/kernel-deploy-dry-run.log`, `instance/kernel-deploy.log`, and
+`instance/kernel-deploy-verification.log`.
+
+Exact archive SHA256:
+`e2e6fb8dcdc29118df088f9faa23c81164b083967886d6fe9fc8bcb37de1c2cd`.
+The deployment dry-run showed only expected application changes and the prior
+convergence documentation closeout; no deletions or protected-path changes.
+All **1,127 checked archive files** matched deployed bytes. Protected `.claude/`
+configuration was excluded. Environment bytes were compared to the rollback copy
+and remain unchanged. Instance data, virtualenv and retained drawing assets were
+excluded from sync. GO, perception and visual services are active; local/public
+health checks passed. The new live kernel route returns 302 to anonymous access.
+Rollback code and the restricted environment copy remain at
+`/var/www/archiosk-backup-c1ffa6c82de2cce205379741c1c149e6f5235924-before-kernel-900a48c1490f67b93a7a543ebc6d9fa850b9c2d6`.
+
+**Authenticated live UI proof is pending.** No maintainer-issued verification
+link has been supplied in this session. The existing mechanism reserves issuance
+to a human maintainer (`services/verification_access.py` and
+`tools/manage_verification_access.py`); no credentials or alternate login path
+were created. `tools/verify_kernel_mapping_live.py` is ready to operate the actual
+Inspect/Reload forms and retain live observation IDs and screenshots. No live
+runtime trace reference is claimed for Stage 1 until that execution occurs.
+Health, deployed bytes, and an anonymous redirect do not satisfy live invocation.
+
+| Activation step | Proven status at this checkpoint |
+| --- | --- |
+| IMPLEMENTED | Existing owner extension and shared real/evaluation UI deployed |
+| REACHABLE | Flask routes and links tested; live anonymous authentication boundary verified |
+| INVOKED | Actual resolver invocation proven by real Flask route tests; authenticated live UI pending |
+| CONSUMED | Returned mapping consumed by template and recorded in route tests; live proof pending |
+| SURFACED | Governed states, provenance, refusals and reload controls rendered in tests; live visual proof pending |
+| END-TO-END OBSERVABLE | Local route chain proved; live browser chain and Product Owner use/review pending |
+
+The Product Owner entry is
+[Castille kernel mapping](https://archiosk.com/projects/9c00eeec-4e65-4bde-bcea-de8b09c8beb1/kernel).
+Enable Developer Mode and request observation first through
+[Survey Evaluation](https://archiosk.com/admin/survey-evaluation).
+Select Source/EvidenceItem, inspect, follow provenance/references, then reload.
+The UI links the current request's trace when observation recording is enabled.
+Review of Stage 1 remains open; Stage 2 has not begun.
+
 ## Programme register — retain through later stages
 
 - Attention changes focus, not truth; excluded evidence still exists.
