@@ -87,3 +87,79 @@ Live command, only with an existing human-issued `ARCHIOSK_VERIFICATION_URL`:
 
 The live verifier mutates isolated evaluation data only and reads Castille. It
 never issues verification credentials. Operational traces are not evidence.
+
+## Delivery closeout — 2026-09-19
+
+Implementation and deployed SHA:
+`73b8d752d4d798f04724b8161f68026f5c3de763`.
+This closeout is a subsequent documentation-only update.
+
+Qualification:
+
+- Focused run: **351 passed, 87 subtests passed**. Final-change checks:
+  **32 passed, 20 subtests passed**.
+- Frozen authoritative full gate, parallel `-n 8 --dist loadfile`:
+  **9,538 passed, 5 skipped, 14 warnings, 10,067 subtests passed**, 785.07 seconds,
+  `PYTEST_EXIT=0`. All **1,136 frozen file hashes** were unchanged after the gate.
+- Two skips were sandbox-denied symlink creation. Both containment tests passed
+  with the required filesystem access: **2 passed**. The other three skips match
+  the baseline count. No implementation/test edits were made during the full gate.
+- A separate pixel check mapped four distinctly colored skewed-source landmarks
+  to their expected rectangle corners and preserved the source bytes.
+- Chromium exercised actual Flask forms in an isolated local runtime: sign-in,
+  evaluation creation, four-corner picking, persisted preview display, correction
+  proposal, accept, explicit re-evaluation, Reload, revert and re-evaluation.
+  No browser errors. Reload preserved both visible state and persisted workspace
+  bytes. The trace records actual invocation of image_intake, spatial/reference
+  consumers, document_examination and CaseWorkspaceStore owners.
+
+Retained local proof:
+
+- `instance/stage1-focused-final.log`
+- `instance/stage1-focused-delta.log`
+- `instance/stage1-full-gate.log`
+- `instance/stage1-frozen-tree.json`
+- `instance/source-review-ui/proof.json`
+- `instance/source-review-ui/runtime-traces.json`
+- `instance/source-review-ui/source-review.png`
+
+Example **local** UI re-evaluation trace:
+`a63840852dd34d419f488b48ab707cb6`, in the retained runtime-traces file. This is
+not a production trace or project evidence. Local temporary evaluation IDs are
+not live links.
+
+Deployment and live checks:
+
+- Exact archive SHA-256:
+  `616aea0c07be7f1ca8d74cefaf13637676558fd723c6079b25531b07e39ff19b`.
+- **1,132 deployed archive files checked; zero mismatches.** Environment bytes
+  preserved. No schema migration or canonical-project backfill was performed.
+- Web, perception and visual services restarted and active. Service description
+  reports the implementation SHA above. Public health returns 200; new source
+  review JavaScript returns 200. Both protected review routes return 302 to sign-in
+  without an authenticated session.
+- Read-only inspection through the deployed document_examination owner found
+  **54 structured Castille fields**. Source/evidence counts remain **2 / 42**.
+  Its document frame is `UNRECTIFIED`, angles `UNRESOLVED`, metric scale
+  `NOT_ESTABLISHED`, as required before new premises enter.
+- Castille original SHA-256 before and after deployment:
+  `3b2dd9dcca1ae79a55d2f91d9fb1acc24edf6b2b857ea9606e31a0147a301e98`.
+- Rollback retained at
+  `/var/www/archiosk-backup-900a48c1490f67b93a7a543ebc6d9fa850b9c2d6-before-kernel-73b8d752d4d798f04724b8161f68026f5c3de763`.
+
+Activation ladder:
+
+| Level | Proof and scope |
+|---|---|
+| IMPLEMENTED | Qualified exact implementation SHA above |
+| REACHABLE | Real/evaluation routes; local signed-in browser; deployed sign-in gates |
+| INVOKED | Actual local UI actions and retained owned-call traces; live read-only owner inspection |
+| CONSUMED | Explicit review result and ordinary Survey Reference consumers exercised locally |
+| SURFACED | Actual browser previews, correction/diff history, states and groups |
+| END-TO-END OBSERVABLE | Proven in local browser runtime; authenticated deployed browser proof pending |
+
+Authenticated production UI invocation is **not claimed**. No maintainer-issued
+verification URL was supplied. `services/verification_access.py` reserves issuance
+to a human maintainer; no account, token or production session was manufactured.
+The Product Owner can now perform the workflow above with their ordinary account.
+Stage 1 acceptance remains pending that re-test; Stage 2 has not begun.
