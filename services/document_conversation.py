@@ -191,7 +191,7 @@ def _evidence_text(workspace, source_id: str) -> str:
 
 
 @observed
-def build_context(document, workspace, result: dict, question: str) -> dict[str, Any]:
+def build_context(document, workspace, result: dict, question: str, *, app=None) -> dict[str, Any]:
     """EXACTLY what leaves this host, assembled in one place so it can be read.
 
     Returning it rather than formatting it inline is deliberate: a test asserts
@@ -222,14 +222,15 @@ def build_context(document, workspace, result: dict, question: str) -> dict[str,
     # under its own gate and with its own audit record. This box sends the
     # RECORD of that looking, which is a short list of qualified statements -
     # not a second transmission of the customer's survey.
-    visual = dx.visual_reading(workspace, source_id) if source_id else None
+    from services.case_workspace import CaseWorkspaceStore
+    from flask import current_app, has_app_context
+    configured_app = app if app is not None else current_app if has_app_context() else None
+    store = CaseWorkspaceStore(configured_app.config["REGISTRY_STORE_PATH"]) if configured_app is not None else None
+    visual = dx.visual_reading(workspace, source_id, store=store) if source_id else None
     reference = dx.survey_reference_of(workspace, source_id) if source_id else None
     visual_recovered, visual_partial, visual_unresolved = dx._visual_lines(visual)
     from services import survey_north, height_datum_governance
     north = survey_north.resolve_true_north((visual or {}).get("graph") or {})
-    from services.case_workspace import CaseWorkspaceStore
-    from flask import current_app, has_app_context
-    store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]) if has_app_context() else None
     admission = [store.admit_proposition(workspace, item["id"]) for item in workspace.evidence_items
                  if item.get("source_id") == source_id] if store else []
 
@@ -364,8 +365,7 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
         return {"ok": False, "answer": NOT_CONFIGURED_MESSAGE,
                 "reason": "no_api_key"}
 
-    with app.app_context():
-        context = build_context(document, workspace, result, question)
+    context = build_context(document, workspace, result, question, app=app)
     outcome = llm_gateway.call_llm_json(
         user_prompt=render_prompt(context),
         system_prompt=SYSTEM_PROMPT,

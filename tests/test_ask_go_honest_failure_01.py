@@ -91,7 +91,9 @@ class TheMessageMatchesWhatHappened(unittest.TestCase):
         reply = _ask(_Outcome(ran=True, parsed={"answer": "Two structures."},
                               parse_status=llm_gateway.PARSE_OK))
         self.assertTrue(reply["ok"])
-        self.assertEqual(reply["answer"], "Two structures.")
+        self.assertEqual(reply["proposed_answer"], "Two structures.")
+        self.assertNotIn("Two structures.", reply["answer"])
+        self.assertTrue(reply["qualification_preserved"])
 
 
 class NoInternalsReachThePerson(unittest.TestCase):

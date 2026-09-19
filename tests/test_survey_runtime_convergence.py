@@ -76,6 +76,9 @@ def test_observation_attaches_to_actual_route_and_cannot_grant_authority(tmp_pat
     assert "services.survey_graph.derive_survey_operation" in invoked
     assert "engine.spatial_compiler.estimate_control_homography" in invoked
     assert "services.case_workspace.CaseWorkspaceStore.register_evidence_item" in invoked
+    registrations=[event for event in trace["events"] if event["owner"].endswith(".register_evidence_item")]
+    assert all("content" not in event.get("inputs",{}) for event in registrations)
+    assert any(event.get("result",{}).get("id") for event in registrations if event["phase"]=="RETURNED")
     assert trace["request"]["endpoint"]=="portal.survey_evaluation"
     assert not CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"]).get("evaluation")
     client.post("/admin/survey-evaluation",data={"action":"observe","enabled":"no"})

@@ -83,7 +83,7 @@ def observed(fn):
             except OSError:
                 current_app.logger.exception("Background observation could not be linked")
         event(owner, "INVOKED", inputs={k: summary(v) for k,v in bound.items()
-              if k not in ("self", "app", "store", "api_key", "governance_log", "image_base64")})
+              if k not in ("self", "app", "store", "api_key", "governance_log", "image_base64", "content")})
         if owner == "services.llm_gateway.call_llm_json":
             event(owner, "PROVIDER_INPUT", user_prompt=bound.get("user_prompt"),
                   system_prompt=bound.get("system_prompt"), model=bound.get("model"),
@@ -172,7 +172,7 @@ def recent(app):
     if not folder.exists():
         return []
     records = sorted((p for p in folder.glob("*.json") if not p.name.startswith("_")), key=lambda p:p.stat().st_mtime, reverse=True)[:30]
-    return [json.loads(p.read_text(encoding="utf-8")) for p in records]
+    return [record for p in records if (record := read(app, p.stem)) is not None]
 
 
 def read(app, identifier):
