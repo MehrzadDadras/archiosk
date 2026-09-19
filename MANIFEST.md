@@ -1,5 +1,17 @@
 # MANIFEST
 
+Generic kernel mapping (Intelligence Programme Stage 1):
+`CaseWorkspaceStore.inspect_kernel_mapping` projects existing records and owned
+admission/currentness/relationship results without a schema or persistence change.
+Real project and isolated evaluation routes in `routes/workspace.py` and
+`routes/portal.py` serve `templates/kernel_mapping.html`, linked from existing
+Survey surfaces. `tests/test_kernel_mapping.py` proves route invocation,
+consumption, byte-preserving reads, qualification and refusals.
+`tools/verify_kernel_mapping_live.py` drives authenticated live browser forms.
+`templates/components/review_reload.html` supplies a GET-only reload control that
+preserves selection/query parameters on kernel and Survey review surfaces.
+Scope, programme register and Product Owner workflow: `docs/GENERIC_KERNEL_STAGE_1.md`.
+
 Survey runtime convergence: `services/runtime_observation.py` records actual
 owned calls on opt-in Admin/Developer requests, without resolving domain truth.
 `CaseWorkspaceStore.admit_proposition` is the shared existing-evidence consumer

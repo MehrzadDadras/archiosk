@@ -6,7 +6,7 @@
 <header><p>Admin · Developer Mode</p><h1>Survey Evaluation</h1>
 <p>Inspect ordinary project execution or run clearly isolated <strong class="se-state se-EVALUATION_INPUT">EVALUATION_INPUT</strong> cases. An observation grants no authority and certifies no survey.</p>
 <p>Controlled cases supply labelled premises. The earned-H operation calculates a transform from addressed correspondence evidence; it does not extract controls automatically or establish physical scale.</p>
-<nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav></header>
+<nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav>{% include 'components/review_reload.html' %}</header>
 <ol class="se-sequence"><li>SITUATE</li><li>BIND</li><li>COMPARE</li><li>REASON</li><li>GOVERN</li><li>CONSUME</li><li>SURFACE</li></ol>
 {% if not report %}
 <section><h2>Observe real execution</h2>
@@ -37,6 +37,7 @@
 <h2>{{ report.record.title }}</h2><p>Run {{ report.record.id }} · Created by {{ report.record.actor }}</p>
 <p>Executed: retained inputs → actual operators → EvidenceItems → reload → trust/review → examination and consumer output. Ask GO is invoked by its separate button below; its provider outcome is shown explicitly.</p>
 <section><h2>Source and actual outputs</h2><div class="se-links">
+<a href="{{ url_for('portal.evaluation_kernel_mapping', run_id=report.record.id) }}">Inspect generic kernel mapping</a>
 {% for artifact,label in [('source.pdf','Controlled source PDF'),('reference.pdf','Actual Survey Reference PDF')] %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact=artifact) }}">{{ label }}</a>{% endfor %}
 {% if report.ifc_exportable %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact='governed.ifc') }}">Governed evaluation IFC</a>{% endif %}
 {% if report.record.case in ['north','ambiguous-north'] %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact='north-0.png') }}">First measured evaluation arrow</a>{% endif %}{% if report.record.case == 'ambiguous-north' %}<a href="{{ url_for('portal.survey_evaluation_artifact',run_id=report.record.id,artifact='north-1.png') }}">Conflicting measured evaluation arrow</a>{% endif %}</div>

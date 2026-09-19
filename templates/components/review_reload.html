@@ -1,0 +1,4 @@
+<form method="get" action="{{ request.path }}" aria-label="Reload current review">
+  {% for key, value in request.args.items(multi=True) %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+  <button type="submit">Reload view</button>
+</form>

@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Generic kernel mapping — ARCHIOSK{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
+{% block content %}
+<main class="survey-evaluation">
+<header><p>Stage 1 · Admin · Developer Mode</p><h1>Generic kernel mapping</h1><p>{{ project_title }}</p>
+<nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Projects, evaluation cases and runtime observations</a></nav>
+<p>Objective: inspect how existing records serve the generic kernel. Selecting an item changes this inspection only.</p>{% include 'components/review_reload.html' %}</header>
+{% if report.state != 'AVAILABLE' %}<section><h2>{{ report.state }}</h2><p>{{ report.reason }}</p></section>{% else %}
+<section><h2>Inputs and selection</h2><p>{{ 'EVALUATION_INPUT — no canonical project authority' if report.evaluation_only else 'REAL PROJECT DATA — authority remains record-specific' }} · Workspace version {{ report.version }}</p>
+<form method="get" action="{{ mapping_url }}"><label for="kernel-item">Existing item</label><select id="kernel-item" name="item">
+{% for item in report['items'] %}<option value="{{ item.address }}"{% if report.selected and item.address == report.selected.address %} selected{% endif %}>{{ item.concrete_type }} · {{ item.label }} · {{ item.id }}</option>{% endfor %}</select><button type="submit">Inspect item</button></form>
+<p>Attention: manual inspection selection only. Evidence outside this selection still exists. Analytical attention and temporary constellations await later stages.</p></section>
+{% if report.selected %}{% set item = report.selected %}
+<section id="kernel-selected"><h2>{{ item.concrete_type }} → {{ item.generic_role }}</h2>
+<p>Existing ID: {{ item.id }} · Collection: {{ item.collection }}</p>
+<p><strong>{{ 'EVALUATION_INPUT' if item.evaluation_only else 'PROJECT RECORD — not an authority grant' }}</strong></p>
+{% if item.collection == 'cases' %}<p>Recorded objective: {{ item.record.get('objective') or 'NOT_RECORDED' }}</p>{% endif %}
+<h3>Governed state</h3>{% if item.governed %}<p id="kernel-state"><strong>{{ item.governed.get('state', item.governed.get('status')) }}</strong></p><pre>{{ item.governed|tojson(indent=2) }}</pre>{% else %}<p>No proposition decision is derived for this concrete type. Recorded state and authority fields follow unchanged.</p>{% endif %}
+<h3>Recorded authority and qualification</h3><pre>{{ item.authority|tojson(indent=2) }}</pre><p>Absent fields are NOT_RECORDED. A stored relationship may remain provisional, disputed or unresolved.</p>
+<h3>Currentness</h3>{% if item.currentness %}<pre>{{ item.currentness|tojson(indent=2) }}</pre>{% else %}<p>No applicable endpoint currentness resolver for this type.</p>{% endif %}</section>
+<section><h2>Provenance and source jumps</h2><pre>{{ item.provenance|tojson(indent=2) }}</pre>
+{% if item.source %}<p>Source: {{ item.source.get('name') }} · {{ item.source_id }}</p>
+{% if run_id %}<a href="{{ url_for('portal.survey_evaluation_artifact', run_id=run_id, artifact='source.pdf') }}">Open controlled source PDF (evaluation run)</a>
+{% else %}<a href="{{ url_for('workspace.show_workspace', project_id=report.project_id, source=item.source_id) }}">Open source in project</a>{% if item.source.get('file_path') %} · <a href="{{ url_for('workspace.source_file', project_id=report.project_id, source_id=item.source_id) }}">Open original source file</a>{% endif %}{% endif %}
+<details><summary>Source record</summary><pre>{{ item.source|tojson(indent=2) }}</pre></details>{% else %}<p>No direct source pointer is recorded for this item. Inspect its recorded references below; none is inferred.</p>{% endif %}
+<details><summary>Complete stored item, including binding and derivation if recorded</summary><pre id="kernel-record">{{ item.record|tojson(indent=2) }}</pre></details></section>
+<section><h2>Relationships</h2><p>These are persisted project relationships. Persistence does not mean confirmation. This view creates no temporary or canonical edges.</p>
+{% for edge in item.relationships %}<article><p>{{ edge.record.from_id }} → {{ edge.record.to_id }} · {{ edge.record.relationship_type }} · <strong>{{ edge.resolved.status }}</strong></p><p>Reason: {{ edge.record.get('reason') or 'NOT_RECORDED' }}</p><pre>{{ edge|tojson(indent=2) }}</pre></article>{% else %}<p>No recorded relationship for this mapped endpoint.</p>{% endfor %}</section>
+<section><h2>Downstream references and consumers</h2><p>These records contain explicit references to this item. A reference alone does not prove runtime consumption. JSON text inside content is preserved above.</p>
+{% for consumer in item.consumers %}<p><a href="{{ mapping_url }}?item={{ consumer.address|urlencode }}">{{ consumer.concrete_type }} · {{ consumer.label }}</a> · {{ consumer.reference_fields|join(', ') }}</p>{% else %}<p>No references found in mapped record fields; this is not proof that no consumer exists.</p>{% endfor %}
+<p>This request consumes the mapping through kernel_mapping.html. Ask GO, drawing and export invocation must be observed through their own UI actions.</p></section>
+{% else %}<section><h2>No mapped items</h2><p>This workspace contains no items in the inspected collections.</p></section>{% endif %}
+<section><h2>Generic concepts and remaining gaps</h2><table><thead><tr><th>Concept</th><th>Current mapping</th></tr></thead><tbody>{% for concept, mapping in report.concepts %}<tr><td>{{ concept }}</td><td>{{ mapping }}</td></tr>{% endfor %}</tbody></table>
+<p>Populated collections outside this bounded mapping: {{ report.unmapped_collections|join(', ') or 'None' }}.</p>
+<p>Pattern: no new pattern inference runs in Stage 1. Muscles: the existing mapping and applicable admission/currentness/relationship resolvers execute; the muscle framework is not yet implemented.</p></section>
+{% endif %}
+<section><h2>Real runtime invocation</h2><p>Route: {{ request.path }} · Owner: CaseWorkspaceStore.inspect_kernel_mapping · Consumer: kernel_mapping.html · Visible result: this page.</p>
+{% if g.survey_observation is defined %}<p>Observation <a id="kernel-trace" href="{{ url_for('portal.survey_evaluation', observation=g.survey_observation.id) }}">{{ g.survey_observation.id }}</a>. If recording succeeds, open it to inspect actual calls and the surfaced response.</p>{% else %}<p>Recording is off. In Survey Evaluation choose “Observe my real requests”, then return and inspect an item.</p>{% endif %}
+<p>Trace is not evidence. Generic role labels do not strengthen authority, certainty, binding or geometry.</p></section>
+</main>
+{% endblock %}

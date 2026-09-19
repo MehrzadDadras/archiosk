@@ -800,6 +800,34 @@ def survey_evaluation_run(run_id):
     return response
 
 
+@portal_bp.route('/admin/survey-evaluation/<run_id>/kernel')
+@admin_required
+def evaluation_kernel_mapping(run_id):
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation
+    from services.runtime_observation import event
+    try:
+        path = evaluation.location(current_app, run_id)
+        record = evaluation._read(path)
+        store = CaseWorkspaceStore(str(path / 'registry'))
+        workspace = store.get(record['project_id'])
+        if workspace is None:
+            abort(404)
+    except (ValueError, OSError, KeyError):
+        abort(404)
+    report = store.inspect_kernel_mapping(workspace, session.get('username'),
+        request.args.get('item', ''), evaluation_only=True)
+    event('kernel_mapping.html', 'CONSUMED', state=report['state'],
+          item=request.args.get('item', ''), evaluation_only=True)
+    response = current_app.make_response((render_template('kernel_mapping.html', report=report,
+        project_title='Evaluation ' + run_id,
+        mapping_url=url_for('portal.evaluation_kernel_mapping', run_id=run_id),
+        back_url=url_for('portal.survey_evaluation_run', run_id=run_id), run_id=run_id),
+        403 if report['state'] == 'REFUSED' else 404 if report['state'] == 'UNRESOLVED' else 200))
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @portal_bp.route('/admin/survey-evaluation/<run_id>/artifact/<artifact>')
 @admin_required
 def survey_evaluation_artifact(run_id, artifact):

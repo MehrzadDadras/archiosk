@@ -612,6 +612,25 @@ def _require_approval(action_class: str, description: str, project_id: str, case
     )
 
 
+@workspace_bp.route("/projects/<project_id>/kernel")
+@admin_required
+def kernel_mapping(project_id):
+    from routes.portal import _require_developer_tools
+    from services.runtime_observation import event
+    _require_developer_tools()
+    document, store, workspace = _load_workspace_or_404(project_id)
+    report = store.inspect_kernel_mapping(workspace, _reviewer(), request.args.get("item", ""))
+    event("kernel_mapping.html", "CONSUMED", state=report["state"],
+          item=request.args.get("item", ""), project_id=project_id)
+    response = current_app.make_response((render_template("kernel_mapping.html", report=report,
+        project_title=workspace.display_title or document.filename,
+        mapping_url=url_for("workspace.kernel_mapping", project_id=project_id),
+        back_url=url_for("workspace.show_workspace", project_id=project_id), run_id=None),
+        403 if report["state"] == "REFUSED" else 404 if report["state"] == "UNRESOLVED" else 200))
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
 @workspace_bp.route("/projects/<project_id>/workspace")
 @login_required
 def show_workspace(project_id):

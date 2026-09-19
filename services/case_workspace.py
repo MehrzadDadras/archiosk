@@ -6646,6 +6646,124 @@ class CaseWorkspaceStore:
         self._overlay_view_state(workspace)
         return workspace
 
+    @observed
+    def inspect_kernel_mapping(self, workspace, actor, selection="", *, evaluation_only=False):
+        """Read-only vocabulary projection over this owner's records and resolvers.
+
+        The mapping is descriptive, never a type conversion, graph, or authority
+        store. Whole-project inspection fails closed when any Case is private to
+        another actor: indirect references must not disclose its contents either.
+        """
+        if len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            return dict(state="REFUSED", reason="Project-wide inspection requires visibility of every case.")
+        # Concrete class, generic roles. These labels confer no new semantics.
+        types = {
+            "sources": ("Source", "Entity / Source / Provenance"),
+            "cases": ("CaseRecord", "Entity / Objective / State"),
+            "requirements": ("Requirement", "Requirement / Constraint"),
+            "evidence_items": ("EvidenceItem", "Evidence / Attribute / Provenance"),
+            "derived_observations": ("DerivedObservation", "Observation"),
+            "findings": ("Finding", "Observation / Uncertainty"),
+            "relationships": ("Relationship", "Relationship"),
+            "supersessions": ("Supersession", "Relationship / Time / Authority"),
+            "structural_units": ("StructuralUnit", "Source address"),
+            "addressable_regions": ("AddressableRegion", "Source address / Subject scope"),
+            "source_references": ("SourceReference", "Relationship / Provenance"),
+            "claims": ("Claim", "Observation / Evidence qualification"),
+            "investigation_steps": ("InvestigationStep", "Objective / Provenance"),
+            "condition_boundaries": ("ConditionBoundary", "Constraint / Scope"),
+            "temporal_obligations": ("TemporalObligation", "Constraint / Time"),
+            "reviewer_validations": ("ReviewerValidation", "Authority / State"),
+            "dispositions": ("Disposition", "Decision / State"),
+            "requirement_adjudications": ("RequirementAdjudication", "Decision / Authority"),
+            "case_outcomes": ("CaseOutcome", "Decision"),
+            "participants": ("Participant", "Entity"),
+            "go_no_go_assessments": ("GoNoGoAssessment", "Decision"),
+            "work_products": ("WorkProduct", "Consumer / Provenance"),
+            "attentions": ("Attention", "Reviewer notification (not analytical attention)"),
+        }
+        items = []
+        for collection, (concrete, roles) in types.items():
+            for record in getattr(workspace, collection):
+                if record.get("project_id", workspace.project_id) != workspace.project_id:
+                    continue
+                items.append(dict(address=collection+":"+record["id"], collection=collection,
+                    id=record["id"], concrete_type=concrete, generic_role=roles,
+                    label=str(record.get("name") or record.get("title") or record.get("statement")
+                              or record.get("content_type") or record["id"])[:180]))
+        chosen = next((i for i in items if i["address"] == selection), None) if selection else next(iter(items), None)
+        if selection and chosen is None:
+            return dict(state="UNRESOLVED", reason="Item is unavailable in this project.")
+        report = dict(state="AVAILABLE", project_id=workspace.project_id, version=workspace.version,
+            evaluation_only=evaluation_only, items=items, selected=None,
+            unmapped_collections=[k for k, v in vars(workspace).items()
+                                  if isinstance(v, list) and v and k not in types],
+            concepts=[
+                ("Entity", "ProjectWorkspace, Source, Participant, CaseRecord; existing IDs retained."),
+                ("Subject", "AddressableRegion and scoped evidence subject_id; no universal subject identity proven."),
+                ("Source", "Source, StructuralUnit, AddressableRegion; original addresses retained."),
+                ("Observation", "DerivedObservation, Finding, Claim; their distinct qualifications retained."),
+                ("Evidence", "EvidenceItem; admission remains CaseWorkspaceStore.admit_proposition."),
+                ("Attribute", "Existing record fields and evidence values; no new attribute store."),
+                ("Requirement", "Requirement, independent of findings and compliance judgments."),
+                ("Constraint", "Requirement, ConditionBoundary, TemporalObligation; no new solver."),
+                ("Relationship", "Relationship, SourceReference, Supersession; no inferred edges."),
+                ("Authority", "Existing source authority, review, disposition and admission owners."),
+                ("Time", "Recorded issue dates and temporal obligations; currentness uses existing resolvers."),
+                ("State", "Existing record states and governed resolver returns, kept distinct."),
+                ("Objective", "CaseRecord.objective and InvestigationStep; project inspection creates no objective."),
+                ("Decision", "Disposition, RequirementAdjudication, CaseOutcome, GoNoGoAssessment."),
+                ("Provenance", "Source/region IDs, evidence references, derivations and recorded authors."),
+                ("Attention Scope", "PARTIAL substrate: InvestigationStep examined IDs, Claim evidence links/exclusions, and relationship sachets. GAP: analytical lifetime and de-emphasis contract. Attention is a reviewer notification."),
+                ("Temporary Analytical Relationship", "Existing sachets bound inspection of recorded edges. GAP: provisional Relationship is not an objective-bound, expiring constellation with governed promotion."),
+            ])
+        if chosen is None:
+            return report
+        record = self._find(getattr(workspace, chosen["collection"]), chosen["id"])
+        kind = next((k for k, v in self._MM6_ENDPOINT_LISTS.items() if v == chosen["collection"]), None)
+        edges = self.relationships_for(workspace, kind, chosen["id"]) if kind else []
+        governed = None
+        if chosen["collection"] == "evidence_items":
+            governed = self.admit_proposition(workspace, chosen["id"])
+        elif chosen["collection"] == "relationships":
+            governed = self.resolve_relationship_status(workspace, chosen["id"])
+        currentness = self.resolve_anchor_currentness(workspace, kind, chosen["id"]) if kind else None
+        source_id = chosen["id"] if chosen["collection"] == "sources" else record.get("source_id")
+        source = self._find(workspace.sources, source_id) or {}
+        # Exact recorded references, not semantic similarity, inferred dependency,
+        # or a claim that another runtime consumer was invoked by this request.
+        def reference_paths(value, target, path=""):
+            found = []
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    here = path+"."+key if path else key
+                    if key != "id" and (key.endswith("_id") or key.endswith("_ids")):
+                        if child == target or isinstance(child, list) and target in child:
+                            found.append(here)
+                    if isinstance(child, (dict, list)):
+                        found.extend(reference_paths(child, target, here))
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    found.extend(reference_paths(child, target, path+f"[{index}]"))
+            return found
+        consumers = []
+        for item in items:
+            other = self._find(getattr(workspace, item["collection"]), item["id"])
+            paths = reference_paths(other, chosen["id"])
+            if paths and item["address"] != chosen["address"]:
+                consumers.append(dict(item, reference_fields=paths))
+        report["selected"] = dict(chosen, record=deepcopy(record), source=deepcopy(source),
+            source_id=source_id, governed=governed, currentness=currentness,
+            relationships=[dict(record=deepcopy(edge), resolved=self.resolve_relationship_status(workspace, edge["id"])) for edge in edges],
+            consumers=consumers,
+            authority={k: deepcopy(v) for k, v in record.items()
+                       if any(word in k for word in ("authority", "certainty", "validation", "status", "confidence", "provisional", "confirmed"))},
+            provenance={k: deepcopy(v) for k, v in record.items()
+                        if k.endswith(("_id", "_ids", "_at", "_by")) or k in ("provenance", "version", "content_hash", "extractor_version", "origin_type", "origin_reference")},
+            evaluation_only=bool(evaluation_only or record.get("evaluation_only") or source.get("evaluation_only")
+                                 or governed and governed.get("evaluation_only")))
+        return report
+
     def _overlay_view_state(self, workspace: ProjectWorkspace) -> None:
         """Sidecar wins over anything still embedded in the document.
 
@@ -14699,6 +14817,7 @@ class CaseWorkspaceStore:
             return None
         return record
 
+    @observed
     def resolve_anchor_currentness(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> dict:
         """Currentness follows exact anchors, never a successor's existence alone.
 
@@ -14837,6 +14956,7 @@ class CaseWorkspaceStore:
             )
         return relationship
 
+    @observed
     def resolve_relationship_status(self, workspace: ProjectWorkspace, relationship_id: str) -> dict:
         """
         Section 6/14: the read-time-derived status a Relationship doesn't
