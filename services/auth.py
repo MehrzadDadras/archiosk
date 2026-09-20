@@ -153,6 +153,8 @@ def user_can_create_document_shop_container() -> bool:
 
 
 def log_in(user: User) -> None:
+    import uuid
+    session["document_desk_selection"] = uuid.uuid4().hex
     session["user_id"] = user.id
     session["username"] = user.username
     session["role"] = user.role
@@ -160,6 +162,7 @@ def log_in(user: User) -> None:
 
 def log_out() -> None:
     username = session.get("username")
+    session.pop("document_desk_selection", None)
     session.pop("user_id", None)
     session.pop("username", None)
     session.pop("role", None)

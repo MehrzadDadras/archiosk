@@ -1,5 +1,8 @@
 # Document Shop deletion lifecycle
 
+**UI policy superseded:** Delete now enters 7-day private Trash. The permanent
+erasure owner documented here is used on expiry. See DOCUMENT_SHOP_BULK.md.
+
 The reported Castille URL identifies a Black Box workspace, not a separate job
 table row. Source removal previously marked the original and generated Survey
 Reference removed, then returned to My Documents without retiring the container.

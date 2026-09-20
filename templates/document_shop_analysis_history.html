@@ -1,0 +1,16 @@
+﻿{% extends "base.html" %}
+{% block title %}Analysis history{% endblock %}
+{% block content %}
+<h1>Analysis history</h1>
+<p>Runs use the preserved source. Existing OCR evidence may be reused by the current worker; visual re-analysis creates a new qualified reading. Newer results do not acquire greater authority.</p>
+{% for row in records %}<section>
+<h2>{{ row.stage|replace('_', ' ') }} — {{ row.state }}</h2>
+<p>{{ row.created_at }} · Engine {{ row.processing_version }} · Run {{ row.analysis_run_id or 'Initial analysis' }}</p>
+<p>Source {{ row.source_id }} · SHA256 {{ row.source_sha256 }}</p>
+<p>Job {{ row.job_id }} · Evidence {{ row.evidence_refs|join(', ') or 'None recorded' }}</p>
+{% for reading in row.readings %}<details><summary>Inspect reading {{ reading.id }} ? {{ reading.evidence_class }}</summary><pre>{{ reading.content }}</pre></details>{% endfor %}
+{% if row.failure_reason %}<p>{{ row.failure_reason }}</p>{% endif %}
+</section>{% else %}<p>No worker runs recorded.</p>{% endfor %}
+<a class="btn" href="{{ url_for('portal.document_shop_result', project_id=project_id) }}">Back to analysis</a>
+<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">My documents</a>
+{% endblock %}

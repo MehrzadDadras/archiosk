@@ -14,8 +14,31 @@
 
    The full container-presentation work is D2's, not this tranche's. This page
    exists so the boundary above does not orphan the containers it excludes. #}
-<h1 class="np-page-title" data-ui-ref="document-shop.jobs.page-title">My documents</h1>
-<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}" data-ui-ref="document-shop.jobs.reload">Reload</a>
+<h1 class="np-page-title" data-ui-ref="document-shop.jobs.page-title">{{ {'active': 'My documents', 'archive': 'Archive', 'trash': 'Recently Deleted'}[view] }}</h1>
+<a class="btn" href="{{ url_for('portal.document_shop_jobs', view=view) }}" data-ui-ref="document-shop.jobs.reload">Reload</a>
+
+<nav aria-label="Document desk views">
+<a href="{{ url_for('portal.document_shop_jobs') }}">My documents</a> ?
+<a href="{{ url_for('portal.document_shop_jobs', view='archive') }}">Archive</a> ?
+<a href="{{ url_for('portal.document_shop_jobs', view='trash') }}">Recently Deleted</a>
+</nav>
+{% if view == 'trash' %}<p>Recoverable for 7 days. Expired items are permanently purged by scheduled maintenance.</p>{% endif %}
+<form id="document-bulk" method="post" action="{{ url_for('portal.document_shop_bulk') }}" data-selection-scope="{{ selection_scope }}" data-view="{{ view }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="request_id" value="{{ request_id }}">
+<button class="btn" type="button" id="document-select-all">Select all</button>
+<button class="btn" type="button" id="document-clear-selection">Clear selection</button>
+<span id="document-selected-count" aria-live="polite">0 selected</span>
+<div id="document-bulk-actions" hidden>
+{% if view == 'active' %}
+<button class="btn" name="action" value="archive">Archive</button>
+<button class="btn" name="action" value="delete">Delete</button>
+<button class="btn" name="action" value="reanalyze">Re-analyze</button>
+<button class="btn" name="action" value="compare" id="document-compare" disabled>Compare</button>
+<span>Compare supports exactly two analyses with one original image each.</span>
+{% else %}<button class="btn" name="action" value="restore">Restore</button>{% endif %}
+</div>
+</form>
 
 <p class="mono" data-ui-ref="document-shop.jobs.intro">
     Documents you have brought in for examination. Each one is governed and
@@ -30,8 +53,13 @@
            Result, not the analyst bench. Every job has one, including a job
            nothing could be read from - which is exactly the case that used to
            land on an empty workbench. #}
-        <a href="{{ url_for('portal.document_shop_result', project_id=job.project_id) }}"
+        <input type="checkbox" form="document-bulk" name="project_id" value="{{ job.project_id }}"
+               aria-label="Select {{ job.name }}" data-compatible="{{ 'true' if job.compatible else 'false' }}" {% if not job.can_delete %}disabled{% endif %}>
+        {% if view == 'active' %}<a href="{{ url_for('portal.document_shop_result', project_id=job.project_id) }}"
            data-ui-ref="document-shop.jobs.open">{{ job.name }}</a>
+        <a href="{{ url_for('portal.document_shop_analysis_history', project_id=job.project_id) }}">Analysis history</a>
+        {% else %}<strong>{{ job.name }}</strong>{% endif %}
+        {% if job.expires_at %}<span>Recovery expires {{ job.expires_at }}</span>{% endif %}
         <span class="mono" data-ui-ref="document-shop.jobs.state">{{ job.state_label }}</span>
         {% if job.pending_count %}
         {# Real counts from real job records - never a bar animating over
@@ -44,7 +72,7 @@
             {{ job.source_count }} document{{ '' if job.source_count == 1 else 's' }}
             &middot; <time datetime="{{ job.added_at }}">{{ job.added_at[:10] }}</time>
         </span>
-        {% if job.can_delete %}<form method="post" action="{{ url_for('portal.document_shop_delete_job', project_id=job.project_id) }}">
+        {% if job.can_delete and view == 'active' %}<form method="post" action="{{ url_for('portal.document_shop_delete_job', project_id=job.project_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn" type="submit" data-ui-ref="document-shop.jobs.delete">Delete</button>
         </form>{% endif %}
@@ -67,4 +95,5 @@
        data-ui-ref="document-shop.jobs.new">Examine a document</a>
 </p>
 {% endif %}
+<script src="{{ url_for('static', filename='js/document_shop_bulk.js') }}" defer></script>
 {% endblock %}

@@ -1,0 +1,13 @@
+﻿{% extends "base.html" %}
+{% block title %}Move to Recently Deleted{% endblock %}
+{% block content %}
+<h1>Delete {{ identifiers|length }} selected items?</h1>
+<p>They will disappear from active lists. You can restore them for 7 days. After that, their private data will be permanently purged. Shared material is preserved.</p>
+<form method="post" action="{{ url_for('portal.document_shop_bulk') }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="action" value="delete"><input type="hidden" name="confirm" value="yes">
+{% for pid in identifiers %}<input type="hidden" name="project_id" value="{{ pid }}">{% endfor %}
+<button class="btn btn-primary" type="submit">Move to Recently Deleted</button>
+<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">Cancel</a>
+</form>
+{% endblock %}

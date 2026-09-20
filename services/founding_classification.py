@@ -65,11 +65,13 @@ that order.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Optional
 
 from services import perception_jobs
+from services.runtime_observation import observed
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +117,7 @@ class FoundingClassificationError(RuntimeError):
 
 def enqueue_for_source(jobs, *, workspace_id: str, source_id: str,
                        source_sha256: str, source_name: str = "",
-                       intake_order: Optional[int] = None) -> dict:
+                       intake_order: Optional[int] = None, analysis_run_id: str = "") -> dict:
     """Queue founding classification for an already-stored Source.
 
     Called AFTER the bytes are final. Reuses `PerceptionJobStore.enqueue`
@@ -125,7 +127,7 @@ def enqueue_for_source(jobs, *, workspace_id: str, source_id: str,
     return jobs.enqueue(
         workspace_id=workspace_id, source_id=source_id,
         source_sha256=source_sha256, source_name=source_name,
-        intake_order=intake_order, processing_version=FOUNDING_VERSION)
+        intake_order=intake_order, processing_version=FOUNDING_VERSION, analysis_run_id=analysis_run_id)
 
 
 def is_founding_job(job) -> bool:
@@ -151,6 +153,7 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+@observed
 def classify_source(app, jobs, job: dict, *, parser=None, registry=None,
                     store=None) -> dict:
     """Run founding classification for one job. NEVER RAISES.
@@ -185,6 +188,25 @@ def classify_source(app, jobs, job: dict, *, parser=None, registry=None,
         return jobs.complete(job, state=perception_jobs.STATE_FAILED,
                              failure_reason=REASON_SOURCE_MISSING)
 
+    if job.get("analysis_run_id"):
+        if getattr(parser, 'api_key', None):
+            from services.visual_classification import resolve_external_ai_decision
+            from services.security_policy import DECISION_ALLOW
+            decision = resolve_external_ai_decision(app, workspace)
+            if decision.decision != DECISION_ALLOW:
+                return jobs.complete(job, state=perception_jobs.STATE_NEEDS_ATTENTION,
+                                     failure_reason='Re-analysis refused by external AI policy: ' + decision.reason)
+        for evidence in workspace.evidence_items:
+            if evidence.get('source_id') != source_id or evidence.get('content_type') != 'document_reanalysis':
+                continue
+            try:
+                existing = json.loads(evidence.get('content') or '{}')
+            except ValueError:
+                continue
+            if existing.get('analysis_run_id') == job['analysis_run_id']:
+                return jobs.complete(job, state=perception_jobs.STATE_COMPLETED,
+                                     extractor='bhive-parser', evidence_refs=[evidence['id']])
+
     path = Path(source.get("file_path") or "")
     if not source.get("file_path") or not path.is_file():
         return jobs.complete(job, state=perception_jobs.STATE_FAILED,
@@ -200,6 +222,8 @@ def classify_source(app, jobs, job: dict, *, parser=None, registry=None,
 
     raw_bytes = path.read_bytes()
     original_name = source.get("origin_reference") or source.get("name") or path.name
+    if job.get('analysis_run_id'):
+        original_name = job.get('source_name') or path.name
 
     try:
         document = parser.parse(raw_bytes, original_name)
@@ -224,12 +248,27 @@ def classify_source(app, jobs, job: dict, *, parser=None, registry=None,
     document.project_id = workspace_id
     document.original_file_path = str(path)
     document.original_file_hash = actual
-    registry.save(document)
+    refs = []
+    if job.get('analysis_run_id'):
+        # A new reading is analytical evidence, not a replacement of accepted
+        # registry requirements. Prior parsed content and source remain intact.
+        from services.case_workspace import EVIDENCE_CLASS_AI_GENERATED_PROPOSAL
+        current = store.get(workspace_id)
+        evidence = store.register_evidence_item(current, source_id=source_id,
+            evidence_class=EVIDENCE_CLASS_AI_GENERATED_PROPOSAL,
+            content_type='document_reanalysis', extractor_version=document.parser_version,
+            content=json.dumps(dict(analysis_run_id=job['analysis_run_id'], job_id=job['job_id'],
+                source_sha256=actual, qualification='ANALYTICAL_NOT_CANONICAL', result=document.to_dict())),
+            actor='founding-worker')
+        refs.append(evidence['id'])
+    else:
+        registry.save(document)
 
     logger.info("founding classification complete for %s (%d requirements)",
                 source_id, len(document.requirements or []))
     return jobs.complete(job, state=perception_jobs.STATE_COMPLETED,
                          extractor="bhive-parser",
+                         evidence_refs=refs,
                          extractor_version=getattr(document, "parser_version", None))
 
 

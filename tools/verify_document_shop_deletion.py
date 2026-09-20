@@ -101,7 +101,7 @@ def main():
                 page.locator('[data-ui-ref="document-shop.job-delete.confirm"]').click()
                 page.wait_for_url('**/document-shop/jobs')
                 assert pid not in page.content()
-                assert registry.is_deleted(pid)
+                assert store.get(pid).document_desk_state == 'trash'
             for route in ('/document-shop/jobs', '/projects', '/projects/choose',
                           '/search?q=Castille', '/removed-projects'):
                 response = page.goto(base + route)
@@ -118,7 +118,7 @@ def main():
                 from services.runtime_observation import read
                 records = captured
                 (output / 'runtime-traces.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
-                owner = 'services.case_workspace.CaseWorkspaceStore.delete_document_shop_job'
+                owner = 'services.case_workspace.CaseWorkspaceStore.move_document_shop_case'
                 assert any(e['owner'] == owner and e['phase'] == 'RETURNED' for r in records if r for e in r['events'])
                 proof['real_owner_invoked'] = owner
             assert not proof['errors']

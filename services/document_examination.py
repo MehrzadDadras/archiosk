@@ -1609,3 +1609,79 @@ def summarise_job(document, workspace, *, display_name: str,
         "settled_count": settled,
         "pending_count": len(sources) - settled,
     }
+
+
+def preserved_analysis_sources(workspace):
+    """Original active sources only; generated references are analysis outputs."""
+    from services.case_workspace import GENERATED_SOURCE_ORIGIN_TYPES, CaseWorkspaceError
+    sources = [s for s in workspace.sources if not s.get('removed_at')
+               and s.get('origin_type') not in GENERATED_SOURCE_ORIGIN_TYPES]
+    if not sources:
+        raise CaseWorkspaceError('No preserved original source is available.')
+    for source in sources:
+        path = Path(source.get('file_path') or '')
+        if not path.is_file() or not source.get('file_hash'):
+            raise CaseWorkspaceError('The preserved source or its recorded hash is unavailable.')
+        if hashlib.sha256(path.read_bytes()).hexdigest() != source['file_hash']:
+            raise CaseWorkspaceError('Source bytes differ from their recorded hash; re-analysis is refused.')
+    return sources
+
+
+@observed
+def queue_reanalysis(app, store, workspace, actor, request_id):
+    """Explicit new runs through the existing OCR and visual workers."""
+    from services.case_workspace import CaseWorkspaceError, CONTAINER_STATE_BLACK_BOX
+    from services import perception_jobs, visual_classification, founding_classification, image_intake
+    current = store.get(workspace.project_id)
+    if not current or current.owner != actor or current.removed_at or current.container_state != CONTAINER_STATE_BLACK_BOX:
+        raise CaseWorkspaceError('Only your active disposable analyses can be re-analyzed.')
+    sources = preserved_analysis_sources(current)
+    queued = []
+    for source in sources:
+        values = dict(workspace_id=current.project_id, source_id=source['id'], source_sha256=source['file_hash'],
+                      source_name=Path(source['file_path']).name, analysis_run_id=request_id)
+        if not (values['source_name'].lower().endswith('.pdf') or image_intake.is_supported_image(values['source_name'])):
+            reading = founding_classification.enqueue_for_source(founding_classification.founding_store(store.store_path), **values)
+            queued.append(dict(source_id=source['id'], reading=reading['job_id']))
+            continue
+        reading = perception_jobs.PerceptionJobStore(store.store_path).enqueue(**values)
+        looking = visual_classification.enqueue_for_source(
+            perception_jobs.PerceptionJobStore(store.store_path, subdir='visual_jobs'), **values)
+        queued.append(dict(source_id=source['id'], reading=reading['job_id'], looking=looking['job_id']))
+    return queued
+
+
+def comparison_source(workspace):
+    """The existing comparator accepts exactly one retained raster per selection."""
+    from PIL import Image
+    from services.case_workspace import CaseWorkspaceError
+    sources = preserved_analysis_sources(workspace)
+    if len(sources) != 1:
+        raise CaseWorkspaceError('Comparison currently supports two analyses with one original image each.')
+    try:
+        with Image.open(sources[0]['file_path']) as picture:
+            picture.verify()
+    except (OSError, ValueError) as exc:
+        raise CaseWorkspaceError('Comparison currently supports retained raster images only.') from exc
+    return sources[0]
+
+
+@observed
+def compare_document_analyses(workspaces, actor):
+    """Read-only adapter to the governed pixel comparator; no semantic inference."""
+    from services.case_workspace import CaseWorkspaceError, CONTAINER_STATE_BLACK_BOX
+    from services.region_comparison import compare_region
+    if len(workspaces) != 2 or len({w.project_id for w in workspaces}) != 2:
+        raise CaseWorkspaceError('Select exactly two compatible analyses.')
+    if any(w.owner != actor or w.removed_at or w.container_state != CONTAINER_STATE_BLACK_BOX for w in workspaces):
+        raise CaseWorkspaceError('Only your active disposable analyses can be compared.')
+    sources = [comparison_source(w) for w in workspaces]
+    state = compare_region(Path(sources[0]['file_path']), Path(sources[1]['file_path']),
+                           dict(x=0, y=0, width=1, height=1))
+    return dict(state=state, canonical=False, qualification='Pixel comparison only; document alignment and semantic agreement remain unresolved.',
+        unsupported=['Semantic conflicts', 'Missing requirements', 'Supersession authority'],
+        sources=[dict(project_id=w.project_id, source_id=s['id'], name=s['name'],
+                      original_filename=Path(s['file_path']).name, sha256=s['file_hash'],
+                      origin_type=s.get('origin_type'), origin_reference=s.get('origin_reference'),
+                      authority=s.get('authority', 'UNRESOLVED'), currentness=s.get('currentness', 'UNRESOLVED'))
+                 for w, s in zip(workspaces, sources)])

@@ -1,0 +1,7 @@
+﻿[Unit]
+Description=Purge expired disposable Document Shop analyses
+[Service]
+Type=oneshot
+User=archiosk
+WorkingDirectory=/var/www/archiosk
+ExecStart=/var/www/archiosk/.venv/bin/python /var/www/archiosk/tools/purge_document_shop.py

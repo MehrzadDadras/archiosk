@@ -2665,10 +2665,10 @@ class RDeleteAnUploadedDocument(SurveyReferenceCase):
 
         self._delete(project_id, source["id"], confirm="yes")
 
-        self.assertIsNone(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id))
+        self.assertEqual(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id).document_desk_state, "trash")
         for item in workspace.sources:
             if item.get("file_path"):
-                self.assertFalse(Path(item["file_path"]).exists())
+                self.assertTrue(Path(item["file_path"]).exists())
 
     def test_the_confirmation_names_the_derived_artifact_before_deleting_it(self):
         project_id = self.upload(survey_jpeg(), "survey.jpg")
@@ -2689,7 +2689,7 @@ class RDeleteAnUploadedDocument(SurveyReferenceCase):
         self.assertTrue(dx.visual_reading(workspace, source_id))
 
         self._delete(project_id, source_id, confirm="yes")
-        self.assertIsNone(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id))
+        self.assertEqual(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id).document_desk_state, "trash")
 
     def test_the_result_page_no_longer_offers_the_deleted_document(self):
         project_id = self.upload(survey_jpeg(), "survey.jpg")
@@ -2711,7 +2711,7 @@ class RDeleteAnUploadedDocument(SurveyReferenceCase):
 
         self._delete(project_id, workspace.sources[0]["id"], confirm="yes")
 
-        self.assertIsNone(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id))
+        self.assertEqual(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id).document_desk_state, "trash")
         self.assertEqual(self.client.get("/document-shop/jobs/%s" % project_id).status_code, 404)
 
     def test_deleted_disposable_case_has_no_normal_audit_surface(self):
@@ -2722,7 +2722,7 @@ class RDeleteAnUploadedDocument(SurveyReferenceCase):
         source_id = self.workspace(project_id).sources[0]["id"]
         self._delete(project_id, source_id, confirm="yes")
 
-        self.assertEqual(get_governance_log(self.app).read(project_id), [])
+        self.assertTrue(any(e.event_type == "document_desk_trash" for e in get_governance_log(self.app).read(project_id)))
 
     def test_deletion_across_projects_is_refused(self):
         """A source id from ANOTHER container must not be reachable through
@@ -2755,12 +2755,12 @@ class RDeleteAnUploadedDocument(SurveyReferenceCase):
         self.assertEqual(response.status_code, 404)
         self.assertIsNone(self.workspace(project_id).sources[0].get("removed_at"))
 
-    def test_private_original_bytes_are_erased_with_disposable_case(self):
+    def test_private_original_bytes_are_retained_during_recovery(self):
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         source = self.workspace(project_id).sources[0]
         self._delete(project_id, source["id"], confirm="yes")
-        self.assertIsNone(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id))
-        self.assertFalse(Path(source["file_path"]).exists())
+        self.assertEqual(CaseWorkspaceStore(self.app.config["REGISTRY_STORE_PATH"]).get(project_id).document_desk_state, "trash")
+        self.assertTrue(Path(source["file_path"]).exists())
 
 
 class SWorkingIndicator(SurveyReferenceCase):
@@ -3302,6 +3302,30 @@ class WSecondGate(SurveyReferenceCase):
     be refused. This is the same lesson as the job id, one layer down: a
     capability cannot reach a record through two gates when one was opened.
     """
+
+    def test_explicit_same_engine_reanalysis_keeps_prior_reading_and_original_bytes(self):
+        import uuid
+        from services import visual_examination as vx
+        project_id = self.upload(survey_jpeg(), "survey.jpg")
+        self.run_worker()
+        before = self.workspace(project_id)
+        original = before.sources[0]
+        raw = Path(original["file_path"]).read_bytes()
+        prior = {e["id"] for e in before.evidence_items if e.get("content_type") == vx.VISUAL_CONTENT_TYPE}
+        run_id = uuid.uuid4().hex
+        response = self.client.post('/document-shop/bulk', data=dict(action='reanalyze',
+            project_id=project_id, request_id=run_id))
+        self.assertEqual(response.status_code, 303)
+        outcome = self.run_worker()
+        self.assertEqual(outcome["analysis_run_id"], run_id)
+        after = self.workspace(project_id)
+        readings = [e for e in after.evidence_items if e.get("content_type") == vx.VISUAL_CONTENT_TYPE]
+        self.assertTrue(prior.issubset({e['id'] for e in readings}))
+        self.assertEqual(len(readings), len(prior) + 1)
+        self.assertEqual(json.loads(readings[-1]['content'])['analysis_run_id'], run_id)
+        self.assertEqual(Path(original["file_path"]).read_bytes(), raw)
+        self.client.post('/document-shop/bulk', data=dict(action='reanalyze', project_id=project_id, request_id=run_id))
+        self.assertIsNone(self.run_worker())
 
     def test_generation_is_read_from_either_spelling(self):
         from services import visual_classification as vc

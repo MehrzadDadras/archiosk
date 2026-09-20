@@ -1,0 +1,50 @@
+[Unit]
+Description=ARCHIOSK GO document parser worker
+Documentation=file:///var/www/archiosk/services/founding_worker.py
+After=network.target
+# Deliberately NOT Requires= or BindsTo= the web service or the perception
+# worker. All three are independent on purpose; none should be able to take
+# another down. Ordering between OCR and vision is a readiness predicate in the
+# claim, not a systemd dependency.
+Wants=network.target
+
+[Service]
+Type=simple
+User=archiosk
+Group=archiosk
+WorkingDirectory=/var/www/archiosk
+
+# The same interpreter and the same .env the web service loads, so the worker
+# reads exactly the configuration the application does - one source of truth for
+# REGISTRY_STORE_PATH and ANTHROPIC_API_KEY, and no second place to drift.
+EnvironmentFile=/var/www/archiosk/.env
+ExecStart=/var/www/archiosk/.venv/bin/python -m services.founding_worker
+
+# All job state lives on disk, so a restart is always safe: a job interrupted
+# mid-flight is reclaimed after its lease expires and retried, bounded by
+# MAX_ATTEMPTS.
+Restart=always
+RestartSec=5
+
+# SIGTERM asks the loop to finish the job in hand and exit. The lease would
+# recover an abandoned job anyway; this simply avoids the wasted retry.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# One job at a time. The host is 6 vCPU / 11 GB with no GPU and thirteen
+# Gunicorn workers already resident; the web tier stays the primary workload.
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=archiosk-founding
+
+# Modest hardening, matching archiosk-perception. The worker reads customer
+# sources and writes evidence under the registry root and needs nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

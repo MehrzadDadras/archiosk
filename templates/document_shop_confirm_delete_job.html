@@ -6,9 +6,7 @@
 {% if decision.state == 'BLOCK_DELETE' %}
 <p role="alert">{{ decision.reason }}</p>
 {% else %}
-<p>It will disappear from your documents and active lists.
-{% if decision.state == 'SAFE_TO_ERASE' %}This analysis and its private documents and results will be permanently erased. Shared material belonging to other cases will be preserved.
-{% else %}Retained content will be preserved through governed removal.{% endif %}</p>
+<p>This item will disappear from active lists. It can be restored from Recently Deleted for 7 days. After expiry, its private data will be permanently purged. Shared material is preserved.</p>
 <form method="post" action="{{ url_for('portal.document_shop_delete_job', project_id=project_id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="confirm" value="yes">

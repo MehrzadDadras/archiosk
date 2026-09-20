@@ -3300,6 +3300,7 @@ def document_shop_jobs():
     `@admin_required`, matching the intake door beside it.
     """
     from services.ingestion import _display_name_of as _document_display_name
+    from services.case_workspace import GENERATED_SOURCE_ORIGIN_TYPES
 
     # CLAUDE-DOCUMENT-SHOP-CUSTOMER-ENTITLEMENT-01A: authenticated only, and
     # deliberately NOT gated on creation entitlement. Viewing a job you are
@@ -3312,8 +3313,15 @@ def document_shop_jobs():
     store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
     job_store = perception_jobs.PerceptionJobStore(
         current_app.config['REGISTRY_STORE_PATH'])
-    documents = _accessible_documents(
-        registry, store, scope=LISTING_SCOPE_DOCUMENT_SHOP)
+    view = request.args.get('view', 'active')
+    if view not in ('active', 'archive', 'trash'):
+        abort(404)
+    if view == 'active':
+        documents = _accessible_documents(registry, store, scope=LISTING_SCOPE_DOCUMENT_SHOP)
+    else:
+        documents = [d for pid in registry.list_ids() if (d := registry.get(pid)) is not None
+                     and (w := store.get(pid)) is not None and w.owner == session.get('username')
+                     and w.container_state == 'black_box' and w.document_desk_state == view]
     jobs = []
     for document in sorted(documents, key=lambda d: d.ingested_at, reverse=True):
         workspace = _safe_workspace(store, document.project_id)
@@ -3323,12 +3331,16 @@ def document_shop_jobs():
             document, workspace,
             display_name=_document_display_name(document, store),
             project_id=document.project_id, jobs=job_store))
-        jobs[-1]['can_delete'] = workspace.owner == session.get('username') or is_admin()
-    # The intake call-to-action renders only for an account that could
-    # actually use it - a button that answers 403 is a worse surface than
-    # no button.
-    return render_template('document_shop_jobs.html', jobs=jobs,
-                           can_create=user_can_create_document_shop_container())
+        jobs[-1]['can_delete'] = workspace.owner == session.get('username')
+        jobs[-1]['expires_at'] = workspace.document_trash_expires_at
+        originals = [source for source in store.active_sources(workspace)
+                     if source.get('origin_type') not in GENERATED_SOURCE_ORIGIN_TYPES]
+        jobs[-1]['compatible'] = (len(originals) == 1 and
+            Path(originals[0].get('file_path') or '').suffix.lower() in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.webp'))
+    return render_template('document_shop_jobs.html', jobs=jobs, view=view,
+        selection_scope=session.setdefault('document_desk_selection', uuid.uuid4().hex),
+        request_id=uuid.uuid4().hex, can_create=user_can_create_document_shop_container())
+
 
 
 @portal_bp.route('/document-shop/jobs/<project_id>', methods=['GET', 'POST'])
@@ -3483,21 +3495,20 @@ def document_shop_status(project_id):
 @limiter.limit("30 per hour")
 def document_shop_delete_job(project_id):
     document, store, workspace = _document_shop_workspace_or_404(project_id)
-    if session.get('username') != workspace.owner and not is_admin():
+    if session.get('username') != workspace.owner:
         abort(403)
-    decision = store.document_shop_deletion_state(workspace)
+    decision = dict(state='TRASH', reason='Recoverable for 7 days.')
     if request.form.get('confirm') != 'yes':
         return render_template('document_shop_confirm_delete_job.html',
             project_id=project_id, name=workspace.display_title or document.filename,
             decision=decision)
     try:
-        store.delete_document_shop_job(workspace, actor=session.get('username', ''),
-            actor_role=session.get('role') or '', governance_log=get_governance_log(current_app))
+        store.move_document_shop_case(workspace, session.get('username', ''), 'trash', get_governance_log(current_app))
     except CaseWorkspaceError as exc:
         return render_template('document_shop_confirm_delete_job.html',
             project_id=project_id, name=workspace.display_title or document.filename,
             decision=dict(state='BLOCK_DELETE', reason=str(exc))), 409
-    flash('Job deleted.', 'success')
+    flash('1 item moved to Recently Deleted. Recoverable for 7 days.', 'success')
     return redirect(url_for('portal.document_shop_jobs'), code=303)
 
 
@@ -4167,3 +4178,73 @@ def dashboard(project_id=None):
     # bouncing through an extra redirect first.
     _require_project_access_or_404(CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]), project_id)
     return redirect(url_for('workspace.show_workspace', project_id=project_id))
+
+
+@portal_bp.route('/document-shop/bulk', methods=['POST'])
+@login_required
+@limiter.limit('30 per hour')
+def document_shop_bulk():
+    identifiers = list(dict.fromkeys(request.form.getlist('project_id')))
+    action = request.form.get('action', '')
+    if not identifiers or len(identifiers) > 100 or action not in ('archive', 'delete', 'restore', 'reanalyze', 'compare'):
+        abort(400)
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    actor = session.get('username')
+    workspaces = [store.get(pid) for pid in identifiers]
+    # Validate the entire selection before any action. Admin is not bulk ownership.
+    if any(not w or w.owner != actor or w.container_state != 'black_box' for w in workspaces):
+        abort(404)
+    if action != 'restore' and any(w.removed_at for w in workspaces):
+        abort(409)
+    if action == 'restore' and any(w.document_desk_state not in ('archive', 'trash') for w in workspaces):
+        abort(409)
+    if action == 'delete' and request.form.get('confirm') != 'yes':
+        return render_template('document_shop_bulk_confirm.html', identifiers=identifiers)
+    if action == 'compare':
+        try:
+            result = document_examination.compare_document_analyses(workspaces, actor)
+        except CaseWorkspaceError as exc:
+            flash(str(exc), 'error')
+            return redirect(url_for('portal.document_shop_jobs'), code=303)
+        flash('2 documents opened for comparison', 'success')
+        return render_template('document_shop_comparison.html', comparison=result)
+    if action == 'reanalyze':
+        run_id = request.form.get('request_id', '')
+        if not re.fullmatch('[a-f0-9]{32}', run_id):
+            abort(400)
+        try:
+            for workspace in workspaces:
+                document_examination.preserved_analysis_sources(workspace)
+        except CaseWorkspaceError as exc:
+            flash(str(exc), 'error')
+            return redirect(url_for('portal.document_shop_jobs'), code=303)
+    count = 0
+    try:
+        for workspace in workspaces:
+            if action == 'reanalyze':
+                count += len(document_examination.queue_reanalysis(current_app, store, workspace, actor, run_id))
+            else:
+                store.move_document_shop_case(workspace, actor,
+                    {'delete': 'trash', 'archive': 'archive', 'restore': 'active'}[action], get_governance_log(current_app))
+                count += 1
+    except (CaseWorkspaceError, ValueError, OSError) as exc:
+        flash(f'{count} completed; remaining items were not completed: {exc}', 'error')
+    else:
+        message = {'archive': 'items archived', 'delete': 'items moved to Recently Deleted',
+                   'restore': 'items restored', 'reanalyze': 'documents queued for re-analysis'}[action]
+        flash(f'{count} {message}', 'success')
+    return redirect(url_for('portal.document_shop_jobs'), code=303)
+
+
+@portal_bp.route('/document-shop/jobs/<project_id>/analysis-history')
+@login_required
+def document_shop_analysis_history(project_id):
+    document, store, workspace = _document_shop_workspace_or_404(project_id)
+    records = []
+    for folder in ('perception_jobs', 'visual_jobs', 'founding_jobs'):
+        for job in perception_jobs.PerceptionJobStore(store.store_path, subdir=folder).for_workspace(project_id):
+            produced = [e for e in workspace.evidence_items if e.get('id') in job.get('evidence_refs', [])]
+            records.append(dict(job, stage=folder, readings=produced))
+    records.sort(key=lambda row: row.get('created_at', ''), reverse=True)
+    return render_template('document_shop_analysis_history.html', project_id=project_id,
+                           records=records, sources=workspace.sources)

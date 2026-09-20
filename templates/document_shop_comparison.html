@@ -1,0 +1,15 @@
+﻿{% extends "base.html" %}
+{% block title %}Compare selected documents{% endblock %}
+{% block content %}
+<h1>Compare selected documents</h1>
+<p><strong>{{ comparison.state }}</strong> — Analytical, non-canonical result.</p>
+<p>{{ comparison.qualification }}</p>
+<p>Compares the full normalized image region using the existing pixel comparator. A matching image does not establish matching requirements or survey authority.</p>
+{% for source in comparison.sources %}
+<section><h2>{{ source.name }}</h2>
+<dl>{% for key, value in source.items() %}<dt>{{ key|replace('_', ' ') }}</dt><dd>{{ value if value is not none else 'UNRESOLVED' }}</dd>{% endfor %}</dl>
+<a href="{{ url_for('portal.document_shop_result', project_id=source.project_id) }}">Open source analysis</a></section>
+{% endfor %}
+<p>Not established by this comparison: {{ comparison.unsupported|join(', ') }}.</p>
+<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">Back to My documents</a>
+{% endblock %}

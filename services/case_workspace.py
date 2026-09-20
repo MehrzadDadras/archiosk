@@ -42,7 +42,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from dataclasses import fields as dataclass_fields
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -5505,6 +5505,10 @@ class ProjectWorkspace:
     removed_by: Optional[str] = None
     removal_reason: Optional[str] = None
 
+    # Desk lifecycle only: source/evidence authority is unaffected.
+    document_desk_state: str = "active"
+    document_trash_expires_at: Optional[str] = None
+
     perspective_assessments: list[dict] = field(default_factory=list)  # CLAUDE-P12R - see PerspectiveAssessment
     # Per-reviewer "who do I represent in this Project" (username ->
     # participant_id) - same personal/display-only shape as
@@ -9616,6 +9620,45 @@ class CaseWorkspaceStore:
     def removed_sources(workspace: ProjectWorkspace) -> list[dict]:
         return [s for s in workspace.sources if s.get("removed_at")]
 
+    @observed
+    def move_document_shop_case(self, workspace, actor, destination, governance_log=None, *, now=None):
+        """Owner-only Archive/Trash/Restore over the existing workspace lifecycle."""
+        current = self.get(workspace.project_id)
+        if not current or current.owner != actor or current.container_state != CONTAINER_STATE_BLACK_BOX:
+            raise CaseWorkspaceError("This analysis is not owned by you.")
+        if destination not in ("active", "archive", "trash"):
+            raise CaseWorkspaceError("Unknown desk action.")
+        moment = now or datetime.now(timezone.utc)
+        if current.document_trash_expires_at and datetime.fromisoformat(current.document_trash_expires_at) <= moment:
+            raise CaseWorkspaceError("The recovery period has expired.")
+        if current.document_desk_state == destination:
+            return current
+        if destination != "active" and current.removed_at:
+            raise CaseWorkspaceError("Restore this analysis before moving it again.")
+        current.document_desk_state = destination
+        current.removed_at = None if destination == "active" else moment.isoformat()
+        current.removed_by = None if destination == "active" else actor
+        current.removal_reason = None if destination == "active" else "Document desk: " + destination
+        current.document_trash_expires_at = (moment + timedelta(days=7)).isoformat() if destination == "trash" else None
+        self.save(current)
+        if governance_log:
+            governance_log.append(project_id=current.project_id, event_type="document_desk_" + destination,
+                actor=actor, role="human", payload={"expires_at": current.document_trash_expires_at})
+        return current
+
+    def purge_document_shop_trash(self, *, now=None):
+        """Scheduled expiry uses the qualified permanent erasure owner."""
+        moment = now or datetime.now(timezone.utc)
+        purged = []
+        for pid in RequirementsRegistry(self.store_path).list_ids():
+            workspace = self.get(pid)
+            if (workspace and workspace.container_state == CONTAINER_STATE_BLACK_BOX
+                    and workspace.document_desk_state == "trash" and workspace.document_trash_expires_at
+                    and datetime.fromisoformat(workspace.document_trash_expires_at) <= moment):
+                self.delete_document_shop_job(workspace, actor=workspace.owner, purge_before=moment)
+                purged.append(pid)
+        return purged
+
     def document_shop_deletion_state(self, workspace: ProjectWorkspace) -> dict:
         """Disposable analysis owns its private content; established projects do not."""
         if workspace.container_state != CONTAINER_STATE_BLACK_BOX:
@@ -9628,7 +9671,7 @@ class CaseWorkspaceStore:
 
     @observed
     def delete_document_shop_job(self, workspace: ProjectWorkspace, actor: str,
-                                 actor_role: str = "", governance_log=None) -> dict:
+                                 actor_role: str = "", governance_log=None, *, purge_before=None) -> dict:
         """Erase a disposable analysis through its existing workspace owner."""
         if actor != workspace.owner and actor_role != "admin":
             raise CaseWorkspaceError("Only the owner or an admin may delete this job.")
@@ -9647,6 +9690,10 @@ class CaseWorkspaceStore:
                 raise CaseWorkspaceError("This job no longer exists.")
             if actor != current.owner and actor_role != "admin":
                 raise CaseWorkspaceError("Only the owner or an admin may delete this job.")
+            if purge_before is not None and (current.document_desk_state != "trash"
+                    or not current.document_trash_expires_at
+                    or datetime.fromisoformat(current.document_trash_expires_at) > purge_before):
+                raise CaseWorkspaceError("This analysis is no longer eligible for expiry purge.")
             decision = self.document_shop_deletion_state(current)
             if decision["state"] != "SAFE_TO_ERASE":
                 raise CaseWorkspaceError(decision["reason"])
@@ -9774,7 +9821,7 @@ class CaseWorkspaceStore:
                     (s.get("origin_type") in GENERATED_SOURCE_ORIGIN_TYPES and
                      s.get("origin_reference") == source_id) for s in workspace.sources))
         if final_shop_source:
-            self.delete_document_shop_job(workspace, actor, actor_role, governance_log)
+            self.move_document_shop_case(workspace, actor, "trash", governance_log)
             return source
 
         removed_at = _now()
@@ -9914,6 +9961,8 @@ class CaseWorkspaceStore:
         """The exact same project, same project_id, every child record
         and relationship unchanged - see remove_project's own
         docstring. Same owner-or-admin authority as removal itself."""
+        if workspace.container_state == CONTAINER_STATE_BLACK_BOX and workspace.document_desk_state != "active":
+            return self.move_document_shop_case(workspace, actor, "active", governance_log)
         if actor != workspace.owner and actor_role != "admin":
             raise CaseWorkspaceError("Only the project owner or an admin may restore a Project.")
         if not workspace.removed_at:

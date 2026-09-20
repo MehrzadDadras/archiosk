@@ -1,5 +1,14 @@
 # MANIFEST
 
+Document desk bulk management: existing workspace removal plus Archive/Trash
+metadata, 7-day recovery and scheduled qualified purge. Routes/templates expose
+selection, archive/restore, trash/restore, queued re-analysis history and the
+existing two-raster comparison path. `static/js/document_shop_bulk.js` owns
+selection only. `tools/purge_document_shop.py` and the matching deploy timer/service
+run expiry cleanup; `deploy/archiosk-founding.service` activates the existing parser
+worker for non-image re-analysis. `tools/verify_document_shop_bulk.py` proves the forms.
+See `docs/DOCUMENT_SHOP_BULK.md` and `tests/test_document_shop_bulk.py`.
+
 Document Shop deletion lifecycle: `CaseWorkspaceStore.delete_document_shop_job`
 erases disposable analysis cases and their private content, preserving shared
 material. Final source removal deletes its disposable Black Box container.

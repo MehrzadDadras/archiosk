@@ -122,7 +122,7 @@ def visual_store(registry_store_path) -> "perception_jobs.PerceptionJobStore":
 @observed
 def enqueue_for_source(jobs, *, workspace_id: str, source_id: str,
                        source_sha256: str, source_name: str = "",
-                       intake_order: Optional[int] = None) -> dict:
+                       intake_order: Optional[int] = None, analysis_run_id: str = "") -> dict:
     """Queue visual examination for an already-stored Source.
 
     Reuses `PerceptionJobStore.enqueue` verbatim under this module's own
@@ -133,7 +133,7 @@ def enqueue_for_source(jobs, *, workspace_id: str, source_id: str,
     return jobs.enqueue(
         workspace_id=workspace_id, source_id=source_id,
         source_sha256=source_sha256, source_name=source_name,
-        intake_order=intake_order, processing_version=VISUAL_VERSION)
+        intake_order=intake_order, processing_version=VISUAL_VERSION, analysis_run_id=analysis_run_id)
 
 
 def is_visual_job(job) -> bool:
@@ -234,7 +234,7 @@ def generation_of(version) -> str:
 
 
 def _existing_evidence_of_type(workspace, source_id, content_type, *,
-                               generation=None):
+                               generation=None, analysis_run_id=None):
     """Evidence of one kind against a Source, optionally of ONE GENERATION.
 
     CLAUDE-SURVEY-REFERENCE-REPAIR-02: the generation filter is the difference
@@ -247,6 +247,8 @@ def _existing_evidence_of_type(workspace, source_id, content_type, *,
     items = [e for e in (getattr(workspace, "evidence_items", None) or [])
              if e.get("source_id") == source_id
              and e.get("content_type") == content_type]
+    if analysis_run_id:
+        items = [e for e in items if (_decoded_reference(e) or {}).get("analysis_run_id") == analysis_run_id]
     if generation is None:
         return items
     return [e for e in items
@@ -430,7 +432,8 @@ def examine_source(app, jobs, job: dict, *, store=None, governance_log=None) -> 
     #
     # Same generation is still a replay and is still refused.
     if _existing_evidence_of_type(workspace, job["source_id"], vx.VISUAL_CONTENT_TYPE,
-                                  generation=generation_of(vx.VISUAL_PROMPT_VERSION)):
+                                  generation=generation_of(vx.VISUAL_PROMPT_VERSION),
+                                  analysis_run_id=job.get("analysis_run_id")):
         return jobs.complete(job, state=perception_jobs.STATE_COMPLETED,
                              extractor="visual-examination",
                              failure_reason=REASON_ALREADY_EXAMINED)
@@ -586,6 +589,8 @@ def _store_visual_record(store, job, visual, ocr, governance_log):
     from services import visual_examination as vx
 
     record = visual.as_record()
+    record["analysis_run_id"] = job.get("analysis_run_id")
+    record["job_id"] = job["job_id"]
     # THE PROVENANCE OF THE CONTEXT, carried on the reading itself.
     record["ocr_context"] = {
         "evidence_item_ids": ocr["evidence_item_ids"],
@@ -709,7 +714,8 @@ def _build_survey_reference(app, store, job, visual, governance_log, *,
     for row in _existing_evidence_of_type(workspace, job["source_id"],
                                           survey_reference.REFERENCE_CONTENT_TYPE):
         previous = _decoded_reference(row)
-        if generation_of((previous or {}).get("prompt_version")) == current:
+        if (generation_of((previous or {}).get("prompt_version")) == current
+                and (not job.get("analysis_run_id") or (previous or {}).get("analysis_run_id") == job["analysis_run_id"])):
             return None
         if (previous or {}).get("derived_source_id"):
             superseded_id = previous["derived_source_id"]
@@ -751,6 +757,7 @@ def _build_survey_reference(app, store, job, visual, governance_log, *,
         return None
 
     reference["artifact_filename"] = artifact_name
+    reference["analysis_run_id"] = job.get("analysis_run_id")
     reference["artifact_sha256"] = hashlib.sha256(pdf_bytes).hexdigest()
     reference["artifact_bytes"] = len(pdf_bytes)
 

@@ -178,7 +178,7 @@ class PerceptionJobStore:
 
     def enqueue(self, *, workspace_id: str, source_id: str, source_sha256: str,
                 source_name: str = "", intake_order: Optional[int] = None,
-                processing_version: str = PROCESSING_VERSION) -> dict:
+                processing_version: str = PROCESSING_VERSION, analysis_run_id: str = "") -> dict:
         """Create the job, or return the one that already exists.
 
         Not "create if absent" as a check-then-act - the identity IS the file
@@ -187,7 +187,7 @@ class PerceptionJobStore:
         through.
         """
         job_id = job_identity(workspace_id, source_id, source_sha256,
-                              processing_version)
+                              processing_version + ("/run/" + analysis_run_id if analysis_run_id else ""))
         with self._lock:
             existing = self.get(job_id)
             if existing is not None:
@@ -200,6 +200,7 @@ class PerceptionJobStore:
                 "source_name": source_name,
                 "intake_order": intake_order,
                 "processing_version": processing_version,
+                "analysis_run_id": analysis_run_id,
                 "state": STATE_QUEUED,
                 "attempt_count": 0,
                 "created_at": _now(),
@@ -253,6 +254,14 @@ class PerceptionJobStore:
         allowed = None if versions is None else frozenset(versions)
 
         def claimable_kind(job) -> bool:
+            # Retained Archive/Trash cases are not active analysis work.
+            workspace_path = self.root.parent / (job.get("workspace_id", "") + ".workspace.json")
+            if workspace_path.exists():
+                try:
+                    if json.loads(workspace_path.read_text(encoding="utf-8")).get("removed_at"):
+                        return False
+                except (OSError, ValueError):
+                    return False
             if allowed is not None:
                 # A record written before `processing_version` existed can only
                 # be perception - it is the only kind that existed - so it is

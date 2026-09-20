@@ -44,6 +44,9 @@ def can_access_project(workspace, username: Optional[str], is_admin: bool) -> bo
     precedent to preserve, since no project-level access check existed
     before this module.
     """
+    if (workspace is not None and getattr(workspace, "container_state", None) == "black_box"
+            and getattr(workspace, "document_desk_state", "active") != "active"):
+        return bool(username and workspace.owner == username)
     if is_admin:
         return True
     if workspace is None or not username:

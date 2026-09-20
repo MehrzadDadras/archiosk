@@ -119,13 +119,25 @@ def _job_key(values):
 
 def case_id(record):
     arguments = record.get("request", {}).get("arguments", {})
-    return arguments.get("project_id") or arguments.get("workspace_id")
+    selection = record.get("request", {}).get("selection", [])
+    return arguments.get("project_id") or arguments.get("workspace_id") or (selection[0] if len(selection) == 1 else None)
 
 
 def deleted_case(app, record):
     from services.requirements_registry import RequirementsRegistry
     identifier = case_id(record)
-    return bool(identifier and RequirementsRegistry(app.config["REGISTRY_STORE_PATH"]).is_deleted(identifier))
+    registry = RequirementsRegistry(app.config["REGISTRY_STORE_PATH"])
+    if not identifier:
+        return False
+    if registry.is_deleted(identifier):
+        return True
+    path = registry.store_path / (identifier + '.workspace.json')
+    try:
+        workspace = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return workspace.get('container_state') == 'black_box' and workspace.get('document_desk_state', 'active') != 'active'
+
 
 
 def remove_case(app, project_id):
@@ -175,7 +187,9 @@ def install(app):
             return
         record = dict(id=uuid.uuid4().hex, started=time.monotonic(),
             request=dict(method=request.method, path=request.path, endpoint=request.endpoint,
-                         arguments=request.view_args or {}), actor=session.get("username"), events=[])
+                         arguments=request.view_args or {},
+                         selection=list(dict.fromkeys(request.form.getlist('project_id'))) if request.endpoint == 'portal.document_shop_bulk' else []),
+            actor=session.get("username"), events=[])
         g.survey_observation = record
         g.survey_observation_token = _active.set(record)
         event("flask", "REQUEST", route=request.endpoint)

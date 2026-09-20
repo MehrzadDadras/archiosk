@@ -21,6 +21,7 @@
 
 <h1 class="np-page-title" data-ui-ref="document-shop.result.page-title">{{ result.name }}</h1>
 {% include 'components/review_reload.html' %}
+<a href="{{ url_for('portal.document_shop_analysis_history', project_id=project_id) }}">Analysis history</a>
 {% if session.get('role') == 'admin' and session.get('developer_mode') and result.source_id %}<p><a href="{{ url_for('workspace.source_review', project_id=project_id, source_id=result.source_id) }}">Review source frame, machine readings and unresolved propositions</a></p>{% endif %}
 
 {# CLAUDE-SURVEY-REFERENCE-01: the state, and only the state.

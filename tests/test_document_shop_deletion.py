@@ -2,6 +2,7 @@
 import copy
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -35,6 +36,12 @@ def shell(env, name='Failed empty Castille regression'):
     workspace.display_title = name
     store.save(workspace)
     return workspace, document
+
+
+def expire_trash(env):
+    app, _, store, _, _ = env
+    with app.app_context():
+        store.purge_document_shop_trash(now=datetime.now(timezone.utc) + timedelta(days=8))
 
 
 def assert_absent(env, pid):
@@ -74,10 +81,12 @@ def test_failed_empty_job_delete_reload_projections_direct_url_and_no_collateral
     body = client.get('/document-shop/jobs').get_data(as_text=True)
     assert workspace.project_id in body and 'Could not complete' in body and '0 documents' in body
     path = '/document-shop/jobs/' + workspace.project_id + '/delete'
-    assert b'permanently erased' in client.post(path).data
+    assert b'7 days' in client.post(path).data
     assert store.get(workspace.project_id) is not None
     response = client.post(path, data={'confirm': 'yes'}, follow_redirects=True)
     assert response.status_code == 200 and workspace.project_id.encode() not in response.data
+    assert store.get(workspace.project_id).document_desk_state == 'trash'
+    expire_trash(env)
     assert_absent(env, workspace.project_id)
     assert not jobs.for_workspace(workspace.project_id)
     assert not owned.exists()
@@ -113,6 +122,8 @@ def test_last_source_removal_erases_disposable_case_and_private_evidence(env):
     response = client.post(f'/document-shop/jobs/{workspace.project_id}/sources/{source["id"]}/remove',
                            data={'confirm': 'yes'}, follow_redirects=True)
     assert response.status_code == 200
+    assert store.get(workspace.project_id).evidence_items == workspace.evidence_items
+    expire_trash(env)
     after = store.get(workspace.project_id)
     assert after is None
     assert registry.is_deleted(workspace.project_id)
@@ -226,6 +237,7 @@ def test_old_project_delete_door_erases_only_disposable_case(env):
     store.add_source(workspace, kind='unclassified', name='Retained', actor='owner', file_path=None)
     response = client.post(f'/projects/{workspace.project_id}/delete', data={'confirm': 'yes'})
     assert response.status_code == 303
+    expire_trash(env)
     after = store.get(workspace.project_id)
     assert after is None
     assert registry.is_deleted(workspace.project_id)
@@ -277,6 +289,7 @@ def test_populated_disposable_case_erases_private_files_and_runtime(env, tmp_pat
     _retain(app, unrelated)
     response = client.post('/document-shop/jobs/' + workspace.project_id + '/delete', data={'confirm': 'yes'})
     assert response.status_code == 303
+    expire_trash(env)
     assert not folder.exists()
     assert not (directory(app) / (record['id'] + '.json')).exists()
     assert not _retain(app, record)

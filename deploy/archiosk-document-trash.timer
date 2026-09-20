@@ -1,0 +1,7 @@
+﻿[Unit]
+Description=Hourly Document Shop Trash expiry
+[Timer]
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target
