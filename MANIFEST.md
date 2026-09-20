@@ -1,5 +1,13 @@
 # MANIFEST
 
+Role composition consumes retained matching runs through the existing bounded
+coverage solver. It exposes distinct role contributions, overlaps, missing roles
+and mandatory exclusions without ranking entities or summing capital. The shared
+WorkProduct renderer creates draft Capital Alignment Briefs from committed
+matching/composition, retaining factual uncertainty and current premise status.
+Eight controlled matching games extend Survey Evaluation and invoke these same
+owners. See `governance/current/role-composition-capital-brief.md`.
+
 Source-anchored subject propositions extend existing Participant, Claim,
 Supersession and adoption owners. Original observations and claims remain intact;
 human review attribution is explicit. Shared multi-criterion matching consumes

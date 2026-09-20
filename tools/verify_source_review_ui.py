@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--games', action='store_true', help='Exercise continuum and constraint games through real evaluation forms.')
     parser.add_argument('--propositions', action='store_true', help='Exercise sourced subject classification, correction and review through the real UI.')
+    parser.add_argument('--matching-games', action='store_true', help='Exercise controlled matching/composition games through the real evaluation UI.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -368,6 +369,96 @@ def main():
                 matching.scroll_into_view_if_needed()
                 page.screenshot(path=str(output/'requirement-matching.png'),full_page=True)
                 proof['requirement_matching_conditional_fit_and_read_only_reload']=True
+                page.get_by_text('Add a subject reference', exact=True).click()
+                form=action_form('record_subject')
+                form.locator('input[name="subject_name"]').fill('EVALUATION debt participant')
+                form.locator('input[name="subject_role"]').fill('lender')
+                form.locator('button').click()
+                page.get_by_text('Record a sourced proposition', exact=True).click()
+                options=action_form('subject_proposition').locator('select[name="subject_key"] option')
+                debtor=options.evaluate_all('nodes => nodes.find(n => n.textContent.includes("EVALUATION debt participant")).value')
+                opportunity=options.evaluate_all('nodes => nodes.find(n => n.value.startsWith("source:")).value')
+                role_claims=[]
+                for role_subject, role_value in [(opportunity,'EQUITY'),(opportunity,'DEBT'),(subject,'EQUITY'),(debtor,'DEBT')]:
+                    page.goto(attention_url)
+                    page.get_by_text('Record a sourced proposition', exact=True).click()
+                    form=action_form('subject_proposition')
+                    form.locator('select[name="subject_key"]').select_option(role_subject)
+                    form.locator('input[name="property_key"]').fill('role')
+                    form.locator('input[name="scope_key"]').fill('evaluation-opportunity')
+                    form.locator('select[name="kind"]').select_option('TOKEN_SET')
+                    form.locator('input[name="value"]').fill(role_value)
+                    form.locator('input[name="vocabulary"]').fill('evaluation-roles')
+                    form.locator('input[name="qualifiers"]').fill('[]')
+                    form.locator('select[name="view_basis"]').select_option('VIEW_INVARIANT')
+                    form.locator('select[name="evidence_id"]').select_option(evidence_id)
+                    form.locator('textarea[name="original_quote"]').fill(source_quote)
+                    form.locator('select[name="source_class"]').select_option('PROJECT_DOCUMENT')
+                    form.locator('select[name="temporal_class"]').select_option('CURRENTNESS_UNRESOLVED')
+                    form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT role premise only; not a verified financial commitment.')
+                    form.locator('input[name="attribution"][value="agent_assessment"]').check()
+                    form.locator('button').click()
+                    role_claims.append(page.locator('[data-proposition-id]').last.get_attribute('data-proposition-id'))
+                role_matches=[]
+                for target, candidate_claim in [(subject,role_claims[2]),(debtor,role_claims[3])]:
+                    form=action_form('requirement_matching')
+                    form.locator('select[name="context_key"]').select_option('investment')
+                    form.locator('select[name="target_subject"]').select_option(target)
+                    form.locator('select[name="require_currentness"]').select_option('no')
+                    form.locator('details').nth(1).locator('summary').click()
+                    for index in (0,1):
+                        prefix='criterion_'+str(index)+'_'
+                        form.locator('select[name="'+prefix+'required"]').select_option(role_claims[index])
+                        form.locator('select[name="'+prefix+'candidate"]').select_option(candidate_claim)
+                        form.locator('select[name="'+prefix+'operator"]').select_option('CONTAINS_ALL')
+                        form.locator('select[name="'+prefix+'mandatory"]').select_option('no')
+                    form.locator('input[name="reason"]').fill('Evaluate the role contribution of this candidate.')
+                    form.get_by_role('button',name='Run requirement matching',exact=True).click()
+                    role_matches.append(page.locator('input[name="matching_id"]').last.input_value())
+                form=action_form('role_composition')
+                for identifier in role_claims[:2]:
+                    form.locator('input[name="required_role_id"][value="'+identifier+'"]').check()
+                for identifier in role_matches:
+                    form.locator('input[name="matching_id"][value="'+identifier+'"]').check()
+                form.locator('input[name="reason"]').fill('Compose distinct equity and debt role coverage without summing capital.')
+                form.get_by_role('button',name='Compose role coverage',exact=True).click()
+                composition=page.locator('#role-composition')
+                assert 'Conditional role coverage MATCH' in composition.inner_text()
+                assert 'factual configuration UNRESOLVED' in composition.inner_text()
+                if not args.live:
+                    persisted_before=state_path.read_bytes()
+                page.get_by_role('link',name='Reload',exact=True).click()
+                if not args.live:
+                    assert state_path.read_bytes() == persisted_before
+                composition.get_by_role('button',name='Render Capital Alignment Brief',exact=True).click()
+                with page.expect_download() as brief_download:
+                    page.get_by_role('link',name='Capital Alignment Brief',exact=False).click()
+                brief_download.value.save_as(str(output/'capital-alignment-brief.docx'))
+                import docx
+                brief_text='\n'.join(p.text for p in docx.Document(str(output/'capital-alignment-brief.docx')).paragraphs)
+                assert 'NOT_APPROVED_BY_COMPUTATION' in brief_text and 'UNRESOLVED' in brief_text
+                assert all(identifier in brief_text for identifier in role_matches)
+                proof['role_composition_and_capital_brief_actual_runtime']=True
+            if args.matching_games:
+                from services import survey_evaluation as evaluation
+                proof['matching_games']=[]
+                expected={'matching:fit':'FIT', 'matching:partial':'PARTIAL', 'matching:mandatory-failure':'NON_FIT',
+                    'matching:historical':'UNRESOLVED', 'matching:repeated-claim':'FIT',
+                    'matching:missing-provenance':'UNRESOLVED', 'matching:composition':'MATCH', 'matching:brief':'PARTIAL'}
+                for case in evaluation.MATCHING_GAMES:
+                    page.goto(base+'/admin/survey-evaluation')
+                    page.select_option('#case',case)
+                    page.get_by_role('button',name='Run isolated evaluation',exact=True).click()
+                    page.wait_for_url('**/attention?analysis=*')
+                    surface=page.locator('#role-composition' if case.endswith('composition') else '#requirement-matching')
+                    phrase='Conditional role coverage ' if case.endswith('composition') else 'conditional model '
+                    assert phrase+expected[case] in surface.inner_text()
+                    assert 'UNRESOLVED' in surface.inner_text() and 'EVALUATION_INPUT' in surface.inner_text()
+                    before=surface.inner_text()
+                    page.get_by_role('link',name='Reload',exact=True).click()
+                    assert surface.inner_text() == before
+                    proof['matching_games'].append(dict(case=case, model=expected[case], factual_state='UNRESOLVED',
+                        entry=urlparse(page.url).path+'?'+urlparse(page.url).query))
             page.screenshot(path=str(output/'professional-review.png'), full_page=True)
             if args.games:
                 import hashlib
@@ -433,7 +524,7 @@ def main():
                 proof['invoked_owners']=sorted(owners)
                 if args.propositions:
                     for method in ('record_review_subject', 'record_subject_proposition', 'review_subject_proposition', 'inspect_subject_propositions',
-                                   'run_requirement_matching', 'inspect_requirement_matches'):
+                                   'run_requirement_matching', 'inspect_requirement_matches', 'run_role_composition'):
                         assert 'services.case_workspace.CaseWorkspaceStore.'+method in owners
                     assert 'services.cross_modal_investigation.match_normalized_criteria' in owners
                     assert 'services.cross_modal_investigation.inspect_declared_temporal_scope' in owners

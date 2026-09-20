@@ -36,7 +36,8 @@ _keys = {"id", "project_id", "source_id", "evidence_item_id", "region_id",
          "criteria", "mandatory", "required", "candidate", "operator", "blocked_reason", "mandatory_failures",
          "unresolved", "factual_fit", "query_date", "expected_class", "model_label", "target_subject",
          "required_claim_id", "candidate_claim_id", "candidate_temporal_class", "context_key", "require_currentness",
-         "used_claim_ids", "unselected_claim_ids", "consumption_state", "premise_statuses", "source_integrity"}
+         "used_claim_ids", "unselected_claim_ids", "consumption_state", "premise_statuses", "source_integrity",
+         "matching_ids", "required_claim_ids", "matching_analysis_ids", "candidates", "covered_claim_ids", "excluded_reasons", "overlaps"}
 
 
 def current_reference():

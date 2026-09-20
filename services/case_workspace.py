@@ -7130,6 +7130,94 @@ class CaseWorkspaceStore:
         return results
 
     @observed
+    def run_role_composition(self, workspace, actor, analysis_id, matching_ids, required_claim_ids, reason):
+        """Compose explicit role coverage with the existing bounded set solver.
+
+        This does not add monetary amounts, rank entities, prove collaboration
+        compatibility or convert analytical predicates into factual authority.
+        """
+        from services.cross_modal_investigation import cover_requirements
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if workspace.document_desk_state != 'active':
+            raise CaseWorkspaceError('Composition requires an active document case.')
+        for values, maximum in ((matching_ids, 16), (required_claim_ids, 32)):
+            if (not isinstance(values, list) or not 1 <= len(values) <= maximum
+                    or any(not isinstance(value, str) for value in values) or len(set(values)) != len(values)):
+                raise CaseWorkspaceError('Select distinct bounded matching runs and required role propositions.')
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise CaseWorkspaceError('Record the reason for this proposed configuration.')
+        available = {row['run']['id']: row for row in self.inspect_requirement_matches(workspace, actor, analysis_id)}
+        if any(identifier not in available for identifier in matching_ids):
+            raise CaseWorkspaceError('Every matching run must belong to the active attention scope.')
+        propositions = {row['claim']['id']: row for row in self.inspect_subject_propositions(workspace, actor, analysis_id)}
+        requirements = []
+        for identifier in required_claim_ids:
+            row = propositions.get(identifier)
+            norm = ((row or {}).get('claim', {}).get('structured_proposition') or {}).get('normalization', {})
+            if (not row or norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'role' or not norm.get('value')
+                    or row['source_integrity'] != 'UNCHANGED' or row['status']['status'] not in
+                    ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding')):
+                raise CaseWorkspaceError('Select current explicit role propositions; financial amounts cannot be combined as role coverage.')
+            requirements.append(deepcopy(row))
+        if len({row['claim']['structured_proposition']['normalization']['subject_key'] for row in requirements}) != 1:
+            raise CaseWorkspaceError('Required roles must describe the same opportunity or subject.')
+        runs = [available[identifier] for identifier in matching_ids]
+        contexts = {(row['run']['governed_result']['context_key'], row['run']['governed_result']['query_date'],
+                     row['run']['governed_result']['require_currentness']) for row in runs}
+        subjects = [row['run']['governed_result']['target_subject'] for row in runs]
+        if len(contexts) != 1 or len(set(subjects)) != len(subjects):
+            raise CaseWorkspaceError('Choose one matching run per candidate, with the same context and temporal scope.')
+        coverage, candidates, obligations = {}, [], None
+        for entry in runs:
+            result = entry['run']['governed_result']
+            predicates = {row['id']: row for row in result['model']['criteria']}
+            if not set(required_claim_ids).issubset(predicates):
+                raise CaseWorkspaceError('Every candidate run must explicitly examine each selected role, including missing evidence.')
+            declared = {key: predicates[key]['mandatory'] for key in required_claim_ids}
+            if obligations is not None and declared != obligations:
+                raise CaseWorkspaceError('Required role obligations must be the same across candidate comparisons.')
+            obligations = declared
+            excluded = []
+            if entry['consumption_state'] == 'REVIEW_REQUIRED':
+                excluded.append('Matching premises changed or became unavailable; explicitly re-evaluate first.')
+            if result['model']['mandatory_failures']:
+                excluded.append('A mandatory candidate constraint failed; other partners cannot erase that failure.')
+            if any(row['mandatory'] and row['comparison']['state'] not in ('MATCH', 'NON_MATCH') for row in predicates.values()):
+                excluded.append('A mandatory candidate constraint remains unresolved or incomparable.')
+            covered = [] if excluded else [key for key in required_claim_ids if predicates[key]['comparison']['state'] == 'MATCH']
+            coverage[result['target_subject']] = covered
+            candidates.append(dict(subject=result['target_subject'], matching_analysis_id=entry['run']['id'],
+                covered_claim_ids=covered, excluded_reasons=excluded, matching=deepcopy(entry)))
+        model = cover_requirements(required_claim_ids, coverage)
+        overlaps = {key: [candidate for candidate, keys in coverage.items() if key in keys] for key in required_claim_ids}
+        result = dict(kind='role_composition', state='UNRESOLVED', canonical=False,
+            evaluation_only=bool(scope['evaluation_only'] or any(row['run']['governed_result']['evaluation_only'] for row in runs)),
+            attention_analysis_id=analysis_id, objective=scope['objective'], context_key=next(iter(contexts))[0],
+            reason=reason.strip(), requirements=requirements, candidates=candidates, model=model,
+            overlaps={key: values for key, values in overlaps.items() if len(values) > 1},
+            required_claim_ids=list(required_claim_ids), matching_analysis_ids=list(matching_ids),
+            qualification='Minimum conditional coverage of the selected role propositions only. No entity ranking, '
+                'capital summation, capacity allocation or factual fit is established. Partnership compatibility, '
+                'unrepresented constraints and complete opportunity requirements remain unresolved.')
+        return self.record_analysis(workspace, source_ids=sorted({source for row in runs for source in row['run']['source_ids']}),
+            objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='role-composition-1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+            muscle_profile=[dict(muscle='COMPOSITION', owner='cover_requirements', result=model)])
+
+    @observed
+    def inspect_role_compositions(self, workspace, actor, analysis_id):
+        matches = {row['run']['id']: row for row in self.inspect_requirement_matches(workspace, actor, analysis_id)}
+        rows = []
+        for run in workspace.analyses:
+            result = run.get('governed_result') or {}
+            if result.get('kind') != 'role_composition' or result.get('attention_analysis_id') != analysis_id:
+                continue
+            changed = any(identifier not in matches or matches[identifier]['consumption_state'] == 'REVIEW_REQUIRED'
+                          for identifier in result['matching_analysis_ids'])
+            rows.append(dict(run=deepcopy(run), consumption_state='REVIEW_REQUIRED' if changed else 'HISTORICAL_RESULT'))
+        return rows
+
+    @observed
     def run_information_comparison(self, workspace, actor, analysis_id, left, right, operator, reason, *, allowed_root=None):
         """Compare explicit normalized hypotheses without creating another truth store.
 
@@ -7319,37 +7407,87 @@ class CaseWorkspaceStore:
     @observed
     def render_professional_review(self, workspace, actor, analysis_id):
         """Render committed analysis into the existing WorkProduct path, without inference."""
-        if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+        if workspace.removed_at or workspace.document_desk_state != 'active' or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
             raise CaseWorkspaceError('Presentation requires an active, fully visible project.')
         analysis = self._find(workspace.analyses, analysis_id)
         result = (analysis or {}).get('governed_result')
-        if not result or result.get('kind') != 'professional_review':
-            raise CaseWorkspaceError('A persisted professional review is required.')
+        if not result or result.get('kind') not in ('professional_review', 'requirement_matching', 'role_composition'):
+            raise CaseWorkspaceError('A persisted governed review, matching or composition result is required.')
         attention = self._find(workspace.analyses, result['attention_analysis_id'])
         if not attention:
             raise CaseWorkspaceError('The originating attention scope is unavailable.')
-        links = [{'object_type': 'evidence_item', 'object_id': a['evidence_item_id']} for a in result['admissions']]
+        if result['kind'] == 'professional_review':
+            links = [{'object_type': 'evidence_item', 'object_id': a['evidence_item_id']} for a in result['admissions']]
+            title = result['narrative']['professional_lens'] + ' — ' + analysis['objective']
+            artifact_type = 'professional_review'
+            sections = {
+                'objective_and_lens': dict(analysis_id=analysis_id, objective=result['objective'],
+                    lens=result['narrative']['professional_lens'], state=result['state'], canonical=False,
+                    evaluation_only=result['evaluation_only']),
+                'evidence_and_attention': dict(admissions=result['admissions'], attention=attention['attention_scope']),
+                'resolution_and_expected_next': dict(resolution=result['resolution'], expected_next=result['expected_next']),
+                'source_jumps_and_root_traces': dict(evidence_links=links, continuum=result.get('continuum'), root_trace=result.get('root_trace', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'})),
+                'section_and_discipline_coverage': result.get('coverage', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
+                'interpretation_changes': result.get('interpretation_drift', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
+                'contradictions_and_gaps': dict(admission_conflicts=[a for a in result['admissions'] if a['state'] == 'CONTESTED'], remaining=result['remaining']),
+                'uncertainty_and_refusals': dict(uncertainty=result['uncertainty'], classifications=result['input_classification']),
+                'governed_conclusions': dict(state=result['state'], canonical=False, muscle_profile=analysis['muscle_profile']),
+                'next_investigation': dict(missing_resolution_question=result['resolution'].get('next_question'), expected_next=result['expected_next'].get('expected')),
+                'provenance': dict(analysis_id=analysis_id, attention_analysis_id=result['attention_analysis_id'],
+                    narrative_key=result['narrative']['key'], narrative_version=result['narrative']['version'],
+                    source_ids=analysis['source_ids'], premise_ids=[a['evidence_item_id'] for a in result['admissions']]),
+            }
+        else:
+            if result['kind'] == 'requirement_matching':
+                matches = [row for row in self.inspect_requirement_matches(workspace, actor, result['attention_analysis_id'])
+                           if row['run']['id'] == analysis_id]
+                consumption = matches[0]['consumption_state'] if matches else 'REVIEW_REQUIRED'
+                composition = dict(state='UNRESOLVED', reason='Composition was not performed by this matching execution.')
+            else:
+                matches = [candidate['matching'] for candidate in result['candidates']]
+                inspected = self.inspect_role_compositions(workspace, actor, result['attention_analysis_id'])
+                consumption = next((row['consumption_state'] for row in inspected if row['run']['id'] == analysis_id), 'REVIEW_REQUIRED')
+                composition = deepcopy(result)
+            claim_ids = sorted({identifier for match in matches for identifier in match['run']['governed_result']['used_claim_ids']})
+            links = [dict(object_type='claim', object_id=identifier) for identifier in claim_ids]
+            current_claims = [self.get_claim(workspace, identifier) for identifier in claim_ids]
+            for claim in current_claims:
+                if claim:
+                    for link in claim['evidence_links']:
+                        if link not in links:
+                            links.append(deepcopy(link))
+            capital = result['context_key'] == 'investment'
+            title = ('Capital Alignment Brief' if capital else 'Requirement and Role Alignment Review') + ' / ' + analysis['objective']
+            artifact_type = 'capital_alignment_brief' if capital else 'alignment_review'
+            sections = {
+                'objective_and_context': dict(objective=result['objective'], context=result['context_key'],
+                    state=result['state'], canonical=False, evaluation_only=result['evaluation_only'],
+                    qualification=result['qualification'], consumption_state=consumption),
+                'evidence_and_attention': dict(attention=attention['attention_scope'], evidence_links=links),
+                'candidate_landscape_and_matching': dict(matches=matches),
+                'role_composition': composition,
+                'capital_requirement_and_market_context': dict(state='UNRESOLVED',
+                    reason='Only supplied sourced criteria are assessed. No market context or financing commitment is invented.'),
+                'human_disposition': dict(state='NOT_APPROVED_BY_COMPUTATION', claims=[dict(claim_id=claim['id'],
+                    adoption_state=claim['adoption_state'], adopted_by=claim.get('adopted_by'),
+                    adopted_at=claim.get('adopted_at'), reason=claim.get('adoption_reason')) for claim in current_claims if claim],
+                    qualification='Claim adoption is interpretation review, not approval of this match or authorization for outreach.'),
+                'risks_and_unresolved': dict(state='UNRESOLVED', consumption_state=consumption,
+                    factors=['Source authority and actual current mandate are not established by classification.',
+                        'Complete requirement coverage, partnership compatibility and financing closure are unresolved.',
+                        'Changed premises require explicit re-evaluation; historical results are not recomputed by rendering.']),
+                'governed_conclusions': dict(state=result['state'], canonical=False, muscle_profile=analysis['muscle_profile']),
+                'next_investigation': dict(actions=['Review the cited source premises and missing evidence.',
+                    'Establish applicability, currentness and authority through existing human governance.',
+                    'Explicitly re-evaluate affected comparisons after corrections.'],
+                    outreach='No external contact or financial action is authorized by this brief.'),
+                'provenance': dict(analysis_id=analysis_id, attention_analysis_id=result['attention_analysis_id'],
+                    source_ids=analysis['source_ids'], claim_ids=claim_ids, runtime_trace_id=analysis.get('runtime_trace_id')),
+            }
         if any(not self._resolve_mm6_endpoint(workspace, link['object_type'], link['object_id']) for link in links):
             raise CaseWorkspaceError('A cited premise is unavailable; presentation cannot conceal the broken lineage.')
-        product = self.create_work_product(workspace, 'professional_review',
-            result['narrative']['professional_lens'] + ' — ' + analysis['objective'], actor)
-        sections = {
-            'objective_and_lens': dict(analysis_id=analysis_id, objective=result['objective'],
-                lens=result['narrative']['professional_lens'], state=result['state'], canonical=False,
-                evaluation_only=result['evaluation_only']),
-            'evidence_and_attention': dict(admissions=result['admissions'], attention=attention['attention_scope']),
-            'resolution_and_expected_next': dict(resolution=result['resolution'], expected_next=result['expected_next']),
-            'source_jumps_and_root_traces': dict(evidence_links=links, continuum=result.get('continuum'), root_trace=result.get('root_trace', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'})),
-            'section_and_discipline_coverage': result.get('coverage', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
-            'interpretation_changes': result.get('interpretation_drift', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
-            'contradictions_and_gaps': dict(admission_conflicts=[a for a in result['admissions'] if a['state'] == 'CONTESTED'], remaining=result['remaining']),
-            'uncertainty_and_refusals': dict(uncertainty=result['uncertainty'], classifications=result['input_classification']),
-            'governed_conclusions': dict(state=result['state'], canonical=False, muscle_profile=analysis['muscle_profile']),
-            'next_investigation': dict(missing_resolution_question=result['resolution'].get('next_question'), expected_next=result['expected_next'].get('expected')),
-            'provenance': dict(analysis_id=analysis_id, attention_analysis_id=result['attention_analysis_id'],
-                narrative_key=result['narrative']['key'], narrative_version=result['narrative']['version'],
-                source_ids=analysis['source_ids'], premise_ids=[a['evidence_item_id'] for a in result['admissions']]),
-        }
+        product = self.create_work_product(workspace, artifact_type, title, actor)
+
         sections['provenance']['source_hashes'] = {s['id']: s.get('file_hash') for s in workspace.sources
                                                   if s['id'] in analysis['source_ids']}
         for name, content in sections.items():

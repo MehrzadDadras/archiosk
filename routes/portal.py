@@ -4404,6 +4404,10 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                         require_currentness=request.form.get('require_currentness') == 'yes',
                         query_date=request.form.get('query_date'))
                     analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'role_composition':
+                    store.run_role_composition(workspace, actor, request.form.get('analysis_id'),
+                        request.form.getlist('matching_id'), request.form.getlist('required_role_id'), request.form.get('reason', ''))
+                    analysis = {'id': request.form['analysis_id']}
                 elif request.form.get('action') == 'information_comparison':
                     def explicit_tokens(value):
                         return [] if value.strip() == '[]' else [part.strip() for part in value.split(',')] if value.strip() else None
@@ -4506,6 +4510,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
         subject_propositions=propositions, selected_proposition=selected_proposition,
         requirement_matches=store.inspect_requirement_matches(workspace, actor, analysis['id']) if analysis else [],
+        role_compositions=store.inspect_role_compositions(workspace, actor, analysis['id']) if analysis else [],
         matching_contexts=MATCHING_CONTEXTS, declared_temporal_classes=DECLARED_CURRENT_TEMPORAL_CLASSES,
         proposition_source_classes=PROPOSITION_SOURCE_CLASSES,
         proposition_temporal_classes=PROPOSITION_TEMPORAL_CLASSES,
@@ -4518,7 +4523,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
             a.get('reviewed_condition_digest') == condition_review_fingerprint(conditions_by_id[a['condition_id']], a)))
             for a in workspace.discipline_assumptions if a['condition_id'] in conditions_by_id],
         evaluation_run_id=evaluation_path.name if evaluation_path else None,
-        professional_presentations=[p for p in workspace.work_products if p.get('artifact_type') == 'professional_review'],
+        professional_presentations=[p for p in workspace.work_products if p.get('artifact_type') in ('professional_review', 'capital_alignment_brief', 'alignment_review')],
         resolution_classes=next(iter(PROFESSIONAL_NARRATIVES.values())).resolution_questions,
         representation_classes=sorted({value for narrative in PROFESSIONAL_NARRATIVES.values()
                                        for value in narrative.information_sequence + narrative.representation_types}))

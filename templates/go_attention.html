@@ -4,7 +4,7 @@
 {% block content %}
 <div class="survey-evaluation go-attention">
 <h1>Governed attention</h1>
-{% if evaluation_game %}<h2>{{ evaluation_game.title }}</h2><p>EVALUATION_INPUT: retained text fixtures supply explicit representation, resolution and applicability premises. They are not physical detail drawings or human professional approvals. The ordinary review owners derive the results below; project authority remains unchanged.</p>{% endif %}
+{% if evaluation_game %}<h2>{{ evaluation_game.title }}</h2><p>EVALUATION_INPUT: retained text fixtures supply explicit analytical premises. They are not physical detail drawings, verified investor facts or human professional approvals. The ordinary review owners derive the results below; project authority remains unchanged.</p>{% endif %}
 <p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'Real project data — qualification stays with each record' }}</p>
 <p>Attention selects what GO examines for this objective. It does not change what is true.</p>
 <nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ mapping_url }}">Generic kernel mapping</a> · <a href="{{ request.url }}">Reload</a></nav>
@@ -47,6 +47,7 @@
 <details><summary>Evidence, lifetime, objective and promotion status</summary><pre>{{ edge|tojson(indent=2) }}</pre></details></article>{% else %}<p>No temporary edges recorded for this objective.</p>{% endfor %}</section>
 {% include 'components/subject_propositions.html' %}
 {% include 'components/requirement_matching.html' %}
+{% include 'components/role_composition.html' %}
 <section><h2>Normalized information comparison</h2>
 <p>EVALUATION_INPUT: explicitly model a number or vocabulary set from each selected source. These hypotheses do not correct the machine read or establish source facts. Blank qualifiers remain unresolved; enter [] only when explicitly modelling no qualifiers.</p>
 {% if not expired %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="information_comparison"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">

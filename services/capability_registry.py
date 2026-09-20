@@ -111,6 +111,10 @@ def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
 # One catalogue beside the existing capability/action metadata. Each key names
 # its actual implementation. Being registered is not proof of invocation.
 MUSCLE_CONTRACTS = {
+    'services.case_workspace.CaseWorkspaceStore.run_role_composition': _muscle('ROLE COMPOSITION',
+        'Retained candidate matching runs, explicit required roles and common temporal scope', 'Conditional minimum coverage configurations',
+        'Positive role predicates -> set coverage; mandatory failures exclude candidates', 'REFUSED for foreign/mixed inputs; PARTIAL for missing coverage',
+        'Coverage is not ranking, capital summation, partnership compatibility or verified fit.'),
     'services.cross_modal_investigation.match_normalized_criteria': _muscle('REQUIREMENT MATCHING',
         'Distinct typed required/candidate premises and mandatory obligations', 'Per-criterion model states and mandatory failures',
         'Comparable predicates -> conditional match; mandatory failure dominates', 'UNRESOLVED, PARTIAL, REFUSED; missing and incomparable inputs remain explicit',

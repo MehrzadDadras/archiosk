@@ -74,6 +74,17 @@ REVIEW_GAMES = {
     'review:physical-path-gap': dict(title='Labelled air control lacks a recorded continuity path', conditions=1, physical=True),
 }
 CASES.update({key: value['title'] for key, value in REVIEW_GAMES.items()})
+MATCHING_GAMES = {
+    'matching:fit': dict(title='Capital alignment: all declared predicates fit, factual authority unresolved', matching='fit'),
+    'matching:partial': dict(title='Capital alignment: one match and missing geographic evidence', matching='partial'),
+    'matching:mandatory-failure': dict(title='Capital alignment: capital fits but mandatory sector fails', matching='mandatory_failure'),
+    'matching:historical': dict(title='Historical activity does not establish a current mandate', matching='historical'),
+    'matching:repeated-claim': dict(title='Repeated reporting does not establish investor authority', matching='repeated'),
+    'matching:missing-provenance': dict(title='Unanchored candidate claim cannot supply matching evidence', matching='missing'),
+    'matching:composition': dict(title='Two entities jointly cover equity and debt roles without capital summation', matching='composition'),
+    'matching:brief': dict(title='Capital Alignment Brief preserves missing evidence and unresolved authority', matching='brief'),
+}
+CASES.update({key: value['title'] for key, value in MATCHING_GAMES.items()})
 CASES.update({"control:"+key:"Rule 7 control: "+key+" / "+value["category"] for key,value in CONTROLS.items()})
 H_CASES = {"homography", "no-h", "singular", "ill-conditioned", "infinity", "space-mismatch", "projective"}
 UNIMPLEMENTED = ["Automatic control-point extraction and professional/legal certification"]
@@ -199,7 +210,7 @@ def _source_pdf(path, case):
 def create(app, case, actor, matrix_text=""):
     if case not in CASES:
         raise ValueError("Unknown evaluation case")
-    if case in REVIEW_GAMES:
+    if case in REVIEW_GAMES or case in MATCHING_GAMES:
         return _create_review_game(app, case, actor)
     if matrix_text and len(matrix_text)>2000:
         raise ValueError("Transform input too large")
@@ -301,7 +312,7 @@ def _create_review_game(app, case, actor):
     the fixture or an alternative evaluator. Review premises remain evaluation-only.
     """
     import pymupdf
-    spec = REVIEW_GAMES[case]
+    spec = (REVIEW_GAMES | MATCHING_GAMES)[case]
     run_id = uuid.uuid4().hex
     path = root(app) / run_id
     path.mkdir(parents=True)
@@ -326,6 +337,13 @@ def _create_review_game(app, case, actor):
         condition_text = ['EVALUATION_INPUT specification clause: provide continuous air control at this interface. No downstream manifestation is provided.']
     if case == 'review:independent':
         condition_text = ['EVALUATION_INPUT independent reference: no upstream or downstream participation is required for this review objective.']
+    if spec.get('matching'):
+        condition_text = ['EVALUATION_INPUT opportunity: capital minimum 100 EVAL_CURRENCY; sector EVAL_SECTOR; geography EVAL_REGION; collective roles EQUITY and DEBT. Declared interval 2026-01-01 to 2027-01-01.']
+        other_text = ['EVALUATION_INPUT candidate: capital 100 EVAL_CURRENCY; sector '
+            + ('OTHER_SECTOR' if spec['matching'] == 'mandatory_failure' else 'EVAL_SECTOR')
+            + '; geography EVAL_REGION. Hypothetical candidate A offers EQUITY role coverage; candidate B offers DEBT role coverage. '
+            + ('Historical activity only; no current mandate supplied.' if spec['matching'] == 'historical'
+               else 'Declared hypothetical interval 2026-01-01 to 2027-01-01. This is not verified investor information.')]
     evidence = []
     with isolated(app, path):
         for number, lines in enumerate((condition_text, other_text)):
@@ -364,7 +382,9 @@ def _create_review_game(app, case, actor):
                 representation = store.record_review_representation(workspace, actor, attention['id'], condition['id'],
                     evidence[1][0]['id'], 'structural', 'WALL_SECTION', 'ASSEMBLY_LAYERS', reason)
                 store.review_coverage_record(workspace, actor, attention['id'], representation['id'], 'resolve_representation', reason)
-        if spec.get('constraints'):
+        if spec.get('matching'):
+            analysis = _matching_game_inputs(store, workspace, actor, attention['id'], evidence, spec['matching'], reason)
+        elif spec.get('constraints'):
             constraints = [dict(id=f'constraint-{index}', subject=subject, parameter='opening_width', unit='mm',
                 lower=lower, upper=upper, premise_ids=[evidence[index][0]['id']])
                 for index, (lower, upper) in enumerate(((lo_a, hi_a), (lo_b, hi_b)))]
@@ -378,6 +398,54 @@ def _create_review_game(app, case, actor):
         record['analysis_id'] = analysis['id']
     _save(path, record)
     return run_id
+
+
+def _matching_game_inputs(store, workspace, actor, attention_id, evidence, variant, reason):
+    """Supply declared fixture premises; ordinary Claim/matching/composition owners execute."""
+    parties = [store.record_review_subject(workspace, actor, attention_id, 'EVALUATION '+name, role)
+        for name, role in [('opportunity', 'opportunity'), ('candidate A','investor'), ('candidate B','lender')]]
+
+    def proposition(party, property_key, value, *, historical=False, reporting=False):
+        item = evidence[0 if party == 0 else 1][0]
+        numeric = property_key == 'capital'
+        norm = dict(subject_key='participant:'+parties[party]['id'], property_key=property_key,
+            scope_key='evaluation-opportunity', kind='NUMBER' if numeric else 'TOKEN_SET', value=value,
+            unit='EVAL_CURRENCY' if numeric else '', vocabulary='' if numeric else 'evaluation-'+property_key,
+            qualifiers=[], view_basis='VIEW_INVARIANT', view_id=None, basis=reason, premise_ids=[item['id']])
+        return store.record_subject_proposition(workspace, actor, attention_id, norm,
+            'REPORTING' if reporting else 'PROJECT_DOCUMENT',
+            'HISTORICAL_ACTIVITY' if historical else 'DATED_REQUIREMENT' if party == 0 else 'CURRENT_DISCLOSED_MANDATE',
+            item['content'], reason, as_of='2026-01-01', valid_until='2027-01-01', attribution='agent_assessment')
+
+    if variant == 'composition':
+        required = [proposition(0, 'role', [role]) for role in ('EQUITY','DEBT')]
+        runs = []
+        for party, role in ((1,'EQUITY'),(2,'DEBT')):
+            candidate = proposition(party, 'role', [role])
+            criteria = [dict(required_claim_id=claim['id'], candidate_claim_id=candidate['id'], mandatory=False,
+                operator='CONTAINS_ALL', candidate_temporal_class='CURRENT_DISCLOSED_MANDATE') for claim in required]
+            runs.append(store.run_requirement_matching(workspace, actor, attention_id, 'participant:'+parties[party]['id'],
+                criteria, 'investment', reason, query_date='2026-09-20'))
+        return store.run_role_composition(workspace, actor, attention_id, [run['id'] for run in runs],
+            [claim['id'] for claim in required], reason)
+    criteria = []
+    for property_key, value in [('capital','100'), ('sector',['EVAL_SECTOR']), ('geography',['EVAL_REGION'])]:
+        required = proposition(0, property_key, value)
+        candidate = None
+        if not (variant == 'missing' or (variant in ('partial','brief') and property_key == 'geography')):
+            candidate_value = ['OTHER_SECTOR'] if variant == 'mandatory_failure' and property_key == 'sector' else value
+            candidate = proposition(1, property_key, candidate_value,
+                historical=variant == 'historical', reporting=variant == 'repeated')
+            if variant == 'repeated':
+                proposition(1, property_key, candidate_value, reporting=True)
+        criteria.append(dict(required_claim_id=required['id'], candidate_claim_id=candidate['id'] if candidate else None,
+            mandatory=True, operator='AT_LEAST' if property_key == 'capital' else 'CONTAINS_ALL',
+            candidate_temporal_class='CURRENT_DISCLOSED_MANDATE'))
+    analysis = store.run_requirement_matching(workspace, actor, attention_id, 'participant:'+parties[1]['id'],
+        criteria, 'investment', reason, query_date='2026-09-20')
+    if variant == 'brief':
+        store.render_professional_review(workspace, actor, analysis['id'])
+    return analysis
 
 
 def _survey_operation(store, workspace, record):

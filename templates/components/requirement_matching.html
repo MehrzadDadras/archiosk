@@ -27,4 +27,5 @@
 <p>Relevant propositions not selected: {{ result.unselected_claim_ids|join(', ') or 'None in this scope' }}. Selection does not prove complete requirement coverage.</p>
 <p>{{ entry.qualification }}</p><details><summary>Current premise status</summary><pre>{{ entry.premise_statuses|tojson(indent=2) }}</pre></details>
 {% if run.runtime_trace_id %}<a href="{{ url_for('portal.survey_evaluation', observation=run.runtime_trace_id) }}#muscle-inspector">Inspect actual runtime invocation</a>{% endif %}
+<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="professional_presentation"><input type="hidden" name="review_id" value="{{ run.id }}"><button>Render {{ 'Capital Alignment Brief' if result.context_key == 'investment' else 'alignment review' }}</button></form>
 </article>{% endfor %}</section>
