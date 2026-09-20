@@ -1,5 +1,13 @@
 # MANIFEST
 
+Normalized comparison extends the existing attention/AnalysisRun path with
+explicit source-anchored scalar and vocabulary-set hypotheses. The shared
+cross-modal and quantitative owners retain scope, qualifiers, source admissions
+and verified derived-view lineage. Conditional model matches remain evaluation
+input; factual consistency and authority are not inferred. Participant identity
+is reachable through the existing relationship endpoint resolver. See
+`governance/current/normalized-comparison.md` and `tests/test_normalized_comparison.py`.
+
 Continuum acceptance games extend `survey_evaluation.REVIEW_GAMES` and its existing
 isolated registry boundary. Retained controlled PDFs are extracted into ordinary
 Source/page/region/EvidenceItems; the real attention, professional review and

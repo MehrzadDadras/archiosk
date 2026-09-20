@@ -208,6 +208,33 @@ def main():
             page.get_by_role('link', name='Reload', exact=True).click()
             assert 'BOUNDARY_FOUND' in page.locator('body').inner_text()
             proof['hypothetical_constraint_and_breakpoint_invoked_through_ui']=True
+            form=action_form('information_comparison')
+            form.locator('input[name="property_key"]').fill('opening-width')
+            for side in ('left', 'right'):
+                form.locator(f'input[name="{side}_scope"]').fill('evaluation-interface')
+                form.locator(f'input[name="{side}_value"]').fill('100')
+                form.locator(f'input[name="{side}_unit"]').fill('mm')
+                form.locator(f'input[name="{side}_qualifiers"]').fill('[]')
+                form.locator(f'select[name="{side}_view"]').select_option('VIEW_INVARIANT')
+            mirrored=form.locator('select[name="left_view"] option').evaluate_all(
+                'nodes => nodes.filter(n => n.textContent.includes("MIRROR_HORIZONTAL")).map(n => n.value)')
+            assert len(mirrored) == 1
+            form.locator('select[name="left_view"]').select_option(mirrored[0])
+            form.locator('input[name="reason"]').fill('EVALUATION_INPUT: compare explicit width hypotheses using the retained mirrored view; no factual consistency is inferred.')
+            form.locator('button').click()
+            assert 'model MATCH' in page.locator('body').inner_text()
+            assert 'Factual consistency: UNRESOLVED' in page.locator('body').inner_text()
+            if not args.live:
+                persisted_before=state_path.read_bytes()
+                workspace=store.get(evaluation._read(location)['project_id'])
+                comparison=workspace.analyses[-1]['governed_result']
+                assert comparison['views'][0]['transform']['type'] == 'MIRROR_HORIZONTAL'
+                assert comparison['evaluation_only'] and not comparison['canonical']
+            page.get_by_role('link', name='Reload', exact=True).click()
+            assert 'model MATCH' in page.locator('body').inner_text()
+            if not args.live:
+                assert state_path.read_bytes() == persisted_before
+            proof['normalized_comparison_retained_view_and_reload_invoked_through_ui']=True
             page.screenshot(path=str(output/'professional-review.png'), full_page=True)
             if args.games:
                 import hashlib
@@ -266,6 +293,8 @@ def main():
                     'services.cross_modal_investigation.inspect_continuum_participation',
                     'services.quantitative_investigation.probe_interval_constraints',
                     'services.quantitative_investigation.search_interval_breakpoint',
+                    'services.cross_modal_investigation.compare_normalized_information',
+                    'services.quantitative_investigation.compare_scalar_values',
                     'services.document_examination.reevaluate_source_review'):
                     assert owner in owners, owner
                 proof['invoked_owners']=sorted(owners)

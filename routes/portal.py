@@ -4316,7 +4316,25 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
             from services import survey_evaluation as evaluation
             context = evaluation.isolated(current_app, evaluation_path) if evaluation_path else nullcontext()
             with context:
-                if request.form.get('action') == 'constraint_review':
+                if request.form.get('action') == 'information_comparison':
+                    def explicit_tokens(value):
+                        return [] if value.strip() == '[]' else [part.strip() for part in value.split(',')] if value.strip() else None
+                    premises = []
+                    for side in ('left', 'right'):
+                        view = request.form.get(side + '_view', 'UNRESOLVED')
+                        value = request.form.get(side + '_value', '')
+                        premises.append(dict(subject_key=request.form.get(side + '_subject', ''),
+                            property_key=request.form.get('property_key', ''), scope_key=request.form.get(side + '_scope', ''),
+                            kind=request.form.get('kind'), value=explicit_tokens(value) if request.form.get('kind') == 'TOKEN_SET' else value,
+                            qualifiers=explicit_tokens(request.form.get(side + '_qualifiers', '')),
+                            unit=request.form.get(side + '_unit', ''), vocabulary=request.form.get('vocabulary', ''),
+                            view_basis='NORMALIZED_VIEW' if view.startswith('view:') else view,
+                            view_id=view.partition(':')[2] if view.startswith('view:') else None,
+                            basis=request.form.get('reason', ''), premise_ids=[request.form.get(side + '_evidence', '')]))
+                    store.run_information_comparison(workspace, actor, request.form.get('analysis_id'),
+                        *premises, request.form.get('operator'), request.form.get('reason', ''), allowed_root=evaluation_path)
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'constraint_review':
                     constraints = [dict(id='constraint-' + str(index), subject=request.form.get('subject', ''),
                         parameter=request.form.get('parameter', ''), unit=request.form.get('unit', ''),
                         lower=request.form.get('lower_' + str(index)), upper=request.form.get('upper_' + str(index)),
@@ -4392,6 +4410,10 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         evaluation_only=evaluation_only, temporary_edges=edges,
         governed_reviews=[r for r in reviews if r['governed_result']['kind'] == 'professional_review'],
         constraint_reviews=[r for r in reviews if r['governed_result']['kind'] == 'constraint_review'],
+        information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
+        comparison_subjects=[dict(key='source:'+s['id'], label='Source: '+s.get('name', s['id'])) for s in workspace.sources if s['id'] in scoped_sources]
+            + [dict(key='participant:'+p['id'], label='Participant: '+p['name']) for p in workspace.participants],
+        comparison_views=[v for v in workspace.derived_views if v['source_id'] in scoped_sources and v.get('view_transform')],
         professional_narratives=PROFESSIONAL_NARRATIVES,
         review_conditions=conditions,
         review_representations=[dict(a, applicability_current=bool(a.get('resolved_by') and

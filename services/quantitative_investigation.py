@@ -44,6 +44,35 @@ from typing import Optional
 from services.runtime_observation import observed
 
 
+def bounded_decimal(value):
+    """Shared scalar input boundary; no coercion of missing/boolean quantities."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        if isinstance(value, bool) or value is None or len(str(value)) > 80:
+            raise ValueError('Missing or invalid scalar')
+        parsed = Decimal(str(value))
+        if not parsed.is_finite() or (parsed and abs(parsed.adjusted()) > 100):
+            raise ValueError('Scalar outside finite bounds')
+        return parsed
+    except (InvalidOperation, TypeError) as error:
+        raise ValueError('A bounded finite scalar is required') from error
+
+
+@observed
+def compare_scalar_values(required, candidate, operator='EQUAL'):
+    """One scalar predicate shared by every domain; callers govern its premises."""
+    if operator not in ('EQUAL', 'AT_LEAST', 'AT_MOST'):
+        return dict(state='REFUSED', reason='Unknown scalar comparison operator.')
+    try:
+        left, right = bounded_decimal(required), bounded_decimal(candidate)
+    except ValueError:
+        return dict(state='UNRESOLVED', reason='Both finite scalar premises are required.')
+    matched = right == left if operator == 'EQUAL' else right >= left if operator == 'AT_LEAST' else right <= left
+    return dict(state='MATCH' if matched else 'NON_MATCH', operator=operator,
+        required=str(left), candidate=str(right), authority='UNCHANGED', canonical=False,
+        reason='Predicate evaluated only over the supplied scalar premises.')
+
+
 @observed
 def probe_interval_constraints(constraints):
     """Intersect explicit scalar bounds; never extract or invent a missing value.
@@ -70,11 +99,8 @@ def probe_interval_constraints(constraints):
         if not isinstance(row, dict) or not row.get('premise_ids'):
             return dict(result, reason='Each constraint requires retained source premises.')
         try:
-            if any(isinstance(row.get(k), bool) or len(str(row.get(k))) > 80 for k in ('lower', 'upper')):
-                raise ValueError('Boolean bounds')
-            lower, upper = Decimal(str(row['lower'])), Decimal(str(row['upper']))
-            if (not lower.is_finite() or not upper.is_finite() or lower > upper
-                    or any(abs(v.adjusted()) > 100 for v in (lower, upper) if v)):
+            lower, upper = bounded_decimal(row['lower']), bounded_decimal(row['upper'])
+            if lower > upper:
                 raise ValueError('Invalid interval')
         except (KeyError, InvalidOperation, ValueError):
             return dict(result, reason='Finite ordered lower and upper bounds are required; missing bounds are not inferred.')

@@ -6833,6 +6833,82 @@ class CaseWorkspaceStore:
         raise CaseWorkspaceError('Unknown coverage review action.')
 
     @observed
+    def run_information_comparison(self, workspace, actor, analysis_id, left, right, operator, reason, *, allowed_root=None):
+        """Compare explicit normalized hypotheses without creating another truth store.
+
+        Inputs and results live in the ordinary AnalysisRun, with exact existing
+        subject/evidence/view references. Entered normalizations are evaluation
+        premises even when they refer to real project sources. No source reading,
+        binding, applicability, authority or currentness is edited by comparison.
+        """
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if workspace.document_desk_state != 'active':
+            raise CaseWorkspaceError('Comparison requires an active document case.')
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise CaseWorkspaceError('Record the reason for this bounded normalization model.')
+        if any(not isinstance(row, dict) for row in (left, right)):
+            raise CaseWorkspaceError('Two normalized premises are required.')
+        try:
+            if len(json.dumps([left, right], allow_nan=False)) > 20000:
+                raise ValueError('Input too large')
+        except (ValueError, TypeError):
+            raise CaseWorkspaceError('Normalized input exceeds the bounded comparison contract.') from None
+        references, views, subjects = set(), [], []
+        for row in (left, right):
+            identifiers = row.get('premise_ids')
+            if (not isinstance(identifiers, list) or not identifiers or len(identifiers) > 32
+                    or any(not isinstance(i, str) for i in identifiers)
+                    or not set(identifiers).issubset(scope['included_evidence_ids'])):
+                raise CaseWorkspaceError('Every normalized premise must reference evidence in the active attention scope.')
+            references.update(identifiers)
+            for identifier in identifiers:
+                evidence = self.get_evidence_item(workspace, identifier)
+                source = self._find(workspace.sources, (evidence or {}).get('source_id'))
+                if (not evidence or evidence.get('project_id') != workspace.project_id
+                        or not source or source.get('removed_at') or source.get('project_id') != workspace.project_id):
+                    raise CaseWorkspaceError('A referenced source or evidence item is no longer available in this project.')
+            subject_key = row.get('subject_key')
+            if not isinstance(subject_key, str):
+                raise CaseWorkspaceError('Select an existing subject in this project.')
+            subject_type, _, subject_id = subject_key.partition(':')
+            if subject_type not in ('participant', 'source', 'requirement', 'legend_item', 'derived_observation'):
+                raise CaseWorkspaceError('This object type is not an available comparison subject.')
+            subject = self._resolve_mm6_endpoint(workspace, subject_type, subject_id)
+            if not subject:
+                raise CaseWorkspaceError('The comparison subject is unavailable in this project.')
+            subjects.append(dict(object_type=subject_type, object_id=subject_id,
+                currentness=self.resolve_anchor_currentness(workspace, subject_type, subject_id)))
+            if row.get('view_basis') == 'NORMALIZED_VIEW':
+                view = self._find(workspace.derived_views, row.get('view_id'))
+                sources = {self.get_evidence_item(workspace, identifier)['source_id'] for identifier in identifiers}
+                if not view or sources != {view['source_id']} or not view.get('view_transform'):
+                    raise CaseWorkspaceError('The normalized view must belong to the referenced source.')
+                from services.document_examination import working_view_bytes, review_source_bytes
+                _, raw, _ = review_source_bytes(self, workspace, view['source_id'], allowed_root=allowed_root)
+                if hashlib.sha256(raw).hexdigest() != view['view_transform']['source_sha256']:
+                    raise CaseWorkspaceError('The normalized view does not match the current retained original.')
+                working_view_bytes(self, workspace, view)
+                metadata = deepcopy(view['view_transform'])
+                metadata.pop('file_path', None)
+                views.append(dict(view_id=view['id'], source_id=view['source_id'], transform=metadata))
+        from services.cross_modal_investigation import compare_normalized_information
+        comparison = compare_normalized_information(deepcopy(left), deepcopy(right), operator=operator)
+        admissions = [self.admit_proposition(workspace, identifier) for identifier in sorted(references)]
+        fingerprints = [dict(evidence_item_id=identifier,
+            content_sha256=hashlib.sha256(self.get_evidence_item(workspace, identifier)['content'].encode()).hexdigest())
+            for identifier in sorted(references)]
+        result = dict(kind='information_comparison', state='EVALUATION_INPUT', canonical=False, evaluation_only=True,
+            attention_analysis_id=analysis_id, objective=scope['objective'], actor=actor, reason=reason.strip(),
+            comparison=comparison, admissions=admissions, subjects=subjects, views=views, evidence_fingerprints=fingerprints,
+            qualification='Entered normalized values are explicit analytical hypotheses, not corrected machine readings or project facts. '
+            'A matching model does not establish source consistency, capability, applicability or authority.')
+        return self.record_analysis(workspace, source_ids=sorted({a['source_id'] for a in admissions if a.get('source_id')}),
+            objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='normalized-model-1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+            muscle_profile=[dict(muscle='NORMALIZED COMPARISON', owner='compare_normalized_information', result=comparison),
+                dict(muscle='AUTHORITY / UNCERTAINTY', owner='CaseWorkspaceStore.admit_proposition', result=admissions)])
+
+    @observed
     def run_constraint_review(self, workspace, actor, analysis_id, constraints, baseline, direction, reason):
         """Explicit hypothetical models reuse the quantitative investigation owner.
 
@@ -15356,6 +15432,9 @@ class CaseWorkspaceStore:
         # it a "signifies the same thing as" edge could not be a governed
         # Relationship at all, and the lineage would have to live in prose.
         OBJECT_KIND_LEGEND_ITEM: "legend_items",
+        # Existing project parties are entities, not a second company identity
+        # model. Registration grants no capability, authority or representation.
+        OBJECT_KIND_PARTICIPANT: "participants",
     }
 
     def _resolve_mm6_endpoint(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> Optional[dict]:

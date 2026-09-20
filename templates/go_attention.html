@@ -45,6 +45,26 @@
 <p><a href="{{ mapping_url }}?item=evidence_items:{{ edge.record.from_id }}">{{ edge.record.from_id }}</a> → <a href="{{ mapping_url }}?item=evidence_items:{{ edge.record.to_id }}">{{ edge.record.to_id }}</a></p>
 <p>{{ edge.record.reason }} · {{ edge.record.analytical_scope.uncertainty }} · Authority {{ edge.record.analytical_scope.authority }}</p>
 <details><summary>Evidence, lifetime, objective and promotion status</summary><pre>{{ edge|tojson(indent=2) }}</pre></details></article>{% else %}<p>No temporary edges recorded for this objective.</p>{% endfor %}</section>
+<section><h2>Normalized information comparison</h2>
+<p>EVALUATION_INPUT: explicitly model a number or vocabulary set from each selected source. These hypotheses do not correct the machine read or establish source facts. Blank qualifiers remain unresolved; enter [] only when explicitly modelling no qualifiers.</p>
+{% if not expired %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="information_comparison"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+<label>Declared property key <input name="property_key" required maxlength="200" placeholder="opening-width"></label>
+<label>Premise type <select name="kind"><option>NUMBER</option><option>TOKEN_SET</option></select></label>
+<label>Predicate, comparing right against left <select name="operator">{% for value in ['EQUAL','AT_LEAST','AT_MOST','CONTAINS_ALL','CONTAINS_ANY'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Vocabulary identity for token sets <input name="vocabulary" maxlength="200" placeholder="explicit-review-vocabulary"></label>
+{% for side, label in [('left','Left / required premise'),('right','Right / candidate premise')] %}<fieldset><legend>{{ label }}</legend>
+<label>Existing subject <select name="{{ side }}_subject">{% for subject in comparison_subjects %}<option value="{{ subject.key }}">{{ subject.label }}</option>{% endfor %}</select></label>
+<label>Evidence reference <select name="{{ side }}_evidence">{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}">{{ item.evidence_item_id }} · {{ item.source_id }}</option>{% endfor %}</select></label>
+<label>Declared applicability scope <input name="{{ side }}_scope" required maxlength="200"></label>
+<label>Value: number, or comma-separated vocabulary tokens ([] for a known empty set) <input name="{{ side }}_value" maxlength="6000" required></label>
+<label>Unit for numbers <input name="{{ side }}_unit" maxlength="200"></label>
+<label>Qualifiers, comma-separated ([] for explicitly none) <input name="{{ side }}_qualifiers" maxlength="6000" required></label>
+<label>Viewpoint basis <select name="{{ side }}_view"><option value="UNRESOLVED">Not established</option><option value="VIEW_INVARIANT">Explicit hypothesis: property is view-invariant</option>{% for view in comparison_views %}<option value="view:{{ view.id }}">Retained {{ view.view_transform.type }} · source {{ view.source_id }} · {{ view.id }}</option>{% endfor %}</select></label>
+</fieldset>{% endfor %}
+<label>Source-based reason for the normalization and viewpoint premises <input name="reason" maxlength="2000" required></label><button>Compare normalized hypotheses</button></form>{% endif %}
+{% for run in information_comparisons|reverse %}{% set result = run.governed_result %}<article><h3>EVALUATION_INPUT · model {{ result.comparison.state }}</h3><p>{{ result.qualification }}</p><p>{{ result.comparison.reason }} Factual consistency: {{ result.comparison.factual_consistency }}.</p>
+{% for side in ['left','right'] %}<h4>{{ side|capitalize }} normalized premise</h4><p>{{ result.comparison[side].subject_key }} · {{ result.comparison[side].property_key }} · {{ result.comparison[side].value }} {{ result.comparison[side].unit or '' }}</p>{% for identifier in result.comparison[side].premise_ids %}<a href="{{ mapping_url }}?item=evidence_items:{{ identifier }}">Jump to source evidence {{ identifier }}</a>{% endfor %}{% endfor %}
+<details><summary>Source → view transform → normalized premise → result, qualifications and runtime</summary><pre>{{ result|tojson(indent=2) }}</pre><pre>{{ run.muscle_profile|tojson(indent=2) }}</pre></details></article>{% endfor %}</section>
 <section><h2>Constraint and breakpoint probe</h2>
 <p>EVALUATION_INPUT — enter hypothetical scalar bounds for a single subject, parameter and unit. Source references preserve context; typed numbers do not become source measurements or project facts.</p>
 {% if not expired %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="constraint_review"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">

@@ -259,6 +259,66 @@ def inspect_representation_necessity(required_keys, candidates):
 
 
 @observed
+def compare_normalized_information(left, right, *, operator='EQUAL'):
+    """Conditional comparison of explicitly declared, source-anchored premises.
+
+    This does not infer semantic bindings from prose. Normalization is an input
+    premise, not a new authoritative transcription. Tokens belong to a declared
+    vocabulary; no synonym, unit, scope or viewpoint conversion is invented.
+    """
+    result = dict(state='UNRESOLVED', canonical=False, authority='UNCHANGED',
+        input_status='DECLARED_ANALYTICAL_PREMISES', factual_consistency='UNRESOLVED',
+        operator=operator, left=left, right=right)
+    required = ('subject_key', 'property_key', 'scope_key', 'kind', 'basis')
+    allowed = set(required) | {'premise_ids', 'qualifiers', 'view_basis', 'view_id', 'value', 'unit', 'vocabulary'}
+    if any(isinstance(row, dict) and set(row)-allowed for row in (left, right)):
+        return dict(result, state='REFUSED', reason='Unsupported normalization fields cannot supply authority or hidden parameters.')
+    if any(not isinstance(row, dict) or any(not isinstance(row.get(k), str) or not row[k].strip()
+           or len(row[k]) > 2000 for k in required) for row in (left, right)):
+        return dict(result, reason='Explicit subject, property, scope, type and normalization reason are required.')
+    if any(not isinstance(row.get('premise_ids'), list) or not row['premise_ids']
+           or any(not isinstance(i, str) or not i for i in row['premise_ids']) for row in (left, right)):
+        return dict(result, reason='Both normalized premises need retained evidence references.')
+    if any(not isinstance(row.get('qualifiers'), list) or len(row['qualifiers']) > 32
+           or any(not isinstance(q, str) or not q.strip() or len(q) > 200 for q in row['qualifiers']) for row in (left, right)):
+        return dict(result, reason='Declare qualifiers explicitly, including an explicit empty set when none apply.')
+    if any(row.get('view_basis') not in ('VIEW_INVARIANT', 'NORMALIZED_VIEW') for row in (left, right)):
+        return dict(result, reason='Viewpoint applicability is unresolved; normalization cannot be assumed.')
+    if any(row.get('view_basis') == 'NORMALIZED_VIEW' and not row.get('view_id') for row in (left, right)):
+        return dict(result, reason='A normalized-view premise needs its retained derived-view identity.')
+    for key in ('property_key', 'scope_key', 'kind'):
+        if left[key] != right[key]:
+            return dict(result, state='INCOMPARABLE', reason=f'The declared {key} differs; no equivalence was supplied.')
+    if set(left['qualifiers']) != set(right['qualifiers']):
+        return dict(result, state='PARTIAL', qualifier_change=dict(
+            omitted=sorted(set(left['qualifiers'])-set(right['qualifiers'])),
+            added=sorted(set(right['qualifiers'])-set(left['qualifiers']))),
+            reason='Qualifier changes need review; a value comparison cannot erase them.')
+    if left['kind'] == 'NUMBER':
+        if (not isinstance(left.get('unit'), str) or not left['unit'].strip() or len(left['unit']) > 200
+                or left.get('unit') != right.get('unit')):
+            return dict(result, state='INCOMPARABLE', reason='Explicit matching units are required; no conversion was inferred.')
+        from services.quantitative_investigation import compare_scalar_values
+        predicate = compare_scalar_values(left.get('value'), right.get('value'), operator)
+    elif left['kind'] == 'TOKEN_SET':
+        if (not isinstance(left.get('vocabulary'), str) or not left['vocabulary'].strip() or len(left['vocabulary']) > 200
+                or left.get('vocabulary') != right.get('vocabulary')):
+            return dict(result, state='INCOMPARABLE', reason='A shared explicit token vocabulary is required.')
+        if any(not isinstance(row.get('value'), list) or len(row['value']) > 64 or
+               any(not isinstance(v, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,80}', v) for v in row['value']) for row in (left, right)):
+            return dict(result, reason='Supply bounded vocabulary tokens, not free prose or inferred categories.')
+        a, b = set(left['value']), set(right['value'])
+        if operator not in ('EQUAL', 'CONTAINS_ALL', 'CONTAINS_ANY'):
+            return dict(result, state='REFUSED', reason='Unknown token-set predicate.')
+        matched = a == b if operator == 'EQUAL' else a.issubset(b) if operator == 'CONTAINS_ALL' else bool(a & b)
+        predicate = dict(state='MATCH' if matched else 'NON_MATCH', missing=sorted(a-b), additional=sorted(b-a))
+    else:
+        return dict(result, reason='This representation has no supported typed comparison. Prose difference is not meaning difference.')
+    return dict(result, state=predicate['state'], predicate=predicate,
+        reason='Conditional result under the declared normalization premises; source truth and authority are unchanged.')
+
+
+@observed
 def inspect_continuum_participation(store, workspace, evidence_id, expectation='unknown'):
     """Inspect immediate governed dependencies; isolation is a gap only if expected."""
     if expectation not in ('unknown', 'independent', 'upstream', 'downstream', 'both'):
