@@ -649,6 +649,20 @@ invariants are in `governance/current/view-normalization.md`. Existing
 `tools/verify_source_review_ui.py` exercises attention, temporary edges and working
 views through actual browser forms and captures their runtime observations.
 
+**Transaction review:** Existing `CaseWorkspaceStore` Claims carry optional
+source-scoped event interpretations; ReviewerValidation holds explicit scoped
+human checks, with Disposition and Apply still separate. The shared
+`cross_modal_investigation` owner resolves identity and event history, and
+`run_transaction_review` persists the result through AnalysisRun. The attention
+dispatcher exposes source entry, declared work plans and retained transaction
+results; `components/transaction_source_form.html`, `transaction_review.html`,
+`transaction_result.html` and `scoped_proposition_review.html` extend the existing
+Flask/Jinja UI. The six `test_transaction_*` / `test_scoped_proposition_review`
+modules qualify source lineage, identity, history, lifecycle and actual routes.
+`tools/verify_source_review_ui.py --transaction-games` exercises real browser
+invocation. No transaction database, graph, independent report interpreter or
+automatic canonical promotion is introduced.
+
 **Document ingestion (API):**
 `POST /api/v1/documents/ingest` (`routes/api.py`) → `services.ingestion.ingest_upload` → `services.bhive_parser.BHiveParser.parse` → `services.requirements_registry.RequirementsRegistry.save` → JSON response.
 

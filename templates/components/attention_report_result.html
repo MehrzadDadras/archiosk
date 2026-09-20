@@ -1,5 +1,7 @@
 {# Render committed result fields only. No predicates, authority or coverage are recomputed here. #}
-{% if result.kind == 'professional_review' %}
+{% if result.kind == 'transaction_review' %}
+{% include 'components/transaction_result.html' %}
+{% elif result.kind == 'professional_review' %}
 <table><thead><tr><th>Review question</th><th>State</th><th>Finding / next premise</th></tr></thead><tbody>
 {% for key,label in [('resolution','Scale sufficiency'),('expected_next','Expected next'),('root_trace','Root trace / return'),('continuum','Continuum participation')] %}
 <tr><td>{{ label }}</td><td>{{ result[key].state }}</td><td>{{ result[key].reason }} {{ result[key].next_question or '' }}</td></tr>{% endfor %}

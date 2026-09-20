@@ -109,6 +109,7 @@ REVIEW_WORK_PROCEDURES = {
     'constraint_review': ('Probe stated constraints', 'run_constraint_review', ('CONSTRAINT PROBING', 'BREAKPOINT SEARCH')),
     'professional_review': ('Run professional review', 'run_professional_review', ('EXPECTED-NEXT', 'SECTION-COVERAGE', 'DISCIPLINE-COVERAGE', 'ROOT-TRACE / RETURN')),
     'professional_presentation': ('Render retained review', 'render_professional_review', ('PROVENANCE PRESERVATION', 'UNCERTAINTY')),
+    'transaction_review': ('Review transaction history', 'run_transaction_review', ('TRANSACTION IDENTITY', 'TRANSACTION HISTORY', 'UNCERTAINTY')),
 }
 
 
@@ -124,6 +125,17 @@ def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
 # One catalogue beside the existing capability/action metadata. Each key names
 # its actual implementation. Being registered is not proof of invocation.
 MUSCLE_CONTRACTS = {
+    'services.cross_modal_investigation.resolve_transaction_identity': _muscle('TRANSACTION IDENTITY',
+        'Source-anchored identity and event Claims, scoped review, Apply and explicit date',
+        'Separate project, participant, transaction and temporal closure',
+        'Proposed scope -> exact only with admissible scoped review',
+        'UNRESOLVED for missing legal identity, authority or applicability; distinct structures stay distinct',
+        'Matching names, parent relationships and shared projects do not establish transaction identity.'),
+    'services.cross_modal_investigation.investigate_transaction_history': _muscle('TRANSACTION HISTORY',
+        'Retained transaction Claims and independent event evidence', 'Maturity, lifecycle and recoverable event history',
+        'Evidence-specific maturity and scoped lifecycle transitions; historical events remain retained',
+        'UNRESOLVED for missing prerequisites; CONFLICTING for incompatible positive evidence',
+        'Discovery order is not event order. Execution, currentness and financial close require separate evidence.'),
     'services.case_workspace.CaseWorkspaceStore.declare_go_work_plan': _muscle('GOVERNED WORK PLAN',
         'Bounded typed action, objective, existing scope and available premise identities', 'Persisted InvestigationStep procedure',
         'Intent -> PLANNED; declaration does not execute the domain action', 'REFUSED for foreign, inactive or unsupported inputs',

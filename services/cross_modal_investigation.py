@@ -81,6 +81,605 @@ PROPOSITION_TEMPORAL_CLASSES = (
 DECLARED_CURRENT_TEMPORAL_CLASSES = ('CURRENT_DISCLOSED_MANDATE', 'CURRENT_DISCLOSED_CAPABILITY',
                                      'RECENT_COMMITMENT', 'DATED_REQUIREMENT')
 
+# A domain vocabulary over Claim/event history, not another persistence owner.
+# These are asserted interpretations until the existing review / Apply path
+# admits the exact proposition and its scope.
+TRANSACTION_CLASSES = (
+    'EQUITY_JV', 'EQUITY_INVESTMENT', 'CO_INVESTMENT', 'CONSORTIUM',
+    'DEVELOPMENT_PARTNERSHIP', 'OPERATING_PARTNERSHIP', 'PROJECT_FINANCE',
+    'CONSTRUCTION_LOAN', 'TERM_LOAN', 'REVOLVING_CREDIT', 'BOND_FINANCING',
+    'SUBORDINATED_DEBT', 'MEZZANINE_FINANCING', 'GOVERNMENT_CONTRIBUTION',
+    'GRANT', 'GUARANTEE', 'OFFTAKE_AGREEMENT', 'STRATEGIC_PARTNERSHIP',
+    'MOU', 'LETTER_OF_INTENT', 'OTHER', 'UNRESOLVED',
+)
+TRANSACTION_MATURITY = ('ANNOUNCED', 'SIGNED', 'EXECUTED', 'FINANCIALLY_CLOSED')
+TRANSACTION_EVENT_DIMENSIONS = TRANSACTION_MATURITY + (
+    'CURRENT_CONFIRMATION', 'SUSPENSION', 'SUPERSESSION', 'TERMINATION',
+    'REINSTATEMENT', 'PARTICIPANT_SUBSTITUTION', 'CONDITION_UPDATE',
+    'REFINANCING', 'CORRECTION', 'STRUCTURE_AMENDMENT',
+)
+TRANSACTION_COMPONENTS = (
+    'FULL_TRANSACTION', 'PARTICIPANTS', 'OWNERSHIP', 'CAPITAL_STRUCTURE',
+    'FINANCING', 'GOVERNANCE', 'PROJECT_PHASE', 'OPERATING_ROLE', 'ASSET_SCOPE',
+)
+FINANCING_RELATIONSHIPS = ('REFINANCES', 'PARTIALLY_REFINANCES', 'REPLACES_FACILITY', 'ADDS_TRANCHE', 'EXTENDS_MATURITY')
+PROPOSITION_REVIEW_CHECKS = (
+    'READING', 'SUBJECT_BINDING', 'SCOPE_APPLICABILITY',
+    'SOURCE_AUTHENTICITY', 'EVENT_OR_PROPOSITION_AUTHORITY',
+)
+PROPOSITION_REVIEW_STATES = ('ESTABLISHED', 'QUALIFIED', 'UNRESOLVED', 'CONFLICTING', 'REFUSED')
+
+
+def validate_transaction_identity(identity):
+    """Validate an asserted source scope; matching strings do not prove identity."""
+    keys = {'project', 'participants', 'transaction_class', 'transaction_reference',
+            'economic_scope', 'joint_structure'}
+    if not isinstance(identity, dict) or set(identity) != keys:
+        raise CrossModalInvestigationError('Retain the explicit project, parties, class and transaction scope.')
+    project_keys = {'name', 'phase', 'location', 'sponsor', 'project_type', 'opportunity_reference'}
+    project = identity['project']
+    if not isinstance(project, dict) or set(project) != project_keys:
+        raise CrossModalInvestigationError('Project identity needs its compound scope; missing values remain empty.')
+    if any(not isinstance(value, str) or len(value) > 500 for value in project.values()):
+        raise CrossModalInvestigationError('Project identity fields must be bounded source interpretations.')
+    if identity['transaction_class'] not in TRANSACTION_CLASSES:
+        raise CrossModalInvestigationError('Select a supported transaction class, including UNRESOLVED when necessary.')
+    for key in ('transaction_reference', 'economic_scope'):
+        if not isinstance(identity[key], str) or len(identity[key]) > 1000:
+            raise CrossModalInvestigationError('Transaction reference and economic scope must be bounded text.')
+    if identity['joint_structure'] not in ('JOINT_EQUITY', 'CONTRACTUAL_JV', 'NOT_JV', 'UNRESOLVED'):
+        raise CrossModalInvestigationError('Joint structure must be explicit; partnership language does not establish equity.')
+    participants = identity['participants']
+    party_keys = {'participant_id', 'legal_name', 'jurisdiction', 'registration_id', 'role', 'identity_relation'}
+    relations = ('EXACT_ENTITY', 'QUALIFIED_ENTITY', 'PARENT_CHILD_LINKED', 'AMBIGUOUS_ENTITY', 'IDENTITY_CONFLICT')
+    if not isinstance(participants, list) or not 1 <= len(participants) <= 16:
+        raise CrossModalInvestigationError('Retain one to sixteen explicitly identified participant interpretations.')
+    for party in participants:
+        if (not isinstance(party, dict) or set(party) != party_keys
+                or any(not isinstance(value, str) or len(value) > 500 for value in party.values())
+                or not party['participant_id'] or party['identity_relation'] not in relations):
+            raise CrossModalInvestigationError('Each party needs a legal-entity interpretation and an explicit transaction role.')
+    if len({p['participant_id'] for p in participants}) != len(participants):
+        raise CrossModalInvestigationError('A participant cannot be counted twice in one transaction identity.')
+
+
+def validate_transaction_event_data(data):
+    """Shape checks only. Dates, tiers and asserted events grant no authority."""
+    from datetime import date
+    keys = {'kind', 'transaction_claim_id', 'identity', 'event_dimension', 'asserted_state',
+            'occurred_at', 'effective_from', 'effective_until', 'discovered_at',
+            'component_scope', 'component_key', 'related_claim_ids', 'replaces_claim_ids',
+            'continuity', 'facets', 'conditions'}
+    if not isinstance(data, dict) or set(data) not in (keys, keys | {'relationship_type'}):
+        raise CrossModalInvestigationError('The event requires its complete typed identity, scope and occurrence record.')
+    if data['kind'] not in ('TRANSACTION_IDENTITY', 'TRANSACTION_EVENT'):
+        raise CrossModalInvestigationError('Select an identity proposition or an independently cited event.')
+    validate_transaction_identity(data['identity'])
+    if data['kind'] == 'TRANSACTION_IDENTITY':
+        if data['transaction_claim_id'] is not None or data['event_dimension'] is not None:
+            raise CrossModalInvestigationError('An identity proposition is not itself a maturity or lifecycle event.')
+    elif not isinstance(data['transaction_claim_id'], str) or not data['transaction_claim_id'] or data['event_dimension'] not in TRANSACTION_EVENT_DIMENSIONS:
+        raise CrossModalInvestigationError('An event must identify its existing transaction Claim and event dimension.')
+    if data['asserted_state'] not in ('ESTABLISHED', 'UNRESOLVED', 'CONFLICTING', 'NOT_OCCURRED', 'NOT_ESTABLISHED'):
+        raise CrossModalInvestigationError('Select an explicit asserted event state; it remains a proposal until reviewed.')
+    parsed = {}
+    for key in ('occurred_at', 'effective_from', 'effective_until', 'discovered_at'):
+        value = data[key]
+        if value is not None:
+            try:
+                if not isinstance(value, str) or len(value) != 10:
+                    raise ValueError()
+                parsed[key] = date.fromisoformat(value)
+            except ValueError:
+                raise CrossModalInvestigationError('Source occurrence and applicability dates must be ISO dates or explicitly unknown.') from None
+    if parsed.get('effective_from') and parsed.get('effective_until') and parsed['effective_until'] < parsed['effective_from']:
+        raise CrossModalInvestigationError('The source applicability interval is reversed.')
+    if data['component_scope'] not in TRANSACTION_COMPONENTS or not isinstance(data['component_key'], str) or len(data['component_key']) > 200:
+        raise CrossModalInvestigationError('Changes require a bounded component scope; partial replacement is not full supersession.')
+    if data['component_scope'] != 'FULL_TRANSACTION' and not data['component_key'].strip():
+        raise CrossModalInvestigationError('Identify the particular component or tranche being changed.')
+    if data['continuity'] not in ('CONTINUES', 'NEW_TRANSACTION', 'UNRESOLVED'):
+        raise CrossModalInvestigationError('Transaction continuity must be explicit.')
+    if data.get('relationship_type') not in (None, 'UNRESOLVED') + FINANCING_RELATIONSHIPS:
+        raise CrossModalInvestigationError('Financing links require a supported explicit relationship type.')
+    for key in ('related_claim_ids', 'replaces_claim_ids'):
+        if (not isinstance(data[key], list) or len(data[key]) > 32
+                or any(not isinstance(value, str) or not value for value in data[key])
+                or len(set(data[key])) != len(data[key])):
+            raise CrossModalInvestigationError('Event relationships must be bounded, distinct references to retained Claims.')
+    facet_keys = {'explicit_signing', 'legal_effectiveness', 'financial_close',
+                  'execution_conditions_complete', 'closing_conditions_complete', 'express_current_confirmation'}
+    if (not isinstance(data['facets'], dict) or set(data['facets']) != facet_keys
+            or any(value not in ('ESTABLISHED', 'UNRESOLVED', 'NOT_ESTABLISHED') for value in data['facets'].values())):
+        raise CrossModalInvestigationError('Keep signing, effectiveness, close and condition sufficiency separate and explicit.')
+    if not isinstance(data['conditions'], list) or len(data['conditions']) > 32:
+        raise CrossModalInvestigationError('Conditions must be bounded source assertions, not invented prerequisites.')
+    for condition in data['conditions']:
+        if (not isinstance(condition, dict) or set(condition) != {'key', 'outcome', 'blocking_for', 'evidence_ids'}
+                or not isinstance(condition['key'], str) or not condition['key'].strip() or len(condition['key']) > 200
+                or condition['outcome'] not in ('SATISFIED', 'FAILED', 'WAIVED', 'UNRESOLVED')
+                or condition['blocking_for'] not in ('EXECUTED', 'FINANCIALLY_CLOSED', 'NON_BLOCKING')
+                or not isinstance(condition['evidence_ids'], list) or len(condition['evidence_ids']) > 8
+                or any(not isinstance(value, str) or not value for value in condition['evidence_ids'])):
+            raise CrossModalInvestigationError('Every condition needs its own outcome, blocking stage and evidence references.')
+        if condition['outcome'] != 'UNRESOLVED' and not condition['evidence_ids']:
+            raise CrossModalInvestigationError('A positive condition result requires retained evidence.')
+    if len({c['key'] for c in data['conditions']}) != len(data['conditions']):
+        raise CrossModalInvestigationError('A condition cannot be silently counted or resolved twice within one event.')
+
+@observed
+def resolve_transaction_identity(store, workspace, root_claim_id, event_claim_id, *, as_of):
+    """Close source-scoped identity through existing Claim review admission.
+
+    Exact text is necessary here, never sufficient: both interpretations must
+    have passed scoped review and Apply. Aliases and parent-child candidates
+    stay unresolved until a separately supported identity interpretation exists.
+    This read does not promote either Claim or mutate its event history.
+    """
+    from datetime import date
+    try:
+        query = date.fromisoformat(as_of)
+    except (ValueError, TypeError):
+        raise CrossModalInvestigationError('Transaction investigation requires an explicit ISO analysis date.') from None
+    result = dict(state='TRANSACTION_UNRESOLVED', project_scope_match='UNRESOLVED',
+        participant_scope_match='UNRESOLVED', transaction_scope_match='UNRESOLVED',
+        temporal_scope_match='UNRESOLVED', reasons=[], admissions=[], evidence_refs=[],
+        temporal_reasons=[], common_interval=None, evaluation_only=False)
+    root = store.get_claim(workspace, root_claim_id) or {}
+    event = store.get_claim(workspace, event_claim_id) or {}
+    left = (root.get('event_proposition') or {}).get('data') or {}
+    right = (event.get('event_proposition') or {}).get('data') or {}
+    if (left.get('kind') != 'TRANSACTION_IDENTITY' or right.get('kind') != 'TRANSACTION_EVENT'
+            or right.get('transaction_claim_id') != root_claim_id):
+        result['reasons'].append('SOURCE_ANCHORED_TRANSACTION_LINK_MISSING')
+        return result
+    for claim in (root, event):
+        admission = store.admit_reviewed_proposition(workspace, claim['id'], query_date=as_of, historical=True)
+        result['admissions'].append(admission)
+        result['evaluation_only'] |= admission.get('evaluation_only', False)
+        result['evidence_refs'].append(dict(object_type='claim', object_id=claim['id']))
+    if not all(row['admissible'] for row in result['admissions']):
+        result['reasons'].append('SCOPED_IDENTITY_AUTHORITY_NOT_ESTABLISHED')
+        return result
+    if any(row['evidence_tier'] < 2 for row in result['admissions']):
+        result['reasons'].append('DISCOVERY_OR_CORROBORATION_CANNOT_CLOSE_IDENTITY')
+        return result
+    a, b = left['identity'], right['identity']
+    # Empty scope never acts as a wildcard, including phase and transaction role.
+    if any(not value.strip() for identity in (a, b) for value in identity['project'].values()):
+        result['reasons'].append('COMPOUND_PROJECT_IDENTITY_INCOMPLETE')
+    elif a['project'] != b['project']:
+        result.update(state='DIFFERENT_TRANSACTION', project_scope_match='DIFFERENT_PROJECT_SCOPE')
+        result['reasons'].append('PROJECT_OR_PHASE_DIFFERS')
+        return result
+    else:
+        result['project_scope_match'] = 'EXACT_PROJECT'
+    parties = a['participants'] + b['participants']
+    if any(len({(p['jurisdiction'], p['registration_id']) for p in identity['participants']})
+            != len(identity['participants']) for identity in (a, b)):
+        result['reasons'].append('DISTINCT_LEGAL_PARTICIPANTS_NOT_ESTABLISHED')
+    if any(p['identity_relation'] == 'IDENTITY_CONFLICT' for p in parties):
+        result.update(state='TRANSACTION_CONFLICT', participant_scope_match='IDENTITY_CONFLICT')
+        result['reasons'].append('POSITIVE_ENTITY_IDENTITY_CONFLICT')
+        return result
+    if any(p['identity_relation'] != 'EXACT_ENTITY' or any(not v.strip() for v in p.values()) for p in parties):
+        result['reasons'].append('EXACT_LEGAL_PARTICIPANTS_NOT_ESTABLISHED')
+    elif sorted(a['participants'], key=lambda p:p['participant_id']) != sorted(b['participants'], key=lambda p:p['participant_id']):
+        result['reasons'].append('PARTICIPANT_OR_ROLE_DIFFERS')
+    else:
+        result['participant_scope_match'] = 'EXACT_ENTITY'
+    fields = ('transaction_class', 'transaction_reference', 'economic_scope', 'joint_structure')
+    if any(not a[k].strip() or not b[k].strip() or a[k] == 'UNRESOLVED' or b[k] == 'UNRESOLVED' for k in fields):
+        result['reasons'].append('TRANSACTION_STRUCTURE_INCOMPLETE')
+    elif any(a[k] != b[k] for k in fields):
+        result.update(state='RELATED_TRANSACTION', transaction_scope_match='DIFFERENT_TRANSACTION')
+        result['reasons'].append('DISTINCT_TRANSACTION_STRUCTURE')
+        return result
+    else:
+        result['transaction_scope_match'] = 'EXACT_TRANSACTION'
+    # Intersect asserted applicability with each exact reviewed interval.
+    intervals = []
+    for data, admission in zip((left, right), result['admissions']):
+        review = next((r for r in workspace.reviewer_validations if r['id'] == admission['review_id']), {})
+        scope = review.get('proposition_review') or {}
+        for start, end in ((data.get('effective_from'), data.get('effective_until')),
+                           (scope.get('valid_from'), scope.get('valid_until'))):
+            if not start or not end:
+                result['temporal_reasons'].append('APPLICABILITY_INTERVAL_INCOMPLETE')
+                continue
+            intervals.append((date.fromisoformat(start), date.fromisoformat(end)))
+    if len(intervals) == 4:
+        start, end = max(i[0] for i in intervals), min(i[1] for i in intervals)
+        if start <= end:
+            result['common_interval'] = dict(valid_from=start.isoformat(), valid_until=end.isoformat())
+            result['temporal_scope_match'] = 'ESTABLISHED' if start <= query <= end else 'HISTORICAL'
+        else:
+            result['temporal_reasons'].append('NO_COMMON_APPLICABILITY_INTERVAL')
+    if not result['reasons']:
+        result['state'] = 'EXACT_TRANSACTION'
+    result['reasons'] = list(dict.fromkeys(result['reasons']))
+    result['temporal_reasons'] = list(dict.fromkeys(result['temporal_reasons']))
+    return result
+
+
+@observed
+def investigate_transaction_history(store, workspace, root_claim_id, *, as_of):
+    """Reconstruct event-specific maturity from retained, reviewed Claim history.
+
+    This resolver is shared with investigation; it owns no storage. Callers
+    persist its result through AnalysisRun. A dated assertion is not admitted
+    merely because it is attached to the right transaction or has a high tier.
+    """
+    from datetime import date
+    from copy import deepcopy
+    try:
+        query = date.fromisoformat(as_of)
+    except (ValueError, TypeError):
+        raise CrossModalInvestigationError('Select an explicit ISO transaction analysis date.') from None
+    root = store.get_claim(workspace, root_claim_id) or {}
+    root_data = (root.get('event_proposition') or {}).get('data') or {}
+    if root_data.get('kind') != 'TRANSACTION_IDENTITY':
+        raise CrossModalInvestigationError('Select an existing transaction identity Claim.')
+    root_admission = store.admit_reviewed_proposition(workspace, root_claim_id, query_date=as_of, historical=True)
+    result = dict(engine_version='transaction-history-1', transaction_claim_id=root_claim_id,
+        as_of=as_of, identity=root_data['identity'], governed_state='UNRESOLVED',
+        maturity_state=None, lifecycle_status='SUSPENDED', evaluation_only=root_admission['evaluation_only'],
+        events={name:dict(state='UNRESOLVED', evidence_refs=[], reasons=[]) for name in TRANSACTION_MATURITY},
+        history=[], component_changes=[], financing_relationships=[], configuration_history=[], transitions=[], unresolved=[], root_admission=root_admission,
+        qualification='Analytical reconstruction of retained Claims. Capability coverage is not a JV, and a JV is not funding close.')
+    rows = []
+    for claim in workspace.claims:
+        data = (claim.get('event_proposition') or {}).get('data') or {}
+        if data.get('kind') != 'TRANSACTION_EVENT' or data.get('transaction_claim_id') != root_claim_id:
+            continue
+        closure = resolve_transaction_identity(store, workspace, root_claim_id, claim['id'], as_of=as_of)
+        admission = closure['admissions'][-1] if closure['admissions'] else {}
+        result['evaluation_only'] |= closure['evaluation_only']
+        reasons = list(closure['reasons'])
+        if closure['state'] != 'EXACT_TRANSACTION':
+            reasons.append('TRANSACTION_SCOPE_NOT_CLOSED')
+        if not data['occurred_at']:
+            reasons.append('OCCURRENCE_DATE_UNRESOLVED')
+        elif date.fromisoformat(data['occurred_at']) > query:
+            reasons.append('EVENT_AFTER_ANALYSIS_DATE')
+        review = next((r.get('proposition_review') or {} for r in workspace.reviewer_validations
+            if r['id'] == admission.get('review_id')), {})
+        if data['occurred_at'] and review.get('valid_from'):
+            end = review.get('valid_until') or review['valid_from']
+            if not review['valid_from'] <= data['occurred_at'] <= end:
+                reasons.append('EVENT_OUTSIDE_REVIEWED_APPLICABILITY')
+        tier = admission.get('evidence_tier')
+        dimension = data['event_dimension']
+        minimum = 4 if dimension == 'FINANCIALLY_CLOSED' else 3 if dimension == 'EXECUTED' else 2
+        if tier is None or tier < minimum:
+            reasons.append('EVENT_EVIDENCE_TIER_INSUFFICIENT')
+        if dimension == 'SIGNED' and tier == 2 and data['facets']['explicit_signing'] != 'ESTABLISHED':
+            reasons.append('EXPLICIT_SIGNING_CONFIRMATION_MISSING')
+        row = dict(claim_id=claim['id'], data=data, recorded_at=claim['created_at'],
+            identity_closure=closure, admissible=not reasons, reasons=list(dict.fromkeys(reasons)),
+            evidence_refs=claim['evidence_links'], source_admission=admission)
+        rows.append(row)
+    rows.sort(key=lambda r:(r['data']['occurred_at'] or '9999-12-31', r['claim_id']))
+    result['history'] = rows  # Retain refused, future and historical assertions too.
+    eligible = [r for r in rows if r['admissible']]
+    result['current_configuration'] = dict(identity_claim_id=root_claim_id, identity=root_data['identity'],
+        state='ESTABLISHED' if eligible and root_admission['current_applicability'] == 'ESTABLISHED' else 'UNRESOLVED',
+        reason='Current configuration requires an applicable reviewed identity; historical participants remain retained.')
+    # An explicit corrective assertion must cite exactly the event it corrects.
+    # Newer statements without that linkage remain contradictory, not winners.
+    corrected = set()
+    for correction in eligible:
+        data = correction['data']
+        if data['event_dimension'] != 'CORRECTION':
+            continue
+        targets = [r for r in eligible if r['claim_id'] in data['replaces_claim_ids']]
+        if (not targets or len(targets) != len(data['replaces_claim_ids'])
+                or len({r['data']['event_dimension'] for r in targets}) != 1
+                or targets[0]['data']['event_dimension'] not in TRANSACTION_MATURITY
+                or any(r['data']['component_scope'] != data['component_scope']
+                       or r['data']['component_key'] != data['component_key']
+                       or r['data']['occurred_at'] > data['occurred_at']
+                       or r['source_admission']['evidence_tier'] > correction['source_admission']['evidence_tier'] for r in targets)):
+            result['unresolved'].append(dict(claim_id=correction['claim_id'], reason='CORRECTION_SCOPE_OR_AUTHORITY_UNRESOLVED'))
+            continue
+        if data['asserted_state'] not in ('NOT_OCCURRED', 'CONFLICTING'):
+            result['unresolved'].append(dict(claim_id=correction['claim_id'], reason='POSITIVE_CORRECTIVE_STATE_REQUIRED'))
+            continue
+        corrected.update(r['claim_id'] for r in targets)
+        correction['resolved_event_dimension'] = targets[0]['data']['event_dimension']
+    def condition_findings(dimension, through):
+        """Resolve only explicitly linked changes to a named blocking premise."""
+        entries = [(r, c) for r in eligible if r['data']['occurred_at'] <= through
+            and r['claim_id'] not in corrected
+            and r['data']['component_scope'] == 'FULL_TRANSACTION'
+            and r['data']['asserted_state'] == 'ESTABLISHED'
+            and r['data']['event_dimension'] in ('SIGNED','EXECUTED','FINANCIALLY_CLOSED','CONDITION_UPDATE')
+            for c in r['data']['conditions'] if c['blocking_for'] == dimension]
+        replaced = set()
+        for update, condition in entries:
+            if update['data']['event_dimension'] != 'CONDITION_UPDATE':
+                continue
+            for prior, old in entries:
+                if (prior['claim_id'] in update['data']['replaces_claim_ids']
+                        and old['key'] == condition['key']
+                        and prior['data']['occurred_at'] < update['data']['occurred_at']
+                        and prior['source_admission']['evidence_tier'] <= update['source_admission']['evidence_tier']):
+                    replaced.add((prior['claim_id'], old['key']))
+        retained = [(r,c) for r,c in entries if (r['claim_id'],c['key']) not in replaced]
+        states = {}
+        for row, condition in retained:
+            states.setdefault(condition['key'], set()).add(condition['outcome'])
+        return dict(failed=any('FAILED' in values for values in states.values()),
+            unresolved=any('UNRESOLVED' in values for values in states.values()),
+            conflicting=any('FAILED' in values and values & {'SATISFIED','WAIVED'} for values in states.values()),
+            evidence_refs=list(dict.fromkeys(r['claim_id'] for r,c in retained)),
+            entries=[dict(claim_id=r['claim_id'], **c) for r,c in retained])
+
+    for dimension in TRANSACTION_MATURITY:
+        selected = [r for r in eligible if r['claim_id'] not in corrected
+            and r.get('resolved_event_dimension', r['data']['event_dimension']) == dimension
+            and r['data']['component_scope'] == 'FULL_TRANSACTION']
+        event = result['events'][dimension]
+        positives, negatives, conflicts = [], [], []
+        for row in selected:
+            data = row['data']
+            state = data['asserted_state']
+            if state == 'NOT_OCCURRED':
+                negatives.append(row)
+                continue
+            if state == 'CONFLICTING':
+                conflicts.append(row)
+                continue
+            if state != 'ESTABLISHED':
+                event['reasons'].append('SOURCE_EVENT_UNRESOLVED')
+                continue
+            failures = []
+            if dimension in ('EXECUTED', 'FINANCIALLY_CLOSED'):
+                prior = 'SIGNED' if dimension == 'EXECUTED' else 'EXECUTED'
+                prior_event = result['events'][prior]
+                prior_dates = [r['data']['occurred_at'] for r in eligible if r['claim_id'] in prior_event['evidence_refs']]
+                if prior_event['state'] != 'ESTABLISHED' or not prior_dates or min(prior_dates) > data['occurred_at']:
+                    failures.append(prior+'_NOT_ESTABLISHED_BEFORE_EVENT')
+                facet = 'legal_effectiveness' if dimension == 'EXECUTED' else 'financial_close'
+                complete = 'execution_conditions_complete' if dimension == 'EXECUTED' else 'closing_conditions_complete'
+                if data['facets'][facet] != 'ESTABLISHED':
+                    failures.append(facet.upper()+'_NOT_ESTABLISHED')
+                if data['facets'][complete] != 'ESTABLISHED':
+                    failures.append('CONDITION_INVENTORY_NOT_ESTABLISHED')
+                conditions = condition_findings(dimension, data['occurred_at'])
+                event['condition_evidence_refs'] = list(dict.fromkeys(
+                    event.get('condition_evidence_refs', []) + conditions['evidence_refs']))
+                if conditions['conflicting']:
+                    conflicts.append(row)
+                    continue
+                if conditions['failed']:
+                    row['negative_basis'] = 'FAILED_CONDITION_AT_OCCURRENCE'
+                    negatives.append(row)
+                    continue
+                if conditions['unresolved']:
+                    failures.append('MANDATORY_CONDITION_UNRESOLVED')
+            if failures:
+                event['reasons'].extend(failures)
+            else:
+                positives.append(row)
+        historical_nonoccurrence = [negative for negative in negatives
+            if negative.get('negative_basis') == 'FAILED_CONDITION_AT_OCCURRENCE'
+            and any(positive['data']['occurred_at'] > negative['data']['occurred_at'] for positive in positives)]
+        if historical_nonoccurrence:
+            event['historical_nonoccurrence_refs'] = [r['claim_id'] for r in historical_nonoccurrence]
+            negatives = [r for r in negatives if r not in historical_nonoccurrence]
+        if conflicts or (positives and negatives):
+            event['state'] = 'CONFLICTING'
+        elif negatives:
+            event['state'] = 'NOT_OCCURRED'
+        elif positives:
+            event['state'] = 'ESTABLISHED'
+        event['evidence_refs'] = [r['claim_id'] for r in positives + negatives + conflicts]
+        event['reasons'] = list(dict.fromkeys(event['reasons']))
+    # Positive failure before effectiveness preserves signing, never fabricates
+    # an executed-then-terminated transaction. Close-only failure is independent.
+    result['condition_findings'] = {}
+    for dimension in ('EXECUTED', 'FINANCIALLY_CLOSED'):
+        conditions = condition_findings(dimension, as_of)
+        result['condition_findings'][dimension] = conditions
+        event = result['events'][dimension]
+        if conditions['failed']:
+            if event['state'] == 'ESTABLISHED':
+                result['unresolved'].append(dict(reason='LATER_CONDITION_FAILURE_REQUIRES_CURRENT_SCOPE_REVIEW',
+                    evidence_refs=conditions['evidence_refs']))
+            else:
+                event['state'] = 'CONFLICTING' if conditions['conflicting'] or event['state'] == 'CONFLICTING' else 'NOT_OCCURRED'
+                event['evidence_refs'] = list(dict.fromkeys(event['evidence_refs'] + conditions['evidence_refs']))
+                event['reasons'].append('POSITIVE_MANDATORY_CONDITION_FAILURE')
+    if result['events']['EXECUTED']['state'] == 'NOT_OCCURRED':
+        closed = result['events']['FINANCIALLY_CLOSED']
+        closed['state'] = 'CONFLICTING' if closed['state'] == 'ESTABLISHED' else 'NOT_OCCURRED'
+        closed['evidence_refs'] = list(dict.fromkeys(closed['evidence_refs'] + result['events']['EXECUTED']['evidence_refs']))
+        closed['reasons'].append('EXECUTION_POSITIVELY_NOT_OCCURRED')
+    established = [d for d in TRANSACTION_MATURITY if result['events'][d]['state'] == 'ESTABLISHED']
+    result['maturity_state'] = established[-1] if established else None
+    # Lifecycle records remain visible even when their prerequisites are absent.
+    lifecycle = []
+    for row in eligible:
+        data = row['data']
+        dimension = data['event_dimension']
+        if dimension not in ('CURRENT_CONFIRMATION', 'SUSPENSION', 'SUPERSESSION', 'TERMINATION', 'REINSTATEMENT', 'PARTICIPANT_SUBSTITUTION', 'REFINANCING', 'STRUCTURE_AMENDMENT'):
+            continue
+        if data['asserted_state'] == 'CONFLICTING' and data['component_scope'] == 'FULL_TRANSACTION':
+            lifecycle.append((data['occurred_at'], 'CONFLICTING', row))
+            continue
+        if data['asserted_state'] == 'NOT_OCCURRED' and data['component_scope'] == 'FULL_TRANSACTION':
+            if any(r['data']['event_dimension'] == dimension and r['data']['asserted_state'] == 'ESTABLISHED'
+                   and r['data']['component_scope'] == 'FULL_TRANSACTION' for r in eligible):
+                lifecycle.append((data['occurred_at'], 'CONFLICTING', row))
+            continue
+        if data['asserted_state'] != 'ESTABLISHED':
+            continue
+        if dimension in ('PARTICIPANT_SUBSTITUTION', 'STRUCTURE_AMENDMENT'):
+            configuration = result['current_configuration']
+            change = dict(event_claim_id=row['claim_id'], occurred_at=data['occurred_at'],
+                component_scope=data['component_scope'], component_key=data['component_key'],
+                continuity=data['continuity'], state='UNRESOLVED', candidate_claim_id=None,
+                reason='A continuing amendment requires an explicitly reviewed successor configuration and predecessor link.')
+            candidates = []
+            for identifier in data['related_claim_ids']:
+                candidate = store.get_claim(workspace, identifier) or {}
+                candidate_data = (candidate.get('event_proposition') or {}).get('data') or {}
+                identity = candidate_data.get('identity') or {}
+                if (candidate_data.get('kind') != 'TRANSACTION_IDENTITY' or identifier == root_claim_id
+                        or any(identity.get(key) != root_data['identity'][key] for key in
+                            ('project','transaction_class','transaction_reference','joint_structure'))):
+                    continue
+                parties = identity['participants']
+                if (data['component_scope'] != 'PARTICIPANTS' and parties != configuration['identity']['participants']):
+                    continue
+                if (data['component_scope'] == 'PARTICIPANTS'
+                        and identity['economic_scope'] != configuration['identity']['economic_scope']):
+                    continue
+                if (any(p['identity_relation'] != 'EXACT_ENTITY' or any(not v.strip() for v in p.values()) for p in parties)
+                        or len({(p['jurisdiction'],p['registration_id']) for p in parties}) != len(parties)):
+                    continue
+                admission = store.admit_reviewed_proposition(workspace, identifier, query_date=as_of, historical=True)
+                if admission['admissible'] and admission['evidence_tier'] >= 2:
+                    candidates.append((identifier, identity, admission))
+            if (data['continuity'] == 'CONTINUES' and len(candidates) == 1
+                    and data['component_scope'] in ('PARTICIPANTS','OWNERSHIP','CAPITAL_STRUCTURE','GOVERNANCE','OPERATING_ROLE')
+                    and configuration['identity_claim_id'] in data['replaces_claim_ids']):
+                identifier, identity, admission = candidates[0]
+                change.update(state='ESTABLISHED', candidate_claim_id=identifier,
+                    reason='Reviewed same-transaction amendment replaces only its explicitly named configuration scope.')
+                current = admission['current_applicability'] == 'ESTABLISHED' and row['identity_closure']['temporal_scope_match'] == 'ESTABLISHED'
+                result['current_configuration'] = dict(identity_claim_id=identifier, identity=identity,
+                    state='ESTABLISHED' if current else 'UNRESOLVED', reason=change['reason'], event_claim_id=row['claim_id'])
+            else:
+                competing = any(change['occurred_at'] == data['occurred_at']
+                    and change['component_scope'] == data['component_scope']
+                    and change['component_key'] == data['component_key'] and change['state'] == 'ESTABLISHED'
+                    for change in result['configuration_history'])
+                configuration['state'] = 'CONFLICTING' if competing else 'UNRESOLVED'
+                change['reason'] = 'CONTINUATION_IDENTITY_OR_PREDECESSOR_UNRESOLVED'
+                result['unresolved'].append(dict(claim_id=row['claim_id'], reason=change['reason']))
+            result['configuration_history'].append(change)
+            result['component_changes'].append(row)
+            continue
+        if dimension == 'REFINANCING':
+            financing_classes = {'PROJECT_FINANCE','CONSTRUCTION_LOAN','TERM_LOAN','REVOLVING_CREDIT',
+                'BOND_FINANCING','SUBORDINATED_DEBT','MEZZANINE_FINANCING'}
+            link = dict(predecessor_claim_id=root_claim_id, event_claim_id=row['claim_id'],
+                relationship_type=data.get('relationship_type', 'UNRESOLVED'), state='UNRESOLVED',
+                component_scope=data['component_scope'], component_key=data['component_key'],
+                successor_claim_ids=[], reason='Separate facility identity and explicit refinancing scope are required.')
+            for identifier in data['related_claim_ids']:
+                candidate = store.get_claim(workspace, identifier) or {}
+                candidate_data = (candidate.get('event_proposition') or {}).get('data') or {}
+                if (candidate_data.get('kind') == 'TRANSACTION_IDENTITY' and identifier != root_claim_id
+                        and candidate_data['identity']['transaction_class'] in financing_classes
+                        and candidate_data['identity']['project'] == root_data['identity']['project']
+                        and candidate_data['identity']['transaction_reference'] != root_data['identity']['transaction_reference']):
+                    admitted = store.admit_reviewed_proposition(workspace, identifier, query_date=as_of, historical=True)
+                    if admitted['admissible'] and admitted['evidence_tier'] >= 2:
+                        link['successor_claim_ids'].append(identifier)
+            if (root_data['identity']['transaction_class'] in financing_classes
+                    and len(link['successor_claim_ids']) == 1 and link['relationship_type'] in FINANCING_RELATIONSHIPS
+                    and not (link['relationship_type'] == 'PARTIALLY_REFINANCES' and data['component_scope'] == 'FULL_TRANSACTION')):
+                link.update(state='ESTABLISHED', reason='Reviewed distinct facilities and an explicit scoped financing relationship; predecessor maturity is retained.')
+                if data['component_scope'] == 'FULL_TRANSACTION' and link['relationship_type'] in ('REFINANCES','REPLACES_FACILITY'):
+                    lifecycle.append((data['occurred_at'], 'SUPERSEDED', row))
+            else:
+                result['unresolved'].append(dict(claim_id=row['claim_id'], reason='FINANCING_IDENTITY_OR_LINK_UNRESOLVED'))
+            result['financing_relationships'].append(link)
+            if data['component_scope'] != 'FULL_TRANSACTION':
+                result['component_changes'].append(row)
+            continue
+        if data['component_scope'] != 'FULL_TRANSACTION':
+            result['component_changes'].append(row)
+            continue
+        if dimension == 'SUSPENSION':
+            lifecycle.append((data['occurred_at'], 'SUSPENDED', row))
+        elif dimension == 'TERMINATION' and result['events']['EXECUTED']['state'] == 'ESTABLISHED':
+            executed_dates = [r['data']['occurred_at'] for r in eligible if r['claim_id'] in result['events']['EXECUTED']['evidence_refs']]
+            if executed_dates and min(executed_dates) <= data['occurred_at']:
+                lifecycle.append((data['occurred_at'], 'TERMINATED', row))
+        elif dimension == 'CURRENT_CONFIRMATION' and data['facets']['express_current_confirmation'] == 'ESTABLISHED' and row['identity_closure']['temporal_scope_match'] == 'ESTABLISHED':
+            lifecycle.append((data['occurred_at'], 'ACTIVE', row))
+        elif dimension == 'SUPERSESSION':
+            successors = []
+            for identifier in data['related_claim_ids']:
+                candidate = store.get_claim(workspace, identifier) or {}
+                candidate_data = (candidate.get('event_proposition') or {}).get('data') or {}
+                if (candidate_data.get('kind') == 'TRANSACTION_IDENTITY' and identifier != root_claim_id
+                        and candidate_data['identity']['project'] == root_data['identity']['project']
+                        and candidate_data['identity']['transaction_reference'] != root_data['identity']['transaction_reference']
+                        and store.admit_reviewed_proposition(workspace, identifier, query_date=as_of, historical=True)['admissible']):
+                    successors.append(identifier)
+            if len(successors) == 1:
+                lifecycle.append((data['occurred_at'], 'SUPERSEDED', row))
+            else:
+                result['unresolved'].append(dict(claim_id=row['claim_id'], reason='EXPLICIT_REVIEWED_SUCCESSOR_UNRESOLVED'))
+        elif (dimension == 'REINSTATEMENT' and data['continuity'] == 'CONTINUES'
+                and data['facets']['express_current_confirmation'] == 'ESTABLISHED'
+                and row['identity_closure']['temporal_scope_match'] == 'ESTABLISHED'):
+            lifecycle.append((data['occurred_at'], 'REINSTATED', row))
+        else:
+            result['unresolved'].append(dict(claim_id=row['claim_id'], reason='LIFECYCLE_PREREQUISITES_REQUIRE_REVIEW'))
+    status = 'SUSPENDED'
+    prior_refs = []
+    interrupted = False
+    for occurred in sorted({r[0] for r in lifecycle}):
+        group = [r for r in lifecycle if r[0] == occurred]
+        states = {r[1] for r in group}
+        next_status = next(iter(states)) if len(states) == 1 else 'CONFLICTING'
+        if next_status == 'REINSTATED':
+            if (not interrupted or not prior_refs or any(not set(prior_refs).issubset(
+                    set(r[2]['data']['related_claim_ids']) | set(r[2]['data']['replaces_claim_ids'])) for r in group)):
+                result['unresolved'].append(dict(reason='EXACT_INTERRUPTION_LINK_REQUIRED', evidence_refs=[r[2]['claim_id'] for r in group]))
+                continue
+            next_status = 'ACTIVE'
+            interrupted = False
+        elif next_status == 'ACTIVE' and interrupted:
+            result['unresolved'].append(dict(reason='POSITIVE_REINSTATEMENT_OR_RESOLUTION_REQUIRED', evidence_refs=[r[2]['claim_id'] for r in group]))
+            continue
+        import hashlib
+        refs = [r[2]['claim_id'] for r in group]
+        result['transitions'].append(dict(transition_id=hashlib.sha256(
+            json.dumps([root_claim_id, occurred, status, next_status, refs], sort_keys=True).encode()).hexdigest(),
+            transaction_id=root_claim_id, before_state=status, after_state=next_status,
+            event_dimension='LIFECYCLE', effective_at=occurred,
+            recorded_at=max(r[2]['recorded_at'] for r in group),
+            transition_class='REINSTATEMENT' if 'REINSTATED' in states else
+                {'ACTIVE':'PROMOTION', 'SUSPENDED':'SUSPENSION', 'CONFLICTING':'CONFLICT',
+                 'SUPERSEDED':'SUPERSESSION', 'TERMINATED':'TERMINATION'}[next_status],
+            prior_evidence_refs=list(prior_refs), new_evidence_refs=refs,
+            project_scope_match='EXACT_PROJECT', participant_scope_match='EXACT_ENTITY',
+            transaction_scope_match='EXACT_TRANSACTION',
+            temporal_scope_match=group[0][2]['identity_closure']['temporal_scope_match'],
+            reason='Reconstructed from scoped, reviewed event Claims; discovery order is not lifecycle order.'))
+        prior_refs = refs
+        if next_status != 'ACTIVE':
+            interrupted = True
+        status = next_status
+    result['lifecycle_status'] = status
+    for row in eligible:
+        if row['identity_closure']['temporal_scope_match'] == 'UNRESOLVED':
+            result['unresolved'].append(dict(claim_id=row['claim_id'],
+                reasons=row['identity_closure']['temporal_reasons'] or ['TEMPORAL_APPLICABILITY_UNRESOLVED']))
+    if (status == 'CONFLICTING' or result['current_configuration']['state'] == 'CONFLICTING'
+            or any(e['state'] == 'CONFLICTING' for e in result['events'].values())):
+        result['governed_state'] = 'CONFLICTING'
+    elif (root_admission['admissible'] and status == 'ACTIVE' and not result['unresolved']
+          and not any(r['reasons'] for r in rows)
+          and result['events']['EXECUTED']['state'] == 'ESTABLISHED'
+          and root_data['identity']['transaction_class'] == 'EQUITY_JV'
+          and root_data['identity']['joint_structure'] in ('JOINT_EQUITY', 'CONTRACTUAL_JV')
+          and result['current_configuration']['state'] == 'ESTABLISHED'
+          and len(result['current_configuration']['identity']['participants']) >= 2):
+        result['governed_state'] = 'ACTUAL_JV_CONFIRMED'
+    for row in rows:
+        if row['reasons']:
+            result['unresolved'].append(dict(claim_id=row['claim_id'], reasons=row['reasons']))
+    return deepcopy(result)
+
+
 # Presentation vocabulary only. Every domain invokes the same predicates and
 # mandatory-constraint aggregation; none receives its own matching engine.
 MATCHING_CONTEXTS = {

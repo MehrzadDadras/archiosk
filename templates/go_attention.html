@@ -53,6 +53,7 @@
 {% include 'components/subject_propositions.html' %}
 {% include 'components/requirement_matching.html' %}
 {% include 'components/role_composition.html' %}
+{% include 'components/transaction_review.html' %}
 <section><h2>Normalized information comparison</h2>
 <p>EVALUATION_INPUT: explicitly model a number or vocabulary set from each selected source. These hypotheses do not correct the machine read or establish source facts. Blank qualifiers remain unresolved; enter [] only when explicitly modelling no qualifiers.</p>
 {% if not expired %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="information_comparison"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">

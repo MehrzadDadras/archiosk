@@ -1,0 +1,24 @@
+{% set transaction = result.transaction %}
+{% set retained_stale = (group is defined and group.semantic.consumption_state == 'REVIEW_REQUIRED') or (review is defined and review.consumption_state == 'REVIEW_REQUIRED') %}
+<p><strong>Analysis date:</strong> {{ transaction.as_of }} · retained execution</p>
+{% if retained_stale %}<p role="status"><strong>Current applicability unresolved:</strong> supporting premises have changed. Re-evaluate explicitly. The original result and its proof remain below.</p>{% endif %}
+<p><strong>Project:</strong> {{ transaction.identity.project.name }} · {{ transaction.identity.project.phase }}</p>
+<p><strong>Originally recorded participants:</strong> {% for party in transaction.identity.participants %}{{ party.legal_name }} ({{ party.role }}){% if not loop.last %}; {% endif %}{% endfor %}</p>
+{% if transaction.current_configuration %}<p><strong>Configuration at analysis date:</strong> {{ transaction.current_configuration.state }} · {% for party in transaction.current_configuration.identity.participants %}{{ party.legal_name }} ({{ party.role }}){% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+<p><strong>{{ 'Factual status at earlier execution' if retained_stale else 'Governed factual status' }}:</strong> {{ result.state }}{% if result.evaluation_only %} · Evaluation only{% endif %}</p>
+<p><strong>Maturity:</strong> {{ transaction.maturity_state or 'Unresolved' }} · <strong>Lifecycle:</strong> {{ transaction.lifecycle_status }}</p>
+<table><thead><tr><th>Independent event</th><th>State</th><th>Missing premise</th></tr></thead><tbody>
+{% for name,event in transaction.events.items() %}<tr><td>{{ name|replace('_',' ')|title }}</td><td>{{ event.state }}</td><td>{% for reason in event.reasons %}{{ reason|replace('_',' ')|capitalize }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+{% if transaction.unresolved %}<h4>What remains unresolved</h4>
+{% set summary = namespace(reasons=[]) %}{% for finding in transaction.unresolved %}{% for reason in ([finding.reason] if finding.reason else finding.reasons) %}{% if reason not in summary.reasons %}{% set summary.reasons = summary.reasons + [reason] %}{% endif %}{% endfor %}{% endfor %}
+<ul>{% for reason in summary.reasons %}<li>{{ reason|replace('_',' ')|capitalize }}</li>{% endfor %}</ul>
+<p>{{ transaction.unresolved|length }} underlying findings remain available in the evidence and history.</p>{% endif %}
+{% if transaction.component_changes %}<p>{{ transaction.component_changes|length }} scoped component change(s); these do not replace the full transaction.</p>{% endif %}
+{% if transaction.financing_relationships %}<h4>Financing relationships</h4><ul>{% for link in transaction.financing_relationships %}<li>{{ link.relationship_type }} · {{ link.state }} · {{ link.component_scope }} {{ link.component_key }}. {{ link.reason }}</li>{% endfor %}</ul>{% endif %}
+<details><summary>Evidence and transaction history · {{ transaction.history|length }} retained events</summary>
+{% for row in transaction.history %}<article><h4>{{ row.data.event_dimension|replace('_',' ')|title }} · {{ row.data.occurred_at or 'Occurrence date unresolved' }}</h4>
+<p>{{ row.data.asserted_state }} · {{ 'Admitted for investigation' if row.admissible else 'Not admitted' }} · {{ row.reasons|join('; ') }}</p>
+<p>{{ row.data.component_scope }} {{ row.data.component_key }}. Discovered {{ row.data.discovered_at or 'Unknown' }}; recorded {{ row.recorded_at }}.</p>
+<details><summary>Exact evidence and provenance</summary><pre>{{ row|tojson(indent=2) }}</pre></details>
+</article>{% endfor %}</details>
+<details><summary>Technical details</summary><pre>{{ transaction|tojson(indent=2) }}</pre></details>

@@ -1,0 +1,32 @@
+<section id="transaction-review"><h2>Transaction history</h2>
+<p>Review the identity, maturity and lifecycle supported by retained source interpretations. An analytical combination is not a partnership agreement.</p>
+{% if not expired %}{% include 'components/transaction_source_form.html' %}{% endif %}
+{% if transaction_claims %}<details><summary>Source interpretations and human review</summary>
+{% for claim in transaction_claims %}<article><h3>{{ claim.event_proposition.data.event_dimension or 'Identity' }} · {{ claim.event_proposition.data.identity.transaction_reference }}</h3>
+<p>{{ claim.statement }} · {{ claim.adoption_state }}</p>
+{% if claim.finding_id %}{% set finding = workspace.findings|selectattr('id','equalto',claim.finding_id)|first %}<a href="{{ url_for('workspace.show_workspace', project_id=workspace.project_id, case=finding.case_id) }}">Open the workspace to review this Finding, set its disposition and explicitly Apply</a>
+{% elif not expired and workspace.cases %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="adopt_transaction_finding"><input type="hidden" name="analysis_id" value="{{ analysis.id }}"><input type="hidden" name="claim_id" value="{{ claim.id }}">
+<label>Review case <select name="case_id">{% for case in workspace.cases if not case.archived_at %}<option value="{{ case.id }}">{{ case.title }}</option>{% endfor %}</select></label>
+<label>Reason <input name="reason" required maxlength="2000"></label>
+<label><input type="checkbox" name="attribution" value="human_reviewed" required>I choose to submit this interpretation as a Finding for review.</label>
+<button>Submit for existing Finding review</button></form>{% endif %}
+<details><summary>Original interpretation and source citations</summary><pre>{{ claim|tojson(indent=2) }}</pre></details></article>{% endfor %}</details>{% endif %}
+{% if transaction_identities and not expired %}
+<form method="post" action="{{ attention_url }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="action" value="transaction_review">
+<input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+<label>Transaction <select name="transaction_claim_id" required>{% for claim in transaction_identities %}
+{% set identity = claim.event_proposition.data.identity %}<option value="{{ claim.id }}">{{ identity.project.name }} · {{ identity.project.phase }} · {{ identity.transaction_class }} · {{ identity.transaction_reference }}</option>
+{% endfor %}</select></label>
+<label>Analysis date <input type="date" name="query_date" required></label>
+<label>Review question <input name="reason" required maxlength="2000"></label>
+<button>Review retained transaction history</button></form>
+{% elif not transaction_identities %}<p>No source-anchored transaction identity has been recorded. Missing identity remains unresolved.</p>{% endif %}
+{% for review in transaction_reviews|reverse %}
+{% set result = review.run.governed_result %}
+<details><summary>{{ result.transaction.identity.project.name }} · {{ result.state }} · as of {{ result.transaction.as_of }}</summary>
+{% if review.consumption_state == 'REVIEW_REQUIRED' %}<p role="status">Retained result: premises have changed. Explicit re-evaluation is required; Reload does not re-run analysis.</p>{% endif %}
+{% include 'components/transaction_result.html' %}
+</details>{% endfor %}
+</section>

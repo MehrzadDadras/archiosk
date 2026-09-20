@@ -6825,6 +6825,18 @@ def validate_finding(project_id, finding_id):
     correction_note = request.form.get("correction_note") or None
 
     try:
+        proposition_review = None
+        if request.form.get('proposition_claim_id'):
+            from services.cross_modal_investigation import PROPOSITION_REVIEW_CHECKS
+            proposition_review = dict(claim_id=request.form['proposition_claim_id'],
+                evidence_tier=int(request.form.get('proposition_evidence_tier','0')),
+                valid_from=request.form.get('proposition_valid_from') or None,
+                valid_until=request.form.get('proposition_valid_until') or None,
+                reason=request.form.get('proposition_reason',''),
+                attribution=request.form.get('proposition_attribution'),
+                checks={key:dict(state=request.form.get('review_'+key+'_state'),
+                    reason=request.form.get('review_'+key+'_reason',''),
+                    evidence_ids=request.form.getlist('review_'+key+'_evidence_id')) for key in PROPOSITION_REVIEW_CHECKS})
         store.record_reviewer_validation(
             workspace,
             finding_id=finding_id,
@@ -6832,8 +6844,9 @@ def validate_finding(project_id, finding_id):
             reviewer=_reviewer(),
             correction_note=correction_note,
             governance_log=_log(),
+            proposition_review=proposition_review,
         )
-    except CaseWorkspaceError as exc:
+    except (CaseWorkspaceError, ValueError) as exc:
         flash(str(exc), "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 

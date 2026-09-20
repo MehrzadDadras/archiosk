@@ -3388,6 +3388,9 @@
 
                 {% if finding.claim_status != "applied" %}
                 <p class="workspace-pane-label" style="margin-top:0.6rem;">Reviewer Validation</p>
+                {% for claim in workspace.claims if visible_cases|length == workspace.cases|length and claim.finding_id == finding.id and (claim.structured_proposition or claim.event_proposition) %}
+                {% include 'components/scoped_proposition_review.html' %}
+                {% endfor %}
                 <form class="finding-review-actions" method="post"
                       action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
                     <input type="hidden" name="case_id" value="{{ active_case.id }}">

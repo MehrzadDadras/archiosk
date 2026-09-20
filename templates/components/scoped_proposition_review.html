@@ -1,0 +1,18 @@
+<details><summary>Review this exact sourced proposition</summary>
+<p>Review reading, identity, applicability, source authenticity and authority separately. This records your assessment; disposition and Apply remain explicit actions. Evaluation input cannot be applied as canonical knowledge.</p>
+<p>{{ claim.statement }}</p>
+<details><summary>Original source interpretation and citations</summary><pre>{{ (claim.event_proposition or claim.structured_proposition)|tojson(indent=2) }}</pre></details>
+<form method="post" action="{{ url_for('workspace.validate_finding', project_id=project_id, finding_id=finding.id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="case_id" value="{{ active_case.id }}"><input type="hidden" name="proposition_claim_id" value="{{ claim.id }}">
+{% for key,label in [('READING','Reading fidelity'),('SUBJECT_BINDING','Subject / identity binding'),('SCOPE_APPLICABILITY','Scope applicability'),('SOURCE_AUTHENTICITY','Source authenticity'),('EVENT_OR_PROPOSITION_AUTHORITY','Authority for this exact proposition')] %}
+<fieldset><legend>{{ label }}</legend><label>State <select name="review_{{ key }}_state">{% for state in ['UNRESOLVED','ESTABLISHED','QUALIFIED','CONFLICTING','REFUSED'] %}<option>{{ state }}</option>{% endfor %}</select></label>
+<label>Reason <textarea name="review_{{ key }}_reason" required maxlength="2000"></textarea></label>
+<label>Supporting observations <select name="review_{{ key }}_evidence_id" multiple>{% for evidence in workspace.evidence_items %}<option value="{{ evidence.id }}">{{ evidence.content|truncate(100) }} · {{ evidence.id }}</option>{% endfor %}</select></label></fieldset>
+{% endfor %}
+<label>Reviewed evidence tier <select name="proposition_evidence_tier">{% for number,label in [(0,'Discovery only'),(1,'Secondary corroboration'),(2,'Authoritative disclosure'),(3,'Transaction document'),(4,'Effectiveness / close proof')] %}<option value="{{ number }}">{{ number }} · {{ label }}</option>{% endfor %}</select></label>
+<label>Reviewed applicability from <input type="date" name="proposition_valid_from"></label>
+<label>Reviewed applicability until <input type="date" name="proposition_valid_until"></label>
+<label>Review basis <textarea name="proposition_reason" required maxlength="4000"></textarea></label>
+<label><input type="checkbox" required name="proposition_attribution" value="human_reviewed">I performed this scoped review and stand behind the recorded assessment.</label>
+<label>Overall reviewer assessment <select name="validation">{% for state in reviewer_validation_states %}<option>{{ state }}</option>{% endfor %}</select></label>
+<button>Record scoped review</button></form></details>

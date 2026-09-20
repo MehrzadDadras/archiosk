@@ -135,6 +135,7 @@ def main():
     parser.add_argument('--report-compression', action='store_true', help='Exercise compact reports, expansion, filters and read-only Reload.')
     parser.add_argument('--work-plans', action='store_true', help='Prove persisted plan display before real runtime execution and read-only Reload.')
     parser.add_argument('--coverage-games', action='store_true', help='Exercise the shared requirement coverage matrix and minimum configurations.')
+    parser.add_argument('--transaction-games', action='store_true', help='Exercise retained transaction Claims, real review execution and read-only Reload.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -214,6 +215,85 @@ def main():
                 verify_work_plans(page, base, None if args.live else app, proof, output)
                 browser.close()
                 print(json.dumps(proof, indent=2))
+                return
+            if args.transaction_games:
+                from services import survey_evaluation as evaluation
+                from services.case_workspace import CaseWorkspaceStore
+                from services.runtime_observation import read
+                proof['transaction_games'] = []
+                for name in ('unverified-signing','debt-not-jv','out-of-order'):
+                    page.goto(base+'/admin/survey-evaluation')
+                    page.select_option('#case','transaction:'+name)
+                    page.get_by_role('button',name='Run isolated evaluation',exact=True).click()
+                    page.wait_for_url('**/attention?analysis=*')
+                    report = page.locator('#attention-report')
+                    assert report.is_visible() and report.locator('pre:visible').count() == 0
+                    assert 'Governed factual status: UNRESOLVED' in report.inner_text()
+                    assert 'Lifecycle: SUSPENDED' in report.inner_text()
+                    reveal_investigation()
+                    if name == 'unverified-signing':
+                        interpretations = [json.loads(value) for value in page.locator('#transaction-review pre').all_text_contents()]
+                        root_claim = next(value for value in interpretations if
+                            (value.get('event_proposition') or {}).get('data',{}).get('kind') == 'TRANSACTION_IDENTITY')
+                        source = root_claim['event_proposition']
+                        data = source['data']
+                        source_form = page.locator('#transaction-review form').filter(has=page.locator('input[value="transaction_proposition"]'))
+                        source_form.locator('..').locator(':scope > summary').click()
+                        for key,value in data['identity']['project'].items():
+                            source_form.locator('[name="project_'+key+'"]').fill(value)
+                        for key in ('transaction_class','joint_structure'):
+                            source_form.locator('[name="'+key+'"]').select_option(data['identity'][key])
+                        for key in ('transaction_reference','economic_scope'):
+                            source_form.locator('[name="'+key+'"]').fill(data['identity'][key])
+                        source_form.get_by_text('Select parties and their source-stated legal identities',exact=True).click()
+                        for party in data['identity']['participants']:
+                            source_form.locator('[name="party_id"][value="'+party['participant_id']+'"]').check()
+                            for key in ('legal_name','jurisdiction','registration_id','role'):
+                                source_form.locator('[name="party_'+party['participant_id']+'_'+key+'"]').fill(party[key])
+                            source_form.locator('[name="party_'+party['participant_id']+'_identity_relation"]').select_option(party['identity_relation'])
+                        for key in ('occurred_at','effective_from','effective_until','discovered_at'):
+                            source_form.locator('[name="'+key+'"]').fill(data[key])
+                        source_form.locator('[name="evidence_id"]').select_option(source['evidence_fingerprints'][0]['evidence_item_id'])
+                        source_form.locator('[name="original_quote"]').fill(source['original_quote'])
+                        source_form.locator('[name="source_class"]').select_option('PROJECT_DOCUMENT')
+                        source_form.locator('[name="reason"]').fill('Explicit browser-created evaluation interpretation; no authority is granted.')
+                        source_form.locator('[name="attribution"]').select_option('agent_assessment')
+                        click_and_reveal(source_form.get_by_role('button',name='Record source interpretation',exact=True))
+                        assert 'Explicit browser-created evaluation interpretation' in page.locator('#transaction-review').text_content(), page.locator('.flash-message').all_text_contents()
+                        proof['source_interpretation_form_invoked'] = True
+                    form = page.locator('#transaction-review form').filter(has=page.locator('input[name="action"][value="transaction_review"]'))
+                    form.locator('[name="query_date"]').fill('2024-06-01')
+                    form.locator('[name="reason"]').fill('Browser-triggered examination of retained hypothetical transaction events.')
+                    click_and_reveal(form.get_by_role('button',name='Review retained transaction history',exact=True))
+                    entry = page.url
+                    before = None
+                    if not args.live:
+                        location = evaluation.location(app,urlparse(entry).path.split('/')[-2])
+                        store = CaseWorkspaceStore(location/'registry')
+                        workspace = store.get(evaluation._read(location)['project_id'])
+                        assert all(c['event_proposition']['evaluation_only'] for c in workspace.claims)
+                        assert not workspace.reviewer_validations and not workspace.applies
+                        assert len([r for r in workspace.analyses if (r.get('governed_result') or {}).get('kind') == 'transaction_review']) == 2
+                        before = store._path_for(workspace.project_id).read_bytes()
+                    page.get_by_role('link',name='Reload',exact=True).click()
+                    assert page.url == entry
+                    if before is not None:
+                        assert store._path_for(workspace.project_id).read_bytes() == before
+                    proof['transaction_games'].append(dict(case=name, entry=urlparse(entry).path+'?'+urlparse(entry).query,
+                        real_review_form_invoked=True, reload_readonly=True, authority_remains_unresolved=True))
+                if not args.live:
+                    records = [read(app,t['trace']) for t in proof['traces']]
+                    owners = {e['owner'] for r in records for e in r['events'] if e['phase']=='INVOKED'}
+                    for owner in ('services.case_workspace.CaseWorkspaceStore.run_transaction_review',
+                                  'services.cross_modal_investigation.resolve_transaction_identity',
+                                  'services.cross_modal_investigation.investigate_transaction_history'):
+                        assert owner in owners
+                    proof['invoked_owners'] = sorted(owners)
+                assert not proof['browser_errors']
+                page.screenshot(path=str(output/'transaction-review.png'),full_page=True)
+                (output/'proof.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
+                browser.close()
+                print(json.dumps(proof,indent=2))
                 return
             if args.coverage_games:
                 proof['coverage_games'] = []

@@ -2199,6 +2199,9 @@ class ReviewerValidation:
     reviewer: str
     validated_at: str
     correction_note: Optional[str] = None
+    # Optional, source-bound review scope. A review is still not Apply, and
+    # cannot grant authority to a different proposition or geometry consumer.
+    proposition_review: Optional[dict] = None
 
 
 @dataclass
@@ -3517,6 +3520,9 @@ class Claim:
     # A typed interpretation of cited evidence, not an independently verified
     # entity profile. Corrections remain successor Claims through supersession.
     structured_proposition: Optional[dict] = None
+    # Independently cited identity/event propositions share Claim persistence.
+    # Historical occurrence is distinct from this record's creation time.
+    event_proposition: Optional[dict] = None
     runtime_trace_id: Optional[str] = None  # operational link, never evidence
 
 
@@ -6898,7 +6904,7 @@ class CaseWorkspaceStore:
                 source_file_hash=source.get('file_hash')))
             if self.admit_proposition(workspace, evidence_id).get('evaluation_only') and not proposition['evaluation_only']:
                 raise CaseWorkspaceError('Evaluation provenance cannot be removed from a proposition.')
-        if proposition['evidence_fingerprints'] != expected or not any(proposition['original_quote'] in text for text in contents):
+        if proposition['evidence_fingerprints'] != expected or not any(self._source_quote_matches(proposition['original_quote'], text) for text in contents):
             raise CaseWorkspaceError('The source quote or evidence fingerprints do not match the cited observations.')
 
     @observed
@@ -6964,6 +6970,131 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError('Supply a bounded subject name and role in an active case.')
         return self.record_participant(workspace, name, role, actor,
             note='User-declared subject reference; identity and capabilities are not verified by registration.')
+
+    @staticmethod
+    def _source_quote_matches(quote, source_text):
+        """HTML textarea line endings are equivalent; source and quote stay intact.
+
+        No whitespace folding, OCR correction or semantic similarity is used.
+        The immutable source/evidence fingerprints remain separately mandatory.
+        """
+        def line_endings(value):
+            return value.replace('\r\n', '\n').replace('\r', '\n')
+        return line_endings(quote) in line_endings(source_text)
+
+    def _validate_event_proposition(self, workspace, proposition, evidence_links):
+        """Validate citations and typed source assertions, never transaction truth."""
+        from services.cross_modal_investigation import validate_transaction_event_data, PROPOSITION_SOURCE_CLASSES
+        keys = {'data', 'evidence_tier', 'source_class', 'original_quote', 'classification_reason',
+                'evidence_fingerprints', 'evaluation_only'}
+        if not isinstance(proposition, dict) or set(proposition) != keys:
+            raise CaseWorkspaceError('An event proposition requires its typed assertions and exact source provenance.')
+        try:
+            if len(json.dumps(proposition, allow_nan=False)) > 64000:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise CaseWorkspaceError('The event proposition exceeds its bounded contract.') from None
+        validate_transaction_event_data(proposition['data'])
+        if (type(proposition['evidence_tier']) is not int or not 0 <= proposition['evidence_tier'] <= 4
+                or proposition['source_class'] not in PROPOSITION_SOURCE_CLASSES
+                or type(proposition['evaluation_only']) is not bool):
+            raise CaseWorkspaceError('Source classification and evidence tier must be explicit proposed interpretations.')
+        for key in ('original_quote', 'classification_reason'):
+            if not isinstance(proposition[key], str) or not proposition[key].strip() or len(proposition[key]) > 8000:
+                raise CaseWorkspaceError('Retain the exact source quote and the reason for this event interpretation.')
+        data = proposition['data']
+        for party in data['identity']['participants']:
+            if not self._find(workspace.participants, party['participant_id']):
+                raise CaseWorkspaceError('A transaction participant must be an existing project subject.')
+        references = data['related_claim_ids'] + data['replaces_claim_ids']
+        if data['transaction_claim_id']:
+            root = self.get_claim(workspace, data['transaction_claim_id'])
+            if not root or ((root.get('event_proposition') or {}).get('data') or {}).get('kind') != 'TRANSACTION_IDENTITY':
+                raise CaseWorkspaceError('Select an existing source-anchored transaction identity Claim.')
+            references = references + [data['transaction_claim_id']]
+        cited_claims = {link['object_id'] for link in evidence_links if link['object_type'] == 'claim'}
+        if not set(references).issubset(cited_claims):
+            raise CaseWorkspaceError('Every event dependency must remain an explicit Claim citation.')
+        for identifier in references:
+            claim = self.get_claim(workspace, identifier)
+            if not claim or claim.get('project_id') != workspace.project_id:
+                raise CaseWorkspaceError('An event reference is outside this governed project.')
+            if ((claim.get('event_proposition') or claim.get('structured_proposition') or {}).get('evaluation_only')
+                    and not proposition['evaluation_only']):
+                raise CaseWorkspaceError('Evaluation ancestry cannot be removed from an event.')
+        identifiers = [link['object_id'] for link in evidence_links if link['object_type'] == 'evidence_item']
+        if not 1 <= len(identifiers) <= 16 or len(set(identifiers)) != len(identifiers):
+            raise CaseWorkspaceError('An event requires one to sixteen distinct retained source observations.')
+        expected, text = [], []
+        for identifier in identifiers:
+            evidence = self.get_evidence_item(workspace, identifier)
+            source = self._find(workspace.sources, (evidence or {}).get('source_id'))
+            if not evidence or not source or source.get('removed_at'):
+                raise CaseWorkspaceError('The event source is unavailable.')
+            expected.append(dict(evidence_item_id=identifier, source_id=source['id'],
+                content_sha256=hashlib.sha256((evidence.get('content') or '').encode()).hexdigest(),
+                source_file_hash=source.get('file_hash')))
+            text.append(evidence.get('content') or '')
+            if self.admit_proposition(workspace, identifier).get('evaluation_only') and not proposition['evaluation_only']:
+                raise CaseWorkspaceError('Evaluation source provenance cannot become transaction authority.')
+        if proposition['evidence_fingerprints'] != expected or not any(self._source_quote_matches(proposition['original_quote'], value) for value in text):
+            raise CaseWorkspaceError('The event quote or source fingerprints no longer match the retained observations.')
+        for condition in data['conditions']:
+            if not set(condition['evidence_ids']).issubset(identifiers):
+                raise CaseWorkspaceError('Every condition premise must cite evidence retained with this event.')
+
+    @observed
+    def record_event_proposition(self, workspace, actor, analysis_id, data, evidence_ids,
+                                 source_class, evidence_tier, original_quote, reason, *, attribution=None):
+        """Append a source interpretation through Claim, without promoting an event.
+
+        Replacements remain separately cited assertions until existing governance
+        resolves them. Neither occurrence nor discovery time is rewritten on a
+        later analysis. The Claim's server creation time records ingestion.
+        """
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if attribution not in ('human_reviewed', 'agent_assessment'):
+            raise CaseWorkspaceError('Declare the actual author of this source interpretation.')
+        if (workspace.document_desk_state != 'active' or not isinstance(evidence_ids, list)
+                or not 1 <= len(evidence_ids) <= 16
+                or any(not isinstance(i, str) for i in evidence_ids)
+                or len(set(evidence_ids)) != len(evidence_ids)
+                or not set(evidence_ids).issubset(scope['included_evidence_ids'])):
+            raise CaseWorkspaceError('Event evidence must belong to the active attention scope.')
+        from services.cross_modal_investigation import validate_transaction_event_data
+        validate_transaction_event_data(data)
+        references = list(dict.fromkeys(data['related_claim_ids'] + data['replaces_claim_ids']
+                         + ([data['transaction_claim_id']] if data['transaction_claim_id'] else [])))
+        links = [dict(object_type='evidence_item', object_id=i) for i in evidence_ids]
+        links += [dict(object_type='claim', object_id=i) for i in references]
+        fingerprints = []
+        evaluation_only = scope['evaluation_only']
+        for identifier in evidence_ids:
+            evidence = self.get_evidence_item(workspace, identifier)
+            source = self._find(workspace.sources, (evidence or {}).get('source_id'))
+            if not evidence or not source:
+                raise CaseWorkspaceError('An event source is unavailable.')
+            fingerprints.append(dict(evidence_item_id=identifier, source_id=source['id'],
+                content_sha256=hashlib.sha256((evidence.get('content') or '').encode()).hexdigest(),
+                source_file_hash=source.get('file_hash')))
+            evaluation_only |= self.admit_proposition(workspace, identifier).get('evaluation_only', False)
+        for identifier in references:
+            parent = self.get_claim(workspace, identifier) or {}
+            evaluation_only |= bool((parent.get('event_proposition') or parent.get('structured_proposition') or {}).get('evaluation_only'))
+        proposition = dict(data=deepcopy(data), evidence_tier=evidence_tier, source_class=source_class,
+            original_quote=original_quote, classification_reason=reason,
+            evidence_fingerprints=fingerprints, evaluation_only=bool(evaluation_only))
+        self._validate_event_proposition(workspace, proposition, links)
+        step = self.record_investigation_step(workspace, None, 'source_event_interpretation',
+            dict(anchor_type='evidence_item', anchor_id=evidence_ids[0]), scope['objective'], actor,
+            evidence_examined_ids={'evidence_item_ids':evidence_ids}, ran=True, analysis_id=analysis_id,
+            assessment='An event interpretation was recorded; no identity, maturity or authority was promoted.')
+        return self.record_investigation_claim(workspace, step['id'],
+            statement=(data['event_dimension'] or 'Transaction identity') + ': proposed source interpretation. ' + reason,
+            claim_class=CLAIM_CLASS_SUPPORTED_INTERPRETATION if attribution == 'human_reviewed' else CLAIM_CLASS_AI_PROPOSAL,
+            method='source_event_interpretation', confidence_state=CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE,
+            author_type=OBSERVATION_AUTHOR_HUMAN if attribution == 'human_reviewed' else OBSERVATION_AUTHOR_AI,
+            created_by=actor, evidence_links=links, event_proposition=proposition)
 
     @observed
     def review_subject_proposition(self, workspace, actor, analysis_id, claim_id, outcome, reason, governance_log=None, *, attribution=None):
@@ -7418,6 +7549,78 @@ class CaseWorkspaceStore:
                 dict(muscle='AUTHORITY / UNCERTAINTY', owner='CaseWorkspaceStore.admit_proposition', result=admissions)])
 
     @observed
+    def run_transaction_review(self, workspace, actor, analysis_id, transaction_claim_id, query_date, reason):
+        """Persist the shared investigator's event projection through AnalysisRun."""
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            raise CaseWorkspaceError('Transaction review requires a fully visible project.')
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise CaseWorkspaceError('Record the focal transaction question.')
+        from services.cross_modal_investigation import investigate_transaction_history
+        projection = investigate_transaction_history(self, workspace, transaction_claim_id, as_of=query_date)
+        prior = next((run for run in reversed(workspace.analyses)
+            if (run.get('governed_result') or {}).get('kind') == 'transaction_review'
+            and run['governed_result']['transaction']['transaction_claim_id'] == transaction_claim_id
+            and run['governed_result']['transaction']['as_of'] == query_date), None)
+        projection['predecessor_analysis_id'] = prior['id'] if prior else None
+        previous_events = prior['governed_result']['transaction']['events'] if prior else {}
+        for dimension, event in projection['events'].items():
+            before = previous_events.get(dimension, {}).get('state', 'UNRESOLVED')
+            if before == event['state'] or not event['evidence_refs']:
+                continue
+            references = list(dict.fromkeys(event['evidence_refs'] + event.get('condition_evidence_refs', [])))
+            rows = [row for row in projection['history'] if row['claim_id'] in references and row['admissible']]
+            if not rows:
+                continue
+            projection['transitions'].append(dict(transition_id=_new_id(), transaction_id=transaction_claim_id,
+                event_dimension=dimension, before_state=before, after_state=event['state'],
+                transition_class='CONFLICT' if event['state'] == 'CONFLICTING' else
+                    'DEGRADATION' if before == 'ESTABLISHED' and event['state'] == 'NOT_OCCURRED' else
+                    'RESOLUTION' if before == 'CONFLICTING' else 'PROMOTION',
+                prior_evidence_refs=previous_events.get(dimension, {}).get('evidence_refs', []),
+                new_evidence_refs=references,
+                admission_provenance=[row['source_admission'].get('provenance') for row in rows],
+                project_scope_match='EXACT_PROJECT', participant_scope_match='EXACT_ENTITY',
+                transaction_scope_match='EXACT_TRANSACTION', temporal_scope_match='HISTORICAL_EVENT',
+                effective_at=max(row['data']['occurred_at'] for row in rows), recorded_at=_now(),
+                reason='Changed event projection is supported by these independently reviewed and applied source Claims.'))
+        claims = [self.get_claim(workspace, transaction_claim_id)] + [self.get_claim(workspace, r['claim_id']) for r in projection['history']]
+        evidence_ids = sorted({link['object_id'] for claim in claims for link in claim['evidence_links']
+            if link['object_type'] == 'evidence_item'})
+        outside = sorted(set(evidence_ids) - set(scope['included_evidence_ids']))
+        dependencies = [dict(state='SCOPE_CROSSING_DEPENDENCY', evidence_item_id=identifier,
+            reason='Retained transaction evidence outside attention was included in the investigation.') for identifier in outside]
+        result = dict(kind='transaction_review', state=projection['governed_state'], canonical=False,
+            evaluation_only=bool(scope['evaluation_only'] or projection['evaluation_only']),
+            attention_analysis_id=analysis_id, objective=scope['objective'], actor=actor, reason=reason.strip(),
+            transaction=projection, scope_crossing_dependencies=dependencies,
+            premise_fingerprints=self._work_plan_premises(workspace),
+            qualification=projection['qualification'])
+        if result['evaluation_only']:
+            result['state'] = 'UNRESOLVED'
+            result['transaction']['governed_state'] = 'UNRESOLVED'
+            result['transaction']['evaluation_only'] = True
+        sources = sorted({self.get_evidence_item(workspace, i)['source_id'] for i in evidence_ids})
+        return self.record_analysis(workspace, source_ids=sources, objective=scope['objective'],
+            engine_name='cross_modal_investigation', engine_version='transaction-history-1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+            muscle_profile=[dict(muscle='TRANSACTION IDENTITY', owner='resolve_transaction_identity',
+                result=[r['identity_closure'] for r in projection['history']]),
+                dict(muscle='TRANSACTION HISTORY', owner='investigate_transaction_history', result=projection)])
+
+    def inspect_transaction_reviews(self, workspace, actor, analysis_id):
+        """Read retained results; Reload never reconstructs or re-runs history."""
+        analysis = self._find(workspace.analyses, analysis_id)
+        if (workspace.removed_at or not (analysis or {}).get('attention_scope')
+                or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases)):
+            raise CaseWorkspaceError('Transaction review requires a fully visible project.')
+        premises = self._work_plan_premises(workspace)
+        return [dict(run=deepcopy(run), consumption_state='RETAINED_EXECUTION'
+                if run['governed_result'].get('premise_fingerprints') == premises else 'REVIEW_REQUIRED')
+            for run in workspace.analyses if (run.get('governed_result') or {}).get('kind') == 'transaction_review'
+            and run['governed_result'].get('attention_analysis_id') == analysis_id]
+
+    @observed
     def run_constraint_review(self, workspace, actor, analysis_id, constraints, baseline, direction, reason):
         """Explicit hypothetical models reuse the quantitative investigation owner.
 
@@ -7684,7 +7887,8 @@ class CaseWorkspaceStore:
                 traces=[evidence.get('runtime_trace_id')], reasons=admission.get('errors', []))
         current_results = {row['run']['id']: row for row in
             self.inspect_requirement_matches(workspace, actor, analysis_id)
-            + self.inspect_role_compositions(workspace, actor, analysis_id)}
+            + self.inspect_role_compositions(workspace, actor, analysis_id)
+            + self.inspect_transaction_reviews(workspace, actor, analysis_id)}
         for run in workspace.analyses:
             result = run.get('governed_result') or {}
             if result.get('attention_analysis_id') != analysis_id:
@@ -13128,6 +13332,7 @@ class CaseWorkspaceStore:
             'professional_review': {'narrative', 'focus_id', 'subject', 'representation_class', 'current_resolution',
                 'required_resolution', 'project_phase', 'discipline', 'next_evidence_id', 'next_class', 'participation_expectation'},
             'professional_presentation': {'review_id'},
+            'transaction_review': {'transaction_claim_id', 'query_date'},
         }
         if set(inputs) - common - fields[action]:
             raise CaseWorkspaceError('Unsupported procedure parameters cannot be retained.')
@@ -13289,6 +13494,7 @@ class CaseWorkspaceStore:
         recommended_next_check: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
         structured_proposition: Optional[dict] = None,
+        event_proposition: Optional[dict] = None,
     ) -> dict:
         """
         Section 9 ("no citation laundering"), enforced structurally, not
@@ -13361,6 +13567,15 @@ class CaseWorkspaceStore:
                     or (origin.get('governed_result') or {}).get('evaluation_only')) and not structured_proposition['evaluation_only']:
                 raise CaseWorkspaceError('The originating evaluation analysis cannot become project authority.')
 
+        if event_proposition is not None:
+            if structured_proposition is not None:
+                raise CaseWorkspaceError('Keep independently reviewable normalized and event propositions separate.')
+            self._validate_event_proposition(workspace, event_proposition, evidence_links)
+            origin = self._find(workspace.analyses, step.get('analysis_id')) or {}
+            if ((origin.get('attention_scope') or {}).get('evaluation_only')
+                    or (origin.get('governed_result') or {}).get('evaluation_only')) and not event_proposition['evaluation_only']:
+                raise CaseWorkspaceError('The originating evaluation analysis cannot become transaction authority.')
+
         claim = Claim(
             id=_new_id(),
             project_id=workspace.project_id,
@@ -13378,6 +13593,7 @@ class CaseWorkspaceStore:
             assumptions=assumptions or [],
             recommended_next_check=recommended_next_check,
             structured_proposition=deepcopy(structured_proposition),
+            event_proposition=deepcopy(event_proposition),
             runtime_trace_id=current_reference(),
         )
         workspace.claims.append(asdict(claim))
@@ -15187,6 +15403,180 @@ class CaseWorkspaceStore:
 
     # -- reviewer validation --------------------------------------------------------
 
+    def _proposition_review_snapshot(self, workspace, claim, additional_ids=()):
+        """Bind an existing review to exactly the retained proposition and sources."""
+        if claim.get('event_proposition'):
+            self._validate_event_proposition(workspace, claim['event_proposition'], claim['evidence_links'])
+        elif claim.get('structured_proposition'):
+            self._validate_structured_proposition(workspace, claim['structured_proposition'],
+                claim['evidence_links'], check_normalization=False)
+        else:
+            raise CaseWorkspaceError('Scoped verification requires a source-anchored typed Claim.')
+        identifiers = sorted(set(additional_ids) | {link['object_id'] for link in claim['evidence_links']
+                                                  if link['object_type'] == 'evidence_item'})
+        if len(identifiers) > 32:
+            raise CaseWorkspaceError('Narrow this review to at most 32 retained observations.')
+        fingerprints = []
+        for identifier in identifiers:
+            evidence = self.get_evidence_item(workspace, identifier)
+            source = self._find(workspace.sources, (evidence or {}).get('source_id'))
+            if (not evidence or evidence.get('project_id') != workspace.project_id or not source
+                    or source.get('project_id') != workspace.project_id or source.get('removed_at')):
+                raise CaseWorkspaceError('A review citation is outside the available project evidence.')
+            fingerprints.append(dict(evidence_item_id=identifier, source_id=source['id'],
+                content_sha256=hashlib.sha256((evidence.get('content') or '').encode()).hexdigest(),
+                source_file_hash=source.get('file_hash')))
+        return dict(claim_sha256=hashlib.sha256(json.dumps(claim, sort_keys=True, allow_nan=False).encode()).hexdigest(),
+                    evidence_fingerprints=fingerprints)
+
+    def _prepare_proposition_review(self, workspace, finding_id, proposal, reviewer):
+        """Record explicit human verification dimensions within ReviewerValidation.
+
+        This does not apply the Finding, change the original machine proposal,
+        or grant authority to an unrelated consumer such as IFC or geometry.
+        """
+        from datetime import date
+        from services.cross_modal_investigation import PROPOSITION_REVIEW_CHECKS, PROPOSITION_REVIEW_STATES
+        keys = {'claim_id', 'checks', 'evidence_tier', 'valid_from', 'valid_until', 'reason', 'attribution'}
+        if not isinstance(proposal, dict) or set(proposal) != keys or proposal['attribution'] != 'human_reviewed':
+            raise CaseWorkspaceError('Scoped verification requires an explicit, attributed human review.')
+        if not isinstance(reviewer, str) or not reviewer.strip():
+            raise CaseWorkspaceError('A scoped review must identify its actual reviewer.')
+        claim = self.get_claim(workspace, proposal['claim_id'])
+        if not claim or claim.get('finding_id') != finding_id:
+            raise CaseWorkspaceError('The review must address the Finding adopted from this exact Claim.')
+        if self.resolve_claim_status(workspace, claim['id'])['status'] != CLAIM_ADOPTION_ACCEPTED_AS_FINDING:
+            raise CaseWorkspaceError('A rejected, disputed or superseded proposition cannot acquire scoped verification.')
+        finding = self._find(workspace.findings, finding_id)
+        if not finding or finding['case_id'] not in {c['id'] for c in self.visible_cases_for(workspace, reviewer)}:
+            raise CaseWorkspaceError('The proposition review Case is not visible to this reviewer.')
+        if len(self.visible_cases_for(workspace, reviewer)) != len(workspace.cases):
+            raise CaseWorkspaceError('Scoped proposition review requires a fully visible project evidence set.')
+        if (type(proposal['evidence_tier']) is not int or not 0 <= proposal['evidence_tier'] <= 4
+                or not isinstance(proposal['reason'], str) or not proposal['reason'].strip()
+                or len(proposal['reason']) > 4000):
+            raise CaseWorkspaceError('State the reviewed source tier and its evidence-based reason.')
+        checks = proposal['checks']
+        if not isinstance(checks, dict) or set(checks) != set(PROPOSITION_REVIEW_CHECKS):
+            raise CaseWorkspaceError('Reading, binding, applicability, authenticity and authority require separate review states.')
+        identifiers = set()
+        for check in checks.values():
+            if (not isinstance(check, dict) or set(check) != {'state', 'reason', 'evidence_ids'}
+                    or check['state'] not in PROPOSITION_REVIEW_STATES
+                    or not isinstance(check['reason'], str) or not check['reason'].strip() or len(check['reason']) > 2000
+                    or not isinstance(check['evidence_ids'], list) or len(check['evidence_ids']) > 16
+                    or any(not isinstance(i, str) or not i for i in check['evidence_ids'])):
+                raise CaseWorkspaceError('Each review dimension needs a state, reason and bounded evidence references.')
+            if check['state'] == 'ESTABLISHED' and not check['evidence_ids']:
+                raise CaseWorkspaceError('A positive review dimension requires cited evidence.')
+            identifiers.update(check['evidence_ids'])
+        dates = {}
+        for key in ('valid_from', 'valid_until'):
+            value = proposal[key]
+            if value is not None:
+                try:
+                    if not isinstance(value, str) or len(value) != 10:
+                        raise ValueError()
+                    dates[key] = date.fromisoformat(value)
+                except ValueError:
+                    raise CaseWorkspaceError('Review applicability dates must be ISO dates or explicitly absent.') from None
+        if ('valid_until' in dates and 'valid_from' not in dates
+                or len(dates) == 2 and dates['valid_until'] < dates['valid_from']):
+            raise CaseWorkspaceError('Supply a coherent reviewed applicability interval.')
+        return dict(deepcopy(proposal), reviewer=reviewer,
+            scope_fingerprint=self._proposition_review_snapshot(workspace, claim, identifiers),
+            qualification='Scoped human review only. Disposition and Apply remain separate; no geometry or unrelated authority is granted.')
+
+    @observed
+    def admit_reviewed_proposition(self, workspace, claim_id, *, query_date=None, historical=False, allowed_root=None):
+        """Read the existing review / disposition / Apply chain for this exact Claim.
+
+        Historical source occurrence can remain supported when a source ceases to
+        be current. That does not establish present transaction applicability.
+        Superseded or corrected Claims themselves remain withheld from admission.
+        """
+        from datetime import date
+        from services.cross_modal_investigation import PROPOSITION_REVIEW_CHECKS
+        result = dict(claim_id=claim_id, state='UNRESOLVED', admissible=False,
+            authority='NOT_ESTABLISHED', evidence_tier=None, evaluation_only=False,
+            review_history_intact=False, errors=[], admissions=[], historical=historical,
+            current_applicability='UNRESOLVED', qualification='Admission is confined to this reviewed proposition; it grants no geometry or external-action authority.')
+        if type(historical) is not bool:
+            return dict(result, state='REFUSED', errors=['EXPLICIT_TEMPORAL_USE_REQUIRED'])
+        claim = self.get_claim(workspace, claim_id)
+        if not claim or claim.get('project_id') != workspace.project_id:
+            return dict(result, errors=['CLAIM_UNAVAILABLE'])
+        payload = claim.get('event_proposition') or claim.get('structured_proposition') or {}
+        result['evaluation_only'] = bool(payload.get('evaluation_only'))
+        finding = self._find(workspace.findings, claim.get('finding_id')) or {}
+        review = self.latest_reviewer_validation(workspace, finding.get('id')) or {}
+        scope = review.get('proposition_review') or {}
+        result.update(review_id=review.get('id'), finding_id=finding.get('id'),
+            claim_status=self.resolve_claim_status(workspace, claim_id))
+        if scope.get('claim_id') != claim_id or review.get('validation') != 'Correct':
+            return dict(result, errors=['SCOPED_HUMAN_REVIEW_NOT_ESTABLISHED'])
+        if (not isinstance(scope.get('checks'), dict) or set(scope['checks']) != set(PROPOSITION_REVIEW_CHECKS)
+                or type(scope.get('evidence_tier')) is not int or not 0 <= scope['evidence_tier'] <= 4
+                or any(not isinstance(check, dict) or set(check) != {'state', 'reason', 'evidence_ids'}
+                       or not isinstance(check['evidence_ids'], list) or not check['evidence_ids']
+                       or any(not isinstance(i, str) for i in check['evidence_ids'])
+                       for check in scope['checks'].values())):
+            return dict(result, errors=['SCOPED_REVIEW_RECORD_INCOMPLETE'])
+        identifiers = {i for check in scope['checks'].values() for i in check['evidence_ids']}
+        try:
+            snapshot = self._proposition_review_snapshot(workspace, claim, identifiers)
+        except CaseWorkspaceError:
+            return dict(result, errors=['REVIEW_PREMISES_CHANGED'])
+        if snapshot != scope.get('scope_fingerprint'):
+            return dict(result, errors=['REVIEW_PREMISES_CHANGED'])
+        result['review_history_intact'] = True
+        if result['claim_status']['status'] != CLAIM_ADOPTION_ACCEPTED_AS_FINDING:
+            result['errors'].append('CLAIM_NOT_CURRENTLY_ADMISSIBLE')
+        for key, check in scope['checks'].items():
+            if check['state'] != 'ESTABLISHED':
+                result['errors'].append(key + '_' + check['state'])
+        if (finding.get('claim_status') != FINDING_STATUS_APPLIED
+                or (self.latest_disposition(workspace, finding.get('id')) or {}).get('disposition') != 'Confirmed'
+                or not any(finding.get('id') in row['finding_ids'] for row in workspace.applies)):
+            result['errors'].append('EXPLICIT_APPLY_NOT_ESTABLISHED')
+        from services.document_examination import review_source_bytes
+        seen_sources = set()
+        for fingerprint in snapshot['evidence_fingerprints']:
+            admission = self.admit_proposition(workspace, fingerprint['evidence_item_id'])
+            result['admissions'].append(admission)
+            result['evaluation_only'] |= admission.get('evaluation_only', False)
+            if admission['state'] in ('CONTESTED', 'REFUSED'):
+                result['errors'].append('SOURCE_' + admission['state'])
+            if not historical and admission.get('currentness', {}).get('status') != 'current':
+                result['errors'].append('SOURCE_CURRENTNESS_UNRESOLVED')
+            if fingerprint['source_id'] not in seen_sources:
+                seen_sources.add(fingerprint['source_id'])
+                try:
+                    if not re.fullmatch(r'[a-fA-F0-9]{64}', fingerprint.get('source_file_hash') or ''):
+                        raise ValueError('No immutable source fingerprint')
+                    review_source_bytes(self, workspace, fingerprint['source_id'], allowed_root=allowed_root)
+                except (ValueError, OSError):
+                    result['errors'].append('IMMUTABLE_SOURCE_UNAVAILABLE')
+        try:
+            query = date.fromisoformat(query_date) if query_date else None
+            start = date.fromisoformat(scope.get('valid_from'))
+            end = date.fromisoformat(scope.get('valid_until') or scope.get('valid_from'))
+            if query is not None and start <= query <= end:
+                result['current_applicability'] = 'ESTABLISHED'
+        except (ValueError, TypeError):
+            pass
+        if not historical and result['current_applicability'] != 'ESTABLISHED':
+            result['errors'].append('TEMPORAL_APPLICABILITY_UNRESOLVED')
+        if result['evaluation_only']:
+            result['errors'].append('EVALUATION_INPUT_NOT_PROJECT_AUTHORITY')
+        result['errors'] = list(dict.fromkeys(result['errors']))
+        if not result['errors']:
+            result.update(state='ESTABLISHED', admissible=True, authority='REVIEWED_APPLIED_PROPOSITION',
+                evidence_tier=scope['evidence_tier'], provenance=dict(claim_id=claim_id, review_id=review['id'],
+                    finding_id=finding['id'], apply_ids=[r['id'] for r in workspace.applies if finding['id'] in r['finding_ids']],
+                    evidence_fingerprints=deepcopy(snapshot['evidence_fingerprints'])))
+        return result
+
     def record_reviewer_validation(
         self,
         workspace: ProjectWorkspace,
@@ -15195,6 +15585,7 @@ class CaseWorkspaceStore:
         reviewer: str,
         correction_note: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
+        proposition_review: Optional[dict] = None,
     ) -> dict:
         if validation not in REVIEWER_VALIDATION_STATES:
             raise CaseWorkspaceError(
@@ -15215,6 +15606,9 @@ class CaseWorkspaceStore:
 
         self._require_case_not_archived(workspace, finding["case_id"])
 
+        if proposition_review is not None:
+            proposition_review = self._prepare_proposition_review(workspace, finding_id, proposition_review, reviewer)
+
         record = ReviewerValidation(
             id=_new_id(),
             finding_id=finding_id,
@@ -15222,6 +15616,7 @@ class CaseWorkspaceStore:
             reviewer=reviewer,
             validated_at=_now(),
             correction_note=correction_note,
+            proposition_review=proposition_review,
         )
         workspace.reviewer_validations.append(asdict(record))
         # Recording a Reviewer Validation is not a Disposition and never
@@ -15355,6 +15750,20 @@ class CaseWorkspaceStore:
             finding = self._find(workspace.findings, finding_id)
             if finding is None:
                 raise CaseWorkspaceError(f"Finding {finding_id} was not found.")
+
+            for claim in workspace.claims:
+                if claim.get('finding_id') != finding_id:
+                    continue
+                typed = claim.get('event_proposition') or claim.get('structured_proposition')
+                if typed and (typed.get('evaluation_only') or any(
+                        self.admit_proposition(workspace, link['object_id']).get('evaluation_only')
+                        for link in claim['evidence_links'] if link['object_type'] == 'evidence_item')):
+                    raise CaseWorkspaceError('Evaluation propositions cannot be applied as canonical project knowledge.')
+                if typed:
+                    admission = self.admit_reviewed_proposition(workspace, claim['id'], historical=True)
+                    blocking = set(admission['errors']) - {'EXPLICIT_APPLY_NOT_ESTABLISHED'}
+                    if blocking:
+                        raise CaseWorkspaceError('Scoped proposition verification is incomplete: ' + ', '.join(sorted(blocking)))
 
             latest = self.latest_disposition(workspace, finding_id)
             if latest is None or latest["disposition"] != "Confirmed":

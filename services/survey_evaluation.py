@@ -92,6 +92,12 @@ MATCHING_GAMES = {
     'matching:additive-unresolved': dict(title='Partial amounts cannot combine without a supporting basis', matching='additive_unresolved'),
 }
 CASES.update({key: value['title'] for key, value in MATCHING_GAMES.items()})
+TRANSACTION_GAMES = {
+    'transaction:unverified-signing': dict(title='Proposed signing does not establish execution or current authority', transaction='signing'),
+    'transaction:debt-not-jv': dict(title='A debt facility is not an equity JV', transaction='debt'),
+    'transaction:out-of-order': dict(title='Close discovered first preserves occurrence chronology and missing authority', transaction='out_of_order'),
+}
+CASES.update({key:value['title'] for key,value in TRANSACTION_GAMES.items()})
 CASES.update({"control:"+key:"Rule 7 control: "+key+" / "+value["category"] for key,value in CONTROLS.items()})
 H_CASES = {"homography", "no-h", "singular", "ill-conditioned", "infinity", "space-mismatch", "projective"}
 UNIMPLEMENTED = ["Automatic control-point extraction and professional/legal certification"]
@@ -217,7 +223,7 @@ def _source_pdf(path, case):
 def create(app, case, actor, matrix_text=""):
     if case not in CASES:
         raise ValueError("Unknown evaluation case")
-    if case in REVIEW_GAMES or case in MATCHING_GAMES:
+    if case in REVIEW_GAMES or case in MATCHING_GAMES or case in TRANSACTION_GAMES:
         return _create_review_game(app, case, actor)
     if matrix_text and len(matrix_text)>2000:
         raise ValueError("Transform input too large")
@@ -319,7 +325,7 @@ def _create_review_game(app, case, actor):
     the fixture or an alternative evaluator. Review premises remain evaluation-only.
     """
     import pymupdf
-    spec = (REVIEW_GAMES | MATCHING_GAMES)[case]
+    spec = (REVIEW_GAMES | MATCHING_GAMES | TRANSACTION_GAMES)[case]
     run_id = uuid.uuid4().hex
     path = root(app) / run_id
     path.mkdir(parents=True)
@@ -351,6 +357,11 @@ def _create_review_game(app, case, actor):
             + '; geography EVAL_REGION. Hypothetical candidate A offers EQUITY role coverage; candidate B offers DEBT role coverage. '
             + ('Historical activity only; no current mandate supplied.' if spec['matching'] == 'historical'
                else 'Declared hypothetical interval 2026-01-01 to 2027-01-01. This is not verified investor information.')]
+    if spec.get('transaction'):
+        condition_text = ['EVALUATION_INPUT: fictional transaction EVAL-AGREEMENT-A; project EVAL-PROJECT phase A; '
+            'parties EVAL-PARTY-A and EVAL-PARTY-B. No human verification, executed instrument or current authority is supplied.']
+        other_text = ['EVALUATION_INPUT: proposed signing occurred 2024-01-01, proposed execution 2024-02-01, '
+            'proposed close 2024-03-01. Discovery order does not establish event order. All assertions remain hypothetical.']
     evidence = []
     with isolated(app, path):
         for number, lines in enumerate((condition_text, other_text)):
@@ -389,7 +400,9 @@ def _create_review_game(app, case, actor):
                 representation = store.record_review_representation(workspace, actor, attention['id'], condition['id'],
                     evidence[1][0]['id'], 'structural', 'WALL_SECTION', 'ASSEMBLY_LAYERS', reason)
                 store.review_coverage_record(workspace, actor, attention['id'], representation['id'], 'resolve_representation', reason)
-        if spec.get('matching'):
+        if spec.get('transaction'):
+            analysis = _transaction_game_inputs(store, workspace, actor, attention['id'], evidence, spec['transaction'], reason)
+        elif spec.get('matching'):
             analysis = _matching_game_inputs(store, workspace, actor, attention['id'], evidence, spec['matching'], reason)
         elif spec.get('constraints'):
             constraints = [dict(id=f'constraint-{index}', subject=subject, parameter='opening_width', unit='mm',
@@ -405,6 +418,36 @@ def _create_review_game(app, case, actor):
         record['analysis_id'] = analysis['id']
     _save(path, record)
     return run_id
+
+
+def _transaction_game_inputs(store, workspace, actor, attention_id, evidence, variant, reason):
+    """Declared fictional source inputs; no reviewer or authority is fabricated."""
+    from copy import deepcopy
+    parties = [store.record_review_subject(workspace, actor, attention_id, 'EVAL-PARTY-'+name, 'investor') for name in ('A','B')]
+    identity = dict(project=dict(name='EVAL-PROJECT', phase='A', location='EVAL-REGION', sponsor='EVAL-SPONSOR',
+        project_type='EVAL-ASSET', opportunity_reference='EVAL-OPPORTUNITY'),
+        participants=[dict(participant_id=p['id'], legal_name=p['name'], jurisdiction='EVAL-JURISDICTION',
+            registration_id='EVAL-REG-'+str(i), role='Lender' if variant == 'debt' else 'Equity participant',
+            identity_relation='EXACT_ENTITY') for i,p in enumerate(parties)],
+        transaction_class='TERM_LOAN' if variant == 'debt' else 'EQUITY_JV',
+        transaction_reference='EVAL-AGREEMENT-A', economic_scope='EVALUATION_INPUT scope',
+        joint_structure='NOT_JV' if variant == 'debt' else 'JOINT_EQUITY')
+    base = dict(kind='TRANSACTION_IDENTITY', transaction_claim_id=None, identity=identity, event_dimension=None,
+        asserted_state='ESTABLISHED', occurred_at='2024-01-01', effective_from='2024-01-01', effective_until='2024-12-31',
+        discovered_at='2026-09-20', component_scope='FULL_TRANSACTION', component_key='', related_claim_ids=[],
+        replaces_claim_ids=[], continuity='UNRESOLVED', conditions=[], facets=dict.fromkeys(
+            ('explicit_signing','legal_effectiveness','financial_close','execution_conditions_complete',
+             'closing_conditions_complete','express_current_confirmation'), 'UNRESOLVED'))
+    def propose(data, item):
+        return store.record_event_proposition(workspace, actor, attention_id, data, [item['id']],
+            'PROJECT_DOCUMENT', 0, item['content'], reason, attribution='agent_assessment')
+    root_claim = propose(base, evidence[0][0])
+    dimensions = [('FINANCIALLY_CLOSED','2024-03-01'),('SIGNED','2024-01-01'),('EXECUTED','2024-02-01')] if variant == 'out_of_order' else [('SIGNED','2024-01-01')]
+    for dimension, occurred in dimensions:
+        data = deepcopy(base)
+        data.update(kind='TRANSACTION_EVENT', transaction_claim_id=root_claim['id'], event_dimension=dimension, occurred_at=occurred)
+        propose(data, evidence[1][0])
+    return store.run_transaction_review(workspace, actor, attention_id, root_claim['id'], '2024-06-01', reason)
 
 
 def _matching_game_inputs(store, workspace, actor, attention_id, evidence, variant, reason):

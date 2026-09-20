@@ -4343,7 +4343,8 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     from services.runtime_observation import event
     from services.cross_modal_investigation import (
         PROFESSIONAL_NARRATIVES, PROPOSITION_SOURCE_CLASSES, PROPOSITION_TEMPORAL_CLASSES,
-        MATCHING_CONTEXTS, DECLARED_CURRENT_TEMPORAL_CLASSES)
+        MATCHING_CONTEXTS, DECLARED_CURRENT_TEMPORAL_CLASSES, TRANSACTION_CLASSES,
+        TRANSACTION_EVENT_DIMENSIONS, TRANSACTION_COMPONENTS)
     from services.capability_registry import REVIEW_WORK_PROCEDURES
     actor = session.get('username')
     if len(store.visible_cases_for(workspace, actor)) != len(workspace.cases):
@@ -4458,6 +4459,48 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                     store.run_information_comparison(workspace, actor, form.get('analysis_id'),
                         *premises, form.get('operator'), form.get('reason', ''), allowed_root=evaluation_path)
                     analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'adopt_transaction_finding':
+                    if form.get('attribution') != 'human_reviewed':
+                        raise CaseWorkspaceError('A human must explicitly choose to submit this interpretation for review.')
+                    claim = store.get_claim(workspace, form.get('claim_id')) or {}
+                    if not claim.get('event_proposition'):
+                        raise CaseWorkspaceError('Select an existing transaction interpretation.')
+                    store.accept_claim_as_finding(workspace, claim['id'], actor, form.get('case_id'),
+                        reason=form.get('reason'), governance_log=get_governance_log(current_app))
+                    analysis = {'id':form['analysis_id']}
+                elif form.get('action') == 'transaction_proposition':
+                    participant_ids = form.getlist('party_id')
+                    identity = dict(project={key:form.get('project_'+key, '') for key in
+                        ('name','phase','location','sponsor','project_type','opportunity_reference')},
+                        participants=[dict(participant_id=identifier, **{key:form.get('party_'+identifier+'_'+key, '')
+                            for key in ('legal_name','jurisdiction','registration_id','role','identity_relation')}) for identifier in participant_ids],
+                        **{key:form.get(key, '') for key in ('transaction_class','transaction_reference','economic_scope','joint_structure')})
+                    root_id = form.get('transaction_claim_id') or None
+                    data = dict(kind='TRANSACTION_EVENT' if root_id else 'TRANSACTION_IDENTITY',
+                        transaction_claim_id=root_id, identity=identity,
+                        event_dimension=form.get('event_dimension') if root_id else None,
+                        asserted_state=form.get('asserted_state'),
+                        **{key:form.get(key) or None for key in ('occurred_at','effective_from','effective_until','discovered_at')},
+                        component_scope=form.get('component_scope'), component_key=form.get('component_key',''),
+                        related_claim_ids=form.getlist('related_claim_id'), replaces_claim_ids=form.getlist('replaces_claim_id'),
+                        continuity=form.get('continuity'), facets={key:form.get(key, 'UNRESOLVED') for key in
+                            ('explicit_signing','legal_effectiveness','financial_close','execution_conditions_complete',
+                             'closing_conditions_complete','express_current_confirmation')},
+                        conditions=[dict(key=form.get('condition_'+str(i)+'_key'),
+                            outcome=form.get('condition_'+str(i)+'_outcome'),
+                            blocking_for=form.get('condition_'+str(i)+'_blocking_for'),
+                            evidence_ids=form.getlist('condition_'+str(i)+'_evidence_id')) for i in range(8)
+                            if form.get('condition_'+str(i)+'_key')])
+                    if form.get('relationship_type'):
+                        data['relationship_type'] = form['relationship_type']
+                    store.record_event_proposition(workspace, actor, form.get('analysis_id'), data,
+                        form.getlist('evidence_id'), form.get('source_class'), int(form.get('evidence_tier','0')),
+                        form.get('original_quote',''), form.get('reason',''), attribution=form.get('attribution'))
+                    analysis = {'id':form['analysis_id']}
+                elif form.get('action') == 'transaction_review':
+                    store.run_transaction_review(workspace, actor, form.get('analysis_id'),
+                        form.get('transaction_claim_id'), form.get('query_date'), form.get('reason', ''))
+                    analysis = {'id': form['analysis_id']}
                 elif form.get('action') == 'constraint_review':
                     constraints = [dict(id='constraint-' + str(index), subject=form.get('subject', ''),
                         parameter=form.get('parameter', ''), unit=form.get('unit', ''),
@@ -4557,6 +4600,12 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
         subject_propositions=propositions, selected_proposition=selected_proposition,
         work_plans=work_plans,
+        transaction_identities=[c for c in workspace.claims if
+            ((c.get('event_proposition') or {}).get('data') or {}).get('kind') == 'TRANSACTION_IDENTITY'],
+        transaction_reviews=store.inspect_transaction_reviews(workspace, actor, analysis['id']) if analysis else [],
+        transaction_classes=TRANSACTION_CLASSES, transaction_event_dimensions=TRANSACTION_EVENT_DIMENSIONS,
+        transaction_components=TRANSACTION_COMPONENTS,
+        transaction_claims=[c for c in workspace.claims if c.get('event_proposition')],
         work_procedure_actions=list(REVIEW_WORK_PROCEDURES),
         presentation_report=presentation_report,
         report_filter=request.args.get('filter', 'all') if request.args.get('filter', 'all') in ('all','material','unresolved','conflicts','changes','evidence','technical') else 'all',

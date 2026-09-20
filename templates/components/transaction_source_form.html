@@ -1,0 +1,42 @@
+<details><summary>Record a source-anchored identity or event</summary>
+<p>This records an interpretation. Source classification and asserted dates do not verify it. Review, disposition and Apply remain separate.</p>
+<form method="post" action="{{ attention_url }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="transaction_proposition"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+<label>Identity or event <select name="transaction_claim_id"><option value="">New transaction identity</option>{% for claim in transaction_identities %}<option value="{{ claim.id }}">Event for {{ claim.event_proposition.data.identity.transaction_reference }} · {{ claim.event_proposition.data.identity.project.name }}</option>{% endfor %}</select></label>
+<fieldset><legend>Source-stated project and transaction scope</legend>
+{% for key,label in [('name','Project name'),('phase','Project phase'),('location','Location'),('sponsor','Sponsor / owner'),('project_type','Project type'),('opportunity_reference','Opportunity reference')] %}<label>{{ label }} <input name="project_{{ key }}" maxlength="500"></label>{% endfor %}
+<label>Transaction class <select name="transaction_class">{% for value in transaction_classes|reverse %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Agreement / facility reference <input name="transaction_reference" maxlength="1000"></label>
+<label>Economic / legal scope <input name="economic_scope" maxlength="1000"></label>
+<label>Joint structure <select name="joint_structure">{% for value in ['UNRESOLVED','JOINT_EQUITY','CONTRACTUAL_JV','NOT_JV'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+</fieldset>
+<details><summary>Select parties and their source-stated legal identities</summary>
+{% for party in workspace.participants %}<fieldset><legend><label><input type="checkbox" name="party_id" value="{{ party.id }}">{{ party.name }}</label></legend>
+{% for key,label in [('legal_name','Legal name'),('jurisdiction','Jurisdiction'),('registration_id','Registration identifier'),('role','Transaction role')] %}<label>{{ label }} <input name="party_{{ party.id }}_{{ key }}" maxlength="500"></label>{% endfor %}
+<label>Source interpretation <select name="party_{{ party.id }}_identity_relation">{% for value in ['AMBIGUOUS_ENTITY','EXACT_ENTITY','QUALIFIED_ENTITY','PARENT_CHILD_LINKED','IDENTITY_CONFLICT'] %}<option>{{ value }}</option>{% endfor %}</select></label></fieldset>
+{% else %}<p>Create a subject reference above before recording a participant.</p>{% endfor %}</details>
+<fieldset><legend>Event assertion and occurrence</legend>
+<label>Event (ignored for a new identity) <select name="event_dimension">{% for value in transaction_event_dimensions %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Source-stated event state <select name="asserted_state">{% for value in ['UNRESOLVED','ESTABLISHED','CONFLICTING','NOT_OCCURRED','NOT_ESTABLISHED'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+{% for key,label in [('occurred_at','Occurred on'),('effective_from','Applicable from'),('effective_until','Applicable until'),('discovered_at','Discovered on')] %}<label>{{ label }} <input type="date" name="{{ key }}"></label>{% endfor %}
+<label>Affected scope <select name="component_scope">{% for value in transaction_components %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Component / tranche identifier <input name="component_key" maxlength="200"></label>
+<label>Transaction continuity <select name="continuity">{% for value in ['UNRESOLVED','CONTINUES','NEW_TRANSACTION'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+</fieldset>
+<details><summary>Event-specific premises and conditions</summary>
+{% for key in ['explicit_signing','legal_effectiveness','financial_close','execution_conditions_complete','closing_conditions_complete','express_current_confirmation'] %}<label>{{ key|replace('_',' ')|capitalize }} <select name="{{ key }}">{% for value in ['UNRESOLVED','ESTABLISHED','NOT_ESTABLISHED'] %}<option>{{ value }}</option>{% endfor %}</select></label>{% endfor %}
+{% for i in range(8) %}<fieldset><legend>Condition {{ i+1 }} (optional)</legend><label>Condition identifier <input name="condition_{{ i }}_key" maxlength="200"></label>
+<label>Outcome <select name="condition_{{ i }}_outcome">{% for value in ['UNRESOLVED','SATISFIED','FAILED','WAIVED'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Blocks <select name="condition_{{ i }}_blocking_for">{% for value in ['EXECUTED','FINANCIALLY_CLOSED','NON_BLOCKING'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Condition evidence <select name="condition_{{ i }}_evidence_id" multiple>{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}">{{ item.evidence_item_id }}</option>{% endfor %}</select></label></fieldset>{% endfor %}
+</details>
+<details><summary>Explicit event relationships</summary>
+<label>Financing relationship <select name="relationship_type"><option value="">Not specified</option>{% for value in ['REFINANCES','PARTIALLY_REFINANCES','REPLACES_FACILITY','ADDS_TRANCHE','EXTENDS_MATURITY'] %}<option>{{ value }}</option>{% endfor %}</select></label>
+{% for key,label in [('related_claim_id','Related event / successor'),('replaces_claim_id','Corrected or replaced event')] %}<label>{{ label }} <select name="{{ key }}" multiple>{% for claim in transaction_claims %}<option value="{{ claim.id }}">{{ claim.event_proposition.data.event_dimension or 'Identity' }} · {{ claim.event_proposition.data.identity.transaction_reference }} · {{ claim.id }}</option>{% endfor %}</select></label>{% endfor %}</details>
+<label>Cited source observations <select name="evidence_id" multiple required>{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}">{{ item.evidence_item_id }} · {{ item.source_id }}</option>{% endfor %}</select></label>
+<label>Exact quote <textarea name="original_quote" required maxlength="8000"></textarea></label>
+<label>Proposed source class <select name="source_class">{% for value in proposition_source_classes %}<option>{{ value }}</option>{% endfor %}</select></label>
+<label>Proposed evidence tier <select name="evidence_tier">{% for number,label in [(0,'Discovery only'),(1,'Secondary corroboration'),(2,'Authoritative disclosure'),(3,'Transaction document'),(4,'Effectiveness / close proof')] %}<option value="{{ number }}">{{ number }} · {{ label }}</option>{% endfor %}</select></label>
+<label>Interpretation reason <textarea name="reason" required maxlength="2000"></textarea></label>
+<label>Interpretation origin <select name="attribution" required><option value="">Choose origin</option><option value="human_reviewed">I have reviewed this source interpretation</option><option value="agent_assessment">Machine-assisted interpretation</option></select></label>
+<button>Record source interpretation</button></form></details>

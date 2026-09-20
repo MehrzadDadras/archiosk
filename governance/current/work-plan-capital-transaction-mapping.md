@@ -38,3 +38,36 @@ their different meanings and the unaffected component scopes.
 Raw-source admission currently returns reference-level qualification. The new
 transaction work must earn any stronger scoped state through explicit admissible
 evidence and the existing review owners. This mapping does not grant that state.
+
+## Transaction extension under qualification
+
+`Claim.event_proposition` retains a typed source interpretation, exact quote,
+source/evidence fingerprints, project/party/transaction scope, occurrence and
+discovery dates, and explicit dependency references. Its existence confers no
+event authority. `ReviewerValidation.proposition_review` records separate human
+checks for reading, binding, applicability, authenticity and event authority.
+The existing Finding Disposition and Apply remain separate. Evaluation Claims
+cannot enter canonical Apply. Raw-source, geometry and IFC admission are unchanged.
+
+`resolve_transaction_identity` and `investigate_transaction_history` extend
+`cross_modal_investigation`. The workspace persists their output as an ordinary
+AnalysisRun; GET inspection only reads that result and detects changed premises.
+Missing current applicability does not erase historical maturity. Explicit
+corrections, waivers and successor links retain predecessor Claims. Financing
+relationships remain distinct from equity and partnership confirmation.
+
+The real attention dispatcher exposes transaction source entry and review,
+declares its existing Governed Work Plan, and renders the retained result using
+the existing report projection. Scoped human verification is exposed through the
+existing Finding validation form; it does not implicitly Apply anything.
+Controlled transaction games use the existing Survey Evaluation registry and
+EVALUATION_INPUT source boundary. They never fabricate human reviews.
+
+Qualification includes `test_transaction_propositions`,
+`test_scoped_proposition_review`, `test_transaction_identity`,
+`test_transaction_history`, `test_transaction_scoped_lifecycle`, and
+`test_transaction_review_surface`. The existing browser verifier's
+`--transaction-games` mode exercises actual forms, invocation and read-only Reload.
+Local browser proof is not authenticated production proof. Component configuration
+amendments and the remaining programme work must be qualified before claiming
+complete master-directive coverage.
