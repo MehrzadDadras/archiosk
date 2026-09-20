@@ -79,6 +79,11 @@ def main():
             page.get_by_role('link',name='Review source frame, anchored machine readings and unresolved stages').click()
             page.wait_for_load_state('domcontentloaded')
             proof['review_path']=urlparse(page.url).path
+            page.select_option('select[name="view_action"]', 'MIRROR_HORIZONTAL')
+            page.locator('form').filter(has=page.locator('select[name="view_action"]')).locator('input[name="reason"]').fill('EVALUATION_INPUT: inspect a mirrored working representation without changing the source.')
+            page.get_by_role('button',name='Create working view',exact=True).click()
+            assert page.get_by_alt_text('Derived working view; original pixels transformed').count() == 1
+            proof['working_view_created_through_ui'] = True
             page.get_by_role('button',name='Select four corners on original').click()
             image=page.locator('#review-original')
             box=image.bounding_box()
@@ -120,10 +125,28 @@ def main():
             page.get_by_role('button',name='Re-evaluate reviewed source',exact=True).click()
             proof['reload_preserves_visible_state']=True
             proof['accept_explicit_reevaluate_revert']=True
+            run=proof['evaluation_path'].rsplit('/',1)[1]
+            page.goto(base+f'/admin/survey-evaluation/{run}/attention')
+            page.fill('input[name="objective"]', 'Inspect sheet identity and retained source readings')
+            page.locator('input[name="included_id"]').first.check()
+            page.locator('input[name="included_id"]').nth(1).check()
+            page.get_by_role('button', name='Set attention', exact=True).click()
+            assert 'Persisted attention: SCOPED' in page.locator('body').inner_text()
+            scope_text=page.locator('section').first.inner_text()
+            page.get_by_role('link', name='Reload', exact=True).click()
+            assert page.locator('section').first.inner_text() == scope_text
+            proof['attention_invoked_and_reload_preserved_scope']=True
+            choices=page.locator('select[name="to_id"] option').evaluate_all('nodes => nodes.map(n => n.value)')
+            page.select_option('select[name="to_id"]', choices[1])
+            page.fill('input[name="hypothesis"]', 'Possible related sheet readings')
+            page.fill('input[name="reason"]', 'EVALUATION_INPUT: inspect a bounded hypothesis without promoting source authority.')
+            page.get_by_role('button', name='Add temporary relationship', exact=True).click()
+            assert 'TEMPORARY · Possible related sheet readings' in page.locator('body').inner_text()
+            proof['temporary_relationship_invoked_through_ui']=True
             if args.live:
-                page.goto(base+'/projects/9c00eeec-4e65-4bde-bcea-de8b09c8beb1/sources/c590314b-f7b7-491a-addc-e2217ec92da9/review')
-                assert page.get_by_role('heading',name='Source review:',exact=False).count()==1
-                page.screenshot(path=str(output/'castille-review.png'),full_page=True)
+                response=page.goto(base+'/document-shop/jobs/9c00eeec-4e65-4bde-bcea-de8b09c8beb1')
+                assert response.status == 404
+                proof['previously_deleted_castille_stays_absent']=True
             assert not proof['browser_errors']
             if not args.live:
                 from services.runtime_observation import read
@@ -133,6 +156,10 @@ def main():
                 for owner in ('services.image_intake.rectify_document_preview',
                     'services.document_examination.propose_text_correction',
                     'services.document_examination.review_text_correction',
+                    'services.document_examination.create_working_view',
+                    'services.image_intake.transform_document_preview',
+                    'services.case_workspace.CaseWorkspaceStore.record_go_attention',
+                    'services.case_workspace.CaseWorkspaceStore.record_temporary_relationship',
                     'services.document_examination.reevaluate_source_review'):
                     assert owner in owners, owner
                 proof['invoked_owners']=sorted(owners)

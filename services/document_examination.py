@@ -210,6 +210,10 @@ def create_document_frame(store, workspace, source_id, corners, aspect, rotation
         origin_reference=source_id, actor=actor)
     frame.update(input=signature, source_id=source_id, derived_source_id=derived['id'],
         source_sha256=signature['source_sha256'], reason=reason,
+        parent_source_id=source_id, parent_view_id=None, transform_type='PERSPECTIVE_RECTIFICATION',
+        origin='EVALUATION_INPUT' if source.get('evaluation_only') else 'USER_REQUESTED',
+        coordinate_space_before='NORMALIZED_EXIF_DISPLAY', coordinate_space_after='DOCUMENT_PREVIEW',
+        provenance={'source_id': source_id, 'source_sha256': signature['source_sha256']},
         evaluation_only=bool(source.get('evaluation_only')))
     return _store_review(store, workspace, source_id, DOCUMENT_FRAME, frame, actor)
 
@@ -383,11 +387,74 @@ def inspect_source_review(workspace, source_id):
     result = review['result'] or {}
     return dict(source=source, review=review, fields=review_text_fields(workspace, source_id),
         result=result, project_id=workspace.project_id,
-        frame=frame_qualification(workspace, source_id))
+        frame=frame_qualification(workspace, source_id),
+        working_views=[view for view in workspace.derived_views
+                       if view.get('source_id') == source_id and view.get('view_transform')])
+
+
+@observed
+def create_working_view(store, workspace, source_id, action, reason, actor, *, parent_view_id=None, allowed_root=None, parameters=None):
+    """Existing DerivedView owns lineage; image_intake samples immutable bytes."""
+    from services.image_intake import transform_document_preview
+    from services.capability_registry import VIEW_ACTIONS
+    if action not in VIEW_ACTIONS or not isinstance(reason, str) or not reason.strip():
+        raise ValueError('Select a supported view action and record its justification.')
+    source, raw, filename = review_source_bytes(store, workspace, source_id, allowed_root=allowed_root)
+    original_hash = hashlib.sha256(raw).hexdigest()
+    parent = None
+    if parent_view_id:
+        parent = next((v for v in workspace.derived_views
+                       if v['id'] == parent_view_id and v['source_id'] == source_id), None)
+        if not parent or not parent.get('view_transform'):
+            raise ValueError('Parent working view is unavailable for this source.')
+        raw, filename = working_view_bytes(store, workspace, parent)
+    preview, transform = transform_document_preview(raw, filename, action, parameters)
+    pages = [p for p in workspace.structural_units if p['source_id'] == source_id]
+    if not pages:
+        # Verified raster is one image; this records its address, not sheet identity.
+        pages = [store.create_structural_unit(workspace, source_id, 'image', 0,
+                                              label='Retained source image', actor=actor)]
+    page_id = parent['page_structural_unit_id'] if parent else pages[0]['id']
+    directory = Path(store.store_path) / 'workspace_sources' / workspace.project_id
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / (uuid.uuid4().hex + '_working_view.png')
+    path.write_bytes(preview)
+    transform.update(parent_source_id=source_id, parent_view_id=parent_view_id,
+        source_sha256=original_hash, parent_sha256=hashlib.sha256(raw).hexdigest(),
+        output_sha256=hashlib.sha256(preview).hexdigest(), file_path=str(path),
+        origin='EVALUATION_INPUT' if source.get('evaluation_only') else 'USER_REQUESTED',
+        reason=reason.strip(), evaluation_only=bool(source.get('evaluation_only')),
+        provenance={'source_id': source_id, 'parent_view_id': parent_view_id})
+    return store.create_derived_view(workspace, source_id, page_id,
+        region={'x': 0, 'y': 0, 'width': 1, 'height': 1},
+        derivation_reason=reason.strip(), actor=actor, view_transform=transform)
+
+
+def working_view_bytes(store, workspace, view):
+    """Read a committed, project-owned artifact; GET never regenerates it."""
+    transform = view.get('view_transform') or {}
+    path = Path(transform.get('file_path') or '').resolve()
+    root = (Path(store.store_path) / 'workspace_sources' / workspace.project_id).resolve()
+    if view.get('project_id') != workspace.project_id or not path.is_relative_to(root):
+        raise ValueError('Working view is outside this project.')
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != transform.get('output_sha256'):
+        raise ValueError('Working view bytes no longer match their committed provenance.')
+    return raw, path.name
 
 
 def apply_source_review_action(store, workspace, source_id, form, actor, *, allowed_root=None):
     action = form.get('action')
+    if action == 'view_transform':
+        from services.capability_registry import VIEW_ACTIONS, resolve_view_action
+        typed = form.get('view_action')
+        if form.get('view_instruction', '').strip():
+            typed = resolve_view_action(form['view_instruction'])
+        if typed not in VIEW_ACTIONS:
+            raise ValueError('View action is unresolved. Select an explicit transform; opposite side, alignment and north-up require additional premises.')
+        return create_working_view(store, workspace, source_id, typed, form.get('reason', ''), actor,
+                                   parent_view_id=form.get('parent_view_id') or None, allowed_root=allowed_root,
+                                   parameters=json.loads(form.get('parameters') or '{}'))
     if action == 'propose':
         return propose_text_correction(store, workspace, source_id, form.get('field',''),
             form.get('after',''), form.get('reason',''), actor)
@@ -1667,7 +1734,7 @@ def comparison_source(workspace):
 
 
 @observed
-def compare_document_analyses(workspaces, actor):
+def compare_document_analyses(workspaces, actor, *, store=None, view_ids=None):
     """Read-only adapter to the governed pixel comparator; no semantic inference."""
     from services.case_workspace import CaseWorkspaceError, CONTAINER_STATE_BLACK_BOX
     from services.region_comparison import compare_region
@@ -1676,9 +1743,28 @@ def compare_document_analyses(workspaces, actor):
     if any(w.owner != actor or w.removed_at or w.container_state != CONTAINER_STATE_BLACK_BOX for w in workspaces):
         raise CaseWorkspaceError('Only your active disposable analyses can be compared.')
     sources = [comparison_source(w) for w in workspaces]
-    state = compare_region(Path(sources[0]['file_path']), Path(sources[1]['file_path']),
+    view_ids = view_ids or [None, None]
+    if len(view_ids) != 2:
+        raise CaseWorkspaceError('Exactly two view selections are required.')
+    views, paths, available = [], [], []
+    for workspace, source, view_id in zip(workspaces, sources, view_ids):
+        candidates = [v for v in workspace.derived_views if v.get('source_id') == source['id'] and v.get('view_transform')]
+        available.append([dict(id=v['id'], label=v['view_transform']['type']) for v in candidates])
+        view = next((v for v in candidates if v['id'] == view_id), None) if view_id else None
+        if view_id and (not view or not store):
+            raise CaseWorkspaceError('Selected view is unavailable for this original source.')
+        if view:
+            if view['view_transform'].get('source_sha256') != source['file_hash']:
+                raise CaseWorkspaceError('Selected view does not match the retained original hash.')
+            working_view_bytes(store, workspace, view)
+        views.append(view)
+        paths.append(Path(view['view_transform']['file_path'] if view else source['file_path']))
+    from services.package_muscles import inspect_view_normalization
+    normalization = inspect_view_normalization(sources, views)
+    state = compare_region(paths[0], paths[1],
                            dict(x=0, y=0, width=1, height=1))
     return dict(state=state, canonical=False, qualification='Pixel comparison only; document alignment and semantic agreement remain unresolved.',
+        normalization=normalization, available_views=available, selected_views=view_ids,
         unsupported=['Semantic conflicts', 'Missing requirements', 'Supersession authority'],
         sources=[dict(project_id=w.project_id, source_id=s['id'], name=s['name'],
                       original_filename=Path(s['file_path']).name, sha256=s['file_hash'],

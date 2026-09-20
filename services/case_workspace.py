@@ -2839,6 +2839,9 @@ class DerivedView:
     overridden_by: Optional[str] = None
     overridden_at: Optional[str] = None
 
+    # Non-destructive working representation; never independent source authority.
+    view_transform: Optional[dict] = None
+
 
 # -- CLAUDE-DRAWING-CONDITIONS-01: conditions, boundaries, and what happens ---
 #    at the threshold.
@@ -3359,6 +3362,7 @@ class AnalysisRun:
     trigger: Optional[dict] = None  # asdict(AnalysisTrigger) - see record_analysis
     finding_ids: list[str] = field(default_factory=list)
     prior_corrections_considered: int = 0
+    attention_scope: Optional[dict] = None
 
 
 @dataclass
@@ -3862,6 +3866,7 @@ class Relationship:
     related_finding_id: Optional[str] = None
     reason: Optional[str] = None
     validation_state: Optional[str] = None  # None | RELATIONSHIP_VALIDATION_DISPUTED | RELATIONSHIP_VALIDATION_REJECTED
+    analytical_scope: Optional[dict] = None
 
 
 CARRIED_FORWARD_OBJECT_TYPE_FINDING = "finding"
@@ -6656,6 +6661,100 @@ class CaseWorkspaceStore:
         return workspace
 
     @observed
+    def record_go_attention(self, workspace, actor, objective, included_ids=(), de_emphasized_ids=(),
+                            *, lifetime_minutes=60, evaluation_only=False, governance_log=None):
+        """Persist analytical scope on AnalysisRun; focus never changes evidence truth."""
+        import re
+        if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            raise CaseWorkspaceError("Whole-project attention requires an active workspace and visibility of every case.")
+        if not isinstance(objective, str) or not objective.strip() or len(objective) > 2000:
+            raise CaseWorkspaceError("Enter a bounded objective of at most 2000 characters.")
+        if not isinstance(lifetime_minutes, int) or not 1 <= lifetime_minutes <= 1440:
+            raise CaseWorkspaceError("Attention lifetime must be between 1 minute and 24 hours.")
+        included_ids, de_emphasized_ids = set(included_ids), set(de_emphasized_ids)
+        evidence = {e['id']: e for e in workspace.evidence_items}
+        if not (included_ids | de_emphasized_ids).issubset(evidence) or included_ids & de_emphasized_ids:
+            raise CaseWorkspaceError("Attention selections must be distinct evidence in this project.")
+        if len(included_ids) > 60:
+            raise CaseWorkspaceError("Select at most 60 evidence items per objective.")
+        terms = set(re.findall(r"[a-z0-9]+", objective.lower())) - {'the', 'a', 'an', 'is', 'are', 'of', 'to', 'and', 'or', 'for', 'in', 'on', 'what', 'which'}
+        relevant = {identifier for identifier, row in evidence.items()
+                    if terms & set(re.findall(r"[a-z0-9]+", str(row.get('content') or '').lower()))}
+        reasons = {identifier: 'Explicitly selected for this objective.' for identifier in included_ids}
+        if not included_ids:
+            for identifier in sorted(relevant - de_emphasized_ids)[:30]:
+                included_ids.add(identifier)
+                reasons[identifier] = 'Contains an exact objective term; relevance only, not a binding or authority claim.'
+        neighbors = set()
+        for edge in workspace.relationships:
+            if edge.get('analytical_scope'):
+                continue  # A different question's working hypothesis is not input truth.
+            if edge.get('from_id') in included_ids and edge.get('to_id') in evidence:
+                neighbors.add(edge['to_id'])
+            if edge.get('to_id') in included_ids and edge.get('from_id') in evidence:
+                neighbors.add(edge['from_id'])
+        for identifier in sorted(neighbors - included_ids - de_emphasized_ids):
+            if len(included_ids) < 60:
+                included_ids.add(identifier)
+                reasons[identifier] = 'Recorded relationship to selected evidence; qualification is retained.'
+        entries = []
+        sources = {source['id']: source for source in workspace.sources}
+        for identifier, row in evidence.items():
+            source = sources.get(row.get('source_id'))
+            inactive = not source or bool(source.get('removed_at'))
+            selected = identifier in included_ids and not inactive
+            admission = self.admit_proposition(workspace, identifier) if selected else None
+            category = ('de_emphasized' if identifier in de_emphasized_ids else
+                        'included' if selected else 'relevant_unselected' if identifier in relevant | neighbors else 'outside_scope')
+            reason = ('Source is missing or removed; retained evidence is not active input.' if inactive else
+                      'Explicitly de-emphasized by the reviewer; the evidence still exists.' if identifier in de_emphasized_ids else
+                      reasons.get(identifier) if selected else
+                      'Relevant objective term or relationship, but left outside this bounded selection.' if category == 'relevant_unselected' else
+                      'No objective-specific selection signal; not examined by this scope.')
+            entries.append(dict(evidence_item_id=identifier, source_id=row.get('source_id'), region_id=row.get('region_id'),
+                evidence_class=row.get('evidence_class'), category=category, reason=reason,
+                admission={key: admission.get(key) for key in ('state','authority','currentness','admissible','errors','evaluation_only')} if admission else None))
+        moment = datetime.now(timezone.utc)
+        included = [e for e in entries if e['category'] == 'included']
+        scope = dict(objective=objective.strip(), project_id=workspace.project_id, actor=actor,
+            created_at=moment.isoformat(), expires_at=(moment + timedelta(minutes=lifetime_minutes)).isoformat(),
+            lifetime_minutes=lifetime_minutes, scope='project', entries=entries,
+            included_evidence_ids=[e['evidence_item_id'] for e in included],
+            evaluation_only=bool(evaluation_only or any((e.get('admission') or {}).get('evaluation_only') for e in included)),
+            state='SCOPED' if included else 'UNRESOLVED',
+            uncertainty=['Attention changes focus, not truth.', 'Excluded evidence remains available and may change a later decision.'])
+        return self.record_analysis(workspace, source_ids=sorted({e['source_id'] for e in included}),
+            objective=objective.strip(), engine_name='go_attention', engine_version='1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor),
+            attention_scope=scope, governance_log=governance_log)
+
+    @observed
+    def record_temporary_relationship(self, workspace, actor, analysis_id, from_id, to_id,
+                                      hypothesis, reason, evidence_ids):
+        if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            raise CaseWorkspaceError('An active, fully visible project is required.')
+        analysis = self._find(workspace.analyses, analysis_id)
+        scope = (analysis or {}).get('attention_scope')
+        if not scope or datetime.fromisoformat(scope['expires_at']) <= datetime.now(timezone.utc):
+            raise CaseWorkspaceError('Select an unexpired attention execution.')
+        allowed = set(scope['included_evidence_ids'])
+        evidence_ids = list(dict.fromkeys(evidence_ids))
+        if (from_id == to_id or not {from_id, to_id}.issubset(allowed)
+                or not evidence_ids or not set(evidence_ids).issubset(allowed)
+                or any(not self._find(workspace.evidence_items, identifier) for identifier in [from_id, to_id, *evidence_ids])):
+            raise CaseWorkspaceError('Distinct endpoints and supporting evidence must belong to this attention scope.')
+        if not hypothesis.strip() or not reason.strip() or len(hypothesis) > 200 or len(reason) > 2000:
+            raise CaseWorkspaceError('Record a bounded hypothesis and its evidence-based reason.')
+        qualifications = [self.admit_proposition(workspace, identifier) for identifier in evidence_ids]
+        return self.record_relationship(workspace, 'evidence_item', from_id, 'evidence_item', to_id,
+            'analytical_hypothesis', created_by=actor, provisional=True, related_analysis_id=analysis_id,
+            reason=reason.strip(), analytical_scope=dict(objective=scope['objective'], hypothesis=hypothesis.strip(),
+                expires_at=scope['expires_at'], evidence_ids=evidence_ids, authority='NOT_ESTABLISHED',
+                uncertainty='Working hypothesis; supporting evidence does not establish this relationship.',
+                promotion_status='NOT_PROMOTED', evaluation_only=scope['evaluation_only'],
+                premise_qualifications=[{k: q.get(k) for k in ('evidence_item_id','state','authority','admissible','errors')} for q in qualifications]))
+
+    @observed
     def inspect_kernel_mapping(self, workspace, actor, selection="", *, evaluation_only=False):
         """Read-only vocabulary projection over this owner's records and resolvers.
 
@@ -6723,8 +6822,8 @@ class CaseWorkspaceStore:
                 ("Objective", "CaseRecord.objective and InvestigationStep; project inspection creates no objective."),
                 ("Decision", "Disposition, RequirementAdjudication, CaseOutcome, GoNoGoAssessment."),
                 ("Provenance", "Source/region IDs, evidence references, derivations and recorded authors."),
-                ("Attention Scope", "PARTIAL substrate: InvestigationStep examined IDs, Claim evidence links/exclusions, and relationship sachets. GAP: analytical lifetime and de-emphasis contract. Attention is a reviewer notification."),
-                ("Temporary Analytical Relationship", "Existing sachets bound inspection of recorded edges. GAP: provisional Relationship is not an objective-bound, expiring constellation with governed promotion."),
+                ("Attention Scope", "AnalysisRun.attention_scope records objective, inclusion/de-emphasis, excluded evidence and lifetime. Attention remains a separate reviewer notification."),
+                ("Temporary Analytical Relationship", "Relationship.analytical_scope records objective-bound, expiring hypotheses. GAP: canonical promotion remains refused pending an explicit evidence/authority review path."),
             ])
         if chosen is None:
             return report
@@ -7671,6 +7770,7 @@ class CaseWorkspaceStore:
         project_north_confidence: Optional[float] = None,
         governance_log: Optional[GovernanceLog] = None,
         title_block_readings: Optional[dict] = None,
+        view_transform: Optional[dict] = None,
     ) -> dict:
         """Derive one governed view from a page. The page is not touched.
 
@@ -7748,6 +7848,7 @@ class CaseWorkspaceStore:
             project_north_method=project_north_method,
             project_north_confidence=project_north_confidence,
             inherited_title_block=inherited,
+            view_transform=deepcopy(view_transform),
         )
         workspace.derived_views.append(asdict(view))
         self.save(workspace)
@@ -11796,6 +11897,7 @@ class CaseWorkspaceStore:
         case_id: Optional[str] = None,
         prior_corrections_considered: int = 0,
         governance_log: Optional[GovernanceLog] = None,
+        attention_scope: Optional[dict] = None,
     ) -> dict:
         """
         `findings` is a list of {"statement", "machine_confidence", "crop"?,
@@ -11890,6 +11992,7 @@ class CaseWorkspaceStore:
             trigger=asdict(trigger),
             finding_ids=finding_ids,
             prior_corrections_considered=prior_corrections_considered,
+            attention_scope=attention_scope,
         )
         workspace.analyses.append(asdict(analysis))
         if case is not None:
@@ -14894,7 +14997,10 @@ class CaseWorkspaceStore:
         related_analysis_id: Optional[str] = None,
         related_finding_id: Optional[str] = None,
         reason: Optional[str] = None,
+        analytical_scope: Optional[dict] = None,
     ) -> dict:
+        if analytical_scope and (relationship_type != 'analytical_hypothesis' or not provisional):
+            raise CaseWorkspaceError('Temporary hypotheses cannot be created as canonical relationships.')
         relationship = Relationship(
             id=_new_id(),
             project_id=workspace.project_id,
@@ -14910,6 +15016,7 @@ class CaseWorkspaceStore:
             related_analysis_id=related_analysis_id,
             related_finding_id=related_finding_id,
             reason=reason,
+            analytical_scope=deepcopy(analytical_scope),
         )
         workspace.relationships.append(asdict(relationship))
         self.save(workspace)
@@ -14921,12 +15028,15 @@ class CaseWorkspaceStore:
         object_type: str,
         object_id: str,
         direction: str = "both",
+        *, include_temporary: bool = False,
     ) -> list[dict]:
         """direction: "from" (this object is the FROM side), "to" (this
         object is the TO side), or "both"."""
         object_type = normalize_open_world_value(object_type, KNOWN_OBJECT_KINDS)
         results = []
         for r in workspace.relationships:
+            if r.get('analytical_scope') and not include_temporary:
+                continue
             matches_from = r["from_type"] == object_type and r["from_id"] == object_id
             matches_to = r["to_type"] == object_type and r["to_id"] == object_id
             if direction == "from" and matches_from:
@@ -15200,6 +15310,9 @@ class CaseWorkspaceStore:
             status = RELATIONSHIP_STATUS_BROKEN
         elif from_status.get("stale") or to_status.get("stale"):
             status = RELATIONSHIP_STATUS_STALE
+        elif relationship.get('analytical_scope'):
+            status = ('expired' if datetime.fromisoformat(relationship['analytical_scope']['expires_at']) <= datetime.now(timezone.utc)
+                      else 'temporary')
         elif relationship.get("provisional", True):
             status = RELATIONSHIP_STATUS_PROPOSED
         else:
@@ -16334,6 +16447,9 @@ class CaseWorkspaceStore:
         if relationship is None:
             raise CaseWorkspaceError(f"Relationship {relationship_id} was not found.")
 
+        if relationship.get('analytical_scope'):
+            raise CaseWorkspaceError('Temporary hypotheses require explicit evidenced promotion; ordinary confirmation cannot make them canonical.')
+
         referenced_cases = {
             c["id"]: c for c in (
                 self._cases_referencing_object(workspace, relationship.get("from_id"))
@@ -16401,6 +16517,10 @@ class CaseWorkspaceStore:
         end, so they commit atomically together (never a Relationship
         created without its outcome_ref, or vice versa).
         """
+        if confirm_relationship_id is not None:
+            candidate = self._find(workspace.relationships, confirm_relationship_id)
+            if candidate and candidate.get('analytical_scope'):
+                raise CaseWorkspaceError('Thread confirmation cannot promote a temporary analytical hypothesis.')
         thread = self._find(workspace.review_threads, thread_id)
         if thread is None:
             raise CaseWorkspaceError(f"Review Thread {thread_id} was not found.")
@@ -16426,6 +16546,8 @@ class CaseWorkspaceStore:
             confirmed = self._find(workspace.relationships, confirm_relationship_id)
             if confirmed is None:
                 raise CaseWorkspaceError(f"Relationship {confirm_relationship_id} was not found.")
+            if confirmed.get('analytical_scope'):
+                raise CaseWorkspaceError('Thread confirmation cannot promote a temporary analytical hypothesis.')
             confirmed["provisional"] = False
             confirmed["confirmed_by"] = actor
 

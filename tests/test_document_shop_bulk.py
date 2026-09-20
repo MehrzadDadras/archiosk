@@ -28,6 +28,24 @@ def bulk(env, action, workspaces, **values):
         project_id=[w.project_id for w in workspaces], **values), follow_redirects=True)
 
 
+def test_compare_selected_working_views_never_establishes_semantic_agreement(env):
+    from services.document_examination import create_working_view
+    _, _, store, _, _ = env
+    first, second = image_case(env), image_case(env)
+    view = create_working_view(store, first, first.sources[0]['id'], 'MIRROR_HORIZONTAL',
+                               'Review the alternate display orientation', 'owner')
+    before = [store._path_for(w.project_id).read_bytes() for w in (first, second)]
+    response = bulk(env, 'compare', [first, second], view_a=view['id'])
+    assert response.status_code == 200
+    assert b'MIRROR_HORIZONTAL' in response.data and b'View normalization before contradiction' in response.data
+    result = compare_document_analyses([first, second], 'owner', store=store, view_ids=[view['id'], None])
+    assert result['normalization']['state'] == 'PARTIAL'
+    assert result['normalization']['semantic_contradiction_admissible'] is False
+    assert [store._path_for(w.project_id).read_bytes() for w in (first, second)] == before
+    with pytest.raises(CaseWorkspaceError):
+        compare_document_analyses([first, second], 'owner', store=store, view_ids=[None, view['id']])
+
+
 def test_archive_reload_restore_preserves_evidence_and_bytes(env):
     _, client, store, _, root = env
     cases = [image_case(env), image_case(env)]

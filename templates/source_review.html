@@ -32,6 +32,18 @@
 <details><summary>Accept / revert audit history</summary><pre>{{ correction.review_history|tojson(indent=2) }}</pre></details>
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="correction_id" value="{{ correction.id }}"><button name="action" value="accept">Accept reviewed correction</button><button name="action" value="revert">Revert correction</button></form></article>{% endfor %}</section>
 <section><h2>Unresolved by reasoning stage</h2>{% for group in report.result.unresolved_groups|default([]) %}<details open><summary>{{ group.stage }} · {{ group['items']|length }}</summary>{% for item in group['items'] %}<article><strong>{{ item.state }}</strong><p>{{ item.reason }}</p><p>Available evidence: {{ item.evidence_available|join(', ') }}</p><p>Missing premise: {{ item.missing_premise }}</p><p>Next: {{ item.next_step }}</p></article>{% else %}<p>No unresolved item recorded at this stage. This does not establish sufficiency.</p>{% endfor %}</details>{% endfor %}</section>
+{% if view_actions is defined %}<section><h2>Non-destructive working views</h2>
+<p>The uploaded original stays unchanged. A mirror changes this display; it does not establish the opposite physical side. Text in raster imagery is transformed with its pixels and may become unreadable.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="view_transform">
+<label>Transform <select name="view_action">{% for key, entry in view_actions.items() %}<option value="{{ key }}">{{ entry.label }}</option>{% endfor %}</select></label>
+<label>Or a bounded instruction <input name="view_instruction" placeholder="rotate 180 degrees"></label>
+<label>Optional parameters <input name="parameters" placeholder='Crop: {"box":[0.1,0.1,0.9,0.9]} or Fit: {"max_edge":1600}'></label>
+<label>Parent view <select name="parent_view_id"><option value="">Original source</option>{% for view in report.working_views %}<option value="{{ view.id }}">{{ view.view_transform.type }} · {{ view.id }}</option>{% endfor %}</select></label>
+<label>Reason <input name="reason" required maxlength="2000"></label><button>Create working view</button></form>
+{% for view in report.working_views %}<article><h3>{{ view.view_transform.type }} · QUALIFIED VIEW</h3>
+<img src="{{ url_for('portal.evaluation_review_image', run_id=evaluation_run_id, kind='view-'+view.id) if evaluation_only else url_for('workspace.working_view_image', project_id=report.project_id, source_id=report.source.id, view_id=view.id) }}" alt="Derived working view; original pixels transformed" style="max-width:100%">
+<p>{{ view.view_transform.qualification }} Original source: {{ view.source_id }} · Parent view: {{ view.view_transform.parent_view_id or 'Original' }} · {{ view.created_by }} · {{ view.created_at }}</p>
+<details><summary>Transform matrix, coordinate spaces and provenance</summary><pre>{{ view|tojson(indent=2) }}</pre></details></article>{% endfor %}</section>{% endif %}
 <details><summary>Actual consumer result and provenance</summary><pre>{{ report.result|tojson(indent=2) }}</pre></details>
 </main>
 <script src="{{ url_for('static', filename='js/source_review.js') }}"></script>{% endblock %}

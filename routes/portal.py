@@ -804,6 +804,7 @@ def survey_evaluation_run(run_id):
 @admin_required
 def evaluation_source_review(run_id):
     _require_developer_tools()
+    from services.capability_registry import VIEW_ACTIONS
     from services import survey_evaluation as evaluation, document_examination as dx
     from services.case_workspace import CaseWorkspaceError
     try:
@@ -827,7 +828,8 @@ def evaluation_source_review(run_id):
     response = current_app.make_response(render_template('source_review.html', report=report,
         image_url=url_for('portal.evaluation_review_image', run_id=run_id, kind='original'),
         rectified_url=url_for('portal.evaluation_review_image', run_id=run_id, kind='rectified') if report['review']['frame'] else None,
-        back_url=url_for('portal.survey_evaluation_run', run_id=run_id), evaluation_only=True))
+        back_url=url_for('portal.survey_evaluation_run', run_id=run_id), evaluation_only=True,
+        evaluation_run_id=run_id, view_actions=VIEW_ACTIONS))
     response.headers['Cache-Control'] = 'private, no-store'
     return response
 
@@ -844,6 +846,12 @@ def evaluation_review_image(run_id, kind):
         store = CaseWorkspaceStore(str(path/'registry'))
         workspace = store.get(evaluation._read(path)['project_id'])
         source_id = workspace.sources[0]['id']
+        if kind.startswith('view-'):
+            view = next((v for v in workspace.derived_views if v['id'] == kind[5:] and v['source_id'] == source_id), None)
+            if not view:
+                abort(404)
+            raw, _ = dx.working_view_bytes(store, workspace, view)
+            return send_file(io.BytesIO(raw), mimetype='image/png', max_age=0)
         if kind == 'rectified':
             source_id = dx.source_review_state(workspace, source_id)['frame']['derived_source_id']
         elif kind != 'original':
@@ -4202,7 +4210,8 @@ def document_shop_bulk():
         return render_template('document_shop_bulk_confirm.html', identifiers=identifiers)
     if action == 'compare':
         try:
-            result = document_examination.compare_document_analyses(workspaces, actor)
+            result = document_examination.compare_document_analyses(workspaces, actor, store=store,
+                view_ids=[request.form.get('view_a') or None, request.form.get('view_b') or None])
         except CaseWorkspaceError as exc:
             flash(str(exc), 'error')
             return redirect(url_for('portal.document_shop_jobs'), code=303)
@@ -4248,3 +4257,65 @@ def document_shop_analysis_history(project_id):
     records.sort(key=lambda row: row.get('created_at', ''), reverse=True)
     return render_template('document_shop_analysis_history.html', project_id=project_id,
                            records=records, sources=workspace.sources)
+
+
+def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_url, evaluation_only=False, evaluation_path=None):
+    """Shared UI adapter; scope computation and persistence belong to the workspace."""
+    from services.runtime_observation import event
+    actor = session.get('username')
+    if len(store.visible_cases_for(workspace, actor)) != len(workspace.cases):
+        abort(403)
+    if request.method == 'POST':
+        try:
+            from contextlib import nullcontext
+            from services import survey_evaluation as evaluation
+            context = evaluation.isolated(current_app, evaluation_path) if evaluation_path else nullcontext()
+            with context:
+                if request.form.get('action') == 'temporary_relationship':
+                    edge = store.record_temporary_relationship(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('from_id'), request.form.get('to_id'), request.form.get('hypothesis', ''),
+                        request.form.get('reason', ''), request.form.getlist('evidence_id'))
+                    analysis = {'id': edge['related_analysis_id']}
+                else:
+                    analysis = store.record_go_attention(workspace, actor, request.form.get('objective', ''),
+                        request.form.getlist('included_id'), request.form.getlist('de_emphasized_id'),
+                        lifetime_minutes=int(request.form.get('lifetime_minutes', '60')), evaluation_only=evaluation_only)
+        except (CaseWorkspaceError, ValueError) as exc:
+            flash(str(exc), 'error')
+            return redirect(attention_url, code=303)
+        return redirect(attention_url + '?analysis=' + analysis['id'], code=303)
+    runs = [run for run in workspace.analyses if run.get('attention_scope')]
+    selected = request.args.get('analysis')
+    analysis = next((run for run in runs if run['id'] == selected), None) if selected else next(iter(reversed(runs)), None)
+    if selected and analysis is None:
+        abort(404)
+    expired = bool(analysis and datetime.fromisoformat(analysis['attention_scope']['expires_at']) <= datetime.now(timezone.utc))
+    edges = [dict(record=edge, resolved=store.resolve_relationship_status(workspace, edge['id']))
+             for edge in workspace.relationships if analysis and edge.get('analytical_scope')
+             and edge.get('related_analysis_id') == analysis['id']]
+    event('go_attention.html', 'CONSUMED', analysis_id=analysis['id'] if analysis else None,
+          state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
+    return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs,
+        expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
+        evaluation_only=evaluation_only, temporary_edges=edges)
+
+
+@portal_bp.route('/admin/survey-evaluation/<run_id>/attention', methods=['GET', 'POST'])
+@admin_required
+def evaluation_go_attention(run_id):
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation
+    try:
+        path = evaluation.location(current_app, run_id)
+        record = evaluation._read(path)
+        store = CaseWorkspaceStore(path / 'registry')
+        workspace = store.get(record['project_id'])
+        if workspace is None:
+            abort(404)
+    except (ValueError, OSError, KeyError):
+        abort(404)
+    attention_url = url_for('portal.evaluation_go_attention', run_id=run_id)
+    mapping_url = url_for('portal.evaluation_kernel_mapping', run_id=run_id)
+    back_url = url_for('portal.survey_evaluation_run', run_id=run_id)
+    return _go_attention_surface(store, workspace, attention_url=attention_url,
+        mapping_url=mapping_url, back_url=back_url, evaluation_only=True, evaluation_path=path)

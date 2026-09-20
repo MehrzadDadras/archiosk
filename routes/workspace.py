@@ -632,14 +632,36 @@ def source_review(project_id, source_id):
             flash(str(exc), 'error')
         return redirect(url_for('workspace.source_review', project_id=project_id, source_id=source_id))
     report = dx.inspect_source_review(workspace, source_id)
+    from services.capability_registry import VIEW_ACTIONS
     response = current_app.make_response(render_template('source_review.html', report=report,
         image_url=url_for('workspace.source_image', project_id=project_id, source_id=source_id),
         rectified_url=url_for('workspace.source_image', project_id=project_id,
             source_id=report['review']['frame']['derived_source_id']) if report['review']['frame'] else None,
         back_url=url_for('workspace.kernel_mapping', project_id=project_id, item='sources:'+source_id),
-        evaluation_only=False))
+        evaluation_only=False, view_actions=VIEW_ACTIONS))
     response.headers['Cache-Control'] = 'private, no-store'
     event('source_review.html', 'CONSUMED', source_id=source_id, state='PARTIAL')
+    return response
+
+
+@workspace_bp.route('/projects/<project_id>/sources/<source_id>/working-view/<view_id>')
+@admin_required
+def working_view_image(project_id, source_id, view_id):
+    from routes.portal import _require_developer_tools
+    from services import document_examination as dx
+    _require_developer_tools()
+    _, store, workspace = _load_workspace_or_404(project_id)
+    if store.inspect_kernel_mapping(workspace, _reviewer(), 'sources:' + source_id)['state'] != 'AVAILABLE':
+        abort(404)
+    view = next((v for v in workspace.derived_views if v['id'] == view_id and v['source_id'] == source_id), None)
+    if not view:
+        abort(404)
+    try:
+        raw, _ = dx.working_view_bytes(store, workspace, view)
+    except (ValueError, OSError):
+        abort(404)
+    response = current_app.response_class(raw, mimetype='image/png')
+    response.headers['Cache-Control'] = 'private, no-store'
     return response
 
 
@@ -7876,3 +7898,15 @@ def publish_procurement_package_route(project_id):
         as_attachment=True,
         download_name=f"published-procurement-package-{project_id}.zip",
     )
+
+
+@workspace_bp.route('/projects/<project_id>/attention', methods=['GET', 'POST'])
+@admin_required
+def go_attention(project_id):
+    from routes.portal import _require_developer_tools, _go_attention_surface
+    _require_developer_tools()
+    document, store, workspace = _load_workspace_or_404(project_id)
+    return _go_attention_surface(store, workspace,
+        attention_url=url_for('workspace.go_attention', project_id=project_id),
+        mapping_url=url_for('workspace.kernel_mapping', project_id=project_id),
+        back_url=url_for('workspace.show_workspace', project_id=project_id))

@@ -11,5 +11,12 @@
 <a href="{{ url_for('portal.document_shop_result', project_id=source.project_id) }}">Open source analysis</a></section>
 {% endfor %}
 <p>Not established by this comparison: {{ comparison.unsupported|join(', ') }}.</p>
+<section><h2>View normalization before contradiction</h2><p>{{ comparison.normalization.state }} · {{ comparison.normalization.reason }}</p>
+{% for chain in comparison.normalization.chains %}<p>Source {{ chain.source_id }} → {{ chain.transform.type }} → {{ chain.view_id or 'Original representation' }} · {{ chain.qualification }}</p>{% endfor %}
+<details><summary>Transform lineage and muscle result</summary><pre>{{ comparison.normalization|tojson(indent=2) }}</pre></details>
+<form method="post" action="{{ url_for('portal.document_shop_bulk') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="compare">
+{% for source in comparison.sources %}<input type="hidden" name="project_id" value="{{ source.project_id }}">{% endfor %}
+{% for name in ['view_a','view_b'] %}{% set index = loop.index0 %}<label>{{ comparison.sources[index].name }} view <select name="{{ name }}"><option value="">Original</option>{% for view in comparison.available_views[index] %}<option value="{{ view.id }}" {% if view.id == comparison.selected_views[index] %}selected{% endif %}>{{ view.label }} · {{ view.id }}</option>{% endfor %}</select></label>{% endfor %}
+<button>Compare selected representations</button></form></section>
 <a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">Back to My documents</a>
 {% endblock %}

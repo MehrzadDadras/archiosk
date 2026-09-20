@@ -546,6 +546,15 @@ deploy/*  (nginx, gunicorn) — infra wrapping wsgi:app, not imported by Python
 
 ## Request-flow reference
 
+**Governed attention and working views:** `templates/go_attention.html` reads
+`AnalysisRun.attention_scope` and objective-bound `Relationship.analytical_scope`.
+`tests/test_go_attention.py` qualifies the real routes, retained evidence and
+temporary-edge promotion refusal. `tests/test_working_views.py` qualifies source
+immutability, typed transforms and view lineage. Standing view-normalization
+invariants are in `governance/current/view-normalization.md`. Existing
+`tools/verify_source_review_ui.py` exercises attention, temporary edges and working
+views through actual browser forms and captures their runtime observations.
+
 **Document ingestion (API):**
 `POST /api/v1/documents/ingest` (`routes/api.py`) → `services.ingestion.ingest_upload` → `services.bhive_parser.BHiveParser.parse` → `services.requirements_registry.RequirementsRegistry.save` → JSON response.
 

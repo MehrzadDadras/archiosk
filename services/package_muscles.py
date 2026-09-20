@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Optional
+from services.runtime_observation import observed
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,27 @@ MANIFEST_GAP_CONTENT_TYPE = "application/vnd.archiosk.manifest-gap+json"
 #: names dozens; a bound specification could name thousands, and an unbounded
 #: registration would turn one upload into a write storm.
 MAX_SUBJECTS_PER_SOURCE = 200
+
+
+@observed
+def inspect_view_normalization(sources, views):
+    """View-normalization before contradiction: qualification, never pixel truth.
+
+    This muscle consumes committed source/view lineage. The pixel comparator
+    remains region_comparison; geometry/authority admission stays with its owners.
+    A chosen display transform is not proof of equivalent physical viewpoints.
+    """
+    chains = []
+    for source, view in zip(sources, views):
+        transform = (view or {}).get('view_transform')
+        chains.append(dict(source_id=source['id'], source_sha256=source['file_hash'],
+            view_id=view['id'] if view else None, transform=transform or {'type': 'ORIGINAL'},
+            qualification='Display normalization only; equivalent physical viewpoint remains unresolved.'))
+    return dict(muscle='VIEW-NORMALIZATION BEFORE CONTRADICTION', owner='services.package_muscles.inspect_view_normalization',
+        version='1', state='PARTIAL' if any(views) else 'UNRESOLVED', chains=chains,
+        considered=['ORIGINAL', 'ROTATE_180', 'MIRROR', 'RECTIFIED / ALIGNED'],
+        semantic_contradiction_admissible=False,
+        reason='Only explicitly justified retained views are consumed. Untested alternatives are not rejected and no transform is chosen to force agreement.')
 
 
 def _text_for(workspace, source_id: str) -> str:

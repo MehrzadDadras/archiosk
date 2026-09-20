@@ -35,6 +35,35 @@ KNOWN_CAPABILITY_STATUSES = frozenset({
     CAPABILITY_STATUS_UNAVAILABLE, CAPABILITY_STATUS_FUTURE,
 })
 
+# Bounded view actions are metadata, not another execution engine. The existing
+# source-review dispatcher invokes image_intake and the DerivedView owner.
+VIEW_ACTIONS = {
+    'ROTATE_90': {'label': 'Rotate clockwise 90 degrees', 'aliases': ('rotate 90 degrees',)},
+    'ROTATE_180': {'label': 'Rotate 180 degrees', 'aliases': ('turn this around', 'rotate 180 degrees')},
+    'ROTATE_270': {'label': 'Rotate clockwise 270 degrees', 'aliases': ('rotate 270 degrees',)},
+    'MIRROR_HORIZONTAL': {'label': 'Mirror horizontally', 'aliases': ('mirror this detail', 'mirror horizontally')},
+    'MIRROR_VERTICAL': {'label': 'Mirror vertically', 'aliases': ('mirror vertically',)},
+    'CROP': {'label': 'Crop working view', 'aliases': ('crop this view',)},
+    'FIT': {'label': 'Fit working view', 'aliases': ('fit this view',)},
+}
+
+# Recognized intentions requiring additional governed premises. Resolution does
+# not authorize execution and must not silently substitute a rotation or mirror.
+VIEW_PREMISE_ACTIONS = {
+    'NORTH_UP': ('put north up',),
+    'SHEET_READING': ('orient for reading',),
+    'ALIGN': ('align these two details',),
+    'OPPOSITE_SIDE': ('show the opposite side',),
+}
+
+
+def resolve_view_action(text):
+    """Choose a typed action only. Ambiguous viewpoint requests remain unresolved."""
+    normalized = ' '.join(str(text or '').lower().strip().rstrip('.').split())
+    result = next((key for key, entry in VIEW_ACTIONS.items()
+                   if normalized in entry['aliases'] or normalized == key.lower()), None)
+    return result or next((key for key, aliases in VIEW_PREMISE_ACTIONS.items() if normalized in aliases), None)
+
 
 @dataclass(frozen=True)
 class Capability:

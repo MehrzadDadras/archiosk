@@ -104,6 +104,64 @@ def rectify_document_preview(raw_bytes, filename, corners, *, aspect_ratio=1.414
 
 logger = logging.getLogger(__name__)
 
+
+@observed
+def transform_document_preview(raw_bytes, filename, action, parameters=None):
+    """Sample a derived view; never modify source bytes or infer a real viewpoint."""
+    from PIL import Image, ImageOps
+    checked = verify_image_bytes(raw_bytes, filename)
+    if checked['status'] != VERIFIED:
+        raise ValueError(checked['reason'])
+    transforms = {
+        'ROTATE_90': (Image.Transpose.ROTATE_270, [[0,-1,1],[1,0,0],[0,0,1]]),
+        'ROTATE_180': (Image.Transpose.ROTATE_180, [[-1,0,1],[0,-1,1],[0,0,1]]),
+        'ROTATE_270': (Image.Transpose.ROTATE_90, [[0,1,0],[-1,0,1],[0,0,1]]),
+        'MIRROR_HORIZONTAL': (Image.Transpose.FLIP_LEFT_RIGHT, [[-1,0,1],[0,1,0],[0,0,1]]),
+        'MIRROR_VERTICAL': (Image.Transpose.FLIP_TOP_BOTTOM, [[1,0,0],[0,-1,1],[0,0,1]]),
+    }
+    parameters = parameters or {}
+    if not isinstance(parameters, dict):
+        raise ValueError('Transform parameters must be an object.')
+    if action not in transforms and action not in ('CROP', 'FIT'):
+        raise ValueError('Unsupported typed view action; no transformation was inferred.')
+    with Image.open(io.BytesIO(raw_bytes)) as original:
+        parent = ImageOps.exif_transpose(original).convert('RGB')
+        if action == 'CROP':
+            box = parameters.get('box')
+            if (not isinstance(box, list) or len(box) != 4 or any(isinstance(v, bool)
+                    or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1 for v in box)
+                    or box[0] >= box[2] or box[1] >= box[3]):
+                raise ValueError('Crop requires box [left, top, right, bottom] in normalized coordinates.')
+            w, h = parent.size
+            pixels = [round(box[0]*w), round(box[1]*h), round(box[2]*w), round(box[3]*h)]
+            if pixels[2] <= pixels[0] or pixels[3] <= pixels[1]:
+                raise ValueError('Crop must retain at least one pixel in each dimension.')
+            x0,y0,x1,y1 = pixels[0]/w,pixels[1]/h,pixels[2]/w,pixels[3]/h
+            matrix = [[1/(x1-x0),0,-x0/(x1-x0)],[0,1/(y1-y0),-y0/(y1-y0)],[0,0,1]]
+            parameters = {'requested_box': box, 'pixel_box': pixels}
+            preview = parent.crop(tuple(pixels))
+        elif action == 'FIT':
+            edge = parameters.get('max_edge', 1600)
+            if type(edge) is not int or not 16 <= edge <= 2400:
+                raise ValueError('Fit max_edge must be an integer between 16 and 2400 pixels.')
+            preview = parent.copy()
+            preview.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+            matrix = [[1,0,0],[0,1,0],[0,0,1]]
+            parameters = {'max_edge': edge}
+        else:
+            if parameters:
+                raise ValueError('This discrete transform accepts no additional parameters.')
+            operation, matrix = transforms[action]
+            preview = parent.transpose(operation)
+    buffer = io.BytesIO()
+    preview.save(buffer, 'PNG')
+    return buffer.getvalue(), dict(type=action, parameters=parameters, matrix=matrix,
+        coordinate_space_before='NORMALIZED_EXIF_DISPLAY', coordinate_space_after='NORMALIZED_WORKING_VIEW',
+        input_size=list(parent.size), output_size=list(preview.size),
+        state='QUALIFIED', authority='NOT_ESTABLISHED', geometry='UNCHANGED',
+        text_rendering='ORIGINAL_PIXELS_TRANSFORMED',
+        qualification='User-requested display transform. Viewpoint equivalence, north, metric geometry and authority are not established.')
+
 #: The only founding image formats this tranche admits. TIFF/HEIC/WEBP/BMP/SVG
 #: are all deliberately absent - see the module docstring.
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg"})

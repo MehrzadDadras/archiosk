@@ -140,6 +140,6 @@ def test_no_items_unknown_evaluation_and_mapping_gaps(project):
     workspace.evidence_items.clear()
     report = store.inspect_kernel_mapping(workspace, "reviewer")
     assert report["selected"] is None and report["items"] == []
-    assert "GAP:" in dict(report["concepts"])["Attention Scope"]
+    assert "AnalysisRun.attention_scope" in dict(report["concepts"])["Attention Scope"]
     assert "GAP:" in dict(report["concepts"])["Temporary Analytical Relationship"]
     assert client.get("/admin/survey-evaluation/unknown/kernel").status_code == 404

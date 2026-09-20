@@ -4,13 +4,13 @@
 {% block content %}
 <main class="survey-evaluation">
 <header><p>Stage 1 · Admin · Developer Mode</p><h1>Generic kernel mapping</h1><p>{{ project_title }}</p>
-<nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Projects, evaluation cases and runtime observations</a></nav>
+<nav>{% if report.project_id or run_id %}<a href="{{ url_for('portal.evaluation_go_attention', run_id=run_id) if run_id is defined and run_id else url_for('workspace.go_attention', project_id=report.project_id) }}">Governed attention</a> ? {% endif %}<a href="{{ back_url }}">Back to case</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Projects, evaluation cases and runtime observations</a></nav>
 <p>Objective: inspect how existing records serve the generic kernel. Selecting an item changes this inspection only.</p>{% include 'components/review_reload.html' %}</header>
 {% if report.state != 'AVAILABLE' %}<section><h2>{{ report.state }}</h2><p>{{ report.reason }}</p></section>{% else %}
 <section><h2>Inputs and selection</h2><p>{{ 'EVALUATION_INPUT — no canonical project authority' if report.evaluation_only else 'REAL PROJECT DATA — authority remains record-specific' }} · Workspace version {{ report.version }}</p>
 <form method="get" action="{{ mapping_url }}"><label for="kernel-item">Existing item</label><select id="kernel-item" name="item">
 {% for item in report['items'] %}<option value="{{ item.address }}"{% if report.selected and item.address == report.selected.address %} selected{% endif %}>{{ item.concrete_type }} · {{ item.label }} · {{ item.id }}</option>{% endfor %}</select><button type="submit">Inspect item</button></form>
-<p>Attention: manual inspection selection only. Evidence outside this selection still exists. Analytical attention and temporary constellations await later stages.</p></section>
+<p>Attention: manual inspection selection only. Evidence outside this selection still exists. Governed attention is available through its explicit objective action; temporary relationships remain distinct from canonical records.</p></section>
 {% if report.selected %}{% set item = report.selected %}
 <section id="kernel-selected"><h2>{{ item.concrete_type }} → {{ item.generic_role }}</h2>
 <p>Existing ID: {{ item.id }} · Collection: {{ item.collection }}</p>

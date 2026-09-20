@@ -103,6 +103,8 @@ def may_measure(view: dict) -> tuple:
     messages differ: INFORMATIVE says "this drawing is not for measuring",
     UNKNOWN says "we cannot tell yet".
     """
+    if view.get('view_transform'):
+        return False, 'A display transform does not establish calibrated survey geometry.'
     state = view.get("scale_state")
     if state == SCALE_STATE_INFORMATIVE:
         return False, ("This view is INFORMATIVE. It is fully usable for notes, "
@@ -184,6 +186,10 @@ def north_corroboration_state(view: dict) -> str:
 
 
 def _rotation(view: dict) -> Optional[float]:
+    if view.get('view_transform'):
+        # These matrices relate normalized display spaces, not the old page-unit
+        # rotation model. Refuse rather than silently mixing those conventions.
+        return None
     source = view.get("source_rotation_degrees")
     normalized = view.get("normalized_rotation_degrees")
     if source is None and normalized is None:

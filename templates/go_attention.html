@@ -1,0 +1,49 @@
+﻿{% extends 'base.html' %}
+{% block title %}Governed attention — GO{% endblock %}
+{% block content %}
+<h1>Governed attention</h1>
+<p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'Real project data — qualification stays with each record' }}</p>
+<p>Attention selects what GO examines for this objective. It does not change what is true.</p>
+<nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ mapping_url }}">Generic kernel mapping</a> · <a href="{{ request.url }}">Reload</a></nav>
+<form method="post" action="{{ attention_url }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Question / objective <input name="objective" required maxlength="2000" value="{{ analysis.objective if analysis else '' }}"></label>
+<label>Lifetime in minutes <input type="number" name="lifetime_minutes" value="60" min="1" max="1440" required></label>
+<p>Select evidence explicitly, or leave inclusion empty to focus by exact objective terms and existing relationships. Neither signal establishes binding or authority.</p>
+<table><thead><tr><th>Include</th><th>De-emphasize</th><th>Existing evidence</th><th>Class</th></tr></thead><tbody>
+{% for evidence in workspace.evidence_items %}<tr>
+<td><input type="checkbox" name="included_id" value="{{ evidence.id }}" aria-label="Include {{ evidence.id }}"></td>
+<td><input type="checkbox" name="de_emphasized_id" value="{{ evidence.id }}" aria-label="De-emphasize {{ evidence.id }}"></td>
+<td><a href="{{ mapping_url }}?item=evidence_items:{{ evidence.id }}">{{ evidence.id }}</a><br>{{ (evidence.content or '')[:180] }}</td><td>{{ evidence.evidence_class }}</td>
+</tr>{% endfor %}</tbody></table>
+<button class="btn btn-primary" type="submit">Set attention</button>
+</form>
+{% if runs %}<form method="get" action="{{ attention_url }}"><label>Recorded execution <select name="analysis">{% for run in runs|reverse %}<option value="{{ run.id }}" {% if analysis and run.id == analysis.id %}selected{% endif %}>{{ run.started_at }} · {{ run.objective }}</option>{% endfor %}</select></label><button>Inspect execution</button></form>{% endif %}
+{% if analysis %}{% set scope = analysis.attention_scope %}
+<section><h2>Persisted attention: {{ scope.state }}{{ ' · EXPIRED' if expired else '' }}</h2>
+<p>Objective: {{ scope.objective }} · Expires {{ scope.expires_at }} · Analysis {{ analysis.id }}</p>
+<p>Scope: {{ scope.scope }} · {{ 'EVALUATION_INPUT' if scope.evaluation_only else 'Project-bound' }}</p>
+{% for category, title in [('included','Focused evidence'), ('de_emphasized','De-emphasized evidence'), ('relevant_unselected','Relevant evidence outside focus'), ('outside_scope','Other evidence still present')] %}
+<h3>{{ title }}</h3><ul>{% for item in scope.entries if item.category == category %}<li>
+<a href="{{ mapping_url }}?item=evidence_items:{{ item.evidence_item_id }}">Jump to evidence {{ item.evidence_item_id }}</a>
+<p>{{ item.reason }} · Source {{ item.source_id }} · Region {{ item.region_id or 'Unresolved' }}</p>
+{% if item.admission %}<p>{{ item.admission.state }} · Authority {{ item.admission.authority }} · {{ item.evidence_class }}</p><details><summary>Recorded qualification</summary><pre>{{ item.admission|tojson(indent=2) }}</pre></details>{% endif %}
+</li>{% else %}<li>None in this category.</li>{% endfor %}</ul>{% endfor %}
+<p>Uncertainty: {{ scope.uncertainty|join(' ') }}</p>
+<p>Pattern / decision: scope only; no domain decision has been made.</p>
+</section>
+<section><h2>Temporary relationship constellation</h2>
+<p>These edges are bounded working hypotheses. They cannot confirm or supersede canonical relationships. Expiry ends their use for this objective; it does not erase their history.</p>
+{% if not expired %}<form method="post" action="{{ attention_url }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="temporary_relationship"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+{% for field, label in [('from_id','From evidence'),('to_id','To evidence'),('evidence_id','Supporting evidence')] %}<label>{{ label }}<select name="{{ field }}" required>{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}">{{ item.evidence_item_id }} · {{ item.source_id }}</option>{% endfor %}</select></label>{% endfor %}
+<label>Hypothesis <input name="hypothesis" required maxlength="200"></label><label>Evidence-based reason <input name="reason" required maxlength="2000"></label><button>Add temporary relationship</button></form>{% endif %}
+{% for edge in temporary_edges %}<article><h3>{{ edge.resolved.status|upper }} · {{ edge.record.analytical_scope.hypothesis }}</h3>
+<p><a href="{{ mapping_url }}?item=evidence_items:{{ edge.record.from_id }}">{{ edge.record.from_id }}</a> → <a href="{{ mapping_url }}?item=evidence_items:{{ edge.record.to_id }}">{{ edge.record.to_id }}</a></p>
+<p>{{ edge.record.reason }} · {{ edge.record.analytical_scope.uncertainty }} · Authority {{ edge.record.analytical_scope.authority }}</p>
+<details><summary>Evidence, lifetime, objective and promotion status</summary><pre>{{ edge|tojson(indent=2) }}</pre></details></article>{% else %}<p>No temporary edges recorded for this objective.</p>{% endfor %}</section>
+<section><h2>Real runtime exposure</h2><p>Input: the submitted objective and evidence IDs. Route: {{ attention_url }}.</p>
+<p>Muscle invoked: CaseWorkspaceStore.record_go_attention. Recorded state: AnalysisRun.attention_scope.</p>
+<p>Consumer: go_attention.html. Visible result: this persisted scope. Reload reads the record; it does not execute attention again. Runtime observations remain operational records, not evidence.</p></section>
+{% endif %}
+{% endblock %}
