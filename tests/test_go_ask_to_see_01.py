@@ -124,7 +124,12 @@ class NoNewCapabilityWasClaimedTests(unittest.TestCase):
         #   answer_orientation_question   - the project-less Gateway
         #   answer_project_question       - grounded project Q&A
         # What THIS stage (ask-to-see) added was a prompt rule and nothing else.
-        expected = {"project_qa.py": 3, "conversational_turn.py": 1}
+        # The authorized Action Registry programme adds resolve_selection_command:
+        # a host-bound document selection with per-case external-AI policy gates,
+        # strict typed output and execution through the existing bulk route.
+        # It shares the gateway; it is not another project-answering engine.
+        # tests/test_document_desk_commands.py proves its isolation/refusals.
+        expected = {"project_qa.py": 3, "conversational_turn.py": 2}
         for filename, count in expected.items():
             source = (ROOT / "services" / filename).read_text(encoding="utf-8")
             code = re.sub(r"(?m)#.*$", "", source)

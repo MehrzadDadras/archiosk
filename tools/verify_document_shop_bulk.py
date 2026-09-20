@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--commands', action='store_true', help='Also exercise Ask GO typed working-view commands.')
+    parser.add_argument('--desk-commands', action='store_true', help='Exercise all four selection actions through the command input.')
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
     output = Path(args.output)
@@ -116,6 +117,29 @@ def main():
                 page.get_by_role('button', name='Clear selection', exact=True).click()
                 for pid in identifiers:
                     page.locator('input[name="project_id"][value="' + pid + '"]').check()
+            def perform_selection_action(action, instruction):
+                if not args.desk_commands:
+                    page.locator('#document-bulk-actions button[value="' + action + '"]').click()
+                    return
+                from contextlib import nullcontext
+                if args.live:
+                    provider_context = nullcontext()
+                else:
+                    from unittest.mock import patch
+                    from types import SimpleNamespace
+                    action_id = {'reload':'RELOAD_STATE', 'archive':'ARCHIVE_ITEMS', 'delete':'DELETE_ITEMS',
+                                 'reanalyze':'REANALYZE_ITEMS', 'compare':'COMPARE_ITEMS'}[action]
+                    provider_context = patch('services.conversational_turn.call_llm_json', return_value=SimpleNamespace(
+                        ran=True, parsed={'command':dict(action_id=action_id, parameters={}, user_requested=True)}))
+                with provider_context:
+                    page.locator('#document-command').fill(instruction)
+                    if action == 'reload':
+                        # Enter must request intent resolution, never submit
+                        # the form's first action button (Archive).
+                        page.locator('#document-command').press('Enter')
+                    else:
+                        page.get_by_role('button', name='Ask GO to act', exact=True).click()
+                    page.wait_for_load_state('domcontentloaded')
             page.locator('input[name="project_id"][value="' + identifiers[0] + '"]').check()
             assert page.locator('#document-selected-count').inner_text() == '1 selected'
             page.get_by_role('button', name='Select all', exact=True).click()
@@ -123,13 +147,16 @@ def main():
             select_all_owned_cases()
             page.get_by_role('link', name='Reload', exact=True).click()
             assert page.locator('#document-selected-count').inner_text() == '2 selected'
-            page.get_by_role('button', name='Compare', exact=True).click()
+            if args.desk_commands:
+                perform_selection_action('reload', 'Refresh the list and status only; do not run analysis again.')
+                assert page.locator('#document-selected-count').inner_text() == '2 selected'
+            perform_selection_action('compare', 'Compare these two selected documents.')
             assert 'Analytical, non-canonical' in page.inner_text('main')
             for pid in identifiers:
                 assert pid in page.inner_text('main')
             page.get_by_role('link', name='Back to My documents', exact=True).click()
             assert page.locator('#document-selected-count').inner_text() == '2 selected'
-            page.get_by_role('button', name='Archive', exact=True).click()
+            perform_selection_action('archive', 'Put these selected documents in Archive so they leave my active desk.')
             for pid in identifiers:
                 assert pid not in page.content()
             page.get_by_role('link', name='Reload', exact=True).click()
@@ -139,10 +166,10 @@ def main():
             select_all_owned_cases()
             page.get_by_role('button', name='Restore', exact=True).click()
             select_all_owned_cases()
-            page.get_by_role('button', name='Re-analyze', exact=True).click()
+            perform_selection_action('reanalyze', 'Run the current analysis engine again on these selected preserved sources.')
             assert '2 documents queued for re-analysis' in page.inner_text('main')
             select_all_owned_cases()
-            page.locator('#document-bulk-actions button[value="delete"]').click()
+            perform_selection_action('delete', 'Move these selected cases to Recently Deleted.')
             assert '7 days' in page.inner_text('main')
             page.get_by_role('button', name='Move to Recently Deleted', exact=True).click()
             page.get_by_role('link', name='Reload', exact=True).click()
@@ -167,6 +194,17 @@ def main():
                     owners = {e['owner'] for record in captured for e in record['events'] if e['phase'] == 'INVOKED'}
                     assert 'services.conversation_interpreter.execute_document_action' in owners
                     assert 'services.document_examination.create_working_view' in owners
+            if args.desk_commands:
+                proof.update(selection_commands=['ARCHIVE_ITEMS', 'DELETE_ITEMS', 'REANALYZE_ITEMS', 'COMPARE_ITEMS', 'RELOAD_STATE'],
+                    delete_confirmation_preserved=True,
+                    selection_intent_provider='LIVE_PROVIDER' if args.live else 'CONTROLLED_RESPONSE_NOT_LIVE_NL_PROOF')
+                if not args.live:
+                    owners = {e['owner'] for record in captured for e in record['events'] if e['phase'] == 'INVOKED'}
+                    for owner in ('services.conversational_turn.resolve_selection_command',
+                                  'services.case_workspace.CaseWorkspaceStore.move_document_shop_case',
+                                  'services.document_examination.queue_reanalysis',
+                                  'services.document_examination.compare_document_analyses'):
+                        assert owner in owners, owner
             (output / 'proof.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
             if captured:
                 (output / 'runtime-traces.json').write_text(json.dumps(captured, indent=2), encoding='utf-8')

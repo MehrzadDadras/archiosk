@@ -73,6 +73,26 @@ ACTION_REGISTRY = {
         description='Create a fitted working view without changing source bytes or analysis.', parameters={}),
 }
 
+DOCUMENT_VIEW_ACTION_IDS = tuple(ACTION_REGISTRY)
+DOCUMENT_DESK_ACTION_IDS = ('ARCHIVE_ITEMS', 'DELETE_ITEMS', 'REANALYZE_ITEMS', 'COMPARE_ITEMS', 'RELOAD_STATE')
+ACTION_REGISTRY.update({
+    'RELOAD_STATE': dict(action_class='view_only', executor='portal.document_shop_jobs',
+        description='Refresh the current persisted document list/status only. Do not queue analysis or modify records.',
+        parameters={}, bulk_action='reload'),
+    'ARCHIVE_ITEMS': dict(action_class='workspace_mutation', executor='CaseWorkspaceStore.move_document_shop_case',
+        description='Archive exactly the selected active disposable cases; retain their sources and evidence.',
+        parameters={}, bulk_action='archive'),
+    'DELETE_ITEMS': dict(action_class='destructive', executor='CaseWorkspaceStore.move_document_shop_case',
+        description='Request the existing single Delete confirmation for the selection. Never confirm on behalf of the user. Recovery lasts seven days before purge.',
+        parameters={}, bulk_action='delete'),
+    'REANALYZE_ITEMS': dict(action_class='analytical', executor='document_examination.queue_reanalysis',
+        description='Deliberately queue the selected preserved sources through the current analysis pipeline. This is not Reload.',
+        parameters={}, bulk_action='reanalyze'),
+    'COMPARE_ITEMS': dict(action_class='analytical', executor='document_examination.compare_document_analyses',
+        description='Open the existing qualified comparison of exactly two compatible selected documents. Do not alter originals.',
+        parameters={}, bulk_action='compare'),
+})
+
 
 def action_catalogue(action_ids):
     """Only caller-enabled capabilities enter the intent-resolution context."""

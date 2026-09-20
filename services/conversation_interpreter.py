@@ -83,13 +83,13 @@ def execute_document_action(store, workspace, source_id, proposal, actor):
     """
     from services.conversational_turn import sanitize_typed_action
     from services.document_examination import create_working_view
-    from services.capability_registry import ACTION_REGISTRY
+    from services.capability_registry import DOCUMENT_VIEW_ACTION_IDS
     workspace = store.get(workspace.project_id)
     if (not workspace or not actor or workspace.owner != actor or workspace.removed_at
             or workspace.document_desk_state != 'active'
             or len(store.visible_cases_for(workspace, actor)) != len(workspace.cases)):
         raise CaseWorkspaceError('Commands require your active, fully visible document case.')
-    command = sanitize_typed_action(proposal, ACTION_REGISTRY)
+    command = sanitize_typed_action(proposal, DOCUMENT_VIEW_ACTION_IDS)
     if not command:
         raise CaseWorkspaceError('The command or its required parameters are unresolved.')
     source = store._find(workspace.sources, source_id)

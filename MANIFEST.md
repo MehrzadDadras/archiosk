@@ -1,5 +1,12 @@
 # MANIFEST
 
+Document-list commands use the existing conversational turn gateway and Action
+Registry to propose bounded actions for the host-selected cases. The bulk route
+rechecks ownership/lifecycle and uses the existing executors; Delete retains its
+confirmation and Reload only reads persisted state. Single-source view actions
+remain separately scoped. See `governance/current/document-desk-commands.md` and
+`tests/test_document_desk_commands.py`.
+
 The existing capability registry now describes nineteen instrumented muscle
 owners. Runtime observations project recorded events against those contracts
 without invoking domain resolvers or inventing PASS states. AnalysisRun keeps an

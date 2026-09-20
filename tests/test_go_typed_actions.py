@@ -8,7 +8,7 @@ import pytest
 from tests.test_document_shop_deletion import env
 from tests.test_document_shop_bulk import image_case
 from services.conversational_turn import sanitize_typed_action
-from services.capability_registry import ACTION_REGISTRY
+from services.capability_registry import DOCUMENT_VIEW_ACTION_IDS
 
 
 @pytest.mark.parametrize('proposal', [
@@ -20,7 +20,7 @@ from services.capability_registry import ACTION_REGISTRY
     {'action_id': 'FIT_VIEW', 'parameters': {}, 'user_requested': True, 'actor': 'admin'},
 ])
 def test_model_cannot_supply_authority_selectors_or_ambiguous_parameters(proposal):
-    assert sanitize_typed_action(proposal, ACTION_REGISTRY) is None
+    assert sanitize_typed_action(proposal, DOCUMENT_VIEW_ACTION_IDS) is None
 
 
 def test_ask_go_executes_real_view_and_reload_does_not_repeat_it(env):

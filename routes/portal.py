@@ -3416,8 +3416,8 @@ def document_shop_result(project_id):
     if request.method == 'POST':
         question = (request.form.get('question') or '').strip()
         if question:
-            from services.capability_registry import ACTION_REGISTRY
-            action_ids = tuple(ACTION_REGISTRY) if result.get('source_id') and workspace.owner == session.get('username') else ()
+            from services.capability_registry import DOCUMENT_VIEW_ACTION_IDS
+            action_ids = DOCUMENT_VIEW_ACTION_IDS if result.get('source_id') and workspace.owner == session.get('username') else ()
             reply = document_conversation.ask(
                 document, workspace, result, question, app=current_app, action_ids=action_ids)
             if reply.get('command'):
@@ -4241,7 +4241,7 @@ def dashboard(project_id=None):
 def document_shop_bulk():
     identifiers = list(dict.fromkeys(request.form.getlist('project_id')))
     action = request.form.get('action', '')
-    if not identifiers or len(identifiers) > 100 or action not in ('archive', 'delete', 'restore', 'reanalyze', 'compare'):
+    if not identifiers or len(identifiers) > 100 or action not in ('archive', 'delete', 'restore', 'reanalyze', 'compare', 'command'):
         abort(400)
     store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
     actor = session.get('username')
@@ -4249,11 +4249,43 @@ def document_shop_bulk():
     # Validate the entire selection before any action. Admin is not bulk ownership.
     if any(not w or w.owner != actor or w.container_state != 'black_box' for w in workspaces):
         abort(404)
+    delete_confirmed = action != 'command' and request.form.get('confirm') == 'yes'
+    if action == 'command':
+        if any(w.removed_at or w.document_desk_state != 'active' for w in workspaces):
+            abort(409)
+        from services.conversation_interpreter import _evaluate_external_ai_policy
+        from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
+        try:
+            permitted = all(_evaluate_external_ai_policy(store, w).decision in
+                (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE) for w in workspaces)
+        except Exception:
+            permitted = False
+        if not permitted:
+            flash('The selected documents do not permit this AI request. Use the action buttons.', 'error')
+            return redirect(url_for('portal.document_shop_jobs'), code=303)
+        from services.conversational_turn import resolve_selection_command
+        from services.capability_registry import ACTION_REGISTRY
+        resolution = resolve_selection_command(request.form.get('command_text', ''),
+            [(w.display_title or 'Selected document')[:160] for w in workspaces],
+            api_key=current_app.config.get('ANTHROPIC_API_KEY'), model=current_app.config.get('ANTHROPIC_MODEL'))
+        if not resolution['command']:
+            flash(resolution['reason'], 'error')
+            return redirect(url_for('portal.document_shop_jobs'), code=303)
+        action = ACTION_REGISTRY[resolution['command']['action_id']]['bulk_action']
+        # The provider call may outlive a lifecycle change. Re-resolve the exact
+        # host selection before using the ordinary bulk executor below.
+        workspaces = [store.get(pid) for pid in identifiers]
+        if any(not w or w.owner != actor or w.container_state != 'black_box' for w in workspaces):
+            abort(404)
+        if any(w.removed_at or w.document_desk_state != 'active' for w in workspaces):
+            abort(409)
+        if action == 'reload':
+            return redirect(url_for('portal.document_shop_jobs'), code=303)
     if action != 'restore' and any(w.removed_at for w in workspaces):
         abort(409)
     if action == 'restore' and any(w.document_desk_state not in ('archive', 'trash') for w in workspaces):
         abort(409)
-    if action == 'delete' and request.form.get('confirm') != 'yes':
+    if action == 'delete' and not delete_confirmed:
         return render_template('document_shop_bulk_confirm.html', identifiers=identifiers)
     if action == 'compare':
         try:

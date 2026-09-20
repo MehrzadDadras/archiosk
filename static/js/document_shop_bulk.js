@@ -17,5 +17,12 @@
   boxes.forEach(box => box.addEventListener('change', refresh));
   document.getElementById('document-select-all').addEventListener('click', () => { boxes.forEach(box => { box.checked = true; }); refresh(); });
   document.getElementById('document-clear-selection').addEventListener('click', () => { boxes.forEach(box => { box.checked = false; }); refresh(); });
+  const command = document.getElementById('document-command');
+  if (command) command.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      form.requestSubmit(form.querySelector('button[value="command"]'));
+    }
+  });
   refresh();
 })();

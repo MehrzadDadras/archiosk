@@ -28,7 +28,7 @@ _keys = {"id", "project_id", "source_id", "evidence_item_id", "region_id",
          "clockwise_degrees", "lower", "upper", "subject", "parameter", "unit", "common_interval",
          "baseline", "failure_point", "margin_to_failure", "origin", "canonical", "direction",
          "first_violated_constraints", "subject_key", "property_key", "scope_key", "kind", "basis",
-         "qualifiers", "view_basis", "vocabulary", "factual_consistency", "input_status"}
+         "qualifiers", "view_basis", "vocabulary", "factual_consistency", "input_status", "command"}
 
 
 def current_reference():

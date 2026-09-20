@@ -36,6 +36,10 @@
 <button class="btn" name="action" value="reanalyze">Re-analyze</button>
 <button class="btn" name="action" value="compare" id="document-compare" disabled>Compare</button>
 <span>Compare supports exactly two analyses with one original image each.</span>
+<div><label for="document-command">Command for selected items</label>
+<input id="document-command" name="command_text" maxlength="2000" placeholder="For example: archive these selected documents">
+<button class="btn" name="action" value="command">Ask GO to act</button>
+<p>Your question and the information shown on this page are sent to the AI service that powers GO. The original file is not sent.</p></div>
 {% else %}<button class="btn" name="action" value="restore">Restore</button>{% endif %}
 </div>
 </form>
