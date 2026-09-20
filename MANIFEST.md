@@ -1,5 +1,14 @@
 # MANIFEST
 
+Governed work plans extend InvestigationStep with immutable procedure and linked
+execution/revision/result history. The real attention UI displays a persisted
+plan before executing the existing route. Completion requires actual proof;
+Reload never starts analysis. Explicit requirement policies extend the shared
+coverage solver with assignment matrices, all minimum configurations, supported
+quantity addition and removal sensitivity. Unknown dimensions remain unresolved,
+and analytical coverage does not establish partnership or factual authority.
+See `governance/current/governed-work-plans-and-coverage.md`.
+
 Governed report compression projects existing evidence, propositions, analyses
 and retained presentations into a result-first notebook. Material distinctions
 remain separate, conflicts remain prominent, and every occurrence/source/trace

@@ -7,9 +7,10 @@ from services.runtime_observation import read
 
 
 @pytest.mark.parametrize('case,expected', [
-    ('matching:fit','FIT'), ('matching:partial','PARTIAL'), ('matching:mandatory-failure','NON_FIT'),
+    ('matching:fit','FIT'), ('matching:partial','UNRESOLVED'), ('matching:mandatory-failure','NON_FIT'),
+    ('matching:known-partial','PARTIAL'),
     ('matching:historical','UNRESOLVED'), ('matching:repeated-claim','FIT'),
-    ('matching:missing-provenance','UNRESOLVED'), ('matching:composition','MATCH'), ('matching:brief','PARTIAL'),
+    ('matching:missing-provenance','UNRESOLVED'), ('matching:composition','MATCH'), ('matching:brief','UNRESOLVED'),
 ])
 def test_matching_games_use_real_ui_owners_without_creating_investor_truth(web_app, case, expected):
     client = web_app.test_client()

@@ -77,6 +77,55 @@ def verify_report_compression(page, base, app, proof, output):
     (output/'proof.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
 
 
+def verify_work_plans(page, base, app, proof, output):
+    """Real two-request UI path: persisted plan, displayed plan, actual executor."""
+    from services import survey_evaluation as evaluation
+    from services.case_workspace import CaseWorkspaceStore
+    from services.runtime_observation import read
+    page.select_option('#case', 'matching:fit')
+    page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
+    page.wait_for_url('**/attention?analysis=*')
+    page.locator('#investigation-controls > summary').click()
+    form = page.locator('form').filter(has=page.get_by_role('button', name='Set attention', exact=True))
+    form.locator('[name=objective]').fill('Inspect source provenance with a declared procedure')
+    # Observe the real DOM at the second native submit. This records UI proof
+    # only; it does not intercept the request or set application state.
+    page.evaluate("""() => document.addEventListener('submit', event => {
+      if (event.target.querySelector('[name=plan_id]')) {
+        sessionStorage.setItem('work-plan-ui-proof', document.querySelector('#go-work-plans').innerText);
+      }
+    }, true)""")
+    with page.expect_navigation(wait_until='networkidle'):
+        form.get_by_role('button', name='Set attention', exact=True).click()
+    seen = page.evaluate("sessionStorage.getItem('work-plan-ui-proof')")
+    assert seen and 'PLANNED' in seen and 'Procedure only' in seen
+    assert page.locator('#go-work-plans > details').count() == 1
+    page.locator('#go-work-plans > details > summary').click()
+    assert 'PARTIAL' in page.locator('#go-work-plans').inner_text()
+    proof['work_plan_displayed_before_execution'] = True
+    if app:
+        path = evaluation.location(app, urlparse(page.url).path.split('/')[-2])
+        store = CaseWorkspaceStore(path/'registry')
+        workspace = store.get(evaluation._read(path)['project_id'])
+        steps = workspace.investigation_steps
+        roots = [s for s in steps if s['step_kind'] == 'governed_work_plan']
+        assert len(roots) == 1
+        history = [s for s in steps if s.get('branched_from_step_id') == roots[0]['id']]
+        assert [s['step_kind'] for s in history] == ['work_plan_execution', 'work_plan_result']
+        record = read(app, history[-1]['governed_work_plan']['runtime_trace_id'])
+        owner = roots[0]['governed_work_plan']['executor']
+        assert any(e['phase'] == 'INVOKED' and e['owner'] == owner for e in record['events'])
+        state_path = store._path_for(workspace.project_id)
+        before = state_path.read_bytes()
+        page.get_by_role('link', name='Reload', exact=True).click()
+        assert state_path.read_bytes() == before
+        proof['work_plan_persisted_invoked_reload_readonly'] = True
+        (output/'runtime-traces.json').write_text(json.dumps([read(app, row['trace']) for row in proof['traces']], indent=2), encoding='utf-8')
+    page.screenshot(path=str(output/'work-plan.png'), full_page=True)
+    assert not proof['browser_errors']
+    (output/'proof.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
@@ -84,6 +133,8 @@ def main():
     parser.add_argument('--propositions', action='store_true', help='Exercise sourced subject classification, correction and review through the real UI.')
     parser.add_argument('--matching-games', action='store_true', help='Exercise controlled matching/composition games through the real evaluation UI.')
     parser.add_argument('--report-compression', action='store_true', help='Exercise compact reports, expansion, filters and read-only Reload.')
+    parser.add_argument('--work-plans', action='store_true', help='Prove persisted plan display before real runtime execution and read-only Reload.')
+    parser.add_argument('--coverage-games', action='store_true', help='Exercise the shared requirement coverage matrix and minimum configurations.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -125,7 +176,16 @@ def main():
                     controls.locator(':scope > summary').click()
             def click_and_reveal(locator):
                 reveal_investigation()
-                locator.click()
+                planned = locator.evaluate("""element => {
+                    const form = element.closest('form'), surface = document.getElementById('go-work-plans');
+                    return !!(form && surface && element.type === 'submit' && form.method === 'post' &&
+                      JSON.parse(surface.dataset.actions).includes(new FormData(form).get('action') || ''));
+                }""")
+                if planned:
+                    with page.expect_navigation(wait_until='domcontentloaded'):
+                        locator.click()
+                else:
+                    locator.click()
                 page.wait_for_load_state('domcontentloaded')
                 reveal_investigation()
             page.on('pageerror',lambda error:proof['browser_errors'].append(str(error)))
@@ -149,6 +209,43 @@ def main():
                 verify_report_compression(page, base, None if args.live else app, proof, output)
                 browser.close()
                 print(json.dumps(proof, indent=2))
+                return
+            if args.work_plans:
+                verify_work_plans(page, base, None if args.live else app, proof, output)
+                browser.close()
+                print(json.dumps(proof, indent=2))
+                return
+            if args.coverage_games:
+                proof['coverage_games'] = []
+                for name in ('coverage-one', 'coverage-two', 'coverage-three', 'coverage-alternatives', 'additive-capital', 'additive-unresolved'):
+                    page.goto(base+'/admin/survey-evaluation')
+                    page.select_option('#case', 'matching:'+name)
+                    page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
+                    page.wait_for_url('**/attention?analysis=*')
+                    report = page.locator('#attention-report')
+                    assert report.is_visible()
+                    assert report.locator('nav').evaluate("element => getComputedStyle(element).display") == 'flex'
+                    assert 'Governed factual status: UNRESOLVED' in report.inner_text()
+                    assert 'Partnership compatibility: UNRESOLVED' in report.inner_text()
+                    assert report.locator('pre:visible').count() == 0
+                    assert page.locator('#investigation-controls').get_attribute('open') is None
+                    if name != 'additive-unresolved':
+                        assert 'Minimum sufficient configuration' in report.inner_text()
+                        report.locator('summary').filter(has_text='Why fewer participants fail').first.click()
+                    else:
+                        assert 'No sufficient configuration established' in report.inner_text()
+                        assert 'cannot be combined' in report.inner_text()
+                    page.get_by_role('link', name='Reload', exact=True).click()
+                    proof['coverage_games'].append(dict(case=name, entry=urlparse(page.url).path+'?'+urlparse(page.url).query))
+                if not args.live:
+                    from services.runtime_observation import read
+                    records = [read(app, item['trace']) for item in proof['traces']]
+                    assert sum(any(e['phase']=='INVOKED' and e['owner'].endswith('.evaluate_requirement_coverage') for e in r['events']) for r in records) == 6
+                    (output/'runtime-traces.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
+                assert not proof['browser_errors']
+                page.screenshot(path=str(output/'coverage.png'), full_page=True)
+                (output/'proof.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
+                browser.close()
                 return
             page.select_option('#case','source-review')
             click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))
@@ -519,10 +616,10 @@ def main():
             if args.matching_games:
                 from services import survey_evaluation as evaluation
                 proof['matching_games']=[]
-                expected={'matching:fit':'FIT', 'matching:partial':'PARTIAL', 'matching:mandatory-failure':'NON_FIT',
+                expected={'matching:fit':'FIT', 'matching:partial':'UNRESOLVED', 'matching:mandatory-failure':'NON_FIT',
                     'matching:historical':'UNRESOLVED', 'matching:repeated-claim':'FIT',
-                    'matching:missing-provenance':'UNRESOLVED', 'matching:composition':'MATCH', 'matching:brief':'PARTIAL'}
-                for case in evaluation.MATCHING_GAMES:
+                    'matching:missing-provenance':'UNRESOLVED', 'matching:composition':'MATCH', 'matching:brief':'UNRESOLVED'}
+                for case in expected:
                     page.goto(base+'/admin/survey-evaluation')
                     page.select_option('#case',case)
                     click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))

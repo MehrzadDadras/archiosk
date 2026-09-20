@@ -1,0 +1,23 @@
+{% macro matrix(coverage) %}
+<p>Analytical configuration: <strong>{{ coverage.state }}</strong></p>
+<p>Governed factual status: <strong>{{ coverage.factual_state }}</strong> · Evidence: Evaluation only</p>
+<table><thead><tr><th>Requirement</th><th>Coverage</th><th>Participant role / contribution</th><th>Gaps</th></tr></thead><tbody>
+{% for assignment in coverage.assignments %}<tr><td>{{ result.requirement_labels.get(assignment.requirement_id, 'Required condition') }}<br>{{ assignment.classification }}</td>
+<td>{{ {'COVERED':'Covered','PARTIALLY_COVERED':'Partially covered','NOT_COVERED':'Not covered','COVERAGE_UNRESOLVED':'Unresolved','HARD_CONFLICT':'Conflict'}.get(assignment.coverage_state, assignment.coverage_state) }}<br>Evaluation only</td>
+<td>{% for party in assignment.participant_ids %}{{ presentation_report.subject_labels.get(party, 'Participant') }}{{ ', ' if not loop.last else '' }}{% else %}No established assignment{% endfor %}
+{% if assignment.coverage_logic.combined_amount is not none %}<br>Conditional combined quantity: {{ assignment.coverage_logic.combined_amount }}{% endif %}</td>
+<td>{{ assignment.unresolved_gaps|join(' ') or 'No gap in the declared coverage model; factual support remains unverified.' }}
+<details><summary>Evidence and coverage logic</summary><pre>{{ assignment|tojson(indent=2) }}</pre></details></td></tr>{% endfor %}
+</tbody></table>
+<p>Partnership compatibility: <strong>{{ coverage.partnership_compatibility.state }}</strong> — {{ coverage.partnership_compatibility.reason }}</p>
+{% endmacro %}
+{% if result.minimum_configurations %}
+<h4>Minimum sufficient configuration{{ 's' if result.minimum_configurations|length != 1 else '' }} — conditional coverage</h4>
+{% for configuration in result.minimum_configurations %}<article><p>{% for party in configuration.participant_ids %}{{ presentation_report.subject_labels.get(party, 'Participant') }}{{ ' + ' if not loop.last else '' }}{% endfor %}</p>
+{{ matrix(configuration.result) }}
+<details><summary>Why fewer participants fail</summary>
+{% for tested in result.model.tested_configurations if tested.participant_ids|length < result.model.minimum_count %}<p>{% for party in tested.participant_ids %}{{ presentation_report.subject_labels.get(party, 'Participant') }}{{ ' + ' if not loop.last else '' }}{% endfor %}: {{ tested.result.state }}</p><ul>{% for assignment in tested.result.assignments if assignment.coverage_state != 'COVERED' %}<li>{{ result.requirement_labels.get(assignment.requirement_id, 'Required condition') }} — {{ assignment.coverage_state }}. {{ assignment.unresolved_gaps|join(' ') }}</li>{% endfor %}</ul>{% endfor %}
+</details></article>{% endfor %}
+{% else %}<h4>No sufficient configuration established</h4>{{ matrix(result.selected_configuration) }}{% endif %}
+{% for dependency in result.scope_crossing_dependencies %}<p><strong>Scope-crossing dependency</strong> {{ result.requirement_labels.get(dependency.claim_id, 'Required eligibility condition') }} — {{ dependency.reason }}</p>{% endfor %}
+<details><summary>Removal sensitivity for the selected participants</summary><ul>{% for check in result.selected_removal_checks %}<li>{{ presentation_report.subject_labels.get(check.participant_id, 'Participant') }} — {{ 'REDUNDANT_FOR_CURRENT_CONFIGURATION' if check.result.coverage_complete else 'Removal leaves incomplete coverage' }}. This is one-at-a-time sensitivity of analytical coverage, not permission to remove agreed parties.</li>{% endfor %}</ul></details>

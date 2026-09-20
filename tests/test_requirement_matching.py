@@ -35,7 +35,21 @@ def test_criteria_preserve_missing_and_incomparable_premises(row, state):
 def test_no_duplicate_votes_or_opaque_score_override():
     assert match_normalized_criteria([criterion(), criterion()])['state'] == 'REFUSED'
     assert match_normalized_criteria([criterion(score=100)])['state'] == 'REFUSED'
-    assert match_normalized_criteria([criterion(), criterion('missing', candidate=None)])['state'] == 'PARTIAL'
+    assert match_normalized_criteria([criterion(), criterion('missing', candidate=None)])['state'] == 'UNRESOLVED'
+    assert match_normalized_criteria([criterion(), criterion('optional', candidate=None, mandatory=False)])['state'] == 'UNRESOLVED'
+
+
+def test_explicit_exclusion_requires_positive_overlap_not_unknown():
+    required = premise(kind='TOKEN_SET', value=['EXCLUDED'], vocabulary='eligibility', unit='')
+    candidate = dict(required, value=['EXCLUDED','OTHER'])
+    row = criterion(required=required, candidate=candidate, operator='EXCLUDES_ALL')
+    result = match_normalized_criteria([row])
+    assert result['state'] == 'NON_MATCH'
+    assert result['criteria'][0]['comparison']['predicate']['prohibited_overlap'] == ['EXCLUDED']
+    row['candidate'] = None
+    assert match_normalized_criteria([row])['state'] == 'UNRESOLVED'
+    row['candidate'] = dict(required, value=[])
+    assert match_normalized_criteria([row])['state'] == 'MATCH'
 
 
 @pytest.mark.parametrize('temporal,until,query,expected', [

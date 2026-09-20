@@ -77,12 +77,19 @@ CASES.update({key: value['title'] for key, value in REVIEW_GAMES.items()})
 MATCHING_GAMES = {
     'matching:fit': dict(title='Capital alignment: all declared predicates fit, factual authority unresolved', matching='fit'),
     'matching:partial': dict(title='Capital alignment: one match and missing geographic evidence', matching='partial'),
+    'matching:known-partial': dict(title='Known optional geographic preference mismatch; mandatory criteria match', matching='known_partial'),
     'matching:mandatory-failure': dict(title='Capital alignment: capital fits but mandatory sector fails', matching='mandatory_failure'),
     'matching:historical': dict(title='Historical activity does not establish a current mandate', matching='historical'),
     'matching:repeated-claim': dict(title='Repeated reporting does not establish investor authority', matching='repeated'),
     'matching:missing-provenance': dict(title='Unanchored candidate claim cannot supply matching evidence', matching='missing'),
     'matching:composition': dict(title='Two entities jointly cover equity and debt roles without capital summation', matching='composition'),
     'matching:brief': dict(title='Capital Alignment Brief preserves missing evidence and unresolved authority', matching='brief'),
+    'matching:coverage-one': dict(title='One participant covers all mandatory roles; factual status unresolved', matching='coverage_one'),
+    'matching:coverage-two': dict(title='Two-party minimum coverage with partnership compatibility unresolved', matching='coverage_two'),
+    'matching:coverage-three': dict(title='Three roles require three participants; no pair is sufficient', matching='coverage_three'),
+    'matching:coverage-alternatives': dict(title='Equal minimum configurations and redundant selected coverage', matching='coverage_alternatives'),
+    'matching:additive-capital': dict(title='Explicit additive capacity basis closes conditional capital coverage', matching='additive_capital'),
+    'matching:additive-unresolved': dict(title='Partial amounts cannot combine without a supporting basis', matching='additive_unresolved'),
 }
 CASES.update({key: value['title'] for key, value in MATCHING_GAMES.items()})
 CASES.update({"control:"+key:"Rule 7 control: "+key+" / "+value["category"] for key,value in CONTROLS.items()})
@@ -417,6 +424,34 @@ def _matching_game_inputs(store, workspace, actor, attention_id, evidence, varia
             'HISTORICAL_ACTIVITY' if historical else 'DATED_REQUIREMENT' if party == 0 else 'CURRENT_DISCLOSED_MANDATE',
             item['content'], reason, as_of='2026-01-01', valid_until='2027-01-01', attribution='agent_assessment')
 
+    if variant.startswith('coverage_') or variant.startswith('additive_'):
+        if variant in ('coverage_three', 'coverage_alternatives'):
+            parties.append(store.record_review_subject(workspace, actor, attention_id, 'EVALUATION candidate C', 'operator'))
+        additive = variant.startswith('additive_')
+        roles = ('EQUITY', 'DEBT', 'OPERATOR') if variant == 'coverage_three' else ('EQUITY', 'DEBT')
+        required = [proposition(0, 'capital', '100')] if additive else [proposition(0, 'role', [role]) for role in roles]
+        runs = []
+        for party in range(1, len(parties)):
+            values = list(roles) if variant == 'coverage_one' and party == 1 else [roles[min(party-1, len(roles)-1)]]
+            candidate = proposition(party, 'capital' if additive else 'role', '50' if additive else values)
+            criteria = [dict(required_claim_id=claim['id'], candidate_claim_id=candidate['id'], mandatory=True,
+                operator='AT_LEAST' if additive else 'CONTAINS_ALL', candidate_temporal_class='CURRENT_DISCLOSED_MANDATE') for claim in required]
+            runs.append(store.run_requirement_matching(workspace, actor, attention_id, 'participant:'+parties[party]['id'],
+                criteria, 'investment', reason, query_date='2026-09-20'))
+        basis = None
+        if variant == 'additive_capital':
+            item = evidence[0][0]
+            norm = dict(subject_key='participant:'+parties[0]['id'], property_key='additive_capacity_basis',
+                scope_key='evaluation-opportunity', kind='TOKEN_SET', value=['participant:'+p['id'] for p in parties[1:]],
+                unit='', vocabulary='additive:capital:EVAL_CURRENCY', qualifiers=[], view_basis='VIEW_INVARIANT',
+                view_id=None, basis=reason, premise_ids=[item['id']])
+            basis = store.record_subject_proposition(workspace, actor, attention_id, norm, 'PROJECT_DOCUMENT',
+                'DATED_REQUIREMENT', item['content'], reason, as_of='2026-01-01', valid_until='2027-01-01', attribution='agent_assessment')
+        policies = {c['id']:dict(classification='COMPOSITIONAL' if additive else 'MANDATORY', divisible=additive,
+            combination_claim_id=basis['id'] if basis else None) for c in required}
+        return store.run_role_composition(workspace, actor, attention_id, [r['id'] for r in runs],
+            [c['id'] for c in required], reason, coverage_policies=policies)
+
     if variant == 'composition':
         required = [proposition(0, 'role', [role]) for role in ('EQUITY','DEBT')]
         runs = []
@@ -433,13 +468,13 @@ def _matching_game_inputs(store, workspace, actor, attention_id, evidence, varia
         required = proposition(0, property_key, value)
         candidate = None
         if not (variant == 'missing' or (variant in ('partial','brief') and property_key == 'geography')):
-            candidate_value = ['OTHER_SECTOR'] if variant == 'mandatory_failure' and property_key == 'sector' else value
+            candidate_value = ['OTHER_SECTOR'] if variant == 'mandatory_failure' and property_key == 'sector' else ['OTHER_REGION'] if variant == 'known_partial' and property_key == 'geography' else value
             candidate = proposition(1, property_key, candidate_value,
                 historical=variant == 'historical', reporting=variant == 'repeated')
             if variant == 'repeated':
                 proposition(1, property_key, candidate_value, reporting=True)
         criteria.append(dict(required_claim_id=required['id'], candidate_claim_id=candidate['id'] if candidate else None,
-            mandatory=True, operator='AT_LEAST' if property_key == 'capital' else 'CONTAINS_ALL',
+            mandatory=not (variant == 'known_partial' and property_key == 'geography'), operator='AT_LEAST' if property_key == 'capital' else 'CONTAINS_ALL',
             candidate_temporal_class='CURRENT_DISCLOSED_MANDATE'))
     analysis = store.run_requirement_matching(workspace, actor, attention_id, 'participant:'+parties[1]['id'],
         criteria, 'investment', reason, query_date='2026-09-20')

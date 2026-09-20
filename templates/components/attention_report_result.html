@@ -16,6 +16,8 @@
 <p>{{ result.comparison.reason }} Factual consistency: {{ result.comparison.factual_consistency }}.</p>
 <table><thead><tr><th>Premise</th><th>Subject</th><th>Property</th><th>Value</th></tr></thead><tbody>{% for side in ['left','right'] %}{% set premise = result.comparison[side] %}<tr><td>{{ side|capitalize }}</td><td>{{ presentation_report.subject_labels.get(premise.subject_key, premise.subject_key) }}</td><td>{{ premise.property_key }}</td><td>{{ premise.value }} {{ premise.unit or '' }}</td></tr>{% endfor %}</tbody></table>
 {% elif result.kind == 'role_composition' %}
+{% if result.selected_configuration %}{% include 'components/coverage_matrix.html' %}{% else %}
 <p>{{ result.model.reason }} · {{ result.model.configurations|length }} retained minimum configuration(s) · {{ result.model.missing|length }} missing required roles.</p>
 <table><thead><tr><th>Candidate</th><th>Covered roles</th><th>Exclusions</th></tr></thead><tbody>{% for candidate in result.candidates %}<tr><td>{{ presentation_report.subject_labels.get(candidate.subject, candidate.subject) }}</td><td>{{ candidate.covered_claim_ids|length }}</td><td>{{ candidate.excluded_reasons|join(' ') or 'No recorded exclusion; compatibility remains unresolved.' }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
 {% endif %}

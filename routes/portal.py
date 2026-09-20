@@ -4344,139 +4344,180 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     from services.cross_modal_investigation import (
         PROFESSIONAL_NARRATIVES, PROPOSITION_SOURCE_CLASSES, PROPOSITION_TEMPORAL_CLASSES,
         MATCHING_CONTEXTS, DECLARED_CURRENT_TEMPORAL_CLASSES)
+    from services.capability_registry import REVIEW_WORK_PROCEDURES
     actor = session.get('username')
     if len(store.visible_cases_for(workspace, actor)) != len(workspace.cases):
         abort(403)
     if request.method == 'POST':
+        from werkzeug.datastructures import MultiDict
+        from services.capability_registry import REVIEW_WORK_PROCEDURES
+        form = request.form
+        plan_id = None
+        started_plan = False
         try:
             from contextlib import nullcontext
             from services import survey_evaluation as evaluation
             context = evaluation.isolated(current_app, evaluation_path) if evaluation_path else nullcontext()
             with context:
-                if request.form.get('action') == 'record_subject':
-                    store.record_review_subject(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('subject_name', ''), request.form.get('subject_role', ''))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'subject_proposition':
+                if form.get('declare_work_plan') == 'yes':
+                    plan = store.declare_go_work_plan(workspace, actor, form.to_dict(flat=False))
+                    event('governed_work_plan', 'CONSUMED', plan_id=plan['plan_id'], state='PLANNED')
+                    return jsonify(plan=plan, html=render_template('components/go_work_plan.html',
+                        work_plan=dict(plan=plan, history=[], status='PLANNED')))
+                if form.get('plan_id'):
+                    plan_id = form['plan_id']
+                    form = MultiDict(store.begin_go_work_plan(workspace, actor, plan_id))
+                    started_plan = True
+                elif form.get('action', '') in REVIEW_WORK_PROCEDURES:
+                    # Non-JavaScript/API callers use the same persisted procedure
+                    # and executor. Browser interception displays it first.
+                    plan = store.declare_go_work_plan(workspace, actor, form.to_dict(flat=False))
+                    plan_id = plan['plan_id']
+                    store.begin_go_work_plan(workspace, actor, plan_id)
+                    started_plan = True
+                if form.get('action') == 'record_subject':
+                    store.record_review_subject(workspace, actor, form.get('analysis_id'),
+                        form.get('subject_name', ''), form.get('subject_role', ''))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'subject_proposition':
                     def proposition_tokens(value):
                         return [] if value.strip() == '[]' else [v.strip() for v in value.split(',')] if value.strip() else None
-                    kind = request.form.get('kind')
-                    normalization = dict(subject_key=request.form.get('subject_key', ''),
-                        property_key=request.form.get('property_key', ''), scope_key=request.form.get('scope_key', ''),
-                        kind=kind, value=proposition_tokens(request.form.get('value', '')) if kind == 'TOKEN_SET' else request.form.get('value'),
-                        qualifiers=proposition_tokens(request.form.get('qualifiers', '')),
-                        unit=request.form.get('unit', ''), vocabulary=request.form.get('vocabulary', ''),
-                        view_basis=request.form.get('view_basis', 'UNRESOLVED'), view_id=None, basis=request.form.get('reason', ''),
-                        premise_ids=[request.form.get('evidence_id', '')])
-                    store.record_subject_proposition(workspace, actor, request.form.get('analysis_id'), normalization,
-                        request.form.get('source_class'), request.form.get('temporal_class'),
-                        request.form.get('original_quote', ''), request.form.get('reason', ''),
-                        as_of=request.form.get('as_of'), valid_until=request.form.get('valid_until'),
-                        predecessor_id=request.form.get('predecessor_id') or None,
-                        attribution=request.form.get('attribution'))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'review_subject_proposition':
-                    store.review_subject_proposition(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('claim_id'), request.form.get('outcome'), request.form.get('reason', ''),
-                        get_governance_log(current_app), attribution=request.form.get('attribution'))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'requirement_matching':
+                    kind = form.get('kind')
+                    normalization = dict(subject_key=form.get('subject_key', ''),
+                        property_key=form.get('property_key', ''), scope_key=form.get('scope_key', ''),
+                        kind=kind, value=proposition_tokens(form.get('value', '')) if kind == 'TOKEN_SET' else form.get('value'),
+                        qualifiers=proposition_tokens(form.get('qualifiers', '')),
+                        unit=form.get('unit', ''), vocabulary=form.get('vocabulary', ''),
+                        view_basis=form.get('view_basis', 'UNRESOLVED'), view_id=None, basis=form.get('reason', ''),
+                        premise_ids=[form.get('evidence_id', '')])
+                    store.record_subject_proposition(workspace, actor, form.get('analysis_id'), normalization,
+                        form.get('source_class'), form.get('temporal_class'),
+                        form.get('original_quote', ''), form.get('reason', ''),
+                        as_of=form.get('as_of'), valid_until=form.get('valid_until'),
+                        predecessor_id=form.get('predecessor_id') or None,
+                        attribution=form.get('attribution'))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'review_subject_proposition':
+                    store.review_subject_proposition(workspace, actor, form.get('analysis_id'),
+                        form.get('claim_id'), form.get('outcome'), form.get('reason', ''),
+                        get_governance_log(current_app), attribution=form.get('attribution'))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'requirement_matching':
                     criteria = []
                     for index in range(16):
                         prefix = 'criterion_' + str(index) + '_'
-                        required = request.form.get(prefix + 'required', '')
+                        required = form.get(prefix + 'required', '')
                         if not required:
-                            if request.form.get(prefix + 'candidate'):
+                            if form.get(prefix + 'candidate'):
                                 raise CaseWorkspaceError('Select the requirement for each candidate proposition.')
                             continue
-                        mandatory = request.form.get(prefix + 'mandatory')
+                        mandatory = form.get(prefix + 'mandatory')
                         if mandatory not in ('yes', 'no'):
                             raise CaseWorkspaceError('Declare whether each criterion is mandatory.')
                         criteria.append(dict(required_claim_id=required,
-                            candidate_claim_id=request.form.get(prefix + 'candidate') or None,
-                            mandatory=mandatory == 'yes', operator=request.form.get(prefix + 'operator'),
-                            candidate_temporal_class=request.form.get(prefix + 'temporal')))
-                    if request.form.get('require_currentness') not in ('yes', 'no'):
+                            candidate_claim_id=form.get(prefix + 'candidate') or None,
+                            mandatory=mandatory == 'yes', operator=form.get(prefix + 'operator'),
+                            candidate_temporal_class=form.get(prefix + 'temporal')))
+                    if form.get('require_currentness') not in ('yes', 'no'):
                         raise CaseWorkspaceError('Declare the temporal scope of the comparison.')
-                    store.run_requirement_matching(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('target_subject'), criteria, request.form.get('context_key'),
-                        request.form.get('reason', ''),
-                        require_currentness=request.form.get('require_currentness') == 'yes',
-                        query_date=request.form.get('query_date'))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'role_composition':
-                    store.run_role_composition(workspace, actor, request.form.get('analysis_id'),
-                        request.form.getlist('matching_id'), request.form.getlist('required_role_id'), request.form.get('reason', ''))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'information_comparison':
+                    store.run_requirement_matching(workspace, actor, form.get('analysis_id'),
+                        form.get('target_subject'), criteria, form.get('context_key'),
+                        form.get('reason', ''),
+                        require_currentness=form.get('require_currentness') == 'yes',
+                        query_date=form.get('query_date'))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'role_composition':
+                    coverage_policies = None
+                    if form.get('coverage_mode') == 'requirements':
+                        coverage_policies = {}
+                        for identifier in form.getlist('required_role_id'):
+                            prefix = 'coverage_' + identifier + '_'
+                            divisible = form.get(prefix + 'divisible', 'no')
+                            if divisible not in ('yes', 'no'):
+                                raise CaseWorkspaceError('Declare whether each selected quantity is divisible.')
+                            coverage_policies[identifier] = dict(classification=form.get(prefix + 'classification', 'MANDATORY'),
+                                divisible=divisible == 'yes', combination_claim_id=form.get(prefix + 'basis') or None)
+                    store.run_role_composition(workspace, actor, form.get('analysis_id'),
+                        form.getlist('matching_id'), form.getlist('required_role_id'), form.get('reason', ''), coverage_policies=coverage_policies)
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'information_comparison':
                     def explicit_tokens(value):
                         return [] if value.strip() == '[]' else [part.strip() for part in value.split(',')] if value.strip() else None
                     premises = []
                     for side in ('left', 'right'):
-                        view = request.form.get(side + '_view', 'UNRESOLVED')
-                        value = request.form.get(side + '_value', '')
-                        premises.append(dict(subject_key=request.form.get(side + '_subject', ''),
-                            property_key=request.form.get('property_key', ''), scope_key=request.form.get(side + '_scope', ''),
-                            kind=request.form.get('kind'), value=explicit_tokens(value) if request.form.get('kind') == 'TOKEN_SET' else value,
-                            qualifiers=explicit_tokens(request.form.get(side + '_qualifiers', '')),
-                            unit=request.form.get(side + '_unit', ''), vocabulary=request.form.get('vocabulary', ''),
+                        view = form.get(side + '_view', 'UNRESOLVED')
+                        value = form.get(side + '_value', '')
+                        premises.append(dict(subject_key=form.get(side + '_subject', ''),
+                            property_key=form.get('property_key', ''), scope_key=form.get(side + '_scope', ''),
+                            kind=form.get('kind'), value=explicit_tokens(value) if form.get('kind') == 'TOKEN_SET' else value,
+                            qualifiers=explicit_tokens(form.get(side + '_qualifiers', '')),
+                            unit=form.get(side + '_unit', ''), vocabulary=form.get('vocabulary', ''),
                             view_basis='NORMALIZED_VIEW' if view.startswith('view:') else view,
                             view_id=view.partition(':')[2] if view.startswith('view:') else None,
-                            basis=request.form.get('reason', ''), premise_ids=[request.form.get(side + '_evidence', '')]))
-                    store.run_information_comparison(workspace, actor, request.form.get('analysis_id'),
-                        *premises, request.form.get('operator'), request.form.get('reason', ''), allowed_root=evaluation_path)
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'constraint_review':
-                    constraints = [dict(id='constraint-' + str(index), subject=request.form.get('subject', ''),
-                        parameter=request.form.get('parameter', ''), unit=request.form.get('unit', ''),
-                        lower=request.form.get('lower_' + str(index)), upper=request.form.get('upper_' + str(index)),
-                        premise_ids=[request.form.get('evidence_' + str(index), '')]) for index in (1, 2)]
-                    store.run_constraint_review(workspace, actor, request.form.get('analysis_id'), constraints,
-                        request.form.get('baseline'), request.form.get('direction'), request.form.get('reason', ''))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'record_condition':
-                    store.record_review_condition(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('evidence_id'), request.form.get('meaning', ''),
-                        request.form.get('affected_disciplines', '').split(','), request.form.get('required_resolution'),
-                        request.form.get('requires_section') == 'yes', request.form.get('reason', ''))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'record_representation':
-                    store.record_review_representation(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('condition_id'), request.form.get('evidence_id'), request.form.get('discipline', ''),
-                        request.form.get('representation_class'), request.form.get('resolution_class'), request.form.get('reason', ''))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') in ('confirm_condition', 'resolve_representation'):
-                    store.review_coverage_record(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('record_id'), request.form['action'], request.form.get('reason', ''))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'professional_presentation':
-                    review = next((r for r in workspace.analyses if r['id'] == request.form.get('review_id')), None)
+                            basis=form.get('reason', ''), premise_ids=[form.get(side + '_evidence', '')]))
+                    store.run_information_comparison(workspace, actor, form.get('analysis_id'),
+                        *premises, form.get('operator'), form.get('reason', ''), allowed_root=evaluation_path)
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'constraint_review':
+                    constraints = [dict(id='constraint-' + str(index), subject=form.get('subject', ''),
+                        parameter=form.get('parameter', ''), unit=form.get('unit', ''),
+                        lower=form.get('lower_' + str(index)), upper=form.get('upper_' + str(index)),
+                        premise_ids=[form.get('evidence_' + str(index), '')]) for index in (1, 2)]
+                    store.run_constraint_review(workspace, actor, form.get('analysis_id'), constraints,
+                        form.get('baseline'), form.get('direction'), form.get('reason', ''))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'record_condition':
+                    store.record_review_condition(workspace, actor, form.get('analysis_id'),
+                        form.get('evidence_id'), form.get('meaning', ''),
+                        form.get('affected_disciplines', '').split(','), form.get('required_resolution'),
+                        form.get('requires_section') == 'yes', form.get('reason', ''))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'record_representation':
+                    store.record_review_representation(workspace, actor, form.get('analysis_id'),
+                        form.get('condition_id'), form.get('evidence_id'), form.get('discipline', ''),
+                        form.get('representation_class'), form.get('resolution_class'), form.get('reason', ''))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') in ('confirm_condition', 'resolve_representation'):
+                    store.review_coverage_record(workspace, actor, form.get('analysis_id'),
+                        form.get('record_id'), form['action'], form.get('reason', ''))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'professional_presentation':
+                    review = next((r for r in workspace.analyses if r['id'] == form.get('review_id')), None)
                     if not review or not review.get('governed_result'):
                         abort(404)
                     store.render_professional_review(workspace, actor, review['id'])
                     analysis = {'id': review['governed_result']['attention_analysis_id']}
-                elif request.form.get('action') == 'professional_review':
-                    store.run_professional_review(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('narrative'), request.form.get('focus_id'), request.form.get('subject', ''),
-                        request.form.get('representation_class'), request.form.get('current_resolution'),
-                        request.form.get('required_resolution'), request.form.get('project_phase', ''),
-                        request.form.get('discipline', ''), request.form.get('reason', ''),
-                        next_evidence_id=request.form.get('next_evidence_id') or None,
-                        next_class=request.form.get('next_class') or None,
-                        participation_expectation=request.form.get('participation_expectation', 'unknown'))
-                    analysis = {'id': request.form['analysis_id']}
-                elif request.form.get('action') == 'temporary_relationship':
-                    edge = store.record_temporary_relationship(workspace, actor, request.form.get('analysis_id'),
-                        request.form.get('from_id'), request.form.get('to_id'), request.form.get('hypothesis', ''),
-                        request.form.get('reason', ''), request.form.getlist('evidence_id'))
+                elif form.get('action') == 'professional_review':
+                    store.run_professional_review(workspace, actor, form.get('analysis_id'),
+                        form.get('narrative'), form.get('focus_id'), form.get('subject', ''),
+                        form.get('representation_class'), form.get('current_resolution'),
+                        form.get('required_resolution'), form.get('project_phase', ''),
+                        form.get('discipline', ''), form.get('reason', ''),
+                        next_evidence_id=form.get('next_evidence_id') or None,
+                        next_class=form.get('next_class') or None,
+                        participation_expectation=form.get('participation_expectation', 'unknown'))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'temporary_relationship':
+                    edge = store.record_temporary_relationship(workspace, actor, form.get('analysis_id'),
+                        form.get('from_id'), form.get('to_id'), form.get('hypothesis', ''),
+                        form.get('reason', ''), form.getlist('evidence_id'))
                     analysis = {'id': edge['related_analysis_id']}
-                elif not request.form.get('action'):
-                    analysis = store.record_go_attention(workspace, actor, request.form.get('objective', ''),
-                        request.form.getlist('included_id'), request.form.getlist('de_emphasized_id'),
-                        lifetime_minutes=int(request.form.get('lifetime_minutes', '60')), evaluation_only=evaluation_only)
+                elif not form.get('action'):
+                    analysis = store.record_go_attention(workspace, actor, form.get('objective', ''),
+                        form.getlist('included_id'), form.getlist('de_emphasized_id'),
+                        lifetime_minutes=int(form.get('lifetime_minutes', '60')), evaluation_only=evaluation_only)
                 else:
                     raise CaseWorkspaceError('Unknown attention/review action.')
+                if started_plan:
+                    store.finish_go_work_plan(workspace, actor, plan_id)
         except (CaseWorkspaceError, ValueError) as exc:
+            if started_plan:
+                # Reload committed state: a producer may have refused after a
+                # legitimate partial commit. Never save an uncommitted mutation.
+                committed = store.get(workspace.project_id)
+                store.finish_go_work_plan(committed, actor, plan_id, error=str(exc))
+            if request.form.get('declare_work_plan') == 'yes':
+                return jsonify(error=str(exc)), 400
             flash(str(exc), 'error')
             return redirect(attention_url, code=303)
         return redirect(attention_url + '?analysis=' + analysis['id'], code=303)
@@ -4505,6 +4546,8 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
           group_count=presentation_report['group_count'] if presentation_report else 0)
     event('go_attention.html', 'CONSUMED', analysis_id=analysis['id'] if analysis else None,
           state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
+    work_plans = store.inspect_go_work_plans(workspace, actor, analysis['id'] if analysis else None, app=current_app)
+    event('go_work_plans', 'CONSUMED', plan_ids=[row['plan']['plan_id'] for row in work_plans])
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
         evaluation_only=evaluation_only, temporary_edges=edges,
@@ -4513,6 +4556,8 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         constraint_reviews=[r for r in reviews if r['governed_result']['kind'] == 'constraint_review'],
         information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
         subject_propositions=propositions, selected_proposition=selected_proposition,
+        work_plans=work_plans,
+        work_procedure_actions=list(REVIEW_WORK_PROCEDURES),
         presentation_report=presentation_report,
         report_filter=request.args.get('filter', 'all') if request.args.get('filter', 'all') in ('all','material','unresolved','conflicts','changes','evidence','technical') else 'all',
         requirement_matches=store.inspect_requirement_matches(workspace, actor, analysis['id']) if analysis else [],

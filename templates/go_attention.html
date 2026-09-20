@@ -1,14 +1,6 @@
 ﻿{% extends 'base.html' %}
 {% block title %}Governed attention — GO{% endblock %}
-{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}"><style>
-#attention-report nav { display:flex; flex-wrap:wrap; gap:.6rem; margin:1rem 0; }
-#attention-report nav a { padding:.3rem .6rem; border:1px solid currentColor; border-radius:.25rem; }
-#attention-report nav [aria-current="page"] { font-weight:bold; text-decoration:underline; }
-#attention-report [data-importance="CRITICAL"] { border-left:4px solid #e7a448; padding-left:1rem; }
-#attention-report details { margin:.5rem 0; }
-#attention-report summary { cursor:pointer; }
-#attention-report pre { max-height:30rem; overflow:auto; }
-</style>{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
 {% block content %}
 <div class="survey-evaluation go-attention">
 <h1>Governed attention</h1>
@@ -16,6 +8,10 @@
 <p>Attention selects what GO examines for this objective. It does not change what is true.</p>
 <nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ mapping_url }}">Generic kernel mapping</a> · <a href="{{ request.url }}">Reload</a></nav>
 {% if presentation_report %}{% include 'components/attention_report.html' %}{% endif %}
+<section id="go-work-plans" aria-label="Governed work plans" data-actions='{{ work_procedure_actions|tojson }}'>
+{% if work_plans %}<details><summary>Governed work plans — {{ work_plans|length }} recorded</summary>
+{% for work_plan in work_plans|reverse %}{% include 'components/go_work_plan.html' %}{% endfor %}
+</details>{% endif %}</section>
 <details id="investigation-controls" {% if selected_proposition or not analysis %}open{% endif %}><summary>Investigate / run actions — full records and individual review controls</summary>
 <form method="post" action="{{ attention_url }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -147,3 +143,4 @@
 </details>
 </div>
 {% endblock %}
+{% block extra_scripts %}{{ super() }}<script src="{{ url_for('static', filename='js/go_work_plan.js') }}"></script>{% endblock %}

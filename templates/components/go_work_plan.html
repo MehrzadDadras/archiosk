@@ -1,0 +1,20 @@
+<article class="go-work-plan" data-plan-id="{{ work_plan.plan.plan_id }}">
+<h3>{{ work_plan.plan.objective.decision_context }} · {{ work_plan.status }}</h3>
+<p>{{ work_plan.plan.objective.statement }}</p>
+<p>Procedure only — not evidence, authority, execution, result or approval.</p>
+<ol>{% for check in work_plan.plan.intended_checks %}<li>{{ check.name }} — {{ check.purpose }}</li>{% endfor %}</ol>
+<p>Expected output: a qualified result with evidence references. Execution proceeds automatically; missing premises remain unresolved.</p>
+{% for step in work_plan.history if step.step_kind == 'work_plan_revision' %}
+<p><strong>PLAN_REVISION</strong> {{ step.governed_work_plan.reason }}</p>
+{% endfor %}
+{% for step in work_plan.history if step.step_kind == 'work_plan_result' %}
+<p>{{ step.governed_work_plan.error or step.governed_work_plan.qualification }}</p>
+{% endfor %}
+<details><summary>Scope, prerequisites and completion proof</summary>
+<p>{{ work_plan.plan.objective.success_definition }}</p>
+<p>Required proof: {{ work_plan.plan.completion_proof.required|join(', ') }}.</p>
+{% if work_plan.proof %}<ul>{% for name, item in work_plan.proof.items() %}<li>{{ name|replace('_', ' ') }}: {{ 'Observed' if item.established else 'Not established' }}{% if item.reason %} — {{ item.reason }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+<p>Excluded from attention does not mean absent from the project. Scope cannot override governing contradictions.</p>
+<details><summary>Technical details — original plan and append-only history</summary><pre>{{ work_plan|tojson(indent=2) }}</pre></details>
+</details>
+</article>

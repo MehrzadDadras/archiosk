@@ -99,6 +99,19 @@ def action_catalogue(action_ids):
     return {key: ACTION_REGISTRY[key] for key in action_ids if key in ACTION_REGISTRY}
 
 
+# Procedure declarations for the existing attention/review dispatcher. These
+# describe its real executors; they neither execute actions nor admit evidence.
+REVIEW_WORK_PROCEDURES = {
+    '': ('Set attention', 'record_go_attention', ('ATTENTION',)),
+    'requirement_matching': ('Match requirements', 'run_requirement_matching', ('AUTHORITY', 'MATCHING', 'UNCERTAINTY')),
+    'role_composition': ('Compose required roles', 'run_role_composition', ('MATCHING', 'ROLE COMPOSITION', 'UNCERTAINTY')),
+    'information_comparison': ('Compare normalized information', 'run_information_comparison', ('VIEW-NORMALIZATION', 'COMPARISON', 'UNCERTAINTY')),
+    'constraint_review': ('Probe stated constraints', 'run_constraint_review', ('CONSTRAINT PROBING', 'BREAKPOINT SEARCH')),
+    'professional_review': ('Run professional review', 'run_professional_review', ('EXPECTED-NEXT', 'SECTION-COVERAGE', 'DISCIPLINE-COVERAGE', 'ROOT-TRACE / RETURN')),
+    'professional_presentation': ('Render retained review', 'render_professional_review', ('PROVENANCE PRESERVATION', 'UNCERTAINTY')),
+}
+
+
 def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
     """Contracts describe owned operations; they never execute or admit a result."""
     return dict(name=name, inputs=inputs, outputs=outputs, allowed_transitions=transitions,
@@ -111,10 +124,22 @@ def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
 # One catalogue beside the existing capability/action metadata. Each key names
 # its actual implementation. Being registered is not proof of invocation.
 MUSCLE_CONTRACTS = {
+    'services.case_workspace.CaseWorkspaceStore.declare_go_work_plan': _muscle('GOVERNED WORK PLAN',
+        'Bounded typed action, objective, existing scope and available premise identities', 'Persisted InvestigationStep procedure',
+        'Intent -> PLANNED; declaration does not execute the domain action', 'REFUSED for foreign, inactive or unsupported inputs',
+        'Plan is neither evidence, authority, execution, result nor approval.'),
+    'services.case_workspace.CaseWorkspaceStore.begin_go_work_plan': _muscle('WORK PLAN EXECUTION',
+        'Owned persisted plan and current workspace version', 'Single execution start with append-only dependency revision',
+        'PLANNED -> RUNNING; changed available premises -> PLAN_REVISION', 'REFUSED for replay, foreign plan or concurrent stale version',
+        'Current governance and evidence take precedence over the declared procedure.'),
+    'services.cross_modal_investigation.evaluate_requirement_coverage': _muscle('REQUIREMENT COVERAGE',
+        'Explicit requirement policies, retained comparison premises and participant configuration', 'Coverage assignments and separate compatibility state',
+        'Positive hard conflict > unresolved premise > known partial > covered', 'UNRESOLVED for missing evidence or unsupported combination basis',
+        'Conditional additive coverage is not factual authority, commitment, partnership agreement or actual JV.'),
     'services.case_workspace.CaseWorkspaceStore.run_role_composition': _muscle('ROLE COMPOSITION',
-        'Retained candidate matching runs, explicit required roles and common temporal scope', 'Conditional minimum coverage configurations',
+        'Retained candidate matching runs, explicit required roles or coverage policies and common temporal scope', 'Conditional minimum coverage configurations',
         'Positive role predicates -> set coverage; mandatory failures exclude candidates', 'REFUSED for foreign/mixed inputs; PARTIAL for missing coverage',
-        'Coverage is not ranking, capital summation, partnership compatibility or verified fit.'),
+        'Supported conditional quantity addition remains separate from commercial structure, partnership compatibility and verified fit.'),
     'services.cross_modal_investigation.match_normalized_criteria': _muscle('REQUIREMENT MATCHING',
         'Distinct typed required/candidate premises and mandatory obligations', 'Per-criterion model states and mandatory failures',
         'Comparable predicates -> conditional match; mandatory failure dominates', 'UNRESOLVED, PARTIAL, REFUSED; missing and incomparable inputs remain explicit',

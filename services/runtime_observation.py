@@ -37,7 +37,7 @@ _keys = {"id", "project_id", "source_id", "evidence_item_id", "region_id",
          "unresolved", "factual_fit", "query_date", "expected_class", "model_label", "target_subject",
          "required_claim_id", "candidate_claim_id", "candidate_temporal_class", "context_key", "require_currentness",
          "used_claim_ids", "unselected_claim_ids", "consumption_state", "premise_statuses", "source_integrity",
-         "matching_ids", "required_claim_ids", "matching_analysis_ids", "candidates", "covered_claim_ids", "excluded_reasons", "overlaps"}
+         "matching_ids", "required_claim_ids", "matching_analysis_ids", "candidates", "covered_claim_ids", "excluded_reasons", "overlaps", "plan_id"}
 
 
 def current_reference():
@@ -212,6 +212,24 @@ def _retain(app, record, filename=None):
         directory(app).mkdir(parents=True, exist_ok=True)
         (directory(app) / (filename or record["id"] + ".json")).write_text(json.dumps(
             {k: v for k, v in record.items() if k != "started"}, default=str), encoding="utf-8")
+        events = record.get('events', [])
+        if any(e.get('phase') == 'SURFACED' and e.get('http_status') == 200 for e in events):
+            for event_row in events:
+                if event_row.get('owner') != 'go_work_plans' or event_row.get('phase') != 'CONSUMED':
+                    continue
+                for plan_id in event_row.get('plan_ids', []):
+                    try:
+                        if str(uuid.UUID(plan_id)) != plan_id:
+                            continue
+                    except (ValueError, TypeError, AttributeError):
+                        continue
+                    # Operational locator only, like existing worker trace
+                    # locators. The referenced trace must still prove surfacing.
+                    pointer = directory(app)/('_plan-'+plan_id+'.json')
+                    temporary = pointer.with_suffix('.'+uuid.uuid4().hex+'.tmp')
+                    temporary.write_text(json.dumps(dict(trace_id=record['id'], actor=record.get('actor'),
+                        request=record.get('request', {}))), encoding='utf-8')
+                    temporary.replace(pointer)
         return True
 
 
@@ -229,8 +247,11 @@ def install(app):
     from services.auth import is_admin
     @app.before_request
     def begin():
-        if (not session.get("survey_observe") or not session.get("developer_mode")
-                or not is_admin() or request.path.startswith("/static/")):
+        planned_operation = (session.get('username')
+            and request.endpoint in ('workspace.go_attention', 'portal.evaluation_go_attention')
+            and (request.method == 'GET' or request.form.get('plan_id') or request.form.get('declare_work_plan') == 'yes'))
+        if (not planned_operation and (not session.get("survey_observe") or not session.get("developer_mode")
+                or not is_admin())) or request.path.startswith("/static/"):
             return
         record = dict(id=uuid.uuid4().hex, started=time.monotonic(),
             request=dict(method=request.method, path=request.path, endpoint=request.endpoint,
@@ -280,3 +301,134 @@ def read(app, identifier):
         return None if deleted_case(app, record) else record
     except (OSError, ValueError):
         return None
+
+
+def work_plan_completion_proof(app, workspace, root, result_step, *, store):
+    """Operational proof only, projected read-only from real retained owners.
+
+    A declaration, successful HTTP redirect or caller-supplied boolean cannot
+    close a proof requirement. Missing/retired qualification remains explicit.
+    """
+    required = root['governed_work_plan']['completion_proof']['required']
+    proof = {key: dict(established=False, reason='Required proof is not retained.') for key in required}
+    if not result_step or result_step['governed_work_plan'].get('error'):
+        return proof
+    result = result_step['governed_work_plan']
+    trace_id = result.get('runtime_trace_id')
+    trace = read(app, trace_id) if trace_id else None
+    events = (trace or {}).get('events', [])
+    owner = root['governed_work_plan']['executor']
+    if ((trace or {}).get('actor') == root['triggered_by_actor'] and not trace.get('truncated') and
+            any(e['phase'] == 'INVOKED' and e['owner'].endswith('.begin_go_work_plan')
+                and e.get('inputs', {}).get('plan_id') == root['id'] for e in events) and
+            any(e['phase'] == 'INVOKED' and e['owner'] == owner for e in events) and
+            any(e['phase'] == 'RETURNED' and e['owner'] == owner for e in events)):
+        proof['runtime_invocation'] = dict(established=True, runtime_trace_id=trace_id)
+    analyses = {r['id']: r for r in workspace.analyses}
+    products = {p['id']: p for p in workspace.work_products}
+    analysis_ids, product_ids = result.get('analysis_ids', []), result.get('work_product_ids', [])
+    if (analysis_ids or product_ids) and all(i in analyses for i in analysis_ids) and all(i in products for i in product_ids):
+        proof['persisted_result'] = dict(established=True, analysis_ids=analysis_ids, work_product_ids=product_ids)
+    sources = {s['id'] for s in workspace.sources if not s.get('removed_at')}
+    referenced_runs = list(analysis_ids)
+    for identifier in product_ids:
+        for section in products.get(identifier, {}).get('sections', []):
+            content = section.get('content') or {}
+            if section.get('section_type') == 'provenance' and isinstance(content, dict) and content.get('analysis_id'):
+                referenced_runs.append(content['analysis_id'])
+    def intact(value, depth=0):
+        if depth > 64:
+            return False
+        if isinstance(value, list):
+            return all(intact(row, depth+1) for row in value)
+        if not isinstance(value, dict):
+            return True
+        links = value.get('evidence_links', [])
+        if not isinstance(links, list):
+            return False
+        for link in links:
+            if not isinstance(link, dict) or not store._resolve_mm6_endpoint(workspace, link.get('object_type'), link.get('object_id')):
+                return False
+        for key, collection in (('premise_ids', workspace.evidence_items), ('included_evidence_ids', workspace.evidence_items),
+                                ('used_claim_ids', workspace.claims), ('required_claim_ids', workspace.claims),
+                                ('matching_analysis_ids', workspace.analyses)):
+            if key in value:
+                if not isinstance(value[key], list) or any(not isinstance(i, str) for i in value[key]):
+                    return False
+                if not set(value[key]).issubset({row['id'] for row in collection}):
+                    return False
+        return all(intact(row, depth+1) for row in value.values())
+    if (referenced_runs and all(i in analyses for i in referenced_runs)
+            and all(analyses[i].get('source_ids') and set(analyses[i]['source_ids']).issubset(sources)
+                    and intact(analyses[i]) for i in referenced_runs)
+            and all(intact(products[i]) for i in product_ids if i in products)):
+        proof['evidence_traceability'] = dict(established=True, analysis_ids=referenced_runs,
+            reason='Retained analyses resolve their source references; source authority remains separately qualified.')
+    # Normal GETs do not write a proof record or rerun analysis. This scan reads
+    # existing traces only; the result is consumed before the current response's
+    # SURFACED event exists, so first rendering may honestly await that proof.
+    try:
+        pointer = json.loads((directory(app)/('_plan-'+root['id']+'.json')).read_text(encoding='utf-8'))
+        surfaced = read(app, pointer['trace_id'])
+    except (OSError, ValueError, KeyError, TypeError):
+        surfaced = None
+    if surfaced and surfaced.get('actor') == root['triggered_by_actor']:
+        record = surfaced
+        rows = record.get('events', [])
+        if (any(e['phase'] == 'CONSUMED' and e['owner'] == 'go_work_plans' and
+                root['id'] in e.get('plan_ids', []) for e in rows) and
+                any(e['phase'] == 'SURFACED' and e.get('http_status') == 200 for e in rows)):
+            proof['surfaced_output'] = dict(established=True, runtime_trace_id=record['id'])
+    # The gate producer will retain an actual run receipt through this same
+    # operational owner. Until then, no configuration flag implies tests passed.
+    proof['regression_tests'] = applicable_test_qualification(app)
+    return proof
+
+
+def qualification_file_hash(path):
+    """Portable implementation identity; source byte-pins remain separate gates.
+
+    Git checks out text as CRLF on Windows and deploys LF. This fingerprint is
+    solely for associating a test run with the same logical implementation.
+    It must not be used as an uploaded-source or protected-byte digest.
+    """
+    data = Path(path).read_bytes()
+    if b'\x00' not in data:
+        try:
+            data = data.decode('utf-8').replace('\r\n', '\n').encode('utf-8')
+        except UnicodeDecodeError:
+            pass
+    return hashlib.sha256(data).hexdigest()
+
+
+def applicable_test_qualification(app):
+    """Read an actual frozen-tree pytest receipt; configuration cannot assert PASS."""
+    unavailable = dict(established=False, reason='No applicable retained frozen-tree test-run receipt.')
+    try:
+        pointer = json.loads((directory(app)/'_qualification-current.json').read_text(encoding='utf-8'))
+        record = read(app, pointer['trace_id'])
+        if not record or record.get('request', {}).get('endpoint') != 'tools.qualify_go_runtime':
+            return unavailable
+        receipt = record.get('qualification') or {}
+        if (receipt.get('exit_code') != 0 or receipt.get('frozen_tree_unchanged') is not True
+                or receipt.get('suite') != 'authoritative_full_gate' or receipt.get('executed_tests', 0) <= 0):
+            return unavailable
+        root = Path(app.root_path).resolve()
+        paths = []
+        for relative, expected in receipt['implementation_hashes'].items():
+            path = (root/relative).resolve()
+            if not path.is_relative_to(root) or not path.is_file():
+                return unavailable
+            paths.append((path, expected, path.stat().st_mtime_ns, path.stat().st_size))
+        if not paths:
+            return unavailable
+        cache_key = (record['id'], tuple((str(p), digest, modified, size) for p, digest, modified, size in paths))
+        cache = app.extensions.get('go_test_qualification')
+        if cache != cache_key:
+            if any(qualification_file_hash(p) != expected for p, expected, _, _ in paths):
+                return dict(unavailable, reason='Implementation differs from the retained tested tree.')
+            app.extensions['go_test_qualification'] = cache_key
+        return dict(established=True, runtime_trace_id=record['id'], executed_tests=receipt['executed_tests'],
+                    reason='The retained successful full test run applies to this implementation tree. This is operational qualification, not evidence authority.')
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return unavailable

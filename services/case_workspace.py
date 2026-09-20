@@ -3443,6 +3443,7 @@ class InvestigationStep:
     needs_human_judgment: bool = True
     analysis_id: Optional[str] = None
     branched_from_step_id: Optional[str] = None
+    governed_work_plan: Optional[dict] = None  # procedure/proof references, never project evidence
 
 
 @dataclass
@@ -7130,7 +7131,7 @@ class CaseWorkspaceStore:
         return results
 
     @observed
-    def run_role_composition(self, workspace, actor, analysis_id, matching_ids, required_claim_ids, reason):
+    def run_role_composition(self, workspace, actor, analysis_id, matching_ids, required_claim_ids, reason, *, coverage_policies=None):
         """Compose explicit role coverage with the existing bounded set solver.
 
         This does not add monetary amounts, rank entities, prove collaboration
@@ -7154,7 +7155,7 @@ class CaseWorkspaceStore:
         for identifier in required_claim_ids:
             row = propositions.get(identifier)
             norm = ((row or {}).get('claim', {}).get('structured_proposition') or {}).get('normalization', {})
-            if (not row or norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'role' or not norm.get('value')
+            if (not row or (coverage_policies is None and (norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'role' or not norm.get('value')))
                     or row['source_integrity'] != 'UNCHANGED' or row['status']['status'] not in
                     ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding')):
                 raise CaseWorkspaceError('Select current explicit role propositions; financial amounts cannot be combined as role coverage.')
@@ -7167,6 +7168,9 @@ class CaseWorkspaceStore:
         subjects = [row['run']['governed_result']['target_subject'] for row in runs]
         if len(contexts) != 1 or len(set(subjects)) != len(subjects):
             raise CaseWorkspaceError('Choose one matching run per candidate, with the same context and temporal scope.')
+        if coverage_policies is not None:
+            return self._compose_declared_coverage(workspace, actor, analysis_id, scope, requirements,
+                runs, propositions, coverage_policies, reason)
         coverage, candidates, obligations = {}, [], None
         for entry in runs:
             result = entry['run']['governed_result']
@@ -7204,6 +7208,115 @@ class CaseWorkspaceStore:
             trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
             muscle_profile=[dict(muscle='COMPOSITION', owner='cover_requirements', result=model)])
 
+    def _compose_declared_coverage(self, workspace, actor, analysis_id, scope, requirements, runs,
+                                    propositions, policies, reason):
+        """Typed coverage adapter to the same matching and composition owners."""
+        from services.cross_modal_investigation import cover_requirements, evaluate_requirement_coverage, inspect_declared_temporal_scope
+        classes = {'MANDATORY', 'OPTIONAL', 'PREFERRED', 'COMPOSITIONAL', 'HARD_EXCLUSION', 'UNRESOLVED'}
+        required_ids = [row['claim']['id'] for row in requirements]
+        if (len(runs) > 8 or len(requirements) > 16 or not isinstance(policies, dict)
+                or set(policies) != set(required_ids)):
+            raise CaseWorkspaceError('Supply an explicit policy for each requirement, with at most eight participants and sixteen dimensions.')
+        typed = []
+        for row in requirements:
+            claim, policy = row['claim'], policies[row['claim']['id']]
+            norm = claim['structured_proposition']['normalization']
+            if (not isinstance(policy, dict) or set(policy) != {'classification', 'divisible', 'combination_claim_id'}
+                    or policy['classification'] not in classes or type(policy['divisible']) is not bool):
+                raise CaseWorkspaceError('Coverage policy must explicitly identify obligation, divisibility and the combination premise.')
+            if policy['divisible'] and (norm['kind'] != 'NUMBER' or norm['property_key'].lower() in
+                    ('authority', 'currentness', 'geography', 'sector', 'mandate', 'identity')):
+                raise CaseWorkspaceError('This dimension cannot be treated as an additive quantity.')
+            basis = None
+            if policy['combination_claim_id']:
+                basis_row = propositions.get(policy['combination_claim_id'])
+                basis_claim = (basis_row or {}).get('claim') or {}
+                basis_norm = (basis_claim.get('structured_proposition') or {}).get('normalization') or {}
+                if (not policy['divisible'] or not basis_row or basis_row['source_integrity'] != 'UNCHANGED'
+                        or basis_row['status']['status'] not in ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding')
+                        or basis_norm.get('kind') != 'TOKEN_SET' or basis_norm.get('property_key') != 'additive_capacity_basis'
+                        or basis_norm.get('scope_key') != norm['scope_key'] or basis_norm.get('subject_key') != norm['subject_key']
+                        or basis_norm.get('vocabulary') != 'additive:' + norm['property_key'] + ':' + norm['unit']):
+                    raise CaseWorkspaceError('The combination basis must be a current, source-anchored proposition for this opportunity, quantity and scope.')
+                temporal_run = runs[0]['run']['governed_result']
+                if (any(a['state'] in ('CONTESTED', 'REFUSED', 'UNRESOLVED') or
+                        (a.get('currentness') or {}).get('status') != 'current' for a in basis_row['admissions'])
+                        or (temporal_run['require_currentness'] and inspect_declared_temporal_scope(
+                            basis_claim['structured_proposition'], temporal_run['query_date'])['state'] != 'DECLARED_INTERVAL_CONTAINS_QUERY')):
+                    raise CaseWorkspaceError('The combination basis is stale, contested or temporally unresolved.')
+                basis = dict(claim_id=basis_claim['id'], participant_ids=basis_norm['value'],
+                    evidence_refs=[basis_claim['id'], *basis_norm['premise_ids']], qualification='Declared analytical combination basis; commercial authority not established.')
+            typed.append(dict(id=claim['id'], normalization=deepcopy(norm),
+                policy=dict(classification=policy['classification'], divisible=policy['divisible'], combination_basis=basis)))
+        candidates, provenance = {}, []
+        extra_ids = sorted({p['id'] for entry in runs for p in entry['run']['governed_result']['model']['criteria']
+                            if p['mandatory'] and p['id'] not in required_ids})
+        for identifier in extra_ids:
+            row = propositions.get(identifier)
+            if not row:
+                raise CaseWorkspaceError('An additional mandatory eligibility dependency is unavailable.')
+            typed.append(dict(id=identifier, normalization=deepcopy(row['claim']['structured_proposition']['normalization']),
+                policy=dict(classification='HARD_EXCLUSION', divisible=False, combination_basis=None)))
+        for entry in runs:
+            result = entry['run']['governed_result']
+            party, predicates = result['target_subject'], {p['id']:p for p in result['model']['criteria']}
+            if not set(required_ids).issubset(predicates):
+                raise CaseWorkspaceError('Every candidate must explicitly examine every selected requirement, including missing evidence.')
+            rows = {}
+            blocked = entry['consumption_state'] == 'REVIEW_REQUIRED'
+            for original in result['criteria']:
+                identifier = original['criterion']['required_claim_id']
+                if identifier not in required_ids and identifier not in extra_ids:
+                    continue
+                candidate = original['candidate']
+                norm = candidate['claim']['structured_proposition']['normalization'] if candidate else None
+                refs = [original['required']['claim']['id']]
+                refs += [candidate['claim']['id'], *norm['premise_ids']] if candidate else []
+                rows[identifier] = dict(state='UNRESOLVED' if blocked else predicates[identifier]['comparison']['state'],
+                    normalization=deepcopy(norm), operator=original['criterion']['operator'],
+                    evidence_refs=refs if candidate else [], matching_analysis_id=entry['run']['id'])
+            candidates[party] = rows
+            provenance.append(dict(subject=party, matching_analysis_id=entry['run']['id'], matching=deepcopy(entry),
+                covered_claim_ids=[key for key, row in rows.items() if row['state'] == 'MATCH'],
+                excluded_reasons=['Matching premises changed; explicit re-evaluation is required.'] if blocked else []))
+        def evaluate(parties):
+            applicable = deepcopy(typed)
+            for requirement in applicable:
+                basis = requirement['policy']['combination_basis']
+                if basis and not set(parties).issubset(basis['participant_ids']):
+                    requirement['policy']['combination_basis'] = None
+            return evaluate_requirement_coverage(applicable, candidates, parties)
+        mandatory = [r['id'] for r in typed if r['policy']['classification'] not in ('OPTIONAL', 'PREFERRED')]
+        coverage = {party: [key for key, row in rows.items() if row['state'] == 'MATCH'] for party, rows in candidates.items()}
+        model = cover_requirements(mandatory, coverage, max_candidates=8, configuration_evaluator=evaluate)
+        minimal = []
+        for parties in model['configurations']:
+            assessed = evaluate(parties)
+            removal = [dict(participant_id=party, remaining=evaluate([p for p in parties if p != party])) for party in parties]
+            minimal.append(dict(participant_ids=parties, result=assessed, removal_checks=removal))
+        result = dict(kind='role_composition', state='UNRESOLVED', canonical=False, evaluation_only=True,
+            attention_analysis_id=analysis_id, objective=scope['objective'], context_key=runs[0]['run']['governed_result']['context_key'],
+            reason=reason.strip(), requirements=deepcopy(requirements), candidates=provenance, model=model,
+            coverage_policies=deepcopy(policies), minimum_configurations=minimal,
+            composition_premise_fingerprints={identifier: hashlib.sha256(json.dumps(propositions[identifier]['claim'], sort_keys=True).encode()).hexdigest()
+                for identifier in set(required_ids + extra_ids + [p['combination_claim_id'] for p in policies.values() if p['combination_claim_id']])},
+            selected_configuration=evaluate(list(candidates)),
+            selected_removal_checks=[dict(participant_id=party, result=evaluate([p for p in candidates if p != party])) for party in candidates],
+            requirement_labels={r['id']: r['normalization']['property_key'] + ' · ' + str(r['normalization']['value']) for r in typed},
+            scope_crossing_dependencies=[dict(state='SCOPE_CROSSING_DEPENDENCY', claim_id=i,
+                reason='A mandatory candidate eligibility condition remains applicable outside the selected collective coverage requirements.') for i in extra_ids],
+            configuration_set_state='MINIMAL_CONFIGURATION_SET' if minimal else
+                'CONFIGURATION_NON_FIT' if model['state'] == 'NON_MATCH' else
+                'PARTIAL_CONFIGURATION' if model['state'] == 'PARTIAL' else 'CONFIGURATION_UNRESOLVED',
+            required_claim_ids=required_ids, matching_analysis_ids=[r['run']['id'] for r in runs], overlaps={},
+            qualification='EVALUATION_INPUT: explicit requirement policies and conditional source interpretations. '
+                'Analytical capacity coverage does not establish factual fit, commitments, partnership compatibility or an actual JV.')
+        return self.record_analysis(workspace, source_ids=sorted({s for r in runs for s in r['run']['source_ids']}),
+            objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='requirement-coverage-1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+            muscle_profile=[dict(muscle='COMPOSITION', owner='cover_requirements', result=model),
+                dict(muscle='REQUIREMENT COVERAGE', owner='evaluate_requirement_coverage', result=dict(state=result['configuration_set_state']))])
+
     @observed
     def inspect_role_compositions(self, workspace, actor, analysis_id):
         matches = {row['run']['id']: row for row in self.inspect_requirement_matches(workspace, actor, analysis_id)}
@@ -7214,6 +7327,17 @@ class CaseWorkspaceStore:
                 continue
             changed = any(identifier not in matches or matches[identifier]['consumption_state'] == 'REVIEW_REQUIRED'
                           for identifier in result['matching_analysis_ids'])
+            for identifier, fingerprint in result.get('composition_premise_fingerprints', {}).items():
+                claim = self.get_claim(workspace, identifier)
+                if (not claim or hashlib.sha256(json.dumps(claim, sort_keys=True).encode()).hexdigest() != fingerprint
+                        or self.resolve_claim_status(workspace, identifier)['status'] not in
+                        ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding')):
+                    changed = True
+                    continue
+                try:
+                    self._validate_structured_proposition(workspace, claim['structured_proposition'], claim['evidence_links'], check_normalization=False)
+                except CaseWorkspaceError:
+                    changed = True
             rows.append(dict(run=deepcopy(run), consumption_state='REVIEW_REQUIRED' if changed else 'HISTORICAL_RESULT'))
         return rows
 
@@ -12927,6 +13051,7 @@ class CaseWorkspaceStore:
         needs_human_judgment: bool = True,
         analysis_id: Optional[str] = None,
         branched_from_step_id: Optional[str] = None,
+        governed_work_plan: Optional[dict] = None,
     ) -> dict:
         """Persists one InvestigationStep - always, whether the underlying
         reasoning actually ran or was honestly skipped (ran=False,
@@ -12953,10 +13078,188 @@ class CaseWorkspaceStore:
             needs_human_judgment=needs_human_judgment,
             analysis_id=analysis_id,
             branched_from_step_id=branched_from_step_id,
+            governed_work_plan=deepcopy(governed_work_plan),
         )
         workspace.investigation_steps.append(asdict(step))
         self.save(workspace)
         return asdict(step)
+
+    def _work_plan_access(self, workspace, actor):
+        if (not actor or workspace.removed_at or workspace.document_desk_state != 'active' or
+                len(self.visible_cases_for(workspace, actor)) != len(workspace.cases)):
+            raise CaseWorkspaceError('An active, fully visible workspace is required.')
+
+    def _work_plan_premises(self, workspace):
+        # Include the entire available substrate: declared attention cannot hide
+        # a changed or newly discovered governing dependency. Operational steps
+        # and trace records are deliberately excluded from evidence fingerprints.
+        return {name: {row['id']: hashlib.sha256(json.dumps(row, sort_keys=True,
+                    ensure_ascii=False).encode('utf-8')).hexdigest() for row in getattr(workspace, name)}
+                for name in ('sources', 'evidence_items', 'claims', 'relationships',
+                             'supersessions', 'findings', 'reviewer_validations', 'dispositions')}
+
+    @observed
+    def declare_go_work_plan(self, workspace, actor, inputs):
+        """Persist intended procedure, without invoking the declared executor."""
+        from services.capability_registry import REVIEW_WORK_PROCEDURES
+        self._work_plan_access(workspace, actor)
+        if (not isinstance(inputs, dict) or len(inputs) > 180 or
+                any(not isinstance(k, str) or not isinstance(v, list) or len(v) > 1000
+                    or any(not isinstance(value, str) or len(value) > 10000 for value in v)
+                    for k, v in inputs.items())):
+            raise CaseWorkspaceError('A bounded typed review form is required.')
+        # Security/session parameters must never be retained as procedure input.
+        inputs = {k: list(v) for k, v in inputs.items()
+                  if k not in ('csrf_token', 'plan_id', 'declare_work_plan')}
+        action = (inputs.get('action') or [''])[0]
+        if action not in REVIEW_WORK_PROCEDURES:
+            raise CaseWorkspaceError('This action has no declared review procedure.')
+        common = {'action', 'analysis_id', 'reason'}
+        fields = {
+            '': {'objective', 'included_id', 'de_emphasized_id', 'lifetime_minutes'},
+            'requirement_matching': {'target_subject', 'context_key', 'require_currentness', 'query_date'} |
+                {f'criterion_{index}_{key}' for index in range(16) for key in ('required', 'candidate', 'mandatory', 'operator', 'temporal')},
+            'role_composition': {'matching_id', 'required_role_id', 'coverage_mode'} |
+                {key for key in inputs if re.fullmatch(r'coverage_[a-f0-9-]{36}_(classification|divisible|basis)', key)},
+            'information_comparison': {'property_key', 'kind', 'operator', 'vocabulary'} |
+                {f'{side}_{key}' for side in ('left', 'right') for key in ('subject', 'evidence', 'scope', 'value', 'unit', 'qualifiers', 'view')},
+            'constraint_review': {'subject', 'parameter', 'unit', 'baseline', 'direction'} |
+                {f'{key}_{index}' for index in (1, 2) for key in ('lower', 'upper', 'evidence')},
+            'professional_review': {'narrative', 'focus_id', 'subject', 'representation_class', 'current_resolution',
+                'required_resolution', 'project_phase', 'discipline', 'next_evidence_id', 'next_class', 'participation_expectation'},
+            'professional_presentation': {'review_id'},
+        }
+        if set(inputs) - common - fields[action]:
+            raise CaseWorkspaceError('Unsupported procedure parameters cannot be retained.')
+        multiple = {'included_id', 'de_emphasized_id', 'matching_id', 'required_role_id'}
+        if any(len(values) != 1 for key, values in inputs.items() if key not in multiple):
+            raise CaseWorkspaceError('Single-valued procedure parameters must be unambiguous.')
+        title, executor, muscles = REVIEW_WORK_PROCEDURES[action]
+        attention_id = (inputs.get('analysis_id') or [None])[0]
+        if action == 'professional_presentation':
+            review = self._find(workspace.analyses, (inputs.get('review_id') or [None])[0])
+            if not review or not review.get('governed_result'):
+                raise CaseWorkspaceError('Select an existing retained review to render.')
+            attention_id = review['governed_result'].get('attention_analysis_id')
+        attention = self._find(workspace.analyses, attention_id)
+        if attention_id and not (attention or {}).get('attention_scope'):
+            raise CaseWorkspaceError('The attention execution is not in this workspace.')
+        scope = (attention or {}).get('attention_scope') or {}
+        selected_ids = scope.get('included_evidence_ids', inputs.get('included_id', []))
+        source_ids = sorted({e['source_id'] for e in workspace.evidence_items if e['id'] in selected_ids})
+        subjects = sorted({value for key, values in inputs.items() if key in ('target_subject', 'left_subject', 'right_subject') for value in values})
+        identifier, created = _new_id(), _now()
+        objective = (inputs.get('objective') or inputs.get('reason') or [title])[0]
+        plan = dict(plan_id=identifier, created_at=created,
+            objective=dict(statement=objective, success_definition='Retain and surface the qualified result with recoverable execution and evidence references.', decision_context=title),
+            scope=dict(project_id=workspace.project_id, case_id=None, subject_ids=subjects,
+                source_ids=source_ids, discipline_scope=inputs.get('discipline', []), spatial_scope=None,
+                temporal_scope=dict(as_of=(inputs.get('query_date') or [None])[0], valid_from=None, valid_until=scope.get('expires_at')),
+                exclusions=[e['evidence_item_id'] for e in scope.get('entries', []) if e['category'] != 'included']),
+            intended_checks=[dict(check_id='executor', sequence=0, name=title, purpose='Invoke the existing governed executor.',
+                muscle=None, required=True, owner='services.case_workspace.CaseWorkspaceStore.' + executor,
+                prerequisites=['Accessible inputs', 'Existing authority and admission rules'])] + [dict(check_id=str(index), sequence=index, name=muscle,
+                purpose='Inspect this component where applicable under the executor contract.', muscle=muscle, required=False,
+                prerequisites=['Accessible source references', 'Existing admission and currentness rules'])
+                for index, muscle in enumerate(muscles, 1)],
+            evidence_classes=dict(required=['Existing source-anchored premises'], optional=[],
+                prohibited_for_strengthening=['PLAN', 'RUNTIME_TRACE', 'EVALUATION_INPUT', 'MODEL_NARRATIVE']),
+            stop_conditions=['Access denied', 'Required premise unavailable', 'Protected invariant would be violated'],
+            output_form=dict(primary_output_type='governed_review', secondary_outputs=['runtime_trace'], technical_detail_default='collapsed'),
+            completion_proof=dict(required=['runtime_invocation', 'persisted_result', 'evidence_traceability', 'surfaced_output', 'regression_tests']),
+            result_state=dict(status='PLANNED'), executor='services.case_workspace.CaseWorkspaceStore.' + executor,
+            inputs=inputs, premise_fingerprints=self._work_plan_premises(workspace),
+            authority='NONE', qualification='Procedure only. Plan display is not an approval gate.')
+        step = InvestigationStep(id=identifier, project_id=workspace.project_id, case_id=None,
+            step_kind='governed_work_plan', anchor={'kind': 'analysis', 'id': attention_id},
+            question=objective, triggered_by_actor=actor, created_at=created,
+            needs_human_judgment=False, governed_work_plan=plan)
+        workspace.investigation_steps.append(asdict(step))
+        self.save(workspace)
+        return deepcopy(plan)
+
+    def _owned_work_plan(self, workspace, actor, plan_id):
+        self._work_plan_access(workspace, actor)
+        step = self.get_investigation_step(workspace, plan_id)
+        if (not step or step.get('step_kind') != 'governed_work_plan'
+                or step['triggered_by_actor'] != actor or not step.get('governed_work_plan')):
+            raise CaseWorkspaceError('Work plan was not found for this actor and workspace.')
+        return step
+
+    @observed
+    def begin_go_work_plan(self, workspace, actor, plan_id):
+        root = self._owned_work_plan(workspace, actor, plan_id)
+        if any(s.get('branched_from_step_id') == plan_id and s.get('step_kind') == 'work_plan_execution'
+               for s in workspace.investigation_steps):
+            raise CaseWorkspaceError('This plan already started. Reload cannot re-execute it.')
+        plan = root['governed_work_plan']
+        before, current = plan['premise_fingerprints'], self._work_plan_premises(workspace)
+        changes = {kind: sorted(key for key in set(before.get(kind, {})) | set(rows)
+                               if before.get(kind, {}).get(key) != rows.get(key))
+                   for kind, rows in current.items()}
+        changes = {kind: ids for kind, ids in changes.items() if ids}
+        if changes:
+            # Append revision and start together. A competing request cannot
+            # both start the same plan: save enforces the loaded disk version.
+            workspace.investigation_steps.append(asdict(InvestigationStep(
+                id=_new_id(), project_id=workspace.project_id, case_id=None,
+                step_kind='work_plan_revision', anchor=root['anchor'], question=root['question'],
+                triggered_by_actor=actor, created_at=_now(), branched_from_step_id=plan_id,
+                needs_human_judgment=False, governed_work_plan=dict(status='PLAN_REVISION',
+                    changed_records=changes, reason='Available premises changed after declaration, including records outside attention. The existing executor must recheck applicability; no plan overrides current governance.'))))
+        self.record_investigation_step(workspace, None, 'work_plan_execution', root['anchor'], root['question'], actor,
+            needs_human_judgment=False, branched_from_step_id=plan_id,
+            governed_work_plan=dict(status='RUNNING', runtime_trace_id=current_reference(),
+                prior_analysis_ids=[r['id'] for r in workspace.analyses],
+                prior_work_product_ids=[p['id'] for p in workspace.work_products]))
+        return deepcopy(plan['inputs'])
+
+    @observed
+    def finish_go_work_plan(self, workspace, actor, plan_id, *, error=None):
+        root = self._owned_work_plan(workspace, actor, plan_id)
+        history = [s for s in workspace.investigation_steps if s.get('branched_from_step_id') == plan_id]
+        started = next((s for s in history if s['step_kind'] == 'work_plan_execution'), None)
+        if not started or any(s['step_kind'] == 'work_plan_result' for s in history):
+            raise CaseWorkspaceError('Work plan must have exactly one started, unfinished execution.')
+        start = started['governed_work_plan']
+        result_ids = [r['id'] for r in workspace.analyses if r['id'] not in start['prior_analysis_ids']]
+        products = [p['id'] for p in workspace.work_products if p['id'] not in start['prior_work_product_ids']]
+        dependencies = [dict(deepcopy(dependency), analysis_id=run['id']) for run in workspace.analyses
+            if run['id'] in result_ids for dependency in (run.get('governed_result') or {}).get('scope_crossing_dependencies', [])]
+        if dependencies:
+            self.record_investigation_step(workspace, None, 'work_plan_revision', root['anchor'], root['question'], actor,
+                needs_human_judgment=False, branched_from_step_id=plan_id,
+                governed_work_plan=dict(status='PLAN_REVISION', scope_crossing_dependencies=dependencies,
+                    reason='The executed resolver identified applicable dependencies outside the selected requirement scope. They remain in the governed result and cannot be excluded by the plan.'))
+        return self.record_investigation_step(workspace, None, 'work_plan_result', root['anchor'], root['question'], actor,
+            ran=True, assessment=error, needs_human_judgment=False, branched_from_step_id=plan_id,
+            governed_work_plan=dict(status='REFUSED' if error else 'PARTIAL', error=error,
+                analysis_ids=result_ids, work_product_ids=products, runtime_trace_id=current_reference(),
+                qualification='Execution result references are retained. COMPLETED requires independent completion proof; return success alone is insufficient.'))
+
+    @observed
+    def inspect_go_work_plans(self, workspace, actor, attention_id=None, *, app=None):
+        """Read-only procedure history. Never synthesize COMPLETED from a plan."""
+        self._work_plan_access(workspace, actor)
+        rows = []
+        for root in workspace.investigation_steps:
+            if root.get('step_kind') != 'governed_work_plan' or root['triggered_by_actor'] != actor:
+                continue
+            history = [s for s in workspace.investigation_steps if s.get('branched_from_step_id') == root['id']]
+            if attention_id and root['anchor'].get('id') != attention_id and not any(
+                    attention_id in (s.get('governed_work_plan') or {}).get('analysis_ids', []) for s in history):
+                continue
+            state = next((s['governed_work_plan']['status'] for s in reversed(history)
+                          if s['step_kind'] in ('work_plan_execution', 'work_plan_result')), 'PLANNED')
+            row = dict(plan=deepcopy(root['governed_work_plan']), history=deepcopy(history), status=state)
+            if app is not None:
+                from services.runtime_observation import work_plan_completion_proof
+                result = next((s for s in reversed(history) if s['step_kind'] == 'work_plan_result'), None)
+                row['proof'] = work_plan_completion_proof(app, workspace, root, result, store=self)
+                if state == 'PARTIAL' and all(item['established'] for item in row['proof'].values()):
+                    row['status'] = 'COMPLETED'
+            rows.append(row)
+        return rows
 
     def investigation_steps_for_case(self, workspace: ProjectWorkspace, case_id: str) -> list[dict]:
         return [s for s in workspace.investigation_steps if s["case_id"] == case_id]

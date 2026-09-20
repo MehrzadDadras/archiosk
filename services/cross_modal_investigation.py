@@ -226,7 +226,7 @@ def expected_next_information(narrative, current_class, actual_classes, *, subje
 
 
 @observed
-def cover_requirements(required_keys, candidates, *, max_candidates=16):
+def cover_requirements(required_keys, candidates, *, max_candidates=16, configuration_evaluator=None):
     """Bounded set composition over admitted coverage, independent of domain.
 
     No ranking or similarity. The caller retains the qualifications of every
@@ -241,20 +241,129 @@ def cover_requirements(required_keys, candidates, *, max_candidates=16):
     candidates = {key: set(values) & required for key, values in candidates.items()}
     available = set().union(*candidates.values()) if candidates else set()
     missing = sorted(required - available)
-    if missing:
+    if missing and configuration_evaluator is None:
         return dict(state='PARTIAL', configurations=[], missing=missing, reason='No configuration covers all supplied requirements.')
     keys = sorted(candidates)
+    tested = []
     for count in range(1, len(keys)+1):
         configurations = []
         for group in combinations(keys, count):
-            if required.issubset(set().union(*(candidates[key] for key in group))):
+            assessment = configuration_evaluator(group) if configuration_evaluator else None
+            if assessment is not None:
+                tested.append(dict(participant_ids=list(group), result=assessment))
+            sufficient = (assessment.get('coverage_complete') is True if assessment is not None else
+                          required.issubset(set().union(*(candidates[key] for key in group))))
+            if sufficient:
                 configurations.append(list(group))
-                if len(configurations) == 32:
-                    return dict(state='MATCH', configurations=configurations, missing=[], minimum_count=count,
-                                alternatives_truncated=True, reason='Minimum size proved; alternative display is bounded to 32 configurations.')
         if configurations:
-            return dict(state='MATCH', configurations=configurations, missing=[], minimum_count=count,
+            result = dict(state='MATCH', configurations=configurations, missing=[], minimum_count=count,
                         alternatives_truncated=False, reason='Minimum coverage of the supplied requirements; no authority or ranking is implied.')
+            if configuration_evaluator:
+                result['tested_configurations'] = tested
+            return result
+    exhausted_state = ('NON_MATCH' if tested and all(t['result'].get('hard_conflict') for t in tested) else
+                       'UNRESOLVED' if not tested or any(t['result'].get('unresolved') for t in tested) else 'PARTIAL')
+    return dict(state=exhausted_state, configurations=[], missing=missing,
+                tested_configurations=tested, reason='No tested configuration establishes every mandatory assignment.')
+
+
+@observed
+def evaluate_requirement_coverage(requirements, candidates, participant_ids, *, compatibility=None):
+    """Configuration checks over retained, typed matching premises.
+
+    Values/predicates come from the existing comparison path. This is conditional
+    coverage, not authentication, commitment, partnership agreement or a JV.
+    Unknown inputs never satisfy a mandatory dimension.
+    """
+    from decimal import Decimal, InvalidOperation
+    assignments = []
+    for requirement in requirements:
+        identifier, policy = requirement['id'], requirement['policy']
+        classification = policy['classification']
+        rows = [dict(candidates[party].get(identifier) or {}, participant_id=party) for party in participant_ids]
+        known = [row for row in rows if row.get('state') in ('MATCH', 'NON_MATCH') and row.get('evidence_refs')]
+        matched = [row for row in known if row['state'] == 'MATCH']
+        unknown = len(known) != len(rows)
+        reasons, used, amount = [], [], None
+        mode, state = 'UNRESOLVED', 'COVERAGE_UNRESOLVED'
+        if classification == 'HARD_EXCLUSION':
+            # An exclusion criterion records the allowed condition: a positive
+            # failed comparison is a veto, not an absent/unknown contribution.
+            if any(row['state'] == 'NON_MATCH' for row in known):
+                state, used = 'HARD_CONFLICT', known
+                reasons.append('A selected participant positively fails a hard eligibility condition.')
+            elif unknown:
+                reasons.append('Hard eligibility is not established for every selected participant.')
+            elif known:
+                state, mode, used = 'COVERED', 'MULTI_PARTICIPANT', known
+        elif classification == 'UNRESOLVED':
+            reasons.append('The obligation or coverage policy remains unresolved.')
+        elif matched:
+            state, mode, used = 'COVERED', 'SINGLE_PARTICIPANT', matched[:1]
+        elif policy.get('divisible'):
+            basis = policy.get('combination_basis')
+            if len(participant_ids) > 1 and not basis:
+                reasons.append('Partial contributions cannot be combined without an explicit, supported combination basis.')
+            elif unknown:
+                reasons.append('A contributing premise is missing, stale or incomparable.')
+            else:
+                try:
+                    norm = requirement['normalization']
+                    contributions = [row['normalization'] for row in known]
+                    if (norm['kind'] != 'NUMBER' or any(n['kind'] != 'NUMBER' or n['unit'] != norm['unit']
+                            or n['property_key'] != norm['property_key'] or n['scope_key'] != norm['scope_key']
+                            or n['qualifiers'] != norm['qualifiers'] for n in contributions)):
+                        raise ValueError()
+                    amounts = [Decimal(str(n['value'])) for n in contributions]
+                    target = Decimal(str(norm['value']))
+                    if not target.is_finite() or target <= 0 or any(not n.is_finite() or n < 0 for n in amounts):
+                        raise ValueError()
+                    amount = sum(amounts, Decimal(0))
+                    # Numerical capacity is bounded to explicit AT_LEAST
+                    # quantities; authority/mandate/geography are never summed.
+                    if any(row.get('operator') != 'AT_LEAST' for row in known):
+                        raise ValueError()
+                    state = 'COVERED' if amount >= target else 'PARTIALLY_COVERED' if amount > 0 else 'NOT_COVERED'
+                    mode, used = 'ADDITIVE' if len(known) > 1 else 'SINGLE_PARTICIPANT', known
+                except (KeyError, ValueError, TypeError, InvalidOperation):
+                    reasons.append('The divisible quantity, units, scope or permitted addition is not established.')
+        elif unknown:
+            reasons.append('A required contribution is missing, stale or incomparable.')
+        elif known:
+            state, mode, used = 'NOT_COVERED', 'NOT_COVERED', known
+            reasons.append('Known candidate capabilities do not cover this requirement.')
+        else:
+            reasons.append('No participant evidence establishes coverage.')
+        refs = sorted({ref for row in used for ref in row.get('evidence_refs', [])})
+        if mode == 'ADDITIVE':
+            refs = sorted(set(refs) | set(policy['combination_basis']['evidence_refs']))
+        assignments.append(dict(requirement_id=identifier, classification=classification,
+            coverage_mode=mode, participant_ids=[row['participant_id'] for row in used],
+            coverage_state=state, evidence_status='EVALUATION_ONLY', evidence_refs=refs,
+            coverage_logic=dict(predicate='existing normalized predicates', explanation='Conditional coverage of declared, source-anchored premises.',
+                additive_allowed=bool(policy.get('divisible') and policy.get('combination_basis')),
+                combination_rule=policy.get('combination_basis'), combined_amount=str(amount) if amount is not None else None),
+            unresolved_gaps=reasons))
+    mandatory = [a for a in assignments if a['classification'] not in ('OPTIONAL', 'PREFERRED')]
+    states = [row['coverage_state'] for row in mandatory]
+    complete = bool(mandatory) and all(state == 'COVERED' for state in states)
+    partnership = compatibility or dict(state='UNRESOLVED', reason='Blocking partnership compatibility dimensions have not been positively established.')
+    if 'HARD_CONFLICT' in states or partnership['state'] == 'CONFLICTING':
+        state, complete = 'CONFIGURATION_NON_FIT', False
+    elif not mandatory or 'COVERAGE_UNRESOLVED' in states:
+        state = 'CONFIGURATION_UNRESOLVED'
+    elif not complete:
+        state = 'COMPLEMENTARY_CONFIGURATION' if len(participant_ids) > 1 and any(s == 'COVERED' for s in states) else 'PARTIAL_CONFIGURATION'
+    elif len(participant_ids) == 1:
+        state = 'INDIVIDUAL_CONFIGURATION_FEASIBLE'
+    elif partnership['state'] == 'ESTABLISHED':
+        state = 'JOINT_CONFIGURATION_FEASIBLE'
+    else:
+        state = 'PARTNERSHIP_COMPATIBILITY_UNRESOLVED'
+    return dict(state=state, coverage_complete=complete, assignments=assignments,
+        hard_conflict=state == 'CONFIGURATION_NON_FIT', unresolved=state == 'CONFIGURATION_UNRESOLVED',
+        partnership_compatibility=partnership, factual_state='UNRESOLVED', canonical=False,
+        qualification='Analytical coverage is separate from factual verification, commercial structure and agreement. No actual JV is established.')
 
 
 @observed
@@ -331,10 +440,12 @@ def compare_normalized_information(left, right, *, operator='EQUAL'):
                any(not isinstance(v, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,80}', v) for v in row['value']) for row in (left, right)):
             return dict(result, reason='Supply bounded vocabulary tokens, not free prose or inferred categories.')
         a, b = set(left['value']), set(right['value'])
-        if operator not in ('EQUAL', 'CONTAINS_ALL', 'CONTAINS_ANY'):
+        if operator not in ('EQUAL', 'CONTAINS_ALL', 'CONTAINS_ANY', 'EXCLUDES_ALL'):
             return dict(result, state='REFUSED', reason='Unknown token-set predicate.')
-        matched = a == b if operator == 'EQUAL' else a.issubset(b) if operator == 'CONTAINS_ALL' else bool(a & b)
+        matched = a == b if operator == 'EQUAL' else a.issubset(b) if operator == 'CONTAINS_ALL' else not bool(a & b) if operator == 'EXCLUDES_ALL' else bool(a & b)
         predicate = dict(state='MATCH' if matched else 'NON_MATCH', missing=sorted(a-b), additional=sorted(b-a))
+        if operator == 'EXCLUDES_ALL':
+            predicate = dict(state=predicate['state'], prohibited_overlap=sorted(a & b), candidate_tokens_outside_exclusion=sorted(b-a))
     else:
         return dict(result, reason='This representation has no supported typed comparison. Prose difference is not meaning difference.')
     return dict(result, state=predicate['state'], predicate=predicate,
@@ -375,6 +486,9 @@ def match_normalized_criteria(criteria):
     if result['mandatory_failures']:
         state = 'NON_MATCH'
         reason = 'At least one mandatory predicate fails; other matches cannot offset it.'
+    elif result['unresolved']:
+        state = 'UNRESOLVED'
+        reason = 'A supplied premise is missing, incomparable or unresolved. Known matches cannot turn an unknown dimension into partial fit; mandatory coverage remains separately inspectable.'
     elif all(state == 'MATCH' for state in states):
         state = 'MATCH'
         reason = 'Every supplied predicate matches under the declared premises; complete requirement coverage and factual fit are not established.'
