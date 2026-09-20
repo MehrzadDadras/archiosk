@@ -3426,7 +3426,7 @@ class InvestigationStep:
 
     id: str
     project_id: str
-    case_id: str
+    case_id: Optional[str]  # None for a project-level source-anchored investigation
     step_kind: str
     anchor: dict  # asdict(Anchor) - what was being investigated
     question: str  # the reviewer's own question, verbatim
@@ -3513,6 +3513,10 @@ class Claim:
     adoption_reason: Optional[str] = None
     derived_observation_id: Optional[str] = None
     finding_id: Optional[str] = None
+    # A typed interpretation of cited evidence, not an independently verified
+    # entity profile. Corrections remain successor Claims through supersession.
+    structured_proposition: Optional[dict] = None
+    runtime_trace_id: Optional[str] = None  # operational link, never evidence
 
 
 @dataclass
@@ -6832,6 +6836,298 @@ class CaseWorkspaceStore:
         if action == 'resolve_representation':
             return self.resolve_discipline_assumption(workspace, record_id, actor, reason)
         raise CaseWorkspaceError('Unknown coverage review action.')
+
+    def _validate_structured_proposition(self, workspace, proposition, evidence_links, *, check_normalization=True):
+        """Validate a Claim's typed payload, never its factual truth."""
+        from datetime import date
+        from services.cross_modal_investigation import (
+            compare_normalized_information, PROPOSITION_SOURCE_CLASSES, PROPOSITION_TEMPORAL_CLASSES)
+        keys = {'normalization', 'source_class', 'temporal_class', 'as_of', 'valid_until',
+                'original_quote', 'classification_reason', 'evidence_fingerprints', 'evaluation_only'}
+        if not isinstance(proposition, dict) or set(proposition) != keys:
+            raise CaseWorkspaceError('A structured proposition requires its explicit classification and provenance fields.')
+        try:
+            if len(json.dumps(proposition, allow_nan=False)) > 24000:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise CaseWorkspaceError('The structured proposition exceeds its bounded contract.') from None
+        norm = proposition['normalization']
+        if not isinstance(norm, dict) or norm.get('view_basis') != 'VIEW_INVARIANT':
+            raise CaseWorkspaceError('This proposition path requires an explicitly view-invariant typed interpretation.')
+        # Self-comparison validates the existing typed contract only. No entity
+        # match or factual verification is inferred. Inspection never runs it.
+        if check_normalization and compare_normalized_information(norm, norm)['state'] != 'MATCH':
+            raise CaseWorkspaceError('Supply a complete scalar or vocabulary-set normalization, including qualifiers.')
+        kind, _, identifier = norm['subject_key'].partition(':')
+        if kind not in ('participant', 'source', 'requirement', 'legend_item', 'derived_observation') or not self._resolve_mm6_endpoint(workspace, kind, identifier):
+            raise CaseWorkspaceError('The proposition subject is unavailable in this project.')
+        ids = norm['premise_ids']
+        cited = {link.get('object_id') for link in evidence_links if link.get('object_type') == 'evidence_item'}
+        if not 1 <= len(ids) <= 8 or len(set(ids)) != len(ids) or not set(ids).issubset(cited):
+            raise CaseWorkspaceError('Every proposition premise must be an explicit evidence citation in this Claim.')
+        if proposition['source_class'] not in PROPOSITION_SOURCE_CLASSES or proposition['temporal_class'] not in PROPOSITION_TEMPORAL_CLASSES:
+            raise CaseWorkspaceError('Select a supported source and temporal classification; unknown remains explicit.')
+        if type(proposition['evaluation_only']) is not bool:
+            raise CaseWorkspaceError('The evaluation boundary must be explicit.')
+        dates = {}
+        for key in ('as_of', 'valid_until'):
+            value = proposition[key]
+            if value is not None:
+                try:
+                    if not isinstance(value, str) or len(value) != 10:
+                        raise ValueError()
+                    dates[key] = date.fromisoformat(value)
+                except ValueError:
+                    raise CaseWorkspaceError('Proposition dates must be ISO dates or explicitly absent.') from None
+        if len(dates) == 2 and dates['valid_until'] < dates['as_of']:
+            raise CaseWorkspaceError('The declared validity interval is reversed.')
+        for key in ('original_quote', 'classification_reason'):
+            if not isinstance(proposition[key], str) or not proposition[key].strip() or len(proposition[key]) > 4000:
+                raise CaseWorkspaceError('Retain the original source quote and an explicit classification reason.')
+        expected, contents = [], []
+        for evidence_id in ids:
+            evidence = self.get_evidence_item(workspace, evidence_id)
+            source = self._find(workspace.sources, (evidence or {}).get('source_id'))
+            if (not evidence or evidence.get('project_id') != workspace.project_id or not source
+                    or source.get('project_id') != workspace.project_id or source.get('removed_at')):
+                raise CaseWorkspaceError('The cited source is no longer available.')
+            contents.append(evidence.get('content') or '')
+            expected.append(dict(evidence_item_id=evidence_id, source_id=source['id'],
+                content_sha256=hashlib.sha256((evidence.get('content') or '').encode()).hexdigest(),
+                source_file_hash=source.get('file_hash')))
+            if self.admit_proposition(workspace, evidence_id).get('evaluation_only') and not proposition['evaluation_only']:
+                raise CaseWorkspaceError('Evaluation provenance cannot be removed from a proposition.')
+        if proposition['evidence_fingerprints'] != expected or not any(proposition['original_quote'] in text for text in contents):
+            raise CaseWorkspaceError('The source quote or evidence fingerprints do not match the cited observations.')
+
+    @observed
+    def record_subject_proposition(self, workspace, actor, analysis_id, normalization, source_class,
+                                   temporal_class, original_quote, reason, *, as_of=None,
+                                   valid_until=None, predecessor_id=None, attribution=None):
+        """Source-anchored proposal/correction through Claim, not a profile store.
+
+        Categorization creates an interpretation. It does not authenticate the
+        source, settle binding/applicability or establish a current mandate.
+        """
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if attribution not in ('human_reviewed', 'agent_assessment'):
+            raise CaseWorkspaceError('Declare whether this interpretation is human-authored or agent-proposed.')
+        if workspace.document_desk_state != 'active' or not isinstance(normalization, dict):
+            raise CaseWorkspaceError('An active document case and typed proposition are required.')
+        ids = normalization.get('premise_ids')
+        if not isinstance(ids, list) or not 1 <= len(ids) <= 8 or any(not isinstance(i, str) for i in ids) or not set(ids).issubset(scope['included_evidence_ids']):
+            raise CaseWorkspaceError('Proposition evidence must remain inside the selected attention scope.')
+        fingerprints = []
+        for identifier in ids:
+            evidence = self.get_evidence_item(workspace, identifier)
+            source = self._find(workspace.sources, (evidence or {}).get('source_id'))
+            if not evidence or not source:
+                raise CaseWorkspaceError('A proposition source is unavailable.')
+            fingerprints.append(dict(evidence_item_id=identifier, source_id=source['id'],
+                content_sha256=hashlib.sha256((evidence.get('content') or '').encode()).hexdigest(),
+                source_file_hash=source.get('file_hash')))
+        proposition = dict(normalization=deepcopy(normalization), source_class=source_class,
+            temporal_class=temporal_class, as_of=None if as_of in (None, '') else as_of,
+            valid_until=None if valid_until in (None, '') else valid_until,
+            original_quote=original_quote, classification_reason=reason,
+            evidence_fingerprints=fingerprints, evaluation_only=bool(scope['evaluation_only'] or
+                any(self.admit_proposition(workspace, i).get('evaluation_only') for i in ids)))
+        links = [dict(object_type='evidence_item', object_id=i) for i in ids]
+        self._validate_structured_proposition(workspace, proposition, links)
+        statement = (normalization['subject_key'] + ' / ' + normalization['property_key'] + ': '
+                     + json.dumps(normalization['value'], ensure_ascii=False)
+                     + ' — proposed source interpretation; authority and applicability are not established.')
+        args = dict(statement=statement, claim_class=(CLAIM_CLASS_SUPPORTED_INTERPRETATION
+                    if attribution == 'human_reviewed' else CLAIM_CLASS_AI_PROPOSAL),
+            method='structured_normalization', confidence_state=CONFIDENCE_STATE_INSUFFICIENT_EVIDENCE,
+            author_type=OBSERVATION_AUTHOR_HUMAN if attribution == 'human_reviewed' else OBSERVATION_AUTHOR_AI,
+            evidence_links=links, structured_proposition=proposition)
+        if predecessor_id:
+            old = self.get_claim(workspace, predecessor_id)
+            old_norm = ((old or {}).get('structured_proposition') or {}).get('normalization', {})
+            if (not old_norm or old_norm.get('subject_key') != normalization['subject_key']
+                    or not set(old_norm.get('premise_ids', [])).issubset(scope['included_evidence_ids'])
+                    or self.resolve_claim_status(workspace, predecessor_id)['status'] == CLAIM_ADOPTION_SUPERSEDED):
+                raise CaseWorkspaceError('Select an unsuperseded proposition for this subject and attention scope.')
+            return self.supersede_claim(workspace, predecessor_id, reason=reason, actor=actor, **args)['new_claim']
+        step = self.record_investigation_step(workspace, None, 'structured_normalization',
+            dict(anchor_type='evidence_item', anchor_id=ids[0]), scope['objective'], actor,
+            evidence_examined_ids={'evidence_item_ids':ids}, ran=True, analysis_id=analysis_id,
+            assessment='Proposed interpretation recorded; authority and current mandate remain unresolved.')
+        return self.record_investigation_claim(workspace, step['id'], created_by=actor, **args)
+
+    @observed
+    def record_review_subject(self, workspace, actor, analysis_id, name, role):
+        self._coverage_attention_scope(workspace, actor, analysis_id)
+        if workspace.document_desk_state != 'active' or any(not isinstance(v, str) or not v.strip() or len(v) > 160 for v in (name, role)):
+            raise CaseWorkspaceError('Supply a bounded subject name and role in an active case.')
+        return self.record_participant(workspace, name, role, actor,
+            note='User-declared subject reference; identity and capabilities are not verified by registration.')
+
+    @observed
+    def review_subject_proposition(self, workspace, actor, analysis_id, claim_id, outcome, reason, governance_log=None, *, attribution=None):
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if attribution != 'human_reviewed':
+            raise CaseWorkspaceError('A human must explicitly attest to this adoption or rejection; an agent can propose a successor.')
+        claim = self.get_claim(workspace, claim_id)
+        prop = (claim or {}).get('structured_proposition')
+        if (workspace.document_desk_state != 'active' or not prop
+                or not set(prop['normalization']['premise_ids']).issubset(scope['included_evidence_ids'])
+                or not isinstance(reason, str) or not reason.strip() or len(reason) > 2000
+                or self.resolve_claim_status(workspace, claim_id)['status'] == CLAIM_ADOPTION_SUPERSEDED):
+            raise CaseWorkspaceError('Select a current scoped proposition and record the review reason.')
+        if outcome == 'accept_interpretation':
+            self._validate_structured_proposition(workspace, prop, claim['evidence_links'])
+            if claim.get('derived_observation_id'):
+                raise CaseWorkspaceError('This interpretation already has an adoption record; correct it through a successor.')
+            return self.accept_claim_as_observation(workspace, claim_id, actor, reason, governance_log)
+        if outcome == 'reject':
+            return self.reject_claim(workspace, claim_id, actor, reason, governance_log)
+        raise CaseWorkspaceError('This review accepts an interpretation or rejects it; authority promotion is a separate action.')
+
+    @observed
+    def inspect_subject_propositions(self, workspace, actor, analysis_id):
+        """Project actual Claim/review/citation state, without a profile truth."""
+        analysis = self._find(workspace.analyses, analysis_id)
+        scope = (analysis or {}).get('attention_scope')
+        if workspace.removed_at or not scope or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            return []
+        rows = []
+        for claim in workspace.claims:
+            prop = claim.get('structured_proposition')
+            if not prop or not set(prop['normalization']['premise_ids']).issubset(scope['included_evidence_ids']):
+                continue
+            integrity = 'UNCHANGED'
+            try:
+                self._validate_structured_proposition(workspace, prop, claim['evidence_links'], check_normalization=False)
+            except CaseWorkspaceError:
+                integrity = 'UNRESOLVED'
+            lineage = next((s for s in workspace.supersessions if s.get('successor_type') == OBJECT_KIND_CLAIM
+                            and s.get('successor_id') == claim['id']), None)
+            predecessor = self.get_claim(workspace, lineage['predecessor_id']) if lineage else None
+            old_prop = (predecessor or {}).get('structured_proposition') or {}
+            changes = [dict(field=key, before=old_prop.get(key), after=value)
+                       for key, value in prop.items() if predecessor and old_prop.get(key) != value]
+            rows.append(dict(claim=claim, status=self.resolve_claim_status(workspace, claim['id']),
+                supersession=lineage, predecessor_claim_id=(predecessor or {}).get('id'), changes=changes,
+                source_integrity=integrity, authority='NOT_ESTABLISHED', canonical=False,
+                temporal_applicability='UNRESOLVED',
+                admissions=[self.admit_proposition(workspace, i) for i in prop['normalization']['premise_ids']],
+                qualification='Source and temporal labels are proposed classifications. Adoption does not authenticate a source or establish a current mandate.'))
+        return rows
+
+    @observed
+    def run_requirement_matching(self, workspace, actor, analysis_id, target_subject, criteria,
+                                 context_key, reason, *, require_currentness=True, query_date=None):
+        """Reuse typed comparison over individual Claims, retaining every qualification.
+
+        Classification/adoption is not factual verification. The model may FIT
+        while factual fit stays UNRESOLVED; this never creates approved profiles.
+        """
+        from datetime import date
+        from services.cross_modal_investigation import (
+            MATCHING_CONTEXTS, DECLARED_CURRENT_TEMPORAL_CLASSES, match_normalized_criteria, inspect_declared_temporal_scope)
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if workspace.document_desk_state != 'active' or context_key not in MATCHING_CONTEXTS:
+            raise CaseWorkspaceError('Select a supported matching context in an active document case.')
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000 or type(require_currentness) is not bool:
+            raise CaseWorkspaceError('State the comparison reason and temporal requirement explicitly.')
+        if require_currentness:
+            try:
+                if not isinstance(query_date, str) or len(query_date) != 10:
+                    raise ValueError()
+                date.fromisoformat(query_date)
+            except ValueError:
+                raise CaseWorkspaceError('Select the date at which applicability is required.') from None
+        if not isinstance(target_subject, str):
+            raise CaseWorkspaceError('Select an existing candidate subject.')
+        target_type, _, target_id = target_subject.partition(':')
+        if target_type not in ('participant', 'source', 'requirement', 'legend_item', 'derived_observation') or not self._resolve_mm6_endpoint(workspace, target_type, target_id):
+            raise CaseWorkspaceError('The candidate subject is unavailable in this project.')
+        if not isinstance(criteria, list) or not 1 <= len(criteria) <= 16:
+            raise CaseWorkspaceError('Select 1–16 explicit criteria.')
+        keys = {'required_claim_id', 'candidate_claim_id', 'mandatory', 'operator', 'candidate_temporal_class'}
+        if any(not isinstance(row, dict) or set(row) != keys or type(row['mandatory']) is not bool
+               or not isinstance(row['required_claim_id'], str)
+               or (row['candidate_claim_id'] is not None and not isinstance(row['candidate_claim_id'], str)) for row in criteria):
+            raise CaseWorkspaceError('Every criterion needs explicit Claim references and a mandatory/optional designation.')
+        if require_currentness and any(row['candidate_temporal_class'] not in DECLARED_CURRENT_TEMPORAL_CLASSES for row in criteria):
+            raise CaseWorkspaceError('Declare the required temporal meaning of each candidate proposition.')
+        inspected = {row['claim']['id']:row for row in self.inspect_subject_propositions(workspace, actor, analysis_id)}
+        comparisons, provenance, used = [], [], set()
+        for criterion in criteria:
+            required = inspected.get(criterion['required_claim_id'])
+            candidate = inspected.get(criterion['candidate_claim_id']) if criterion['candidate_claim_id'] else None
+            if not required or (criterion['candidate_claim_id'] and not candidate):
+                raise CaseWorkspaceError('All selected propositions must belong to this project and attention scope.')
+            if candidate and candidate['claim']['structured_proposition']['normalization']['subject_key'] != target_subject:
+                raise CaseWorkspaceError('Every candidate proposition must describe the selected candidate subject.')
+            blocked, temporal = [], []
+            for row in (required, candidate):
+                if row is None:
+                    continue
+                claim = row['claim']
+                used.add(claim['id'])
+                if row['source_integrity'] != 'UNCHANGED' or row['status']['status'] not in (
+                        'proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding'):
+                    blocked.append('A proposition is rejected, disputed, superseded or has changed source premises.')
+                if any(a['state'] in ('CONTESTED', 'REFUSED', 'UNRESOLVED') or
+                       (a.get('currentness') or {}).get('status') != 'current' for a in row['admissions']):
+                    blocked.append('Source admission or lineage currentness is unresolved.')
+                if require_currentness:
+                    check = inspect_declared_temporal_scope(claim['structured_proposition'], query_date,
+                        expected_class=criterion['candidate_temporal_class'] if row is candidate else None)
+                    temporal.append(dict(claim_id=claim['id'], result=check))
+                    if check['state'] != 'DECLARED_INTERVAL_CONTAINS_QUERY':
+                        blocked.append(check['reason'])
+            comparisons.append(dict(id=criterion['required_claim_id'], mandatory=criterion['mandatory'],
+                required=required['claim']['structured_proposition']['normalization'],
+                candidate=candidate['claim']['structured_proposition']['normalization'] if candidate else None,
+                operator=criterion['operator'], blocked_reason=' '.join(dict.fromkeys(blocked))))
+            provenance.append(dict(criterion=deepcopy(criterion), required=deepcopy(required), candidate=deepcopy(candidate), temporal=temporal))
+        model = match_normalized_criteria(comparisons)
+        context = MATCHING_CONTEXTS[context_key]
+        model_label = context['match'] if model['state'] == 'MATCH' else context['non_match'] if model['state'] == 'NON_MATCH' else model['state']
+        source_ids = sorted({a['source_id'] for row in provenance for side in ('required', 'candidate')
+                             if row[side] for a in row[side]['admissions'] if a.get('source_id')})
+        result = dict(kind='requirement_matching', state='UNRESOLVED', canonical=False,
+            evaluation_only=bool(scope['evaluation_only'] or any(inspected[i]['claim']['structured_proposition']['evaluation_only'] for i in used)),
+            context_key=context_key, context_label=context['label'], target_subject=target_subject,
+            objective=scope['objective'], attention_analysis_id=analysis_id, actor=actor, reason=reason.strip(),
+            model=model, model_label=model_label, criteria=provenance, require_currentness=require_currentness,
+            query_date=query_date if require_currentness else None, used_claim_ids=sorted(used),
+            unselected_claim_ids=sorted(set(inspected)-used),
+            qualification='Conditional comparison of proposed interpretations, not an approved fit or verified investor profile. '
+                'Factual fit and complete requirement coverage remain unresolved. Source quality, adoption and repeated claims do not confer authority.')
+        return self.record_analysis(workspace, source_ids=source_ids, objective=scope['objective'],
+            engine_name='cross_modal_investigation', engine_version='criteria-matching-1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+            muscle_profile=[dict(muscle='MATCHING', owner='match_normalized_criteria', result=model),
+                dict(muscle='AUTHORITY / UNCERTAINTY', owner='CaseWorkspaceStore.inspect_subject_propositions',
+                     result=dict(state='UNRESOLVED', reason='Categorization and adoption do not establish factual fit.'))])
+
+    @observed
+    def inspect_requirement_matches(self, workspace, actor, analysis_id):
+        """Render committed matching runs and current premise status without re-analysis."""
+        propositions = {row['claim']['id']: row for row in self.inspect_subject_propositions(workspace, actor, analysis_id)}
+        results = []
+        for run in workspace.analyses:
+            result = run.get('governed_result') or {}
+            if result.get('kind') != 'requirement_matching' or result.get('attention_analysis_id') != analysis_id:
+                continue
+            statuses = []
+            for claim_id in result['used_claim_ids']:
+                row = propositions.get(claim_id)
+                statuses.append(dict(claim_id=claim_id, state=row['status']['status'] if row else 'UNAVAILABLE',
+                    source_integrity=row['source_integrity'] if row else 'UNRESOLVED',
+                    lineage_current=bool(row) and all(a['state'] not in ('CONTESTED', 'REFUSED', 'UNRESOLVED')
+                        and (a.get('currentness') or {}).get('status') == 'current' for a in row['admissions'])))
+            changed = any(row['source_integrity'] != 'UNCHANGED' or row['state'] not in
+                ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding') or not row['lineage_current'] for row in statuses)
+            results.append(dict(run=deepcopy(run), premise_statuses=statuses,
+                consumption_state='REVIEW_REQUIRED' if changed else 'HISTORICAL_RESULT',
+                qualification='This is the persisted result at execution time. Changed or superseded premises require explicit re-evaluation.'))
+        return results
 
     @observed
     def run_information_comparison(self, workspace, actor, analysis_id, left, right, operator, reason, *, allowed_root=None):
@@ -12376,7 +12672,7 @@ class CaseWorkspaceStore:
     def record_investigation_step(
         self,
         workspace: ProjectWorkspace,
-        case_id: str,
+        case_id: Optional[str],
         step_kind: str,
         anchor: dict,
         question: str,
@@ -12450,6 +12746,7 @@ class CaseWorkspaceStore:
         assumptions: Optional[list[str]] = None,
         recommended_next_check: Optional[str] = None,
         governance_log: Optional[GovernanceLog] = None,
+        structured_proposition: Optional[dict] = None,
     ) -> dict:
         """
         Section 9 ("no citation laundering"), enforced structurally, not
@@ -12515,6 +12812,13 @@ class CaseWorkspaceStore:
 
         method = normalize_open_world_value(method, KNOWN_ANALYTICAL_METHODS)
 
+        if structured_proposition is not None:
+            self._validate_structured_proposition(workspace, structured_proposition, evidence_links)
+            origin = self._find(workspace.analyses, step.get('analysis_id')) or {}
+            if ((origin.get('attention_scope') or {}).get('evaluation_only')
+                    or (origin.get('governed_result') or {}).get('evaluation_only')) and not structured_proposition['evaluation_only']:
+                raise CaseWorkspaceError('The originating evaluation analysis cannot become project authority.')
+
         claim = Claim(
             id=_new_id(),
             project_id=workspace.project_id,
@@ -12531,6 +12835,8 @@ class CaseWorkspaceStore:
             contradiction_relationship_ids=contradiction_relationship_ids,
             assumptions=assumptions or [],
             recommended_next_check=recommended_next_check,
+            structured_proposition=deepcopy(structured_proposition),
+            runtime_trace_id=current_reference(),
         )
         workspace.claims.append(asdict(claim))
         self.save(workspace)
@@ -13346,6 +13652,7 @@ class CaseWorkspaceStore:
         self, workspace: ProjectWorkspace, old_claim_id: str, statement: str, claim_class: str, method: str,
         confidence_state: str, author_type: str, reason: str, actor: str,
         evidence_links: Optional[list[dict]] = None, governance_log: Optional[GovernanceLog] = None,
+        structured_proposition: Optional[dict] = None,
     ) -> dict:
         """
         Section 16 (correction integrity): the original Claim is NEVER
@@ -13368,6 +13675,8 @@ class CaseWorkspaceStore:
             claim_class=claim_class, method=method, confidence_state=confidence_state, author_type=author_type,
             created_by=actor, evidence_links=evidence_links if evidence_links is not None else old["evidence_links"],
             governance_log=governance_log,
+            structured_proposition=(structured_proposition if structured_proposition is not None
+                                    else old.get('structured_proposition')),
         )
         supersession = self.record_supersession(
             workspace, predecessor_type=OBJECT_KIND_CLAIM, predecessor_id=old_claim_id,

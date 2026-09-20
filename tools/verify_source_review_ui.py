@@ -21,6 +21,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--games', action='store_true', help='Exercise continuum and constraint games through real evaluation forms.')
+    parser.add_argument('--propositions', action='store_true', help='Exercise sourced subject classification, correction and review through the real UI.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -255,6 +256,118 @@ def main():
             if not args.live:
                 assert state_path.read_bytes() == persisted_before
             proof['linked_muscle_inspector_actual_invocation_and_read_only_reload']=True
+            if args.propositions:
+                page.get_by_text('Add a subject reference', exact=True).click()
+                form=action_form('record_subject')
+                form.locator('input[name="subject_name"]').fill('EVALUATION subject')
+                form.locator('input[name="subject_role"]').fill('institutional_investor')
+                form.locator('button').click()
+                page.get_by_text('Record a sourced proposition', exact=True).click()
+                form=action_form('subject_proposition')
+                evidence_id=form.locator('select[name="evidence_id"]').input_value()
+                citation=page.locator('a[href*="item=evidence_items:'+evidence_id+'"]').first.get_attribute('href')
+                page.goto(base+citation)
+                page.locator('details').filter(has=page.locator('#kernel-record')).locator('summary').click()
+                source_quote=json.loads(page.locator('#kernel-record').inner_text())['content'][:200]
+                page.goto(attention_url)
+                page.get_by_text('Record a sourced proposition', exact=True).click()
+                form=action_form('subject_proposition')
+                subject=form.locator('select[name="subject_key"] option').evaluate_all(
+                    'nodes => nodes.find(n => n.textContent.includes("EVALUATION subject")).value')
+                form.locator('select[name="subject_key"]').select_option(subject)
+                form.locator('input[name="property_key"]').fill('declared-review-topic')
+                form.locator('input[name="scope_key"]').fill('evaluation-source-classification')
+                form.locator('select[name="kind"]').select_option('TOKEN_SET')
+                form.locator('input[name="value"]').fill('EVALUATION_TOPIC')
+                form.locator('input[name="vocabulary"]').fill('evaluation-topics')
+                form.locator('input[name="qualifiers"]').fill('[]')
+                form.locator('select[name="view_basis"]').select_option('VIEW_INVARIANT')
+                form.locator('select[name="evidence_id"]').select_option(evidence_id)
+                form.locator('textarea[name="original_quote"]').fill(source_quote)
+                form.locator('select[name="source_class"]').select_option('PROJECT_DOCUMENT')
+                form.locator('select[name="temporal_class"]').select_option('HISTORICAL_ACTIVITY')
+                form.locator('input[name="as_of"]').fill('2020-01-01')
+                form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT categorization only; no investor fact or current mandate is established.')
+                form.locator('input[name="attribution"][value="agent_assessment"]').check()
+                form.locator('button').click()
+                rows=page.locator('[data-proposition-id]')
+                assert rows.count() == 1 and 'EVALUATION_INPUT' in rows.first.inner_text()
+                original_id=rows.first.get_attribute('data-proposition-id')
+                if not args.live:
+                    # A local test identity exercises the human form contract.
+                    # Automated live verification must not attest human review.
+                    rows.first.locator('input[name="reason"]').fill('Retain this evaluation interpretation only.')
+                    rows.first.locator('input[name="attribution"]').check()
+                    rows.first.get_by_role('button', name='Accept as interpretation', exact=True).click()
+                assert 'NOT_ESTABLISHED' in page.locator('[data-proposition-id]').first.inner_text()
+                page.get_by_role('link', name='Correct this proposition', exact=True).click()
+                form=action_form('subject_proposition')
+                assert form.locator('textarea[name="original_quote"]').input_value() == source_quote
+                form.locator('input[name="value"]').fill('EVALUATION_UPDATED_TOPIC')
+                form.locator('textarea[name="reason"]').fill('Correct the evaluation categorization without changing its source.')
+                form.locator('input[name="attribution"][value="agent_assessment"]').check()
+                form.get_by_role('button', name='Record corrected successor', exact=True).click()
+                rows=page.locator('[data-proposition-id]')
+                assert rows.count() == 2
+                assert 'superseded' in page.locator('[data-proposition-id="'+original_id+'"]').inner_text()
+                if not args.live:
+                    rows.last.locator('input[name="reason"]').fill('Reject the proposed evaluation categorization.')
+                    rows.last.locator('input[name="attribution"]').check()
+                    rows.last.get_by_role('button', name='Reject interpretation', exact=True).click()
+                    assert 'rejected' in page.locator('[data-proposition-id]').last.inner_text()
+                if not args.live:
+                    persisted_before=state_path.read_bytes()
+                page.get_by_role('link', name='Reload', exact=True).click()
+                assert page.locator('[data-proposition-id]').count() == 2
+                if not args.live:
+                    assert state_path.read_bytes() == persisted_before
+                page.locator('#subject-propositions').scroll_into_view_if_needed()
+                page.screenshot(path=str(output/'subject-propositions.png'),full_page=True)
+                proof['subject_proposition_create_correct_reload']=True
+                proof['subject_proposition_human_curation_local_fixture_only']=not args.live
+                matching_claims=[]
+                for temporal in ('DATED_REQUIREMENT', 'CURRENT_DISCLOSED_MANDATE'):
+                    page.get_by_text('Record a sourced proposition', exact=True).click()
+                    form=action_form('subject_proposition')
+                    form.locator('select[name="subject_key"]').select_option(subject)
+                    form.locator('input[name="property_key"]').fill('evaluation-sector')
+                    form.locator('input[name="scope_key"]').fill('evaluation-mandate')
+                    form.locator('select[name="kind"]').select_option('TOKEN_SET')
+                    form.locator('input[name="value"]').fill('EVALUATION_SECTOR')
+                    form.locator('input[name="vocabulary"]').fill('evaluation-sectors')
+                    form.locator('input[name="qualifiers"]').fill('[]')
+                    form.locator('select[name="view_basis"]').select_option('VIEW_INVARIANT')
+                    form.locator('select[name="evidence_id"]').select_option(evidence_id)
+                    form.locator('textarea[name="original_quote"]').fill(source_quote)
+                    form.locator('select[name="source_class"]').select_option('PROJECT_DOCUMENT')
+                    form.locator('select[name="temporal_class"]').select_option(temporal)
+                    form.locator('input[name="as_of"]').fill('2026-01-01')
+                    form.locator('input[name="valid_until"]').fill('2027-01-01')
+                    form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT typed premise only; not an investor fact.')
+                    form.locator('input[name="attribution"][value="agent_assessment"]').check()
+                    form.locator('button').click()
+                    matching_claims.append(page.locator('[data-proposition-id]').last.get_attribute('data-proposition-id'))
+                form=action_form('requirement_matching')
+                form.locator('select[name="context_key"]').select_option('investment')
+                form.locator('select[name="target_subject"]').select_option(subject)
+                form.locator('input[name="query_date"]').fill('2026-09-20')
+                form.locator('select[name="criterion_0_required"]').select_option(matching_claims[0])
+                form.locator('select[name="criterion_0_candidate"]').select_option(matching_claims[1])
+                form.locator('select[name="criterion_0_operator"]').select_option('CONTAINS_ALL')
+                form.locator('input[name="reason"]').fill('Compare declared evaluation premises; preserve unresolved factual fit.')
+                form.get_by_role('button', name='Run requirement matching', exact=True).click()
+                matching=page.locator('#requirement-matching')
+                assert 'conditional model FIT' in matching.inner_text()
+                assert 'Governed factual fit: UNRESOLVED' in matching.inner_text()
+                if not args.live:
+                    persisted_before=state_path.read_bytes()
+                page.get_by_role('link', name='Reload', exact=True).click()
+                assert 'conditional model FIT' in matching.inner_text()
+                if not args.live:
+                    assert state_path.read_bytes() == persisted_before
+                matching.scroll_into_view_if_needed()
+                page.screenshot(path=str(output/'requirement-matching.png'),full_page=True)
+                proof['requirement_matching_conditional_fit_and_read_only_reload']=True
             page.screenshot(path=str(output/'professional-review.png'), full_page=True)
             if args.games:
                 import hashlib
@@ -318,6 +431,12 @@ def main():
                     'services.document_examination.reevaluate_source_review'):
                     assert owner in owners, owner
                 proof['invoked_owners']=sorted(owners)
+                if args.propositions:
+                    for method in ('record_review_subject', 'record_subject_proposition', 'review_subject_proposition', 'inspect_subject_propositions',
+                                   'run_requirement_matching', 'inspect_requirement_matches'):
+                        assert 'services.case_workspace.CaseWorkspaceStore.'+method in owners
+                    assert 'services.cross_modal_investigation.match_normalized_criteria' in owners
+                    assert 'services.cross_modal_investigation.inspect_declared_temporal_scope' in owners
             (output/'proof.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
             browser.close()
     finally:

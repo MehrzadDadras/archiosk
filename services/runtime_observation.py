@@ -28,7 +28,15 @@ _keys = {"id", "project_id", "source_id", "evidence_item_id", "region_id",
          "clockwise_degrees", "lower", "upper", "subject", "parameter", "unit", "common_interval",
          "baseline", "failure_point", "margin_to_failure", "origin", "canonical", "direction",
          "first_violated_constraints", "subject_key", "property_key", "scope_key", "kind", "basis",
-         "qualifiers", "view_basis", "vocabulary", "factual_consistency", "input_status", "command"}
+         "qualifiers", "view_basis", "vocabulary", "factual_consistency", "input_status", "command",
+         "structured_proposition", "normalization", "source_class", "temporal_class", "as_of", "valid_until",
+         "original_quote", "classification_reason", "evidence_fingerprints", "source_file_hash", "content_sha256",
+         "adoption_state", "created_by", "created_at", "confidence_state", "claim_class", "claim",
+         "derived_observation", "derived_observation_id", "adopted_by", "adopted_at", "adoption_reason",
+         "criteria", "mandatory", "required", "candidate", "operator", "blocked_reason", "mandatory_failures",
+         "unresolved", "factual_fit", "query_date", "expected_class", "model_label", "target_subject",
+         "required_claim_id", "candidate_claim_id", "candidate_temporal_class", "context_key", "require_currentness",
+         "used_claim_ids", "unselected_claim_ids", "consumption_state", "premise_statuses", "source_integrity"}
 
 
 def current_reference():

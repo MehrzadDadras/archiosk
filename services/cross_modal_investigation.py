@@ -67,6 +67,29 @@ from services.case_workspace import (
 
 logger = logging.getLogger(__name__)
 
+# Classification is not verification. These labels configure investigation;
+# they never turn historical activity or source proximity into authority.
+PROPOSITION_SOURCE_CLASSES = (
+    'UNCLASSIFIED', 'OFFICIAL_GOVERNMENT_DISCLOSURE', 'REGULATORY_FILING',
+    'INSTITUTIONAL_REPORT', 'ISSUER_DISCLOSURE', 'CORPORATE_REGISTRY',
+    'REPORTING', 'EVENT_MATERIAL', 'MARKET_RESEARCH', 'PROJECT_DOCUMENT',
+)
+PROPOSITION_TEMPORAL_CLASSES = (
+    'CURRENTNESS_UNRESOLVED', 'HISTORICAL_ACTIVITY', 'CURRENT_DISCLOSED_MANDATE',
+    'RECENT_COMMITMENT', 'INFERRED_PATTERN', 'DATED_REQUIREMENT', 'CURRENT_DISCLOSED_CAPABILITY',
+)
+DECLARED_CURRENT_TEMPORAL_CLASSES = ('CURRENT_DISCLOSED_MANDATE', 'CURRENT_DISCLOSED_CAPABILITY',
+                                     'RECENT_COMMITMENT', 'DATED_REQUIREMENT')
+
+# Presentation vocabulary only. Every domain invokes the same predicates and
+# mandatory-constraint aggregation; none receives its own matching engine.
+MATCHING_CONTEXTS = {
+    'construction': dict(label='Construction consistency', match='CONSISTENT', non_match='INCONSISTENT'),
+    'rfp': dict(label='RFP capability alignment', match='MATCH', non_match='NON_MATCH'),
+    'investment': dict(label='Capital mandate alignment', match='FIT', non_match='NON_FIT'),
+    'asset': dict(label='Asset / intervention compatibility', match='FIT', non_match='NON_FIT'),
+}
+
 
 @dataclass(frozen=True)
 class ProfessionalReviewNarrative:
@@ -316,6 +339,74 @@ def compare_normalized_information(left, right, *, operator='EQUAL'):
         return dict(result, reason='This representation has no supported typed comparison. Prose difference is not meaning difference.')
     return dict(result, state=predicate['state'], predicate=predicate,
         reason='Conditional result under the declared normalization premises; source truth and authority are unchanged.')
+
+
+@observed
+def match_normalized_criteria(criteria):
+    """One transparent multi-criterion predicate over explicit interpretations.
+
+    Mandatory failures dominate successes. Unknown/incomparable/qualified
+    premises cannot become MATCH through counting, weighting or omission.
+    This function grants no factual fit, authority or canonical promotion.
+    """
+    result = dict(state='UNRESOLVED', criteria=[], mandatory_failures=[], unresolved=[],
+        canonical=False, authority='UNCHANGED', factual_fit='UNRESOLVED')
+    if not isinstance(criteria, list) or not 1 <= len(criteria) <= 16:
+        return dict(result, state='REFUSED', reason='Select 1–16 explicit comparison criteria.')
+    keys = {'id', 'mandatory', 'required', 'candidate', 'operator', 'blocked_reason'}
+    if any(not isinstance(row, dict) or set(row) != keys or type(row['mandatory']) is not bool
+           or not isinstance(row['id'], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', row['id'])
+           or not isinstance(row['blocked_reason'], str) or len(row['blocked_reason']) > 2000 for row in criteria):
+        return dict(result, state='REFUSED', reason='Each criterion needs an identity, explicit obligation and bounded comparison inputs.')
+    if len({row['id'] for row in criteria}) != len(criteria):
+        return dict(result, state='REFUSED', reason='Do not count the same required proposition more than once.')
+    for row in criteria:
+        if row['blocked_reason'] or row['candidate'] is None:
+            comparison = dict(state='UNRESOLVED', reason=row['blocked_reason'] or 'Candidate evidence is missing.',
+                              factual_consistency='UNRESOLVED', authority='UNCHANGED', canonical=False)
+        else:
+            comparison = compare_normalized_information(row['required'], row['candidate'], operator=row['operator'])
+        result['criteria'].append(dict(id=row['id'], mandatory=row['mandatory'], comparison=comparison))
+        if row['mandatory'] and comparison['state'] == 'NON_MATCH':
+            result['mandatory_failures'].append(row['id'])
+        if comparison['state'] not in ('MATCH', 'NON_MATCH'):
+            result['unresolved'].append(row['id'])
+    states = [row['comparison']['state'] for row in result['criteria']]
+    if result['mandatory_failures']:
+        state = 'NON_MATCH'
+        reason = 'At least one mandatory predicate fails; other matches cannot offset it.'
+    elif all(state == 'MATCH' for state in states):
+        state = 'MATCH'
+        reason = 'Every supplied predicate matches under the declared premises; complete requirement coverage and factual fit are not established.'
+    elif any(state in ('MATCH', 'NON_MATCH') for state in states):
+        state = 'PARTIAL'
+        reason = 'The supplied criteria include optional non-matches or unresolved comparisons.'
+    else:
+        state = 'UNRESOLVED'
+        reason = 'No admissible comparison settles the supplied criteria.'
+    return dict(result, state=state, reason=reason)
+
+
+@observed
+def inspect_declared_temporal_scope(proposition, query_date, *, expected_class=None):
+    """Inspect an explicitly declared interval, not factual mandate currentness."""
+    from datetime import date
+    result = dict(state='CURRENTNESS_UNRESOLVED', query_date=query_date, canonical=False,
+                  authority='UNCHANGED', qualification='Temporal labels and dates remain proposed source interpretations.')
+    if expected_class is not None and proposition.get('temporal_class') != expected_class:
+        return dict(result, reason='The candidate evidence does not have the required temporal meaning; a commitment or historical activity is not a current mandate.')
+    if proposition.get('temporal_class') not in DECLARED_CURRENT_TEMPORAL_CLASSES:
+        return dict(result, reason='Historical activity, inferred patterns and unknown currentness do not establish an in-force declaration.')
+    try:
+        query = date.fromisoformat(query_date)
+        start = date.fromisoformat(proposition.get('as_of'))
+        end = date.fromisoformat(proposition.get('valid_until') or proposition.get('as_of'))
+    except (ValueError, TypeError):
+        return dict(result, reason='Explicit as-of and query dates are required; open-ended validity is not inferred.')
+    if not start <= query <= end:
+        return dict(result, reason='The query date is outside the declared interval; no continuing applicability is inferred.')
+    return dict(result, state='DECLARED_INTERVAL_CONTAINS_QUERY',
+                reason='The supplied dates contain the query date. Authenticity, applicability and actual current mandate remain unverified.')
 
 
 @observed

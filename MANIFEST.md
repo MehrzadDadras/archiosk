@@ -1,5 +1,15 @@
 # MANIFEST
 
+Source-anchored subject propositions extend existing Participant, Claim,
+Supersession and adoption owners. Original observations and claims remain intact;
+human review attribution is explicit. Shared multi-criterion matching consumes
+these individual claims through existing normalized predicates. Mandatory failures,
+missing evidence, temporal meaning and source qualifications remain visible in
+the attention UI. Conditional model fit never establishes factual fit. Reload
+reads persisted runs and current premise status without re-analysis. See
+`governance/current/subject-proposition-matching.md` and
+`governance/current/investor-kernel-mapping.md`.
+
 Document-list commands use the existing conversational turn gateway and Action
 Registry to propose bounded actions for the host-selected cases. The bulk route
 rechecks ownership/lifecycle and uses the existing executors; Delete retains its
@@ -7,7 +17,7 @@ confirmation and Reload only reads persisted state. Single-source view actions
 remain separately scoped. See `governance/current/document-desk-commands.md` and
 `tests/test_document_desk_commands.py`.
 
-The existing capability registry now describes nineteen instrumented muscle
+The existing capability registry describes instrumented muscle
 owners. Runtime observations project recorded events against those contracts
 without invoking domain resolvers or inventing PASS states. AnalysisRun keeps an
 optional operational trace link; the attention UI opens the actual execution in

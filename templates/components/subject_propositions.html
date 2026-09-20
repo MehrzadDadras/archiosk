@@ -1,0 +1,61 @@
+<section id="subject-propositions">
+<h2>Subjects and sourced propositions</h2>
+<p>Inspect individual assertions about an entity, mandate, requirement or capability. Source and temporal classifications are proposals, not verification. An unsuperseded document does not establish a current mandate.</p>
+{% if not expired %}
+<details><summary>Add a subject reference</summary>
+<form method="post" action="{{ attention_url }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="record_subject"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+<label>Subject name <input name="subject_name" required maxlength="160"></label>
+<label>Role <input name="subject_role" required maxlength="160" placeholder="institutional_investor, company, operator"></label>
+<p>Registration creates a project-scoped identity reference. It does not verify identity or capabilities.</p><button>Create subject reference</button>
+</form></details>
+{% set edit = selected_proposition or {} %}{% set prop = edit.get('structured_proposition') or {} %}{% set norm = prop.get('normalization') or {} %}
+<details {% if edit %}open{% endif %}><summary>{{ 'Correct proposition through a successor' if edit else 'Record a sourced proposition' }}</summary>
+{% if edit %}<p>Original Claim {{ edit.id }} remains unchanged. <a href="{{ attention_url }}?analysis={{ analysis.id|urlencode }}#subject-propositions">Start a new proposition instead</a></p>{% endif %}
+<form method="post" action="{{ attention_url }}" id="subject-proposition-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="subject_proposition"><input type="hidden" name="analysis_id" value="{{ analysis.id }}"><input type="hidden" name="predecessor_id" value="{{ edit.get('id', '') }}">
+<label>Subject <select name="subject_key">{% for subject in comparison_subjects %}<option value="{{ subject.key }}" {% if subject.key == norm.get('subject_key') %}selected{% endif %}>{{ subject.label }}</option>{% endfor %}</select></label>
+<label>Property <input name="property_key" required maxlength="200" value="{{ norm.get('property_key', '') }}" placeholder="sector, geography, capital-scale"></label>
+<label>Applicable scope / vehicle / condition <input name="scope_key" required maxlength="200" value="{{ norm.get('scope_key', '') }}"></label>
+<label>Value type <select name="kind">{% for kind in ['TOKEN_SET', 'NUMBER'] %}<option {% if kind == norm.get('kind') %}selected{% endif %}>{{ kind }}</option>{% endfor %}</select></label>
+<label>Value (comma-separated tokens, or number) <input name="value" required maxlength="6000" value="{{ (norm.value|join(', ') or '[]') if norm.get('kind') == 'TOKEN_SET' else norm.get('value', '') }}"></label>
+<label>Unit for numbers <input name="unit" maxlength="200" value="{{ norm.get('unit', '') }}"></label>
+<label>Explicit token vocabulary <input name="vocabulary" maxlength="200" value="{{ norm.get('vocabulary', '') }}"></label>
+<label>Qualifiers (comma-separated; [] explicitly means none) <input name="qualifiers" required maxlength="6000" value="{{ (norm.qualifiers|join(', ') or '[]') if norm.get('qualifiers') is not none and 'qualifiers' in norm else '' }}"></label>
+<label>Viewpoint premise <select name="view_basis"><option value="UNRESOLVED">Not established</option><option value="VIEW_INVARIANT" {% if norm.get('view_basis') == 'VIEW_INVARIANT' %}selected{% endif %}>Explicit proposal: this property is view-invariant</option></select></label>
+<label>Cited observation <select name="evidence_id">{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}" {% if item.evidence_item_id in norm.get('premise_ids', []) %}selected{% endif %}>{{ item.evidence_item_id }} · {{ item.source_id }}</option>{% endfor %}</select></label>
+<label>Exact original quote from the cited observation <textarea name="original_quote" required maxlength="4000">{{ prop.get('original_quote', '') }}</textarea></label>
+<label>Proposed source class <select name="source_class">{% for value in proposition_source_classes %}<option {% if value == prop.get('source_class') %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+<label>Proposed temporal class <select name="temporal_class">{% for value in proposition_temporal_classes %}<option {% if value == prop.get('temporal_class') %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+<label>Source-stated as-of date, if present <input type="date" name="as_of" value="{{ prop.get('as_of') or '' }}"></label>
+<label>Source-stated validity end, if present <input type="date" name="valid_until" value="{{ prop.get('valid_until') or '' }}"></label>
+<label>Reason for normalization, categorization and view-invariance <textarea name="reason" required maxlength="2000"></textarea></label>
+<fieldset><legend>Interpretation origin</legend>
+<label><input type="radio" name="attribution" value="human_reviewed" required> I made this interpretation myself.</label>
+<label><input type="radio" name="attribution" value="agent_assessment" required> This is an agent-proposed interpretation.</label></fieldset>
+<p>Dates remain declared premises. Missing dates stay missing. This action does not re-evaluate any downstream result or promote authority.</p>
+<button>{{ 'Record corrected successor' if edit else 'Record proposition proposal' }}</button>
+</form></details>
+{% endif %}
+{% for row in subject_propositions %}{% set claim = row.claim %}{% set p = claim.structured_proposition %}
+<article data-proposition-id="{{ claim.id }}">
+<h3>{{ p.normalization.property_key }} · {{ row.status.status }}</h3>
+<p>{{ p.normalization.subject_key }} · {{ p.normalization.value }} {{ p.normalization.unit or '' }} · scope {{ p.normalization.scope_key }}</p>
+<p>{{ 'EVALUATION_INPUT' if p.evaluation_only else 'Source-anchored proposal' }} · authority {{ row.authority }} · temporal applicability {{ row.temporal_applicability }} · source integrity {{ row.source_integrity }}</p>
+<p>Source class: {{ p.source_class }} · temporal class: {{ p.temporal_class }} · as of {{ p.as_of or 'UNRESOLVED' }} · valid until {{ p.valid_until or 'UNRESOLVED' }}</p>
+<blockquote>{{ p.original_quote }}</blockquote><p>{{ row.qualification }}</p>
+<p>Proposed by {{ claim.created_by }} ({{ claim.author_type }}) at {{ claim.created_at }}. {{ p.classification_reason }}</p>
+{% if claim.runtime_trace_id %}<p><a href="{{ url_for('portal.survey_evaluation', observation=claim.runtime_trace_id) }}#muscle-inspector">Inspect proposition creation runtime</a> · trace is not evidence.</p>{% endif %}
+{% if row.predecessor_claim_id %}<p>Corrects Claim {{ row.predecessor_claim_id }}. {{ row.supersession.reason }}</p>
+<details><summary>Before / after field changes (not a semantic judgment)</summary><pre>{{ row.changes|tojson(indent=2) }}</pre></details>{% endif %}
+{% for identifier in p.normalization.premise_ids %}<a href="{{ mapping_url }}?item=evidence_items:{{ identifier|urlencode }}">Open cited observation {{ identifier }}</a>{% endfor %}
+{% if not expired and row.status.status != 'superseded' %}
+<a href="{{ attention_url }}?analysis={{ analysis.id|urlencode }}&amp;claim={{ claim.id|urlencode }}#subject-propositions">Correct this proposition</a>
+<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="review_subject_proposition"><input type="hidden" name="analysis_id" value="{{ analysis.id }}"><input type="hidden" name="claim_id" value="{{ claim.id }}">
+<label>Review reason <input name="reason" required maxlength="2000"></label>
+<label><input type="checkbox" name="attribution" value="human_reviewed" required> I personally reviewed this interpretation and am making this decision.</label>
+{% if not claim.derived_observation_id %}<button name="outcome" value="accept_interpretation">Accept as interpretation</button>{% endif %}<button name="outcome" value="reject">Reject interpretation</button>
+</form>{% endif %}
+<details><summary>Provenance, original record and current review state</summary><pre>{{ row|tojson(indent=2) }}</pre></details>
+</article>{% else %}<p>No structured propositions recorded for this attention scope.</p>{% endfor %}
+</section>

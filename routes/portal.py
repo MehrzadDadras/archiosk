@@ -4341,7 +4341,9 @@ def document_shop_analysis_history(project_id):
 def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_url, evaluation_only=False, evaluation_path=None, evaluation_game=None):
     """Shared UI adapter; scope computation and persistence belong to the workspace."""
     from services.runtime_observation import event
-    from services.cross_modal_investigation import PROFESSIONAL_NARRATIVES
+    from services.cross_modal_investigation import (
+        PROFESSIONAL_NARRATIVES, PROPOSITION_SOURCE_CLASSES, PROPOSITION_TEMPORAL_CLASSES,
+        MATCHING_CONTEXTS, DECLARED_CURRENT_TEMPORAL_CLASSES)
     actor = session.get('username')
     if len(store.visible_cases_for(workspace, actor)) != len(workspace.cases):
         abort(403)
@@ -4351,7 +4353,58 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
             from services import survey_evaluation as evaluation
             context = evaluation.isolated(current_app, evaluation_path) if evaluation_path else nullcontext()
             with context:
-                if request.form.get('action') == 'information_comparison':
+                if request.form.get('action') == 'record_subject':
+                    store.record_review_subject(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('subject_name', ''), request.form.get('subject_role', ''))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'subject_proposition':
+                    def proposition_tokens(value):
+                        return [] if value.strip() == '[]' else [v.strip() for v in value.split(',')] if value.strip() else None
+                    kind = request.form.get('kind')
+                    normalization = dict(subject_key=request.form.get('subject_key', ''),
+                        property_key=request.form.get('property_key', ''), scope_key=request.form.get('scope_key', ''),
+                        kind=kind, value=proposition_tokens(request.form.get('value', '')) if kind == 'TOKEN_SET' else request.form.get('value'),
+                        qualifiers=proposition_tokens(request.form.get('qualifiers', '')),
+                        unit=request.form.get('unit', ''), vocabulary=request.form.get('vocabulary', ''),
+                        view_basis=request.form.get('view_basis', 'UNRESOLVED'), view_id=None, basis=request.form.get('reason', ''),
+                        premise_ids=[request.form.get('evidence_id', '')])
+                    store.record_subject_proposition(workspace, actor, request.form.get('analysis_id'), normalization,
+                        request.form.get('source_class'), request.form.get('temporal_class'),
+                        request.form.get('original_quote', ''), request.form.get('reason', ''),
+                        as_of=request.form.get('as_of'), valid_until=request.form.get('valid_until'),
+                        predecessor_id=request.form.get('predecessor_id') or None,
+                        attribution=request.form.get('attribution'))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'review_subject_proposition':
+                    store.review_subject_proposition(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('claim_id'), request.form.get('outcome'), request.form.get('reason', ''),
+                        get_governance_log(current_app), attribution=request.form.get('attribution'))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'requirement_matching':
+                    criteria = []
+                    for index in range(16):
+                        prefix = 'criterion_' + str(index) + '_'
+                        required = request.form.get(prefix + 'required', '')
+                        if not required:
+                            if request.form.get(prefix + 'candidate'):
+                                raise CaseWorkspaceError('Select the requirement for each candidate proposition.')
+                            continue
+                        mandatory = request.form.get(prefix + 'mandatory')
+                        if mandatory not in ('yes', 'no'):
+                            raise CaseWorkspaceError('Declare whether each criterion is mandatory.')
+                        criteria.append(dict(required_claim_id=required,
+                            candidate_claim_id=request.form.get(prefix + 'candidate') or None,
+                            mandatory=mandatory == 'yes', operator=request.form.get(prefix + 'operator'),
+                            candidate_temporal_class=request.form.get(prefix + 'temporal')))
+                    if request.form.get('require_currentness') not in ('yes', 'no'):
+                        raise CaseWorkspaceError('Declare the temporal scope of the comparison.')
+                    store.run_requirement_matching(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('target_subject'), criteria, request.form.get('context_key'),
+                        request.form.get('reason', ''),
+                        require_currentness=request.form.get('require_currentness') == 'yes',
+                        query_date=request.form.get('query_date'))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'information_comparison':
                     def explicit_tokens(value):
                         return [] if value.strip() == '[]' else [part.strip() for part in value.split(',')] if value.strip() else None
                     premises = []
@@ -4438,6 +4491,10 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     conditions = [c for c in workspace.drawing_conditions if c['source_id'] in scoped_sources]
     from services.drawing_conditions import condition_review_fingerprint
     conditions_by_id = {c['id']: c for c in conditions}
+    propositions = store.inspect_subject_propositions(workspace, actor, analysis['id']) if analysis else []
+    selected_proposition = next((row['claim'] for row in propositions if row['claim']['id'] == request.args.get('claim')), None)
+    if request.args.get('claim') and not selected_proposition:
+        abort(404)
     event('go_attention.html', 'CONSUMED', analysis_id=analysis['id'] if analysis else None,
           state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
@@ -4447,6 +4504,11 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         governed_reviews=[r for r in reviews if r['governed_result']['kind'] == 'professional_review'],
         constraint_reviews=[r for r in reviews if r['governed_result']['kind'] == 'constraint_review'],
         information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
+        subject_propositions=propositions, selected_proposition=selected_proposition,
+        requirement_matches=store.inspect_requirement_matches(workspace, actor, analysis['id']) if analysis else [],
+        matching_contexts=MATCHING_CONTEXTS, declared_temporal_classes=DECLARED_CURRENT_TEMPORAL_CLASSES,
+        proposition_source_classes=PROPOSITION_SOURCE_CLASSES,
+        proposition_temporal_classes=PROPOSITION_TEMPORAL_CLASSES,
         comparison_subjects=[dict(key='source:'+s['id'], label='Source: '+s.get('name', s['id'])) for s in workspace.sources if s['id'] in scoped_sources]
             + [dict(key='participant:'+p['id'], label='Participant: '+p['name']) for p in workspace.participants],
         comparison_views=[v for v in workspace.derived_views if v['source_id'] in scoped_sources and v.get('view_transform')],
