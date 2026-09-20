@@ -26,7 +26,13 @@ def test_declaration_precedes_execution_preserves_evidence_and_reload(project):
     assert len(retained.investigation_steps) == 1
     before = store._path_for('project').read_bytes()
     for _ in range(2):
-        assert client.get('/projects/project/attention').status_code == 200
+        page = client.get('/projects/project/attention')
+        assert page.status_code == 200
+        # Production serves static assets with a long immutable cache. Reload
+        # must reference the new review assets instead of the prior bare URL.
+        markup = page.get_data(as_text=True)
+        assert 'css/survey_evaluation.css?v=' in markup
+        assert 'js/go_work_plan.js?v=' in markup
     assert store._path_for('project').read_bytes() == before
     # Caller cannot replace a declared objective/selection at execution time.
     response = client.post('/projects/project/attention', data=dict(plan_id=plan['plan_id'],

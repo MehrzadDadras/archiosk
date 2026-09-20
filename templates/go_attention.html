@@ -1,6 +1,6 @@
 ﻿{% extends 'base.html' %}
 {% block title %}Governed attention — GO{% endblock %}
-{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css', v=static_version ~ '-go-review-1') }}">{% endblock %}
 {% block content %}
 <div class="survey-evaluation go-attention">
 <h1>Governed attention</h1>
@@ -143,4 +143,4 @@
 </details>
 </div>
 {% endblock %}
-{% block extra_scripts %}{{ super() }}<script src="{{ url_for('static', filename='js/go_work_plan.js') }}"></script>{% endblock %}
+{% block extra_scripts %}{{ super() }}<script src="{{ url_for('static', filename='js/go_work_plan.js', v=static_version ~ '-go-review-1') }}"></script>{% endblock %}
