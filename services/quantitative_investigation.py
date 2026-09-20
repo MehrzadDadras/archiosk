@@ -41,6 +41,80 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Optional
+from services.runtime_observation import observed
+
+
+@observed
+def probe_interval_constraints(constraints):
+    """Intersect explicit scalar bounds; never extract or invent a missing value.
+
+    This bounded model addresses one subject/parameter/unit at a time. The caller
+    must obtain premises through existing admission or explicitly hypothetical
+    input. Numeric feasibility is separate from authority and physical adequacy.
+    """
+    from decimal import Decimal, InvalidOperation
+    result = dict(state='UNRESOLVED', constraints=constraints, common_interval=None,
+                  canonical=False, physical_adequacy='UNRESOLVED')
+    if not isinstance(constraints, list) or not 2 <= len(constraints) <= 32:
+        return dict(result, state='REFUSED', reason='Supply 2–32 explicit constraints for one parameter.')
+    if any(not isinstance(r, dict) or any(not isinstance(r.get(k), str) or not 0 < len(r[k]) <= 200
+           for k in ('id', 'subject', 'parameter', 'unit')) for r in constraints):
+        return dict(result, state='REFUSED', reason='Each bounded constraint requires an identity, subject, parameter and unit.')
+    if len({r['id'] for r in constraints}) != len(constraints):
+        return dict(result, state='REFUSED', reason='Constraint identities must be distinct.')
+    identities = {(r.get('subject'), r.get('parameter'), r.get('unit')) for r in constraints}
+    if len(identities) != 1 or any(not value for identity in identities for value in identity):
+        return dict(result, state='INCOMPARABLE', reason='Subject, parameter and units must match explicitly; no inferred conversion.')
+    intervals = []
+    for row in constraints:
+        if not isinstance(row, dict) or not row.get('premise_ids'):
+            return dict(result, reason='Each constraint requires retained source premises.')
+        try:
+            if any(isinstance(row.get(k), bool) or len(str(row.get(k))) > 80 for k in ('lower', 'upper')):
+                raise ValueError('Boolean bounds')
+            lower, upper = Decimal(str(row['lower'])), Decimal(str(row['upper']))
+            if (not lower.is_finite() or not upper.is_finite() or lower > upper
+                    or any(abs(v.adjusted()) > 100 for v in (lower, upper) if v)):
+                raise ValueError('Invalid interval')
+        except (KeyError, InvalidOperation, ValueError):
+            return dict(result, reason='Finite ordered lower and upper bounds are required; missing bounds are not inferred.')
+        intervals.append((lower, upper))
+    lower, upper = max(r[0] for r in intervals), min(r[1] for r in intervals)
+    if lower > upper:
+        return dict(result, state='NO_COMMON_ADMISSIBLE_CONDITION',
+                    reason='The explicit intervals have no common scalar value; physical adequacy and authority remain separate.')
+    return dict(result, state='CONSISTENT_WITH_TOLERANCE', common_interval=[str(lower), str(upper)],
+                reason='Only coexistence within the supplied scalar bounds is established; omitted constraints remain unknown.')
+
+
+@observed
+def search_interval_breakpoint(constraint_result, baseline, direction):
+    """Exact boundary of a bounded scalar model, not an engineering failure claim."""
+    from decimal import Decimal, InvalidOperation, localcontext
+    result = dict(state='UNRESOLVED', origin='EVALUATION_INPUT', canonical=False,
+        baseline=baseline, direction=direction, failure_point=None, margin_to_failure=None,
+        first_violated_constraints=[], physical_failure_mode='UNRESOLVED')
+    if constraint_result.get('state') != 'CONSISTENT_WITH_TOLERANCE':
+        return dict(result, reason='A feasible baseline model must be established before perturbation.')
+    try:
+        if isinstance(baseline, bool) or len(str(baseline)) > 80 or direction not in ('increase', 'decrease'):
+            raise ValueError('Invalid probe')
+        value = Decimal(str(baseline))
+        lower, upper = map(Decimal, constraint_result['common_interval'])
+        if not value.is_finite() or not lower <= value <= upper:
+            raise ValueError('Baseline outside model')
+    except (InvalidOperation, ValueError, KeyError):
+        return dict(result, reason='A finite actual/model baseline inside the common interval and a direction are required.')
+    limit = upper if direction == 'increase' else lower
+    key = 'upper' if direction == 'increase' else 'lower'
+    first = [r['id'] for r in constraint_result['constraints'] if Decimal(str(r[key])) == limit]
+    with localcontext() as context:
+        context.prec = 256  # bounded 80-character inputs and exponent magnitude <= 100
+        margin = str(abs(limit-value))
+    return dict(result, state='BOUNDARY_FOUND', failure_point=str(limit), margin_to_failure=margin,
+        first_violated_constraints=first, boundary_is_admissible=True,
+        reason='Inclusive bounds remain satisfied at this limit and fail immediately beyond it. '
+               'There is no smallest violating real-number value; this is the failure threshold, not a physical failure prediction.')
 
 # -- trigger recognition -----------------------------------------------------
 # Deliberately keyword-based, like every other trigger in

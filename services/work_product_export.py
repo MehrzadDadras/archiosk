@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+from services.runtime_observation import observed
 
 import docx
 import openpyxl
@@ -187,6 +188,7 @@ def build_work_product_xlsx(work_product: dict) -> io.BytesIO:
     return buffer
 
 
+@observed
 def export_work_product(work_product: dict, export_format: str) -> tuple[io.BytesIO, str]:
     """Dispatches to the correct renderer by format, then computes the
     SHA-256 checksum of the actual exported bytes (Section 19's own

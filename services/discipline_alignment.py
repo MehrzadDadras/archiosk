@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from services.runtime_observation import observed
 
 from services.case_workspace import (
     ALIGNMENT_STATE_ALIGNED,
@@ -78,6 +79,7 @@ def _stale_against(store, workspace, assumption: dict) -> Optional[dict]:
             "current_revision": current, "source_name": source.get("name")}
 
 
+@observed
 def reconcile(store, workspace, condition_id: str) -> dict:
     """Do the disciplines describe the same physical condition?
 
@@ -144,13 +146,17 @@ def reconcile(store, workspace, condition_id: str) -> dict:
                     % len(unevidenced))
             else:
                 state, reason = (
-                    ALIGNMENT_STATE_CONFLICT,
-                    "Both disciplines cite evidence and they still disagree.")
+                    ALIGNMENT_STATE_UNRECONCILED,
+                    "The cited assumptions have different wording. Bound meaning, applicability "
+                    "and legitimate viewpoint normalization remain unresolved; text difference "
+                    "alone does not establish a conflict.")
 
     return {
         "condition_id": condition_id,
         "state": state,
         "reason": reason,
+        "semantic_consistency": 'RESOLVED_BY_PROFESSIONAL' if state == ALIGNMENT_STATE_RESOLVED_BY_PROFESSIONAL else 'UNRESOLVED',
+        "view_normalization": 'NOT_ESTABLISHED',
         "disciplines": sorted(by_discipline),
         "assumptions": [
             {"assumption_id": a["id"], "discipline": a["discipline"],
@@ -181,7 +187,7 @@ def _coordination_question(state: str, by_discipline: dict,
         return ("Has %s been rechecked against the reissued information?"
                 % subject)
     if state == ALIGNMENT_STATE_UNRECONCILED:
-        return ("What does the other discipline assume about %s?" % subject)
+        return ("What applicable meaning and viewpoint does each discipline intend for %s?" % subject)
     if state == ALIGNMENT_STATE_REVIEW_NEEDED:
         return ("What does each discipline assume about %s?" % subject)
     if state == ALIGNMENT_STATE_RESOLVED_BY_PROFESSIONAL:

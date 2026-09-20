@@ -34,6 +34,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+from services.runtime_observation import observed
 
 from services.case_workspace import (
     ANALYTICAL_METHOD_AI_ASSISTED_SYNTHESIS,
@@ -65,6 +66,299 @@ from services.case_workspace import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ProfessionalReviewNarrative:
+    """Review configuration, never an independent authority or reasoning engine."""
+    key: str
+    professional_lens: str
+    review_objective: str
+    information_sequence: tuple
+    resolution_questions: tuple
+    affected_disciplines: tuple
+    representation_types: tuple
+    governing_evidence_requirements: tuple
+    sufficiency_criteria: tuple
+    expected_next_transitions: tuple
+    likely_gap_states: tuple
+    presentation_structure: tuple
+    version: str = '1'
+
+
+_REVIEW_OUTPUT = ('Objective and lens', 'Evidence and attention', 'Resolution and expected next',
+    'Source jumps and root traces', 'Section and discipline coverage', 'Interpretation changes',
+    'Contradictions and gaps', 'Uncertainty and refusals', 'Governed conclusions', 'Next investigation', 'Provenance')
+_RESOLUTION_QUESTIONS = (
+    ('OVERALL', 'Overall geometry, envelope and openings'),
+    ('WHOLE_BUILDING', 'Footing-to-roof and whole-building continuity'),
+    ('ASSEMBLY_TYPE', 'Wall, slab, roof and foundation types'),
+    ('ASSEMBLY_LAYERS', 'Layers and local interfaces'),
+    ('LOCAL_TIE_IN', 'Exact overlap, seal, termination, drainage and movement'),
+)
+_REVIEW_SEQUENCE = ('PLAN', 'ENLARGED_PLAN', 'BUILDING_SECTION', 'WALL_SECTION', 'DETAIL', 'SPECIFICATION', 'SHOP_DRAWING')
+
+
+def _professional_narrative(key, lens, objective, disciplines, sequence=_REVIEW_SEQUENCE):
+    return ProfessionalReviewNarrative(key, lens, objective, tuple(sequence), _RESOLUTION_QUESTIONS,
+        tuple(disciplines), ('PLAN', 'SECTION', 'DETAIL', 'SCHEDULE', 'SPECIFICATION', 'CALCULATION',
+        'DIAGRAM', 'MODEL_PROPERTY', 'NOTE', 'TYPICAL_DETAIL', 'SHOP_DRAWING'),
+        ('Source identity and provenance', 'Subject binding', 'Explicit applicability',
+         'Applicable authority and currentness', 'Unresolved exceptions remain visible'),
+        ('Every materially distinct condition has adequate applicable representation',
+         'Affected disciplines have adequate information; drawing count is not sufficiency',
+         'Finer resolution answers a previously unanswered question'),
+        tuple(zip(sequence, sequence[1:])),
+        ('INSUFFICIENT_SCALE', 'SECTION_COVERAGE_GAP', 'DISCIPLINE_COVERAGE_GAP',
+         'UNRESOLVED', 'REFUSED', 'PARTIAL', 'INCOMPARABLE'), _REVIEW_OUTPUT)
+
+
+PROFESSIONAL_NARRATIVES = {
+    'physical_control': _professional_narrative('physical_control', 'Physical Reality / Force Control',
+        'Trace gravity/load, water, air, heat, moisture/vapour, sound, movement, pressure, fire and '
+        'deterioration from phenomenon through control function, material/assembly, connection, '
+        'continuity and failure path. A functional label is intent, not proof of performance; '
+        'specialized engineering adequacy requires applicable professional analysis.',
+        ('architectural', 'structural', 'mechanical', 'building_science', 'acoustics', 'operations'),
+        ('PHYSICAL_PHENOMENON', 'CONTROL_FUNCTION', 'MATERIAL_ASSEMBLY', 'CONNECTION', 'CONTINUITY', 'FAILURE_PATH')),
+    'building_science': _professional_narrative('building_science', 'Building Science',
+        'Review envelope continuity from overall geometry and openings to footing-to-roof assemblies, '
+        'air/water/vapour/thermal layers, drainage, movement and material tie-ins.',
+        ('architectural', 'structural', 'mechanical', 'building_science')),
+    'permit': _professional_narrative('permit', 'OBC / Building Permit',
+        'Trace the applicable code matrix identity and propositions: occupancy, areas, height/storeys, '
+        'ratings, sprinkler/standpipe, exiting, occupant load, washrooms, accessibility, seismic, '
+        'post-disaster and spatial separation. Missing jurisdiction, edition or applicable provisions '
+        'remain unresolved; this narrative does not itself supply regulatory rules.',
+        ('architectural', 'structural', 'mechanical', 'electrical', 'civil'),
+        ('CODE_MATRIX', 'PLAN', 'SECTION', 'SCHEDULE', 'DETAIL', 'SPECIFICATION')),
+    'acoustics': _professional_narrative('acoustics', 'Acoustics',
+        'Trace space function, noise sources/receivers and required performance through separating '
+        'assemblies, openings, penetrations and flanking paths. Untested ratings remain unresolved.',
+        ('architectural', 'acoustics', 'mechanical', 'structural'),
+        ('SPACE_FUNCTION', 'SOURCE_RECEIVER', 'REQUIRED_PERFORMANCE', 'SEPARATING_ASSEMBLY',
+         'OPENINGS_PENETRATIONS', 'FLANKING_PATHS', 'SCHEDULE_SPECIFICATION', 'DETAIL')),
+    'structural_coordination': _professional_narrative('structural_coordination', 'Structural Coordination',
+        'Review subject identity, supports, interfaces and applicable structural representations '
+        'across disciplines; normalize legitimate viewpoints before contradiction.',
+        ('architectural', 'structural', 'mechanical')),
+    'accessibility': _professional_narrative('accessibility', 'Accessibility',
+        'Trace accessible routes, spaces, openings and interfaces to applicable requirements '
+        'and sufficiently detailed representations without inferring missing clearances.',
+        ('architectural', 'civil', 'mechanical', 'electrical')),
+    'operations_maintenance': _professional_narrative('operations_maintenance', 'Operations / Maintenance',
+        'Trace asset condition, access, maintenance history and operating constraints through '
+        'candidate interventions and lifecycle effects; compatibility is not action authorization.',
+        ('operations', 'maintenance', 'architectural', 'structural', 'mechanical', 'electrical'),
+        ('ASSET_IDENTITY', 'CONDITION', 'MAINTENANCE_HISTORY', 'OPERATING_CONSTRAINTS', 'INTERVENTION', 'LIFECYCLE_EFFECT')),
+}
+
+
+@observed
+def assess_review_resolution(narrative, current_class, required_class, *, premise_ids=()):
+    """Compare explicit resolution classes, not nominal scale or drawing density."""
+    classes = [key for key, _ in narrative.resolution_questions]
+    result = dict(state='UNRESOLVED', current_class=current_class, required_class=required_class,
+                  premise_ids=list(premise_ids), authority='UNCHANGED', next_question=None)
+    if current_class not in classes or required_class not in classes or not premise_ids:
+        result['reason'] = 'Explicit current/required resolution and supporting premises are required.'
+    elif classes.index(current_class) < classes.index(required_class):
+        result.update(state='INSUFFICIENT_SCALE', reason='Seek finer applicable evidence; do not infer the missing detail.',
+                      next_question=dict(narrative.resolution_questions)[required_class])
+    else:
+        result.update(state='QUALIFIED', reason='Declared resolution is sufficient for this resolution check only; '
+                      'content sufficiency, applicability and authority still require their own evidence.')
+    return result
+
+
+@observed
+def expected_next_information(narrative, current_class, actual_classes, *, subject=None,
+                              project_phase=None, discipline=None, evidence_state='UNRESOLVED',
+                              next_evidence_state=None, next_currentness=None):
+    """Sequence is semantic review metadata, never sheet-number order."""
+    expected = dict(narrative.expected_next_transitions).get(current_class)
+    context = dict(subject=subject, project_phase=project_phase, discipline=discipline,
+                   evidence_state=evidence_state, next_evidence_state=next_evidence_state,
+                   next_currentness=next_currentness)
+    if not subject or not project_phase or not discipline or evidence_state in ('UNRESOLVED', 'REFUSED'):
+        return dict(state='UNRESOLVED', expected=expected, context=context,
+                    reason='The subject, phase, discipline and current evidence state must be established for this review.')
+    if next_currentness == 'superseded':
+        return dict(state='SUPERSEDED', expected=expected, context=context,
+                    reason='The corresponding representation is superseded; it does not close the current sequence.')
+    if evidence_state == 'CONTESTED' or next_evidence_state == 'CONTESTED':
+        return dict(state='CONTRADICTORY', expected=expected, context=context,
+                    reason='Existing governed admission records contested support; preserve the conflict for review.')
+    if next_evidence_state in ('UNRESOLVED', 'REFUSED') or next_currentness not in (None, 'current'):
+        return dict(state='UNRESOLVED', expected=expected, context=context,
+                    reason='The corresponding representation cannot establish the expected next step in its current state.')
+    if current_class not in narrative.information_sequence:
+        return dict(state='SURPRISING', expected=None, context=context,
+                    reason='This representation is outside the selected narrative sequence; review applicability.')
+    if expected is None:
+        return dict(state='UNRESOLVED', expected=None, context=context,
+                    reason='The configured sequence ends here; completeness is not established by reaching its last item.')
+    return dict(state='EXPECTED' if expected in actual_classes else 'MISSING', expected=expected,
+                context=context, reason='Compare applicable information classes, not sheet numbering or drawing count.')
+
+
+@observed
+def cover_requirements(required_keys, candidates, *, max_candidates=16):
+    """Bounded set composition over admitted coverage, independent of domain.
+
+    No ranking or similarity. The caller retains the qualifications of every
+    input. This function establishes only coverage of the supplied requirement set.
+    """
+    from itertools import combinations
+    required = set(required_keys)
+    if not required:
+        return dict(state='UNRESOLVED', configurations=[], missing=[], reason='No required coverage was established.')
+    if len(candidates) > max_candidates:
+        return dict(state='REFUSED', configurations=[], missing=[], reason='Candidate set exceeds bounded exhaustive composition.')
+    candidates = {key: set(values) & required for key, values in candidates.items()}
+    available = set().union(*candidates.values()) if candidates else set()
+    missing = sorted(required - available)
+    if missing:
+        return dict(state='PARTIAL', configurations=[], missing=missing, reason='No configuration covers all supplied requirements.')
+    keys = sorted(candidates)
+    for count in range(1, len(keys)+1):
+        configurations = []
+        for group in combinations(keys, count):
+            if required.issubset(set().union(*(candidates[key] for key in group))):
+                configurations.append(list(group))
+                if len(configurations) == 32:
+                    return dict(state='MATCH', configurations=configurations, missing=[], minimum_count=count,
+                                alternatives_truncated=True, reason='Minimum size proved; alternative display is bounded to 32 configurations.')
+        if configurations:
+            return dict(state='MATCH', configurations=configurations, missing=[], minimum_count=count,
+                        alternatives_truncated=False, reason='Minimum coverage of the supplied requirements; no authority or ranking is implied.')
+
+
+@observed
+def inspect_representation_necessity(required_keys, candidates):
+    """Removal sensitivity over the same explicit coverage used by composition.
+
+    Shared coverage does not establish consistent duplication: semantic equivalence,
+    authorized supersession and contradiction remain separate governed questions.
+    """
+    required = set(required_keys)
+    coverage = {key: set(values) & required for key, values in candidates.items()}
+    rows = []
+    for key, values in coverage.items():
+        remaining = set().union(*(other for identifier, other in coverage.items() if identifier != key))
+        unique = sorted(values - remaining)
+        duplicates = sorted(identifier for identifier, other in coverage.items() if identifier != key and values & other)
+        rows.append(dict(representation_id=key,
+            necessity_class='ESSENTIAL' if unique else 'REPRESENTATIVE' if len(values) > 1 else 'NECESSITY_UNRESOLVED',
+            covered_requirements=sorted(values), unique_contribution=unique, overlapping_representations=duplicates,
+            removal_state='COVERAGE_GAP' if unique else 'NO_ADDITIONAL_KNOWN_COVERAGE_GAP',
+            duplicate_consistency='UNRESOLVED', safe_to_remove=False,
+            qualification='Role is limited to supplied, applicable coverage. Overlap is not semantic equivalence or permission to remove.'))
+    return dict(state='PARTIAL' if required else 'UNRESOLVED', representations=rows,
+                minimum_sufficient_set=cover_requirements(required, coverage), canonical=False)
+
+
+@observed
+def inspect_continuum_participation(store, workspace, evidence_id, expectation='unknown'):
+    """Inspect immediate governed dependencies; isolation is a gap only if expected."""
+    if expectation not in ('unknown', 'independent', 'upstream', 'downstream', 'both'):
+        raise CrossModalInvestigationError('Select an explicit participation expectation.')
+    evidence = store.get_evidence_item(workspace, evidence_id)
+    result = dict(state='CONTINUUM_PARTICIPATION_UNRESOLVED', target=evidence_id,
+        expectation=expectation, connections=[], missing=[], canonical=False,
+        authority='UNCHANGED', consumed_evidence_ids=[])
+    if not evidence or evidence.get('project_id') != workspace.project_id:
+        return dict(result, state='REFUSED', reason='The focal object is unavailable in this project.')
+    admission = store.admit_proposition(workspace, evidence_id)
+    result['admission'] = admission
+    if admission['state'] in ('CONTESTED', 'REFUSED', 'UNRESOLVED') or admission.get('currentness', {}).get('status') != 'current':
+        return dict(result, reason='Focal evidence is contested, refused or not current; participation remains unresolved.')
+    links = store.relationships_for(workspace, 'evidence_item', evidence_id, include_temporary=True)
+    if len(links) > 200:
+        return dict(result, state='REFUSED', reason='Narrow attention; immediate relationship inspection exceeds its bound.')
+    found = set()
+    governing_types = {'derived_from', 'based_on', 'depends_on', 'implements'}
+    for link in links:
+        outgoing = link['from_type'] == 'evidence_item' and link['from_id'] == evidence_id
+        role = ('upstream' if outgoing else 'downstream') if link['relationship_type'] in governing_types else 'related'
+        resolved = store.resolve_relationship_status(workspace, link['id'])
+        counterpart_type = link['to_type'] if outgoing else link['from_type']
+        counterpart = link['to_id'] if outgoing else link['from_id']
+        peer = store.get_evidence_item(workspace, counterpart) if counterpart_type == 'evidence_item' else None
+        peer_admission = store.admit_proposition(workspace, counterpart) if peer else None
+        result['connections'].append(dict(relationship_id=link['id'], role=role,
+            relationship_type=link['relationship_type'], counterpart_type=counterpart_type,
+            counterpart_id=counterpart, temporary=bool(link.get('analytical_scope')),
+            status=resolved['status'], reason=link.get('reason'), admission=peer_admission))
+        if peer:
+            result['consumed_evidence_ids'].append(counterpart)
+        if (resolved['status'] == 'confirmed' and not link.get('analytical_scope') and peer_admission
+                and peer_admission.get('currentness', {}).get('status') == 'current'
+                and peer_admission['state'] not in ('CONTESTED', 'REFUSED', 'UNRESOLVED')):
+            found.add(role)
+    expected = {'upstream', 'downstream'} if expectation == 'both' else {expectation} if expectation in ('upstream', 'downstream') else set()
+    result['missing'] = sorted(expected - found)
+    if expectation == 'unknown':
+        return dict(result, reason='Expected participation is not established; isolation is not classified as defective.')
+    if expectation == 'independent':
+        return dict(result, state='PARTICIPATION_NOT_REQUIRED',
+                    reason='The explicit review premise permits independence; this does not establish content correctness.')
+    if not links:
+        return dict(result, state='ORPHANED_INFORMATION',
+                    reason='Participation is explicitly expected but no recorded connection exists in this project scope.')
+    if result['missing']:
+        return dict(result, state='COORDINATION_GAP', reason='Expected governed dependency directions remain unestablished.')
+    return dict(result, state='PARTICIPATES' if admission['admissible'] else 'PARTICIPATION_PARTIAL',
+        reason='Expected recorded dependency directions are present; source qualification remains in force. Connectivity grants no authority.')
+
+
+@observed
+def trace_governing_root(store, workspace, target_id, *, max_depth=12):
+    """Follow only explicit governing dependencies, then return to the focal target.
+
+    Connectivity and a terminal node do not establish governing authority. The
+    existing admission/currentness/relationship owners decide whether to stop.
+    """
+    if type(max_depth) is not int or not 1 <= max_depth <= 32:
+        raise CrossModalInvestigationError('Root tracing requires a bounded depth of 1–32.')
+    result = dict(target=target_id, trace=[], root=None, return_target=target_id,
+                  state='UNRESOLVED', controlling_premise=None, canonical=False)
+    seen, current = set(), target_id
+    for _ in range(max_depth):
+        if current in seen:
+            result.update(state='REFUSED', reason='Governing dependency cycle; returned to target.')
+            return result
+        seen.add(current)
+        evidence = store.get_evidence_item(workspace, current)
+        if not evidence or evidence.get('project_id') != workspace.project_id:
+            result.update(state='REFUSED', reason='Broken or out-of-project dependency; returned to target.')
+            return result
+        admitted = store.admit_proposition(workspace, current)
+        result['trace'].append(dict(evidence_item_id=current, source_id=evidence.get('source_id'),
+                                    admission=admitted, relationship_id=None))
+        if admitted['state'] in ('CONTESTED', 'REFUSED') or admitted.get('currentness', {}).get('status') != 'current':
+            result['reason'] = 'Authority/currentness is unresolved or contested; returned to target.'
+            return result
+        edges = [edge for edge in store.relationships_for(workspace, 'evidence_item', current, direction='from')
+                 if edge['relationship_type'] in ('derived_from', 'based_on')]
+        if not edges:
+            if admitted['admissible']:
+                result.update(state='QUALIFIED', root=current, controlling_premise=admitted,
+                    reason='An admitted terminal premise was found within its existing authority scope; returned to target.')
+            else:
+                result['reason'] = 'Terminal reference does not establish a governing premise; returned to target.'
+            return result
+        if len(edges) != 1:
+            result['reason'] = 'Multiple governing dependencies require scope resolution; no root was selected by recency or proximity.'
+            return result
+        edge = edges[0]
+        result['trace'][-1]['relationship_id'] = edge['id']
+        if edge['to_type'] != 'evidence_item' or store.resolve_relationship_status(workspace, edge['id'])['status'] != 'confirmed':
+            result['reason'] = 'Governing relationship is not admitted for this evidence trace; returned to target.'
+            return result
+        current = edge['to_id']
+    result.update(state='REFUSED', reason='Bounded trace exhausted; returned to target without selecting an unproven root.')
+    return result
 
 
 class CrossModalInvestigationError(CaseWorkspaceError):

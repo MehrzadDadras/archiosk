@@ -548,6 +548,25 @@ deploy/*  (nginx, gunicorn) — infra wrapping wsgi:app, not imported by Python
 
 **Governed attention and working views:** `templates/go_attention.html` reads
 `AnalysisRun.attention_scope` and objective-bound `Relationship.analytical_scope`.
+
+**Professional review narratives:** `services/cross_modal_investigation.py` holds
+seven reusable review configurations, resolution checks, expected-next sequencing,
+bounded governing-root traversal and coverage composition. Existing drawing
+conditions and discipline assumptions retain explicit applicability review;
+`services/drawing_conditions.py` evaluates coverage of known conditions without
+claiming a complete building inventory. `CaseWorkspaceStore` persists the actual
+review in `AnalysisRun.governed_result` and renders it through existing WorkProduct
+sections and exports. The attention UI exposes these actions and persisted results.
+`tests/test_professional_narratives.py` covers qualification, provenance and refusal;
+`tools/verify_source_review_ui.py` exercises real browser review and report actions.
+Physical-control inspection reuses the existing boundary/functional-layer/support
+owners. Representation necessity and minimum selection are limited to explicitly
+reviewed coverage; semantic agreement is not inferred from overlapping coverage.
+`services/quantitative_investigation.py` evaluates explicit hypothetical scalar
+intervals and inclusive failure thresholds. `tests/test_constraint_probing.py`
+checks missing premises, incompatible units, retained hypothetical scope and
+read-only Reload. These probes do not establish actual project measurements or
+engineering adequacy.
 `tests/test_go_attention.py` qualifies the real routes, retained evidence and
 temporary-edge promotion refusal. `tests/test_working_views.py` qualifies source
 immutability, typed transforms and view lineage. Standing view-normalization

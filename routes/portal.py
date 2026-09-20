@@ -4262,6 +4262,7 @@ def document_shop_analysis_history(project_id):
 def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_url, evaluation_only=False, evaluation_path=None):
     """Shared UI adapter; scope computation and persistence belong to the workspace."""
     from services.runtime_observation import event
+    from services.cross_modal_investigation import PROFESSIONAL_NARRATIVES
     actor = session.get('username')
     if len(store.visible_cases_for(workspace, actor)) != len(workspace.cases):
         abort(403)
@@ -4271,15 +4272,56 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
             from services import survey_evaluation as evaluation
             context = evaluation.isolated(current_app, evaluation_path) if evaluation_path else nullcontext()
             with context:
-                if request.form.get('action') == 'temporary_relationship':
+                if request.form.get('action') == 'constraint_review':
+                    constraints = [dict(id='constraint-' + str(index), subject=request.form.get('subject', ''),
+                        parameter=request.form.get('parameter', ''), unit=request.form.get('unit', ''),
+                        lower=request.form.get('lower_' + str(index)), upper=request.form.get('upper_' + str(index)),
+                        premise_ids=[request.form.get('evidence_' + str(index), '')]) for index in (1, 2)]
+                    store.run_constraint_review(workspace, actor, request.form.get('analysis_id'), constraints,
+                        request.form.get('baseline'), request.form.get('direction'), request.form.get('reason', ''))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'record_condition':
+                    store.record_review_condition(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('evidence_id'), request.form.get('meaning', ''),
+                        request.form.get('affected_disciplines', '').split(','), request.form.get('required_resolution'),
+                        request.form.get('requires_section') == 'yes', request.form.get('reason', ''))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'record_representation':
+                    store.record_review_representation(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('condition_id'), request.form.get('evidence_id'), request.form.get('discipline', ''),
+                        request.form.get('representation_class'), request.form.get('resolution_class'), request.form.get('reason', ''))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') in ('confirm_condition', 'resolve_representation'):
+                    store.review_coverage_record(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('record_id'), request.form['action'], request.form.get('reason', ''))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'professional_presentation':
+                    review = next((r for r in workspace.analyses if r['id'] == request.form.get('review_id')), None)
+                    if not review or not review.get('governed_result'):
+                        abort(404)
+                    store.render_professional_review(workspace, actor, review['id'])
+                    analysis = {'id': review['governed_result']['attention_analysis_id']}
+                elif request.form.get('action') == 'professional_review':
+                    store.run_professional_review(workspace, actor, request.form.get('analysis_id'),
+                        request.form.get('narrative'), request.form.get('focus_id'), request.form.get('subject', ''),
+                        request.form.get('representation_class'), request.form.get('current_resolution'),
+                        request.form.get('required_resolution'), request.form.get('project_phase', ''),
+                        request.form.get('discipline', ''), request.form.get('reason', ''),
+                        next_evidence_id=request.form.get('next_evidence_id') or None,
+                        next_class=request.form.get('next_class') or None,
+                        participation_expectation=request.form.get('participation_expectation', 'unknown'))
+                    analysis = {'id': request.form['analysis_id']}
+                elif request.form.get('action') == 'temporary_relationship':
                     edge = store.record_temporary_relationship(workspace, actor, request.form.get('analysis_id'),
                         request.form.get('from_id'), request.form.get('to_id'), request.form.get('hypothesis', ''),
                         request.form.get('reason', ''), request.form.getlist('evidence_id'))
                     analysis = {'id': edge['related_analysis_id']}
-                else:
+                elif not request.form.get('action'):
                     analysis = store.record_go_attention(workspace, actor, request.form.get('objective', ''),
                         request.form.getlist('included_id'), request.form.getlist('de_emphasized_id'),
                         lifetime_minutes=int(request.form.get('lifetime_minutes', '60')), evaluation_only=evaluation_only)
+                else:
+                    raise CaseWorkspaceError('Unknown attention/review action.')
         except (CaseWorkspaceError, ValueError) as exc:
             flash(str(exc), 'error')
             return redirect(attention_url, code=303)
@@ -4293,11 +4335,29 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     edges = [dict(record=edge, resolved=store.resolve_relationship_status(workspace, edge['id']))
              for edge in workspace.relationships if analysis and edge.get('analytical_scope')
              and edge.get('related_analysis_id') == analysis['id']]
+    reviews = [run for run in workspace.analyses if analysis and
+               (run.get('governed_result') or {}).get('attention_analysis_id') == analysis['id']]
+    scoped_sources = {e['source_id'] for e in analysis['attention_scope']['entries'] if e['category'] == 'included'} if analysis else set()
+    conditions = [c for c in workspace.drawing_conditions if c['source_id'] in scoped_sources]
+    from services.drawing_conditions import condition_review_fingerprint
+    conditions_by_id = {c['id']: c for c in conditions}
     event('go_attention.html', 'CONSUMED', analysis_id=analysis['id'] if analysis else None,
           state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs,
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
-        evaluation_only=evaluation_only, temporary_edges=edges)
+        evaluation_only=evaluation_only, temporary_edges=edges,
+        governed_reviews=[r for r in reviews if r['governed_result']['kind'] == 'professional_review'],
+        constraint_reviews=[r for r in reviews if r['governed_result']['kind'] == 'constraint_review'],
+        professional_narratives=PROFESSIONAL_NARRATIVES,
+        review_conditions=conditions,
+        review_representations=[dict(a, applicability_current=bool(a.get('resolved_by') and
+            a.get('reviewed_condition_digest') == condition_review_fingerprint(conditions_by_id[a['condition_id']], a)))
+            for a in workspace.discipline_assumptions if a['condition_id'] in conditions_by_id],
+        evaluation_run_id=evaluation_path.name if evaluation_path else None,
+        professional_presentations=[p for p in workspace.work_products if p.get('artifact_type') == 'professional_review'],
+        resolution_classes=next(iter(PROFESSIONAL_NARRATIVES.values())).resolution_questions,
+        representation_classes=sorted({value for narrative in PROFESSIONAL_NARRATIVES.values()
+                                       for value in narrative.information_sequence + narrative.representation_types}))
 
 
 @portal_bp.route('/admin/survey-evaluation/<run_id>/attention', methods=['GET', 'POST'])
@@ -4319,3 +4379,26 @@ def evaluation_go_attention(run_id):
     back_url = url_for('portal.survey_evaluation_run', run_id=run_id)
     return _go_attention_surface(store, workspace, attention_url=attention_url,
         mapping_url=mapping_url, back_url=back_url, evaluation_only=True, evaluation_path=path)
+
+
+@portal_bp.route('/admin/survey-evaluation/<run_id>/presentations/<work_product_id>.docx')
+@admin_required
+def evaluation_narrative_export(run_id, work_product_id):
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation
+    from services.work_product_export import export_work_product
+    from flask import send_file
+    try:
+        path = evaluation.location(current_app, run_id)
+        store = CaseWorkspaceStore(path / 'registry')
+        workspace = store.get(evaluation._read(path)['project_id'])
+        if workspace is None:
+            abort(404)
+        product = next((p for p in workspace.work_products if p['id'] == work_product_id), None)
+        if not product or len(store.visible_cases_for(workspace, session.get('username'))) != len(workspace.cases):
+            abort(404)
+        buffer, _ = export_work_product(product, 'docx')
+        return send_file(buffer, as_attachment=True, download_name='EVALUATION_INPUT-professional-review.docx',
+                         mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', max_age=0)
+    except (ValueError, OSError, KeyError):
+        abort(404)

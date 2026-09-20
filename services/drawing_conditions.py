@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from services.runtime_observation import observed
 
 from services.case_workspace import (
     CONTINUITY_STATE_CONTINUOUS,
@@ -279,6 +280,7 @@ def edge_behavior_state(boundary: dict) -> dict:
 # Functional layers - building science, honestly bounded
 # ---------------------------------------------------------------------------
 
+@observed
 def functional_layer_continuity(boundary: dict) -> list:
     """For each functional layer at this boundary: does the function survive?
 
@@ -382,6 +384,7 @@ def _edges_of(store, workspace, condition_id: str, types) -> list:
     return [edge for edge in edges if edge.get("relationship_type") in types]
 
 
+@observed
 def host_support_state(store, workspace, condition_id: str) -> dict:
     """Does a dependent material actually have the host it needs?
 
@@ -430,6 +433,7 @@ def host_support_state(store, workspace, condition_id: str) -> dict:
             "state": state, "reason": reason, "hosts": hosts}
 
 
+@observed
 def structural_admission_state(store, workspace, condition_id: str) -> dict:
     """Is there a credible, recorded path for the forces to reach the ground?
 
@@ -528,6 +532,7 @@ def spatially_adjacent(region_a: dict, region_b: dict, tolerance: float = 1.0) -
 # Reporting
 # ---------------------------------------------------------------------------
 
+@observed
 def boundary_report(store, workspace, condition_id: str) -> dict:
     """Everything derivable about one condition and its edges, in one read."""
     condition = store._find(workspace.drawing_conditions, condition_id)
@@ -572,3 +577,111 @@ def boundary_report(store, workspace, condition_id: str) -> dict:
             "QUANTITATIVE.",
         ],
     }
+
+
+@observed
+def review_representation_coverage(store, workspace, source_ids, narrative):
+    """Coverage of known conditions, never a claim of complete building inventory."""
+    from services.cross_modal_investigation import assess_review_resolution, cover_requirements, inspect_representation_necessity
+    rows, section_candidates, section_requirements, consumed = [], {}, [], set()
+    all_requirements, all_candidates = set(), {}
+    section_roles = {'BUILDING_SECTION', 'WALL_SECTION', 'SECTION'}
+    physical_roles = section_roles | {'DETAIL', 'TYPICAL_DETAIL', 'PLAN', 'ENLARGED_PLAN'}
+    for condition in workspace.drawing_conditions:
+        if condition['source_id'] not in source_ids:
+            continue
+        requirements = condition.get('review_requirements') or {}
+        disciplines = requirements.get('affected_disciplines') or []
+        source_state = store.resolve_anchor_currentness(workspace, 'source', condition['source_id'])
+        reviewed = condition.get('status') in ('confirmed', 'overridden') and source_state['status'] == 'current'
+        effective_meaning = condition['proposed_meaning']
+        for decision in condition.get('decisions', []):
+            if decision.get('action') == 'overridden' and decision.get('meaning'):
+                effective_meaning = decision['meaning']
+        row = dict(condition_id=condition['id'], source_id=condition['source_id'], region=condition['region'],
+            meaning=effective_meaning, original_proposed_meaning=condition['proposed_meaning'], condition_state=condition['status'],
+            section_state='UNRESOLVED', disciplines=[], requirements=requirements, representations=[])
+        assumptions = store.discipline_assumptions_for(workspace, condition_id=condition['id'])
+        for assumption in assumptions:
+            identifier = assumption.get('representation_evidence_id')
+            evidence = store.get_evidence_item(workspace, identifier) if identifier else None
+            admitted = store.admit_proposition(workspace, identifier) if evidence else None
+            if evidence:
+                consumed.add(identifier)
+            resolution = assess_review_resolution(narrative, assumption.get('resolution_class'),
+                requirements.get('required_resolution'), premise_ids=[identifier] if evidence else [])
+            reasons = []
+            if not assumption.get('resolved_by'):
+                reasons.append('Typical/disciplinary applicability has not been explicitly reviewed.')
+            elif assumption.get('reviewed_condition_digest') != condition_review_fingerprint(condition, assumption):
+                reasons.append('The condition or its review scope changed after applicability review; explicit re-review is required.')
+            if not evidence:
+                reasons.append('A source-anchored representation reference is missing.')
+            elif admitted['state'] in ('CONTESTED', 'UNRESOLVED', 'REFUSED'):
+                reasons.append('Representation is contested, stale or refused.')
+            if resolution['state'] != 'QUALIFIED':
+                reasons.append('Resolution is insufficient or unresolved for this condition.')
+            if (assumption['discipline'] in requirements.get('physical_coordination_disciplines', [])
+                    and assumption.get('representation_class') not in physical_roles):
+                reasons.append('Theoretical information does not close the required physical coordination.')
+            if assumption.get('representation_class') not in narrative.representation_types + narrative.information_sequence:
+                reasons.append('Representation class has not been established for this narrative.')
+            adequate = reviewed and not reasons
+            item = dict(assumption_id=assumption['id'], evidence_item_id=identifier,
+                discipline=assumption['discipline'], representation_class=assumption.get('representation_class'),
+                state='QUALIFIED_COVERAGE' if adequate else 'PARTIAL', reasons=reasons,
+                resolution=resolution, admission=admitted, reviewer=assumption.get('resolved_by'),
+                applicability_reason=assumption.get('resolution_note'))
+            row['representations'].append(item)
+            if adequate and assumption.get('representation_class') in section_roles:
+                section_candidates.setdefault(identifier, set()).add(condition['id'])
+                all_candidates.setdefault(identifier, set()).add(condition['id'] + ':section')
+            if adequate and assumption['discipline'] in disciplines:
+                all_candidates.setdefault(identifier, set()).add(condition['id'] + ':discipline:' + assumption['discipline'])
+        if reviewed and requirements.get('requires_section') is True:
+            section_requirements.append(condition['id'])
+            all_requirements.add(condition['id'] + ':section')
+            row['section_state'] = ('QUALIFIED_COVERAGE' if any(condition['id'] in values for values in section_candidates.values())
+                                    else 'SECTION_COVERAGE_GAP')
+        elif reviewed and requirements.get('requires_section') is False:
+            row['section_state'] = 'NOT_REQUIRED_BY_RECORDED_SCOPE'
+        for discipline in disciplines:
+            if reviewed:
+                all_requirements.add(condition['id'] + ':discipline:' + discipline)
+            candidates = [r for r in row['representations'] if r['discipline'] == discipline]
+            state = ('UNRESOLVED' if not reviewed else 'QUALIFIED_COVERAGE'
+                     if any(r['state'] == 'QUALIFIED_COVERAGE' for r in candidates) else 'DISCIPLINE_COVERAGE_GAP')
+            row['disciplines'].append(dict(discipline=discipline, state=state,
+                representation_ids=[r['evidence_item_id'] for r in candidates],
+                reason='Coverage requires applicable, reviewed information; no separate drawing per discipline is required.'))
+        if not disciplines:
+            row['discipline_scope_state'] = 'UNRESOLVED'
+        row['physical_control'] = dict(state='UNRESOLVED', performance_established=False,
+            recorded_path=boundary_report(store, workspace, condition['id']),
+            qualification='Recorded function and continuity are inspected separately. Labels and recorded path '
+            'completeness do not prove physical performance, capacity, sizing or engineering adequacy.')
+        rows.append(row)
+    minimum = cover_requirements(section_requirements, section_candidates)
+    gaps = [r['condition_id'] for r in rows if r['section_state'] == 'SECTION_COVERAGE_GAP'
+            or any(d['state'] == 'DISCIPLINE_COVERAGE_GAP' for d in r['disciplines'])]
+    return dict(state='PARTIAL' if rows else 'UNRESOLVED', conditions=rows, gaps=gaps,
+        minimum_sections_for_known_conditions=minimum, consumed_evidence_ids=sorted(consumed),
+        representation_necessity=inspect_representation_necessity(all_requirements, all_candidates),
+        inventory_completeness='UNRESOLVED',
+        qualification='Coverage is limited to recorded, scoped conditions and explicit professional applicability. '
+        'A complete perimeter/vertical inventory and regulatory adequacy are not established by drawing count or this map.')
+
+
+def condition_review_fingerprint(condition, representation=None):
+    """Bind applicability to the exact condition and representation reviewed."""
+    import hashlib
+    import json
+    fields = ('id', 'project_id', 'source_id', 'page_structural_unit_id', 'region',
+              'condition_kind', 'proposed_meaning', 'status', 'decisions', 'review_requirements')
+    payload = {key: condition.get(key) for key in fields}
+    if representation is not None:
+        payload['representation'] = {key: representation.get(key) for key in (
+            'id', 'condition_id', 'discipline', 'assumption', 'evidence', 'source_id',
+            'representation_evidence_id', 'representation_class', 'resolution_class')}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':'),
+                                     allow_nan=False).encode()).hexdigest()

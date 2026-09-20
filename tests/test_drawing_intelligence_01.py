@@ -638,7 +638,7 @@ class DisciplineTests(_DrawingBase):
             self.workspace, condition_id=condition_id, discipline="structural",
             assumption=structural, actor="eng", **kw.get("eng", {}))
 
-    def test_n_conflicting_assumptions_are_both_preserved(self):
+    def test_n_different_raw_assumptions_are_preserved_without_unearned_conflict(self):
         condition = self._condition("transfer beam at grid C")
         self._both(condition["id"],
                    "beam depth 600mm, soffit at 2700",
@@ -646,10 +646,19 @@ class DisciplineTests(_DrawingBase):
                    arch={"evidence": "A-201 section"},
                    eng={"evidence": "S-301 framing"})
         outcome = align.reconcile(self.store, self.workspace, condition["id"])
-        self.assertEqual(outcome["state"], ALIGNMENT_STATE_CONFLICT)
+        self.assertEqual(outcome["state"], ALIGNMENT_STATE_UNRECONCILED)
+        self.assertEqual(outcome['semantic_consistency'], 'UNRESOLVED')
         self.assertEqual(len(outcome["assumptions"]), 2)
         self.assertEqual(sorted(outcome["disciplines"]),
                          ["architectural", "structural"])
+
+    def test_paraphrased_assumptions_are_not_a_semantic_conflict(self):
+        condition = self._condition('opening width')
+        self._both(condition['id'], '900 mm clear width', 'Clear opening width: 900 mm',
+                   arch={'evidence': 'A-201'}, eng={'evidence': 'S-301'})
+        outcome = align.reconcile(self.store, self.workspace, condition['id'])
+        self.assertEqual(outcome['state'], ALIGNMENT_STATE_UNRECONCILED)
+        self.assertEqual(outcome['semantic_consistency'], 'UNRESOLVED')
 
     def test_n_neither_discipline_is_declared_correct(self):
         condition = self._condition("transfer beam at grid C")

@@ -139,10 +139,75 @@ def main():
             choices=page.locator('select[name="to_id"] option').evaluate_all('nodes => nodes.map(n => n.value)')
             page.select_option('select[name="to_id"]', choices[1])
             page.fill('input[name="hypothesis"]', 'Possible related sheet readings')
-            page.fill('input[name="reason"]', 'EVALUATION_INPUT: inspect a bounded hypothesis without promoting source authority.')
+            page.locator('form').filter(has=page.locator('input[value="temporary_relationship"]')).locator('input[name="reason"]').fill('EVALUATION_INPUT: inspect a bounded hypothesis without promoting source authority.')
             page.get_by_role('button', name='Add temporary relationship', exact=True).click()
             assert 'TEMPORARY · Possible related sheet readings' in page.locator('body').inner_text()
             proof['temporary_relationship_invoked_through_ui']=True
+            def action_form(action):
+                return page.locator('form').filter(has=page.locator(f'input[name="action"][value="{action}"]'))
+            def open_coverage():
+                detail=page.locator('details').filter(has=page.get_by_text('Record conditions and corresponding representations for coverage review', exact=True))
+                if detail.get_attribute('open') is None:
+                    detail.locator('summary').click()
+            open_coverage()
+            form=action_form('record_condition')
+            assert form.locator('select[name="evidence_id"] option').count() > 0
+            form.locator('input[name="meaning"]').fill('EVALUATION_INPUT: located review condition')
+            form.locator('input[name="affected_disciplines"]').fill('architectural, mechanical')
+            form.locator('select[name="required_resolution"]').select_option('ASSEMBLY_LAYERS')
+            form.locator('input[name="reason"]').fill('Evaluation of explicit anchored review; no claim of automatic condition recognition.')
+            form.locator('button').click()
+            open_coverage()
+            form=action_form('confirm_condition')
+            form.locator('input[name="reason"]').fill('EVALUATION_INPUT: confirm the bounded review condition and scope.')
+            form.locator('button').click()
+            open_coverage()
+            form=action_form('record_representation')
+            form.locator('input[name="discipline"]').fill('architectural')
+            form.locator('select[name="representation_class"]').select_option('WALL_SECTION')
+            form.locator('select[name="resolution_class"]').select_option('ASSEMBLY_LAYERS')
+            form.locator('input[name="reason"]').fill('EVALUATION_INPUT: explicit applicability premise for this bounded condition.')
+            form.locator('button').click()
+            open_coverage()
+            form=action_form('resolve_representation')
+            form.locator('input[name="reason"]').fill('EVALUATION_INPUT: reviewed applicability; source authority remains unchanged.')
+            form.locator('button').click()
+            form=action_form('professional_review')
+            form.locator('select[name="narrative"]').select_option('building_science')
+            form.locator('input[name="subject"]').fill('EVALUATION_INPUT envelope interface')
+            form.locator('input[name="project_phase"]').fill('design-review')
+            form.locator('input[name="discipline"]').fill('architectural')
+            form.locator('select[name="current_resolution"]').select_option('OVERALL')
+            form.locator('select[name="participation_expectation"]').select_option('upstream')
+            form.locator('select[name="required_resolution"]').select_option('LOCAL_TIE_IN')
+            form.locator('input[name="reason"]').fill('An overall representation cannot establish the exact seal termination.')
+            form.locator('button').click()
+            assert 'INSUFFICIENT_SCALE' in page.locator('body').inner_text()
+            assert 'DISCIPLINE_COVERAGE_GAP' in page.locator('body').inner_text()
+            action_form('professional_presentation').locator('button').click()
+            with page.expect_download() as download_info:
+                page.locator('a[href*="presentations/"][href$=".docx"]').click()
+            download=download_info.value
+            report_path=output/'professional-review.docx'
+            download.save_as(str(report_path))
+            import docx
+            report_text='\n'.join(p.text for p in docx.Document(report_path).paragraphs)
+            assert 'INSUFFICIENT_SCALE' in report_text and 'DISCIPLINE_COVERAGE_GAP' in report_text
+            proof['professional_review_coverage_and_retained_report_invoked_through_ui']=True
+            form=action_form('constraint_review')
+            form.locator('input[name="subject"]').fill('EVALUATION_INPUT opening')
+            form.locator('input[name="parameter"]').fill('width')
+            form.locator('input[name="unit"]').fill('mm')
+            for name, value in {'lower_1':'990','upper_1':'1010','lower_2':'1000','upper_2':'1020','baseline':'1005'}.items():
+                form.locator(f'input[name="{name}"]').fill(value)
+            form.locator('input[name="reason"]').fill('Explicit hypothetical bounds; no project measurement is inferred.')
+            form.locator('button').click()
+            assert 'BOUNDARY_FOUND' in page.locator('body').inner_text()
+            assert 'Actual project value: UNRESOLVED' in page.locator('body').inner_text()
+            page.get_by_role('link', name='Reload', exact=True).click()
+            assert 'BOUNDARY_FOUND' in page.locator('body').inner_text()
+            proof['hypothetical_constraint_and_breakpoint_invoked_through_ui']=True
+            page.screenshot(path=str(output/'professional-review.png'), full_page=True)
             if args.live:
                 response=page.goto(base+'/document-shop/jobs/9c00eeec-4e65-4bde-bcea-de8b09c8beb1')
                 assert response.status == 404
@@ -160,6 +225,13 @@ def main():
                     'services.image_intake.transform_document_preview',
                     'services.case_workspace.CaseWorkspaceStore.record_go_attention',
                     'services.case_workspace.CaseWorkspaceStore.record_temporary_relationship',
+                    'services.case_workspace.CaseWorkspaceStore.run_professional_review',
+                    'services.drawing_conditions.review_representation_coverage',
+                    'services.case_workspace.CaseWorkspaceStore.render_professional_review',
+                    'services.work_product_export.export_work_product',
+                    'services.cross_modal_investigation.inspect_continuum_participation',
+                    'services.quantitative_investigation.probe_interval_constraints',
+                    'services.quantitative_investigation.search_interval_breakpoint',
                     'services.document_examination.reevaluate_source_review'):
                     assert owner in owners, owner
                 proof['invoked_owners']=sorted(owners)

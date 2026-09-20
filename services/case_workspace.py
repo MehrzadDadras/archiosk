@@ -3125,6 +3125,7 @@ class DrawingCondition:
     #: Append-only, same contract as LegendItem.decisions.
     decisions: list = field(default_factory=list)
     style_context: dict = field(default_factory=dict)
+    review_requirements: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -3201,6 +3202,11 @@ class DisciplineAssumption:
     resolved_by: Optional[str] = None
     resolved_at: Optional[str] = None
     resolution_note: Optional[str] = None
+    representation_evidence_id: Optional[str] = None
+    representation_class: Optional[str] = None
+    resolution_class: Optional[str] = None
+    reviewed_condition_digest: Optional[str] = None
+    resolution_history: list = field(default_factory=list)
 
 
 @dataclass
@@ -3363,6 +3369,8 @@ class AnalysisRun:
     finding_ids: list[str] = field(default_factory=list)
     prior_corrections_considered: int = 0
     attention_scope: Optional[dict] = None
+    governed_result: Optional[dict] = None
+    muscle_profile: list = field(default_factory=list)
 
 
 @dataclass
@@ -6755,6 +6763,228 @@ class CaseWorkspaceStore:
                 premise_qualifications=[{k: q.get(k) for k in ('evidence_item_id','state','authority','admissible','errors')} for q in qualifications]))
 
     @observed
+    def record_review_condition(self, workspace, actor, analysis_id, evidence_id, meaning,
+                                affected_disciplines, required_resolution, requires_section, reason):
+        analysis = self._find(workspace.analyses, analysis_id)
+        scope = (analysis or {}).get('attention_scope')
+        if (workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases)
+                or not scope or datetime.fromisoformat(scope['expires_at']) <= datetime.now(timezone.utc)
+                or evidence_id not in scope['included_evidence_ids']):
+            raise CaseWorkspaceError('Select anchored evidence from an active attention scope.')
+        evidence = self.get_evidence_item(workspace, evidence_id)
+        region = self._find(workspace.addressable_regions, (evidence or {}).get('region_id'))
+        unit = self._find(workspace.structural_units, (region or {}).get('structural_unit_id'))
+        if (not evidence or not region or not unit or unit['source_id'] != evidence['source_id']
+                or unit['project_id'] != workspace.project_id):
+            raise CaseWorkspaceError('A source/page/region anchor is required before recording a condition.')
+        if self.resolve_anchor_currentness(workspace, 'evidence_item', evidence_id)['status'] != 'current':
+            raise CaseWorkspaceError('The condition anchor is not current.')
+        if not meaning.strip() or not reason.strip() or len(meaning) > 2000 or len(reason) > 2000:
+            raise CaseWorkspaceError('Record the observed condition and a bounded source-based reason.')
+        from services.cross_modal_investigation import PROFESSIONAL_NARRATIVES
+        resolutions = dict(next(iter(PROFESSIONAL_NARRATIVES.values())).resolution_questions)
+        disciplines = sorted({d.strip() for d in affected_disciplines if d.strip()})
+        if (type(requires_section) is not bool or required_resolution not in resolutions
+                or not disciplines or len(disciplines) > 20 or any(len(d) > 80 for d in disciplines)):
+            raise CaseWorkspaceError('Declare affected disciplines and the required resolution for this condition.')
+        return self.record_drawing_condition(workspace, evidence['source_id'], region['structural_unit_id'],
+            {'region_id': region['id'], 'address': deepcopy(region.get('address'))}, 'interface', meaning.strip(),
+            'human_review_proposal', actor, evidence=evidence_id,
+            review_requirements=dict(affected_disciplines=disciplines, required_resolution=required_resolution,
+                requires_section=bool(requires_section), reason=reason.strip(), premise_ids=[evidence_id]))
+
+    def _coverage_attention_scope(self, workspace, actor, analysis_id):
+        analysis = self._find(workspace.analyses, analysis_id)
+        scope = (analysis or {}).get('attention_scope')
+        if (workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases)
+                or not scope or datetime.fromisoformat(scope['expires_at']) <= datetime.now(timezone.utc)):
+            raise CaseWorkspaceError('An active, fully visible attention scope is required.')
+        return scope
+
+    @observed
+    def record_review_representation(self, workspace, actor, analysis_id, condition_id, evidence_id,
+                                     discipline, representation_class, resolution_class, reason):
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        source_ids = {e['source_id'] for e in scope['entries'] if e['category'] == 'included'}
+        condition = self._find(workspace.drawing_conditions, condition_id)
+        from services.cross_modal_investigation import PROFESSIONAL_NARRATIVES
+        classes = {value for n in PROFESSIONAL_NARRATIVES.values() for value in n.information_sequence + n.representation_types}
+        resolutions = dict(next(iter(PROFESSIONAL_NARRATIVES.values())).resolution_questions)
+        if (not condition or condition['source_id'] not in source_ids or evidence_id not in scope['included_evidence_ids']
+                or representation_class not in classes or resolution_class not in resolutions
+                or not reason.strip() or len(reason) > 2000 or not discipline.strip() or len(discipline) > 80):
+            raise CaseWorkspaceError('Select a scoped condition, evidence, representation and reason.')
+        return self.record_discipline_assumption(workspace, condition_id, discipline, reason.strip(), actor,
+            evidence=evidence_id, representation_evidence_id=evidence_id,
+            representation_class=representation_class, resolution_class=resolution_class)
+
+    @observed
+    def review_coverage_record(self, workspace, actor, analysis_id, record_id, action, reason):
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        source_ids = {e['source_id'] for e in scope['entries'] if e['category'] == 'included'}
+        record = self._find(workspace.drawing_conditions if action == 'confirm_condition' else workspace.discipline_assumptions, record_id)
+        condition = record if action == 'confirm_condition' else self._find(workspace.drawing_conditions, (record or {}).get('condition_id'))
+        if not record or not condition or condition['source_id'] not in source_ids or not reason.strip() or len(reason) > 2000:
+            raise CaseWorkspaceError('Select a scoped record and supply an explicit review reason.')
+        if action == 'confirm_condition':
+            return self.decide_drawing_observation(workspace, record_id, 'confirmed', actor, note=reason)
+        if action == 'resolve_representation':
+            return self.resolve_discipline_assumption(workspace, record_id, actor, reason)
+        raise CaseWorkspaceError('Unknown coverage review action.')
+
+    @observed
+    def run_constraint_review(self, workspace, actor, analysis_id, constraints, baseline, direction, reason):
+        """Explicit hypothetical models reuse the quantitative investigation owner.
+
+        Source references anchor the question; user-entered bounds do not become
+        extracted measurements. The real source admissions are retained alongside
+        the hypothetical result, with no writes to evidence or canonical state.
+        """
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise CaseWorkspaceError('Record why this hypothetical constraint model is being investigated.')
+        if not isinstance(constraints, list) or not 2 <= len(constraints) <= 32:
+            raise CaseWorkspaceError('A bounded model requires 2–32 explicitly supplied constraints.')
+        identifiers = set()
+        for row in constraints:
+            if (not isinstance(row, dict) or not isinstance(row.get('premise_ids'), list)
+                    or not row['premise_ids'] or any(not isinstance(i, str) for i in row['premise_ids'])):
+                raise CaseWorkspaceError('Every hypothetical constraint must retain its source references.')
+            identifiers.update(row['premise_ids'])
+        if not identifiers.issubset(scope['included_evidence_ids']):
+            raise CaseWorkspaceError('Constraint references must belong to the active attention scope.')
+        from services.quantitative_investigation import probe_interval_constraints, search_interval_breakpoint
+        admissions = [self.admit_proposition(workspace, identifier) for identifier in sorted(identifiers)]
+        model = probe_interval_constraints(deepcopy(constraints))
+        probe = search_interval_breakpoint(model, baseline, direction)
+        result = dict(kind='constraint_review', state='EVALUATION_INPUT', canonical=False,
+            attention_analysis_id=analysis_id, objective=scope['objective'], evaluation_only=True,
+            reason=reason.strip(), actor=actor, model=model, breakpoint=probe, admissions=admissions,
+            qualification='Bounds and baseline are explicit hypothetical inputs, not machine-read or established project values. '
+            'The scalar model does not establish missing physical constraints or source authority.')
+        return self.record_analysis(workspace, source_ids=sorted({a['source_id'] for a in admissions if a.get('source_id')}),
+            objective=scope['objective'], engine_name='quantitative_investigation', engine_version='interval-1', findings=[],
+            trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+            muscle_profile=[dict(muscle='CONSTRAINT PROBING', owner='probe_interval_constraints', result=model),
+                            dict(muscle='BREAKPOINT SEARCH', owner='search_interval_breakpoint', result=probe)])
+
+    @observed
+    def run_professional_review(self, workspace, actor, analysis_id, narrative_key, focus_id,
+                                subject, representation_class, current_resolution, required_resolution,
+                                project_phase, discipline, reason, *, next_evidence_id=None, next_class=None,
+                                participation_expectation='unknown'):
+        """Run bounded review assumptions through the existing investigation owner.
+
+        The reviewer classifies selected representations for this question. These
+        are explicit analytical premises; they do not rewrite machine readings,
+        project identity, source authority or canonical representation metadata.
+        """
+        from services.cross_modal_investigation import (PROFESSIONAL_NARRATIVES,
+            assess_review_resolution, expected_next_information, trace_governing_root, inspect_continuum_participation)
+        if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            raise CaseWorkspaceError('Review requires an active, fully visible project.')
+        attention = self._find(workspace.analyses, analysis_id)
+        scope = (attention or {}).get('attention_scope')
+        narrative = PROFESSIONAL_NARRATIVES.get(narrative_key)
+        if not scope or not narrative or datetime.fromisoformat(scope['expires_at']) <= datetime.now(timezone.utc):
+            raise CaseWorkspaceError('Select a narrative and an unexpired attention scope.')
+        identifiers = list(dict.fromkeys([focus_id] + ([next_evidence_id] if next_evidence_id else [])))
+        if not set(identifiers).issubset(scope['included_evidence_ids']):
+            raise CaseWorkspaceError('Every reviewed representation must be in the selected attention scope.')
+        if not subject.strip() or not reason.strip() or any(len(str(v)) > 2000 for v in (subject, reason, project_phase, discipline)):
+            raise CaseWorkspaceError('Record the focal subject and a bounded source-based reason.')
+        classes = set(narrative.information_sequence) | set(narrative.representation_types)
+        if representation_class not in classes or (next_evidence_id and next_class not in classes):
+            raise CaseWorkspaceError('Representation classes must belong to this narrative.')
+        admissions = [self.admit_proposition(workspace, identifier) for identifier in identifiers]
+        resolution = assess_review_resolution(narrative, current_resolution, required_resolution, premise_ids=[focus_id])
+        sequence = expected_next_information(narrative, representation_class,
+            [next_class] if next_evidence_id else [], subject=subject.strip(), project_phase=project_phase,
+            discipline=discipline, evidence_state=admissions[0]['state'],
+            next_evidence_state=admissions[1]['state'] if next_evidence_id else None,
+            next_currentness=self.resolve_anchor_currentness(workspace, 'evidence_item', next_evidence_id)['status'] if next_evidence_id else None)
+        root_trace = trace_governing_root(self, workspace, focus_id)
+        continuum = inspect_continuum_participation(self, workspace, focus_id, participation_expectation)
+        from services.drawing_conditions import review_representation_coverage
+        coverage = review_representation_coverage(self, workspace,
+            {e['source_id'] for e in scope['entries'] if e['category'] == 'included'}, narrative)
+        additional_ids = (set(coverage['consumed_evidence_ids']) | set(continuum['consumed_evidence_ids'])
+                          | {node['evidence_item_id'] for node in root_trace['trace']})
+        admissions.extend(self.admit_proposition(workspace, identifier) for identifier in sorted(additional_ids - set(identifiers)))
+        result = dict(kind='professional_review', narrative=asdict(narrative), attention_analysis_id=analysis_id,
+            objective=scope['objective'], subject=subject.strip(), state='PARTIAL', canonical=False,
+            evaluation_only=scope['evaluation_only'], resolution=resolution, expected_next=sequence,
+            root_trace=root_trace,
+            continuum=continuum,
+            coverage=coverage,
+            traversal_outside_initial_attention=[dict(evidence_item_id=identifier,
+                reason='Existing governing dependency or condition representation reference; qualification retained.')
+                for identifier in sorted(additional_ids - set(scope['included_evidence_ids']))],
+            input_classification=dict(origin='REVIEWER_DECLARED_ANALYTICAL_PREMISE', actor=actor,
+                reason=reason.strip(), focus_evidence_id=focus_id, representation_class=representation_class,
+                current_resolution=current_resolution, required_resolution=required_resolution,
+                next_evidence_id=next_evidence_id, next_class=next_class, project_phase=project_phase, discipline=discipline,
+                participation_expectation=participation_expectation),
+            admissions=admissions, uncertainty=[
+                'Representation classifications are explicit review assumptions, not canonical source metadata.',
+                'Expected-next absence is limited to the reviewed evidence; evidence outside attention still exists.',
+                'Resolution alone establishes neither content sufficiency, applicability nor authority.'],
+            remaining=['Complete perimeter/vertical condition inventory', 'INTERPRETATION DRIFT'])
+        if resolution['state'] in ('UNRESOLVED', 'INSUFFICIENT_SCALE'):
+            result['state'] = resolution['state']
+        profile = [dict(muscle='Scale sufficiency', owner='assess_review_resolution', result=resolution),
+                   dict(muscle='EXPECTED-NEXT', owner='expected_next_information', result=sequence),
+                   dict(muscle='ROOT-TRACE / RETURN', owner='trace_governing_root', result=root_trace),
+                   dict(muscle='CONTINUUM PARTICIPATION', owner='inspect_continuum_participation', result=continuum),
+                   dict(muscle='SECTION-COVERAGE / DISCIPLINE-COVERAGE', owner='review_representation_coverage', result=coverage),
+                   dict(muscle='Authority', owner='CaseWorkspaceStore.admit_proposition', result=admissions)]
+        return self.record_analysis(workspace, source_ids=sorted({a['source_id'] for a in admissions if a.get('source_id')}),
+            objective=scope['objective'], engine_name='professional_review', engine_version=narrative.version,
+            findings=[], trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor),
+            governed_result=result, muscle_profile=profile)
+
+    @observed
+    def render_professional_review(self, workspace, actor, analysis_id):
+        """Render committed analysis into the existing WorkProduct path, without inference."""
+        if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            raise CaseWorkspaceError('Presentation requires an active, fully visible project.')
+        analysis = self._find(workspace.analyses, analysis_id)
+        result = (analysis or {}).get('governed_result')
+        if not result or result.get('kind') != 'professional_review':
+            raise CaseWorkspaceError('A persisted professional review is required.')
+        attention = self._find(workspace.analyses, result['attention_analysis_id'])
+        if not attention:
+            raise CaseWorkspaceError('The originating attention scope is unavailable.')
+        links = [{'object_type': 'evidence_item', 'object_id': a['evidence_item_id']} for a in result['admissions']]
+        if any(not self._resolve_mm6_endpoint(workspace, link['object_type'], link['object_id']) for link in links):
+            raise CaseWorkspaceError('A cited premise is unavailable; presentation cannot conceal the broken lineage.')
+        product = self.create_work_product(workspace, 'professional_review',
+            result['narrative']['professional_lens'] + ' — ' + analysis['objective'], actor)
+        sections = {
+            'objective_and_lens': dict(analysis_id=analysis_id, objective=result['objective'],
+                lens=result['narrative']['professional_lens'], state=result['state'], canonical=False,
+                evaluation_only=result['evaluation_only']),
+            'evidence_and_attention': dict(admissions=result['admissions'], attention=attention['attention_scope']),
+            'resolution_and_expected_next': dict(resolution=result['resolution'], expected_next=result['expected_next']),
+            'source_jumps_and_root_traces': dict(evidence_links=links, continuum=result.get('continuum'), root_trace=result.get('root_trace', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'})),
+            'section_and_discipline_coverage': result.get('coverage', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
+            'interpretation_changes': result.get('interpretation_drift', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
+            'contradictions_and_gaps': dict(admission_conflicts=[a for a in result['admissions'] if a['state'] == 'CONTESTED'], remaining=result['remaining']),
+            'uncertainty_and_refusals': dict(uncertainty=result['uncertainty'], classifications=result['input_classification']),
+            'governed_conclusions': dict(state=result['state'], canonical=False, muscle_profile=analysis['muscle_profile']),
+            'next_investigation': dict(missing_resolution_question=result['resolution'].get('next_question'), expected_next=result['expected_next'].get('expected')),
+            'provenance': dict(analysis_id=analysis_id, attention_analysis_id=result['attention_analysis_id'],
+                narrative_key=result['narrative']['key'], narrative_version=result['narrative']['version'],
+                source_ids=analysis['source_ids'], premise_ids=[a['evidence_item_id'] for a in result['admissions']]),
+        }
+        sections['provenance']['source_hashes'] = {s['id']: s.get('file_hash') for s in workspace.sources
+                                                  if s['id'] in analysis['source_ids']}
+        for name, content in sections.items():
+            self.add_work_product_section(workspace, product['id'], name, deepcopy(content),
+                CONTENT_CLASS_DETERMINISTIC_CALCULATION, actor, evidence_links=links)
+        return self._find(workspace.work_products, product['id'])
+
+    @observed
     def inspect_kernel_mapping(self, workspace, actor, selection="", *, evaluation_only=False):
         """Read-only vocabulary projection over this owner's records and resolvers.
 
@@ -8174,6 +8404,7 @@ class CaseWorkspaceStore:
         support_dependency: Optional[str] = None,
         style_context: Optional[dict] = None,
         governance_log: Optional[GovernanceLog] = None,
+        review_requirements: Optional[dict] = None,
     ) -> dict:
         """One condition, proposed. Never decided at creation."""
         source = self._find(workspace.sources, source_id)
@@ -8218,6 +8449,7 @@ class CaseWorkspaceStore:
                                            KNOWN_SUPPORT_DEPENDENCIES)
                 if support_dependency else None),
             style_context=dict(style_context or {}),
+            review_requirements=deepcopy(review_requirements or {}),
         )
         workspace.drawing_conditions.append(asdict(condition))
         self.save(workspace)
@@ -8355,6 +8587,9 @@ class CaseWorkspaceStore:
         confidence: Optional[float] = None,
         informed_by_source_id: Optional[str] = None,
         informed_by_revision: Optional[str] = None,
+        representation_evidence_id: Optional[str] = None,
+        representation_class: Optional[str] = None,
+        resolution_class: Optional[str] = None,
     ) -> dict:
         """What ONE discipline believes about a shared condition.
 
@@ -8367,6 +8602,14 @@ class CaseWorkspaceStore:
         if not (discipline or "").strip():
             raise CaseWorkspaceError(
                 "An assumption must say which discipline holds it.")
+
+        if representation_evidence_id:
+            represented = self.get_evidence_item(workspace, representation_evidence_id)
+            if not represented or represented.get('project_id') != workspace.project_id:
+                raise CaseWorkspaceError('Representation evidence must exist in this project.')
+            if source_id and source_id != represented['source_id']:
+                raise CaseWorkspaceError('Representation evidence belongs to a different source.')
+            source_id = represented['source_id']
 
         record = DisciplineAssumption(
             id=_new_id(),
@@ -8381,6 +8624,9 @@ class CaseWorkspaceStore:
             confidence=confidence,
             informed_by_source_id=informed_by_source_id,
             informed_by_revision=informed_by_revision,
+            representation_evidence_id=representation_evidence_id,
+            representation_class=representation_class,
+            resolution_class=resolution_class,
         )
         workspace.discipline_assumptions.append(asdict(record))
         self.save(workspace)
@@ -8408,6 +8654,12 @@ class CaseWorkspaceStore:
         record["resolved_by"] = actor
         record["resolved_at"] = _now()
         record["resolution_note"] = note
+        if record.get('representation_evidence_id'):
+            from services.drawing_conditions import condition_review_fingerprint
+            condition = self._find(workspace.drawing_conditions, record['condition_id'])
+            record['reviewed_condition_digest'] = condition_review_fingerprint(condition, record)
+            record.setdefault('resolution_history', []).append(dict(actor=actor, at=record['resolved_at'],
+                note=note, reviewed_condition_digest=record['reviewed_condition_digest']))
         self.save(workspace)
         if governance_log is not None:
             governance_log.append(
@@ -11898,6 +12150,8 @@ class CaseWorkspaceStore:
         prior_corrections_considered: int = 0,
         governance_log: Optional[GovernanceLog] = None,
         attention_scope: Optional[dict] = None,
+        governed_result: Optional[dict] = None,
+        muscle_profile: Optional[list] = None,
     ) -> dict:
         """
         `findings` is a list of {"statement", "machine_confidence", "crop"?,
@@ -11993,6 +12247,8 @@ class CaseWorkspaceStore:
             finding_ids=finding_ids,
             prior_corrections_considered=prior_corrections_considered,
             attention_scope=attention_scope,
+            governed_result=governed_result,
+            muscle_profile=list(muscle_profile or []),
         )
         workspace.analyses.append(asdict(analysis))
         if case is not None:
