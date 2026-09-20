@@ -22,3 +22,8 @@
 .se-comparison figure { margin: 0; }
 .se-comparison img, .se-comparison svg { max-width: 100%; height: auto; }
 .se-comparison img { max-height: 540px; object-fit: contain; }
+.go-attention table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: var(--space-7) 0; }
+.go-attention th, .go-attention td { padding: var(--space-6); vertical-align: top; text-align: left; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
+.go-attention input[type=checkbox] { width: auto; }
+.go-attention fieldset { margin: var(--space-7) 0; padding: var(--space-7); border: 1px solid var(--border); }
+.go-attention p, .go-attention li { overflow-wrap: anywhere; }

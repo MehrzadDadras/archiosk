@@ -784,6 +784,12 @@ def survey_evaluation_run(run_id):
     from services.case_workspace import CaseWorkspaceError
     from services.change_application import ChangeApplicationError
     try:
+        record = evaluation._read(evaluation.location(current_app, run_id))
+        if record.get('evaluation_kind') == 'professional_review':
+            if request.method != 'GET':
+                abort(405)
+            return redirect(url_for('portal.evaluation_go_attention', run_id=run_id,
+                analysis=record['attention_id']))
         if request.method == 'POST':
             try:
                 evaluation.action(current_app, run_id, request.form.get('action', ''),
@@ -4297,7 +4303,7 @@ def document_shop_analysis_history(project_id):
                            records=records, sources=workspace.sources)
 
 
-def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_url, evaluation_only=False, evaluation_path=None):
+def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_url, evaluation_only=False, evaluation_path=None, evaluation_game=None):
     """Shared UI adapter; scope computation and persistence belong to the workspace."""
     from services.runtime_observation import event
     from services.cross_modal_investigation import PROFESSIONAL_NARRATIVES
@@ -4381,7 +4387,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     conditions_by_id = {c['id']: c for c in conditions}
     event('go_attention.html', 'CONSUMED', analysis_id=analysis['id'] if analysis else None,
           state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
-    return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs,
+    return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
         evaluation_only=evaluation_only, temporary_edges=edges,
         governed_reviews=[r for r in reviews if r['governed_result']['kind'] == 'professional_review'],
@@ -4414,9 +4420,11 @@ def evaluation_go_attention(run_id):
         abort(404)
     attention_url = url_for('portal.evaluation_go_attention', run_id=run_id)
     mapping_url = url_for('portal.evaluation_kernel_mapping', run_id=run_id)
-    back_url = url_for('portal.survey_evaluation_run', run_id=run_id)
+    back_url = (url_for('portal.survey_evaluation') if record.get('evaluation_kind') == 'professional_review'
+                else url_for('portal.survey_evaluation_run', run_id=run_id))
     return _go_attention_surface(store, workspace, attention_url=attention_url,
-        mapping_url=mapping_url, back_url=back_url, evaluation_only=True, evaluation_path=path)
+        mapping_url=mapping_url, back_url=back_url, evaluation_only=True, evaluation_path=path,
+        evaluation_game=record if record.get('evaluation_kind') == 'professional_review' else None)
 
 
 @portal_bp.route('/admin/survey-evaluation/<run_id>/presentations/<work_product_id>.docx')

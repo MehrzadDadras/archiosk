@@ -1,7 +1,10 @@
 ﻿{% extends 'base.html' %}
 {% block title %}Governed attention — GO{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
 {% block content %}
+<div class="survey-evaluation go-attention">
 <h1>Governed attention</h1>
+{% if evaluation_game %}<h2>{{ evaluation_game.title }}</h2><p>EVALUATION_INPUT: retained text fixtures supply explicit representation, resolution and applicability premises. They are not physical detail drawings or human professional approvals. The ordinary review owners derive the results below; project authority remains unchanged.</p>{% endif %}
 <p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'Real project data — qualification stays with each record' }}</p>
 <p>Attention selects what GO examines for this objective. It does not change what is true.</p>
 <nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ mapping_url }}">Generic kernel mapping</a> · <a href="{{ request.url }}">Reload</a></nav>
@@ -105,4 +108,5 @@
 <p>Muscle invoked: CaseWorkspaceStore.record_go_attention. Recorded state: AnalysisRun.attention_scope.</p>
 <p>Consumer: go_attention.html. Visible result: this persisted scope. Reload reads the record; it does not execute attention again. Runtime observations remain operational records, not evidence.</p></section>
 {% endif %}
+</div>
 {% endblock %}

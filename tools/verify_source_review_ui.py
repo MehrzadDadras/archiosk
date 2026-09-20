@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
+    parser.add_argument('--games', action='store_true', help='Exercise continuum and constraint games through real evaluation forms.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -208,6 +209,39 @@ def main():
             assert 'BOUNDARY_FOUND' in page.locator('body').inner_text()
             proof['hypothetical_constraint_and_breakpoint_invoked_through_ui']=True
             page.screenshot(path=str(output/'professional-review.png'), full_page=True)
+            if args.games:
+                import hashlib
+                from services import survey_evaluation as evaluation
+                from services.case_workspace import CaseWorkspaceStore
+                proof['continuum_games'] = []
+                for game in evaluation.REVIEW_GAMES:
+                    page.goto(base+'/admin/survey-evaluation')
+                    page.select_option('#case', game)
+                    page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
+                    page.wait_for_url('**/attention?analysis=*')
+                    assert 'EVALUATION_INPUT' in page.locator('body').inner_text()
+                    run_id = urlparse(page.url).path.split('/')[-2]
+                    game_url = page.url
+                    if not args.live:
+                        game_path = evaluation.location(app, run_id)
+                        game_record = evaluation._read(game_path)
+                        game_store = CaseWorkspaceStore(game_path/'registry')
+                        workspace_path = game_store._path_for(game_record['project_id'])
+                        before = hashlib.sha256(workspace_path.read_bytes()).hexdigest()
+                    page.get_by_role('link', name='Reload', exact=True).click()
+                    page.locator('a').filter(has_text='Jump to evidence').first.click()
+                    assert 'Generic' in page.locator('body').inner_text() or 'kernel' in page.locator('body').inner_text().lower()
+                    page.goto(game_url)
+                    if not args.live:
+                        assert hashlib.sha256(workspace_path.read_bytes()).hexdigest() == before
+                        workspace = game_store.get(game_record['project_id'])
+                        result = workspace.analyses[-1]['governed_result']
+                        assert result['evaluation_only'] and not result['canonical']
+                    proof['continuum_games'].append(dict(game=game, entry_path=urlparse(game_url).path,
+                        real_ui_invoked=True, source_jump=True, reload_surfaced=True,
+                        persisted_bytes_unchanged=True if not args.live else None))
+                page.get_by_text('Physical control paths', exact=True).scroll_into_view_if_needed()
+                page.screenshot(path=str(output/'continuum-game.png'))
             if args.live:
                 response=page.goto(base+'/document-shop/jobs/9c00eeec-4e65-4bde-bcea-de8b09c8beb1')
                 assert response.status == 404

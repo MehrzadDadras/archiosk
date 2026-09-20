@@ -59,6 +59,21 @@ CASES = {
     "missing-primitives": "Remaining limits: automatic controls and professional certification",
 }
 CONTROLS=evaluation_controls()
+REVIEW_GAMES = {
+    'review:orphan': dict(title='Required detail has no upstream connection', expectation='upstream'),
+    'review:independent': dict(title='Independent information needs no continuum connection', expectation='independent'),
+    'review:essential': dict(title='Unique required representation', conditions=1, representation=True),
+    'review:typical': dict(title='One applicable typical section covers two conditions', conditions=2, representation=True),
+    'review:section-gap': dict(title='Materially distinct condition has no section', conditions=1),
+    'review:discipline-gap': dict(title='Section exists but affected discipline is missing', conditions=1, representation=True, missing_discipline=True),
+    'review:specification-gap': dict(title='Specification clause has no downstream manifestation', expectation='downstream', representation_class='SPECIFICATION'),
+    'review:drawing-support-gap': dict(title='Drawing condition lacks required specification support', expectation='upstream', conditions=1),
+    'review:constraint-closes': dict(title='Cross-document scalar constraints have a common interval', constraints=('90','110','95','105')),
+    'review:constraint-conflict': dict(title='Cross-document scalar constraints have no common interval', constraints=('90','94','95','105')),
+    'review:breakpoint': dict(title='Controlled variation reaches the first limiting constraint', constraints=('90','110','95','105')),
+    'review:physical-path-gap': dict(title='Labelled air control lacks a recorded continuity path', conditions=1, physical=True),
+}
+CASES.update({key: value['title'] for key, value in REVIEW_GAMES.items()})
 CASES.update({"control:"+key:"Rule 7 control: "+key+" / "+value["category"] for key,value in CONTROLS.items()})
 H_CASES = {"homography", "no-h", "singular", "ill-conditioned", "infinity", "space-mismatch", "projective"}
 UNIMPLEMENTED = ["Automatic control-point extraction and professional/legal certification"]
@@ -184,6 +199,8 @@ def _source_pdf(path, case):
 def create(app, case, actor, matrix_text=""):
     if case not in CASES:
         raise ValueError("Unknown evaluation case")
+    if case in REVIEW_GAMES:
+        return _create_review_game(app, case, actor)
     if matrix_text and len(matrix_text)>2000:
         raise ValueError("Transform input too large")
     matrix = json.loads(matrix_text) if matrix_text.strip() else [[1,0,4],[0,1,5],[0,0,1]]
@@ -272,6 +289,94 @@ def create(app, case, actor, matrix_text=""):
             'Sheet: A-2O3', 'positioned_text', region_id=region['id'], actor='evaluation-machine-reading')
     _save(path,record)
     evaluate(app, run_id)
+    return run_id
+
+
+@observed
+def _create_review_game(app, case, actor):
+    """Controlled inputs only; ordinary review/constraint owners derive results.
+
+    Reuses the evaluation registry boundary, Source/region identities, attention,
+    professional review and quantitative investigation. No expected result enters
+    the fixture or an alternative evaluator. Review premises remain evaluation-only.
+    """
+    import pymupdf
+    spec = REVIEW_GAMES[case]
+    run_id = uuid.uuid4().hex
+    path = root(app) / run_id
+    path.mkdir(parents=True)
+    record = dict(id=run_id, case=case, title=spec['title'], actor=actor,
+        origin='EVALUATION_INPUT', results={}, history=[], capabilities_not_implemented=UNIMPLEMENTED,
+        evaluation_kind='professional_review', premise_origin='AUTOMATED_CONTROLLED_EVALUATION_NOT_HUMAN_PROJECT_REVIEW')
+    store = CaseWorkspaceStore(path / 'registry')
+    workspace = store.get_or_create('evaluation')
+    record['project_id'] = workspace.project_id
+    subject = 'EVALUATION_INPUT envelope interface'
+    count = max(1, spec.get('conditions', 0))
+    condition_text = [f'EVALUATION_INPUT condition {index + 1}: {subject}; materially distinct local condition.' for index in range(count)]
+    if spec.get('physical'):
+        condition_text = ['EVALUATION_INPUT: AIR BARRIER label. No connection, termination or continuity evidence is supplied.']
+    if spec.get('constraints'):
+        lo_a, hi_a, lo_b, hi_b = spec['constraints']
+        condition_text = [f'EVALUATION_INPUT: opening width hypothetical interval [{lo_a}, {hi_a}] mm.']
+        other_text = [f'EVALUATION_INPUT: same opening width hypothetical interval [{lo_b}, {hi_b}] mm.']
+    else:
+        other_text = ['EVALUATION_INPUT: typical structural wall section applies to each explicitly reviewed condition; local exceptions must be reviewed separately.']
+    if case == 'review:specification-gap':
+        condition_text = ['EVALUATION_INPUT specification clause: provide continuous air control at this interface. No downstream manifestation is provided.']
+    if case == 'review:independent':
+        condition_text = ['EVALUATION_INPUT independent reference: no upstream or downstream participation is required for this review objective.']
+    evidence = []
+    with isolated(app, path):
+        for number, lines in enumerate((condition_text, other_text)):
+            directory = path / 'registry' / 'workspace_sources' / workspace.project_id
+            directory.mkdir(parents=True, exist_ok=True)
+            file = directory / f'evaluation-{number}.pdf'
+            with pymupdf.open() as pdf:
+                pages = []
+                for line in lines:
+                    page = pdf.new_page()
+                    page.insert_textbox(pymupdf.Rect(40, 40, 550, 780), line, fontsize=12)
+                    pages.append(page.get_text('text'))
+                pdf.save(file)
+            source = store.add_source(workspace, name=f'EVALUATION_INPUT representation {number + 1}.pdf',
+                kind='document', file_path=str(file), file_hash=hashlib.sha256(file.read_bytes()).hexdigest(), actor=actor)
+            store._find(workspace.sources, source['id'])['evaluation_only'] = True
+            store.save(workspace)
+            store.register_pdf_page_structure(workspace, source['id'], pages,
+                extractor_version='pymupdf-controlled-evaluation-pdf', actor=actor)
+            rows = [item for item in workspace.evidence_items if item['source_id'] == source['id'] and item.get('region_id')]
+            if not rows:
+                raise ValueError('The controlled source did not produce addressed evidence.')
+            evidence.append(rows)
+        identifiers = [item['id'] for rows in evidence for item in rows]
+        attention = store.record_go_attention(workspace, actor, 'EVALUATION_INPUT: ' + spec['title'],
+            identifiers, evaluation_only=True)
+        record['attention_id'] = attention['id']
+        reason = 'Explicit automated EVALUATION_INPUT premise; not human professional approval or project authority.'
+        for index in range(spec.get('conditions', 0)):
+            anchored = evidence[0][min(index, len(evidence[0])-1)]
+            condition = store.record_review_condition(workspace, actor, attention['id'], anchored['id'],
+                condition_text[index], ['structural', 'mechanical'] if spec.get('missing_discipline') else ['structural'],
+                'ASSEMBLY_LAYERS', True, reason)
+            store.review_coverage_record(workspace, actor, attention['id'], condition['id'], 'confirm_condition', reason)
+            if spec.get('representation'):
+                representation = store.record_review_representation(workspace, actor, attention['id'], condition['id'],
+                    evidence[1][0]['id'], 'structural', 'WALL_SECTION', 'ASSEMBLY_LAYERS', reason)
+                store.review_coverage_record(workspace, actor, attention['id'], representation['id'], 'resolve_representation', reason)
+        if spec.get('constraints'):
+            constraints = [dict(id=f'constraint-{index}', subject=subject, parameter='opening_width', unit='mm',
+                lower=lower, upper=upper, premise_ids=[evidence[index][0]['id']])
+                for index, (lower, upper) in enumerate(((lo_a, hi_a), (lo_b, hi_b)))]
+            analysis = store.run_constraint_review(workspace, actor, attention['id'], constraints, '100', 'increase', reason)
+        else:
+            analysis = store.run_professional_review(workspace, actor, attention['id'],
+                'physical_control' if spec.get('physical') else 'building_science', evidence[0][0]['id'], subject,
+                'PHYSICAL_PHENOMENON' if spec.get('physical') else spec.get('representation_class', 'DETAIL'),
+                'ASSEMBLY_LAYERS', 'ASSEMBLY_LAYERS', 'evaluation-review', 'structural', reason,
+                participation_expectation=spec.get('expectation', 'unknown'))
+        record['analysis_id'] = analysis['id']
+    _save(path, record)
     return run_id
 
 
@@ -420,6 +525,8 @@ def inspect(app,run_id):
 @observed
 def evaluate(app,run_id):
     path=location(app,run_id); record=_read(path)
+    if record.get('evaluation_kind') == 'professional_review':
+        raise ValueError('Use the professional review or constraint action in the recorded attention scope.')
     store=CaseWorkspaceStore(str(path/"registry")); workspace=store.get(record["project_id"])
     document=SimpleNamespace(project_id=workspace.project_id,filename=workspace.sources[0]["name"])
     with isolated(app,path):
@@ -511,6 +618,8 @@ def evaluate(app,run_id):
 
 def action(app,run_id,action_name,actor,question=""):
     path=location(app,run_id); record=_read(path)
+    if record.get('evaluation_kind') == 'professional_review':
+        raise ValueError('Use the professional review or constraint action in the recorded attention scope.')
     store=CaseWorkspaceStore(str(path/"registry")); workspace=store.get(record["project_id"])
     if action_name=='reevaluate':
         pass

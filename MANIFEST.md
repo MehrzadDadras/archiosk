@@ -1,5 +1,14 @@
 # MANIFEST
 
+Continuum acceptance games extend `survey_evaluation.REVIEW_GAMES` and its existing
+isolated registry boundary. Retained controlled PDFs are extracted into ordinary
+Source/page/region/EvidenceItems; the real attention, professional review and
+constraint owners run from the evaluation form. Game navigation opens the existing
+attention/review surface. Reload and source jumps consume persisted state. Tests:
+`tests/test_continuum_games.py`; browser: `tools/verify_source_review_ui.py --games`.
+These fixtures do not implement a second evaluator or imply completion of semantic
+redundancy, interpretation drift, physical engineering analysis or all master games.
+
 Typed Document Shop view commands: `capability_registry.ACTION_REGISTRY` exposes
 bounded actions to the existing `document_conversation` model call. Strict typed
 validation and `conversation_interpreter.execute_document_action` recheck ownership
