@@ -7101,7 +7101,7 @@ class CaseWorkspaceStore:
             qualification='Conditional comparison of proposed interpretations, not an approved fit or verified investor profile. '
                 'Factual fit and complete requirement coverage remain unresolved. Source quality, adoption and repeated claims do not confer authority.')
         return self.record_analysis(workspace, source_ids=source_ids, objective=scope['objective'],
-            engine_name='cross_modal_investigation', engine_version='criteria-matching-1', findings=[],
+            engine_name='cross_modal_investigation', engine_version='criteria-matching-2', findings=[],
             trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
             muscle_profile=[dict(muscle='MATCHING', owner='match_normalized_criteria', result=model),
                 dict(muscle='AUTHORITY / UNCERTAINTY', owner='CaseWorkspaceStore.inspect_subject_propositions',
@@ -7204,7 +7204,7 @@ class CaseWorkspaceStore:
                 'capital summation, capacity allocation or factual fit is established. Partnership compatibility, '
                 'unrepresented constraints and complete opportunity requirements remain unresolved.')
         return self.record_analysis(workspace, source_ids=sorted({source for row in runs for source in row['run']['source_ids']}),
-            objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='role-composition-1', findings=[],
+            objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='role-composition-2', findings=[],
             trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
             muscle_profile=[dict(muscle='COMPOSITION', owner='cover_requirements', result=model)])
 

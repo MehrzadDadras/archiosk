@@ -38,8 +38,11 @@ def main():
     identifier = uuid.uuid4().hex
     started = datetime.now(timezone.utc).isoformat()
     xml_path = output/'pytest.xml'
+    # Long fixture names plus atomic-write suffixes can exceed Windows MAX_PATH.
+    # Reserve a short, unique directory; retain it for failure inspection.
+    base_temp = tempfile.mkdtemp(prefix='ag-')
     command = [sys.executable, '-m', 'pytest', '-q', '-x', '--tb=short', '-rs', '-n', '8', '--dist', 'loadfile',
-               '--junitxml='+str(xml_path), '--basetemp='+str(Path(tempfile.gettempdir())/('archiosk-gate-'+identifier))]
+               '--junitxml='+str(xml_path), '--basetemp='+base_temp]
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONIOENCODING='utf-8')
     env.pop('PYTEST_ADDOPTS', None)  # A developer's local filter must not narrow the full gate.
     env.setdefault('FLASK_SECRET_KEY', 'local-qualification-only')
