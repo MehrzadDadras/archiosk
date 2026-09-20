@@ -122,11 +122,22 @@ def transform_document_preview(raw_bytes, filename, action, parameters=None):
     parameters = parameters or {}
     if not isinstance(parameters, dict):
         raise ValueError('Transform parameters must be an object.')
-    if action not in transforms and action not in ('CROP', 'FIT'):
+    if action not in transforms and action not in ('CROP', 'FIT', 'ROTATE_ANGLE'):
         raise ValueError('Unsupported typed view action; no transformation was inferred.')
     with Image.open(io.BytesIO(raw_bytes)) as original:
         parent = ImageOps.exif_transpose(original).convert('RGB')
-        if action == 'CROP':
+        if action == 'ROTATE_ANGLE':
+            angle = parameters.get('clockwise_degrees')
+            if (set(parameters) != {'clockwise_degrees'} or isinstance(angle, bool)
+                    or not isinstance(angle, (int, float)) or not math.isfinite(angle) or not -360 <= angle <= 360):
+                raise ValueError('Rotation requires finite clockwise_degrees between -360 and 360.')
+            preview = parent.rotate(-angle, expand=True, resample=Image.Resampling.BICUBIC, fillcolor='white')
+            w, h = parent.size
+            ow, oh = preview.size
+            cosine, sine = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+            matrix = [[cosine*w/ow, -sine*h/ow, .5-(cosine*w-sine*h)/(2*ow)],
+                      [sine*w/oh, cosine*h/oh, .5-(sine*w+cosine*h)/(2*oh)], [0,0,1]]
+        elif action == 'CROP':
             box = parameters.get('box')
             if (not isinstance(box, list) or len(box) != 4 or any(isinstance(v, bool)
                     or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1 for v in box)

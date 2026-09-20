@@ -1,5 +1,15 @@
 # MANIFEST
 
+Typed Document Shop view commands: `capability_registry.ACTION_REGISTRY` exposes
+bounded actions to the existing `document_conversation` model call. Strict typed
+validation and `conversation_interpreter.execute_document_action` recheck ownership
+and lifecycle before invoking `document_examination.create_working_view`. Original
+bytes and evidence remain unchanged. North-up uses existing `survey_north` premises
+and remeasures the retained page; unresolved frames refuse. Private derived PNGs
+are served without regeneration. Tests: `tests/test_go_typed_actions.py`; browser
+proof: `tools/verify_document_shop_bulk.py --commands`. Scope and limits:
+`governance/current/typed-view-commands.md`.
+
 Document desk bulk management: existing workspace removal plus Archive/Trash
 metadata, 7-day recovery and scheduled qualified purge. Routes/templates expose
 selection, archive/restore, trash/restore, queued re-analysis history and the

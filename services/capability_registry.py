@@ -45,6 +45,7 @@ VIEW_ACTIONS = {
     'MIRROR_VERTICAL': {'label': 'Mirror vertically', 'aliases': ('mirror vertically',)},
     'CROP': {'label': 'Crop working view', 'aliases': ('crop this view',)},
     'FIT': {'label': 'Fit working view', 'aliases': ('fit this view',)},
+    'ALIGN_NORTH_UP': {'label': 'Align established true north up', 'aliases': (), 'requires_premises': True},
 }
 
 # Recognized intentions requiring additional governed premises. Resolution does
@@ -55,6 +56,27 @@ VIEW_PREMISE_ACTIONS = {
     'ALIGN': ('align these two details',),
     'OPPOSITE_SIDE': ('show the opposite side',),
 }
+
+# Capabilities are typed once. Natural-language resolution chooses an entry;
+# existing application owners execute it after permission and parameter checks.
+ACTION_REGISTRY = {
+    'ALIGN_NORTH_UP': dict(action_class='view_only', executor='document_examination.create_working_view',
+        description='Orient a derived view using existing established true-north and document-frame premises. Refuse unresolved or distorted frames.',
+        parameters={}),
+    'ROTATE_VIEW': dict(action_class='view_only', executor='document_examination.create_working_view',
+        description='Rotate a derived working view clockwise, preserving the uploaded source.',
+        parameters={'degrees': (90, 180, 270)}),
+    'MIRROR_VIEW': dict(action_class='view_only', executor='document_examination.create_working_view',
+        description='Mirror a derived view on an explicitly selected axis; no viewpoint or authority is inferred.',
+        parameters={'axis': ('horizontal', 'vertical')}),
+    'FIT_VIEW': dict(action_class='view_only', executor='document_examination.create_working_view',
+        description='Create a fitted working view without changing source bytes or analysis.', parameters={}),
+}
+
+
+def action_catalogue(action_ids):
+    """Only caller-enabled capabilities enter the intent-resolution context."""
+    return {key: ACTION_REGISTRY[key] for key in action_ids if key in ACTION_REGISTRY}
 
 
 def resolve_view_action(text):

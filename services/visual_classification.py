@@ -317,6 +317,7 @@ def _frame_for(raw: bytes, name: str) -> tuple:
     return None, None, 1, False
 
 
+@observed
 def _pdf_page_raster(raw: bytes, page_number: int = 1) -> Optional[bytes]:
     """One PDF page as PNG bytes, bounded. Returns None rather than raising.
 

@@ -11,7 +11,7 @@ from services import image_intake, derived_view
 from services.capability_registry import VIEW_ACTIONS, resolve_view_action
 
 
-@pytest.mark.parametrize('action', [key for key in VIEW_ACTIONS if key not in ('CROP', 'FIT')])
+@pytest.mark.parametrize('action', [key for key, spec in VIEW_ACTIONS.items() if key not in ('CROP', 'FIT') and not spec.get('requires_premises')])
 def test_typed_transform_preserves_original_and_qualification(action):
     image = Image.new('RGB', (30, 20), 'white')
     image.putpixel((1, 2), (255, 0, 0))

@@ -1,7 +1,7 @@
 """CLAUDE-DOCUMENT-SHOP-CONVERSATION-01 - "Ask GO about this document".
 
 The smallest customer-facing continuation of a Document Examination Result.
-It explains and explores; it changes nothing.
+It explains and explores, and may propose an enabled typed command.
 
 WHAT THIS IS NOT, stated first because each was a real temptation:
 
@@ -12,7 +12,8 @@ WHAT THIS IS NOT, stated first because each was a real temptation:
   scoping is structural, not enforced by a filter someone could forget.
 - **Not a mutation path.** The stored examination result is an immutable
   snapshot. Nothing here writes evidence, requirements, sources, container
-  state, or any Project record. The only write is the message itself.
+  state, or any Project record. Enabled command proposals are validated by the
+  existing conversational owner; only that owner executes through real services.
 - **Not an image path.** `llm_gateway.call_llm_json` accepts `image_base64`,
   and this module never passes it. Customer image bytes do not leave the host.
   That is a standing Product Owner constraint, and it is asserted by test at
@@ -350,7 +351,7 @@ def _failure_message(parse_status) -> str:
 
 
 @observed
-def ask(document, workspace, result: dict, question: str, *, app, evaluation_guard=False) -> dict[str, Any]:
+def ask(document, workspace, result: dict, question: str, *, app, evaluation_guard=False, action_ids=()) -> dict[str, Any]:
     """One question, one answer. Returns {"ok", "answer", "reason"}.
 
     NEVER raises for a provider problem - an outage is an outcome the customer
@@ -366,9 +367,11 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
                 "reason": "no_api_key"}
 
     context = build_context(document, workspace, result, question, app=app)
+    from services.conversational_turn import typed_action_instructions, sanitize_typed_action
+    action_prompt = typed_action_instructions(action_ids) if action_ids else ''
     outcome = llm_gateway.call_llm_json(
         user_prompt=render_prompt(context),
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT + action_prompt,
         api_key=api_key,
         model=app.config.get("ANTHROPIC_MODEL"),
         max_tokens=1200,
@@ -405,6 +408,7 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
         admitted.append("Source text (quotation only; binding and authority are not established):\n" + context["recovered_text"])
     return {"ok": True, "answer": "\n".join(admitted), "reason": "evaluation_governed_admission" if evaluation_guard else "governed_geometry_admission" if governed_geometry else "source_reference_admission",
             "proposed_answer": answer, "qualification_preserved": True,
+            "command": sanitize_typed_action(parsed.get('command'), action_ids),
             "admission": "Deterministic examination statements; provider proposal not admitted as authority"}
 
 

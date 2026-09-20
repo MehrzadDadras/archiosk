@@ -318,6 +318,7 @@ def _crop_box(size, bbox) -> Optional[tuple]:
     return (left, top, right, bottom)
 
 
+@observed
 def measure_north(image_bytes: bytes, bbox) -> dict:
     """The angle the arrow points, in degrees clockwise from image-up.
 

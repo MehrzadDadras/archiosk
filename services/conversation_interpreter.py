@@ -71,6 +71,46 @@ from services.question_scope import QUESTION_SCOPE_APPLICATION, classify_questio
 from services.requirement_investigation import investigate_requirement
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
 import services.quantitative_investigation as quant
+from services.runtime_observation import observed
+
+
+@observed
+def execute_document_action(store, workspace, source_id, proposal, actor):
+    """Execute a bounded owner-requested command using existing view services.
+
+    Source/project identity comes from the authenticated surface, never the model.
+    The model cannot grant permission or introduce arbitrary execution parameters.
+    """
+    from services.conversational_turn import sanitize_typed_action
+    from services.document_examination import create_working_view
+    from services.capability_registry import ACTION_REGISTRY
+    workspace = store.get(workspace.project_id)
+    if (not workspace or not actor or workspace.owner != actor or workspace.removed_at
+            or workspace.document_desk_state != 'active'
+            or len(store.visible_cases_for(workspace, actor)) != len(workspace.cases)):
+        raise CaseWorkspaceError('Commands require your active, fully visible document case.')
+    command = sanitize_typed_action(proposal, ACTION_REGISTRY)
+    if not command:
+        raise CaseWorkspaceError('The command or its required parameters are unresolved.')
+    source = store._find(workspace.sources, source_id)
+    if not source or source.get('removed_at') or source.get('project_id') != workspace.project_id:
+        raise CaseWorkspaceError('The selected source is unavailable.')
+    if command['action_id'] == 'ROTATE_VIEW':
+        transform = 'ROTATE_' + str(command['parameters']['degrees'])
+    elif command['action_id'] == 'MIRROR_VIEW':
+        transform = 'MIRROR_' + command['parameters']['axis'].upper()
+    elif command['action_id'] == 'FIT_VIEW':
+        transform = 'FIT'
+    elif command['action_id'] == 'ALIGN_NORTH_UP':
+        transform = 'ALIGN_NORTH_UP'
+    else:
+        raise CaseWorkspaceError('This capability has no executor in the current document context.')
+    view = create_working_view(store, workspace, source_id, transform,
+        'Explicit user-requested typed command: ' + command['action_id'], actor)
+    return dict(state='EXECUTED', action_id=command['action_id'], action_class='view_only',
+                view_id=view['id'], source_id=source_id, authority='UNCHANGED',
+                answer='Created a ' + transform.replace('_', ' ').lower() +
+                ' working view. The original source and analysis are unchanged. View ' + view['id'] + '.')
 
 
 @dataclass

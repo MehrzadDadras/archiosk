@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
+    parser.add_argument('--commands', action='store_true', help='Also exercise Ask GO typed working-view commands.')
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
     output = Path(args.output)
@@ -86,6 +87,30 @@ def main():
                 page.locator('form.upload-form button[type="submit"]').click()
                 page.wait_for_url('**/document-shop/jobs/*')
                 identifiers.append(urlparse(page.url).path.rsplit('/', 1)[-1])
+            if args.commands:
+                from contextlib import nullcontext
+                if not args.live:
+                    from unittest.mock import patch
+                    from types import SimpleNamespace
+                    app.config['ANTHROPIC_API_KEY'] = 'controlled-local-intent-response'
+                    intent_context = patch('services.llm_gateway.call_llm_json', return_value=SimpleNamespace(
+                        ran=True, parsed={'answer':'Requesting a half-turn working view.',
+                            'command':dict(action_id='ROTATE_VIEW', parameters={'degrees':180}, user_requested=True)}))
+                else:
+                    intent_context = nullcontext()
+                page.goto(base + '/document-shop/jobs/' + identifiers[0])
+                with intent_context:
+                    page.locator('textarea[name="question"]').fill('Please turn this document view upside down by 180 degrees.')
+                    page.get_by_role('button', name='Ask', exact=True).click()
+                    page.wait_for_url('**#conversation')
+                    assert 'ROTATE_180' in page.inner_text('main')
+                if not args.live:
+                    app.config.pop('ANTHROPIC_API_KEY', None)
+                views_before = page.locator('img[src*="/working-view/"]').count()
+                assert views_before == 1
+                page.reload()
+                assert page.locator('img[src*="/working-view/"]').count() == views_before
+                page.screenshot(path=str(output / 'typed-command-view.png'), full_page=True)
             page.goto(base + '/document-shop/jobs')
             def select_all_owned_cases():
                 page.get_by_role('button', name='Clear selection', exact=True).click()
@@ -135,6 +160,13 @@ def main():
             proof = dict(environment='LIVE' if args.live else 'LOCAL_ISOLATED_RUNTIME', project_ids=identifiers,
                 archive_restore=True, trash_restore=True, reload_preserves_selection=True,
                 compare_invoked=True, reanalysis_queued=True, old_urls_404=True, errors=errors)
+            if args.commands:
+                proof.update(typed_command_invoked=True, reload_does_not_repeat_command=True,
+                    intent_provider='LIVE_PROVIDER' if args.live else 'CONTROLLED_RESPONSE_NOT_LIVE_NL_PROOF')
+                if not args.live:
+                    owners = {e['owner'] for record in captured for e in record['events'] if e['phase'] == 'INVOKED'}
+                    assert 'services.conversation_interpreter.execute_document_action' in owners
+                    assert 'services.document_examination.create_working_view' in owners
             (output / 'proof.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
             if captured:
                 (output / 'runtime-traces.json').write_text(json.dumps(captured, indent=2), encoding='utf-8')

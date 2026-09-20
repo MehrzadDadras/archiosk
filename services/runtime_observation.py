@@ -22,7 +22,12 @@ _keys = {"id", "project_id", "source_id", "evidence_item_id", "region_id",
          "from_id", "to_id", "relationship_type", "confirmed_by", "ran",
          "skipped_reason", "parse_status", "conditioning", "label", "value",
          "established", "interpretation", "not_established", "primitives", "tags", "filename", "name",
-         "uncertainty", "provenance", "admissible", "source_evidence_ids", "premise_ids"}
+         "uncertainty", "provenance", "admissible", "source_evidence_ids", "premise_ids",
+         "action_id", "action_class", "parameters", "degrees", "axis", "user_requested", "view_id",
+         "parent_view_id", "matrix", "type", "coordinate_space_before", "coordinate_space_after",
+         "clockwise_degrees", "lower", "upper", "subject", "parameter", "unit", "common_interval",
+         "baseline", "failure_point", "margin_to_failure", "origin", "canonical", "direction",
+         "first_violated_constraints"}
 
 
 def summary(value, depth=0):

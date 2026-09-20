@@ -402,18 +402,70 @@ def create_working_view(store, workspace, source_id, action, reason, actor, *, p
     source, raw, filename = review_source_bytes(store, workspace, source_id, allowed_root=allowed_root)
     original_hash = hashlib.sha256(raw).hexdigest()
     parent = None
+    north_premise = None
+    if action == 'ALIGN_NORTH_UP':
+        if parent_view_id or parameters:
+            raise ValueError('North-up requires the original governed frame; transformed-parent alignment is not established.')
+        from services.survey_north import resolve_true_north
+        visual = visual_reading(workspace, source_id, store=store)
+        north_premise = resolve_true_north((visual or {}).get('graph') or {})
+        if north_premise['state'] != 'ESTABLISHED':
+            raise ValueError('North-up is unresolved: ' + north_premise['reason'])
+        north_premise = dict(north_premise, visual_evidence_id=visual.get('evidence_item_id'))
     if parent_view_id:
         parent = next((v for v in workspace.derived_views
                        if v['id'] == parent_view_id and v['source_id'] == source_id), None)
         if not parent or not parent.get('view_transform'):
             raise ValueError('Parent working view is unavailable for this source.')
+        if parent['view_transform'].get('source_sha256') != original_hash:
+            raise ValueError('The parent view no longer matches the immutable original source.')
         raw, filename = working_view_bytes(store, workspace, parent)
-    preview, transform = transform_document_preview(raw, filename, action, parameters)
-    pages = [p for p in workspace.structural_units if p['source_id'] == source_id]
+    rendering = None
+    if not parent and raw.startswith(b'%PDF-'):
+        import pymupdf
+        from services.visual_classification import _pdf_page_raster
+        with pymupdf.open(stream=raw, filetype='pdf') as pdf:
+            if len(pdf) != 1:
+                raise ValueError('Select an explicit page before transforming a multi-page document.')
+            if north_premise and (pdf[0].get_images(full=True) or not pdf[0].get_drawings()):
+                raise ValueError('North-up frame is unresolved: an embedded raster is not an established angular document frame.')
+        rendered = _pdf_page_raster(raw, 1)
+        if not rendered:
+            raise ValueError('The source page could not be rendered within existing bounds.')
+        rendering = dict(source_sha256=original_hash, page_number=1,
+                         raster_sha256=hashlib.sha256(rendered).hexdigest(), owner='visual_classification._pdf_page_raster',
+                         angular_frame='NATIVE_VECTOR_PAGE' if north_premise else 'UNRESOLVED')
+        raw, filename = rendered, 'retained-page.png'
+    if north_premise:
+        from services import survey_north
+        north_premise['source_rechecks'] = []
+        established_ids = {p['candidate_id'] for p in north_premise['premises'] if p['state'] == 'ESTABLISHED'}
+        for candidate in (visual.get('graph') or {}).get('north_candidates', []):
+            if candidate.get('id') not in established_ids:
+                continue
+            measured = survey_north.measure_north(raw, candidate.get('bbox') or candidate.get('source_region'))
+            if (not measured['ok'] or survey_north.angular_delta(measured['degrees'], candidate['measured_degrees'])
+                    > survey_north.CORROBORATION_DELTA_DEGREES):
+                raise ValueError('North-up is unresolved: the retained source does not corroborate the recorded arrow measurement.')
+            north_premise['source_rechecks'].append(dict(candidate_id=candidate['id'], source_sha256=original_hash,
+                rendered_sha256=hashlib.sha256(raw).hexdigest(), measurement=measured))
+        if not north_premise['source_rechecks']:
+            raise ValueError('North-up is unresolved: no source-bound directional measurement is available.')
+    preview, transform = transform_document_preview(raw, filename,
+        'ROTATE_ANGLE' if north_premise else action,
+        {'clockwise_degrees': -north_premise['degrees']} if north_premise else parameters)
+    if north_premise:
+        transform.update(type='ALIGN_NORTH_UP', north_premise=north_premise,
+            qualification='True-north-up display uses the retained directional premises. No metric, legal or survey authority is added.')
+    if rendering:
+        transform.update(rendering=rendering, coordinate_space_before='NORMALIZED_PDF_PAGE_RENDER')
+    pages = [p for p in workspace.structural_units if p['source_id'] == source_id
+             and p.get('unit_type') in ('page', 'sheet', 'image')
+             and (not rendering or p.get('order_index') == 0)]
     if not pages:
         # Verified raster is one image; this records its address, not sheet identity.
-        pages = [store.create_structural_unit(workspace, source_id, 'image', 0,
-                                              label='Retained source image', actor=actor)]
+        pages = [store.create_structural_unit(workspace, source_id, 'page' if rendering else 'image', 0,
+                                              label='Retained source page 1' if rendering else 'Retained source image', actor=actor)]
     page_id = parent['page_structural_unit_id'] if parent else pages[0]['id']
     directory = Path(store.store_path) / 'workspace_sources' / workspace.project_id
     directory.mkdir(parents=True, exist_ok=True)
@@ -430,6 +482,7 @@ def create_working_view(store, workspace, source_id, action, reason, actor, *, p
         derivation_reason=reason.strip(), actor=actor, view_transform=transform)
 
 
+@observed
 def working_view_bytes(store, workspace, view):
     """Read a committed, project-owned artifact; GET never regenerates it."""
     transform = view.get('view_transform') or {}

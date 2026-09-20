@@ -3401,14 +3401,24 @@ def document_shop_result(project_id):
     # would have to re-establish the same identity and the same two gates, and
     # the two would drift at the first change to either.
     #
-    # The stored examination result is NOT touched by any of this. The only
-    # write is the conversation turn itself.
+    # Questions retain conversation turns. Explicit bounded view commands also
+    # create DerivedViews through the existing owner; examination stays intact.
     conversation_error = None
     if request.method == 'POST':
         question = (request.form.get('question') or '').strip()
         if question:
+            from services.capability_registry import ACTION_REGISTRY
+            action_ids = tuple(ACTION_REGISTRY) if result.get('source_id') and workspace.owner == session.get('username') else ()
             reply = document_conversation.ask(
-                document, workspace, result, question, app=current_app)
+                document, workspace, result, question, app=current_app, action_ids=action_ids)
+            if reply.get('command'):
+                from services.conversation_interpreter import execute_document_action
+                try:
+                    execution = execute_document_action(store, workspace, result.get('source_id'),
+                        reply['command'], session.get('username'))
+                    reply['answer'] = execution['answer']
+                except (CaseWorkspaceError, ValueError, OSError) as exc:
+                    reply['answer'] = 'The requested view could not be created: ' + str(exc)
             # Recorded whether or not the provider answered: a customer who
             # asked and was told the service is unavailable should still see
             # that they asked, rather than an empty thread that looks like the
@@ -3429,6 +3439,8 @@ def document_shop_result(project_id):
     return render_template(
         'document_shop_result.html', result=result, project_id=project_id,
         conversation=document_conversation.conversation_for(workspace),
+        working_views=[dict(v, view_transform={key: value for key, value in v['view_transform'].items() if key != 'file_path'})
+            for v in workspace.derived_views if v.get('source_id') == result.get('source_id') and v.get('view_transform')],
         conversation_error=conversation_error,
         can_create=user_can_create_document_shop_container())
 
@@ -3460,6 +3472,32 @@ def _document_shop_workspace_or_404(project_id):
     if workspace.removed_at:
         abort(404)
     return document, store, workspace
+
+
+@portal_bp.route('/document-shop/jobs/<project_id>/working-view/<view_id>')
+@login_required
+def document_shop_working_view(project_id, view_id):
+    """Read the retained artifact through the existing document ownership gate."""
+    import io
+    from flask import send_file
+    from services.document_examination import working_view_bytes
+    _, store, workspace = _document_shop_workspace_or_404(project_id)
+    if workspace.document_desk_state != 'active':
+        abort(404)
+    view = next((v for v in workspace.derived_views if v['id'] == view_id), None)
+    if not view or not view.get('view_transform'):
+        abort(404)
+    source = store._find(workspace.sources, view['source_id'])
+    if (not source or source.get('removed_at')
+            or len(store.visible_cases_for(workspace, session.get('username'))) != len(workspace.cases)):
+        abort(404)
+    try:
+        raw, _ = working_view_bytes(store, workspace, view)
+    except (ValueError, OSError):
+        abort(404)
+    response = send_file(io.BytesIO(raw), mimetype='image/png', max_age=0)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @portal_bp.route('/document-shop/jobs/<project_id>/status')
