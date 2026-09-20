@@ -20,8 +20,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
+def deployment_implementation_hashes(files):
+    """Associate proof with deployed code, not deployment-excluded agent tooling.
+
+    The full-tree freeze below still includes every tooling file. Only receipt
+    applicability follows deploy/DEPLOYMENT.md's established .claude exclusion.
+    """
+    from services.runtime_observation import qualification_file_hash
+    return {name: qualification_file_hash(path) for name, path in files.items()
+            if not name.startswith('.claude/')}
+
+
 def main():
-    from services.runtime_observation import _retain, directory, qualification_file_hash
+    from services.runtime_observation import _retain, directory
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, help='Existing workspace-local artifact directory.')
     args = parser.parse_args()
@@ -33,7 +44,7 @@ def main():
     names = sorted({value.decode('utf-8') for value in listed.split(b'\0') if value})
     files = {name: ROOT/name for name in names if (ROOT/name).is_file()}
     before = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()}
-    logical = {name: qualification_file_hash(path) for name, path in files.items()}
+    logical = deployment_implementation_hashes(files)
     (output/'freeze.json').write_text(json.dumps(before, indent=2), encoding='utf-8')
     identifier = uuid.uuid4().hex
     started = datetime.now(timezone.utc).isoformat()
@@ -61,6 +72,8 @@ def main():
         events=[dict(owner='pytest', phase='RETURNED', exit_code=completed.returncode)],
         qualification=dict(suite='authoritative_full_gate', exit_code=completed.returncode, executed_tests=executed,
             frozen_tree_unchanged=unchanged, implementation_hashes=logical, command=command,
+            excluded_tooling_hashes={name: before[name] for name in files if name not in logical},
+            full_tree_freeze_sha256=hashlib.sha256((output/'freeze.json').read_bytes()).hexdigest(),
             log_sha256=hashlib.sha256((output/'pytest.log').read_bytes()).hexdigest(),
             junit_sha256=hashlib.sha256(xml_path.read_bytes()).hexdigest() if xml_path.exists() else None))
     app = SimpleNamespace(instance_path=str(ROOT/'instance'), config={'REGISTRY_STORE_PATH':str(ROOT/'instance/registry')})

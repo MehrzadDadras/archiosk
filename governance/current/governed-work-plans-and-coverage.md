@@ -36,6 +36,9 @@ full gate and retains its receipt through `runtime_observation`; it cannot impor
 an old log or accept a caller's PASS flag. Test fingerprints normalize Git text
 checkout line endings only. Uploaded source hashes and protected byte pins retain
 their existing, separate integrity rules.
+The freeze still covers local agent tooling. Deployment applicability excludes
+only `.claude/`, following the established deployment exclusion; the receipt
+retains those tooling hashes separately and records the complete freeze digest.
 
 ## Explicit requirement coverage
 

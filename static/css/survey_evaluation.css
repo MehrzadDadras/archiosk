@@ -30,7 +30,7 @@
 #attention-report nav { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
 #attention-report nav a { padding: .3rem .6rem; border: 1px solid currentColor; border-radius: .25rem; }
 #attention-report nav [aria-current="page"] { font-weight: bold; text-decoration: underline; }
-#attention-report [data-importance="CRITICAL"] { border-left: 4px solid #e7a448; padding-left: 1rem; }
+#attention-report [data-importance="CRITICAL"] { border-left: 4px solid var(--attention-amber); padding-left: 1rem; }
 #attention-report details { margin: .5rem 0; }
 #attention-report summary, #go-work-plans summary { cursor: pointer; }
 #attention-report pre, #go-work-plans pre { max-height: 30rem; overflow: auto; }
