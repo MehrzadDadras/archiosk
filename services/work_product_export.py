@@ -37,6 +37,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
+import copy
+from collections import Counter
+from itertools import combinations
 from services.runtime_observation import observed
 
 import docx
@@ -53,6 +57,78 @@ _FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@")
 
 class WorkProductExportError(Exception):
     """Raised when a work product cannot be exported as requested."""
+
+
+@observed
+def compress_presentation_records(records, independent_pairs=()):
+    """Lossless occurrence projection. Semantic identity never uses similarity.
+
+    Callers provide complete material semantics separately from occurrence
+    provenance. Missing distinctions must stay missing, not gain a default.
+    Independence requires explicit reviewed pairwise source relationships.
+    """
+    groups = {}
+    for record in records:
+        semantic = record['semantic']
+        key = json.dumps(semantic, sort_keys=True, ensure_ascii=False, allow_nan=False)
+        group = groups.setdefault(key, dict(semantic=copy.deepcopy(semantic), occurrences=[],
+            occurrence_count=0, source_ids=[], runtime_trace_ids=[], reasons=[], changed=False))
+        group['occurrences'].append(copy.deepcopy(record))
+        group['occurrence_count'] += 1
+        group['changed'] |= bool(record.get('changed'))
+        for field in ('source_ids', 'runtime_trace_ids', 'reasons'):
+            for value in record.get(field, []):
+                if value not in group[field]:
+                    group[field].append(copy.deepcopy(value))
+    pairs = {frozenset(pair) for pair in independent_pairs}
+    rows = list(groups.values())
+    values_by_identity = {}
+    reason_counts = Counter(reason for group in rows for reason in group['reasons'])
+    def identity_for(semantic):
+        return json.dumps([semantic.get(key) for key in ('subject','proposition','scope')], sort_keys=True)
+    for group in rows:
+        values_by_identity.setdefault(identity_for(group['semantic']), set()).add(
+            json.dumps(group['semantic'].get('value'), sort_keys=True))
+    conflict_states = {'CONFLICTING', 'CONTESTED', 'INCONSISTENT', 'NON_MATCH', 'NON_FIT',
+                       'REDUNDANT_CONFLICTING', 'NO_COMMON_ADMISSIBLE_CONDITION'}
+    def recorded_conflicts(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if (key in ('state', 'conditional_state', 'necessity_class', 'duplicate_consistency') or key.endswith('_state')) and isinstance(child, str) and child in conflict_states:
+                    yield child
+                elif isinstance(child, (dict, list)):
+                    yield from recorded_conflicts(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from recorded_conflicts(child)
+    for group in rows:
+        semantic = group['semantic']
+        group['id'] = 'presentation-' + hashlib.sha256(json.dumps(semantic, sort_keys=True).encode()).hexdigest()[:20]
+        sources = group['source_ids']
+        independent = len(sources) > 1 and all(frozenset(pair) in pairs for pair in combinations(sources, 2))
+        group['independent_source_count'] = len(sources) if independent else 0
+        group['source_count'] = len(sources)
+        group['recorded_conflicts'] = list(dict.fromkeys(recorded_conflicts(semantic)))
+        group['conflict'] = bool(group['recorded_conflicts'])
+        # Flag differing values; do not merge them or adjudicate their truth.
+        group['value_disagreement'] = semantic.get('subject') != 'Unbound source observation' and len(values_by_identity[identity_for(semantic)]) > 1
+        group['conflict'] |= group['value_disagreement']
+        group['unresolved'] = bool(group['reasons']) or semantic.get('state') in ('UNRESOLVED','PARTIAL','REFUSED','INCOMPARABLE','INSUFFICIENT_SCALE')
+        historical = semantic.get('temporal_class') == 'HISTORICAL_ACTIVITY' or semantic.get('supersession') == 'superseded'
+        group['classification'] = ('CONFLICTING_EVIDENCE' if group['conflict'] else 'PARSING_NOISE' if semantic.get('noise')
+            else 'TECHNICAL_TRACE' if semantic.get('technical') else 'HISTORICAL_OCCURRENCE' if historical
+            else 'CORROBORATING_SOURCE' if independent else 'EXACT_DUPLICATE' if group['occurrence_count'] > 1 and len(sources) <= 1
+            else 'SAME_PROPOSITION_SAME_STATE')
+        group['importance'] = ('CRITICAL' if group['conflict'] else 'NOISE' if semantic.get('noise') else 'TRACE' if semantic.get('technical')
+            else 'MATERIAL' if group['unresolved'] or semantic.get('result') else 'SUPPORTING')
+        # Assign one default location; filtered views may expose the same group
+        # by another facet, without repeating it in the ordinary notebook.
+        group['section'] = ('technical' if group['importance'] in ('TRACE', 'NOISE')
+            else 'matters' if semantic.get('result') or group['conflict']
+            else 'changes' if group['changed'] else 'unresolved' if group['unresolved'] else 'evidence')
+    shared_reasons = [reason for reason, count in reason_counts.items() if count > 1]
+    return dict(groups=rows, occurrence_count=len(records), group_count=len(rows), shared_reasons=shared_reasons,
+        qualification='Presentation grouping changes no evidence or governed state. Source count does not establish authority.')
 
 
 def _sanitize_cell_value(value):

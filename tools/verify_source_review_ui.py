@@ -17,12 +17,73 @@ from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+def verify_report_compression(page, base, app, proof, output):
+    """Exercise the ordinary evaluation route and observational report in Chromium."""
+    from services import survey_evaluation as evaluation
+    from services.case_workspace import CaseWorkspaceStore
+    from services.runtime_observation import read
+    proof['compressed_reports'] = []
+    for case in ('matching:fit', 'matching:mandatory-failure', 'matching:partial', 'matching:composition', 'matching:brief'):
+        page.goto(base+'/admin/survey-evaluation')
+        page.select_option('#case', case)
+        page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
+        page.wait_for_url('**/attention?analysis=*')
+        report = page.locator('#attention-report')
+        assert report.is_visible()
+        assert page.locator('#investigation-controls').get_attribute('open') is None
+        assert 'Governed factual state: UNRESOLVED' in report.inner_text()
+        assert report.locator('pre:visible').count() == 0
+        entry = page.url
+        before = None
+        if app:
+            location = evaluation.location(app, urlparse(entry).path.split('/')[-2])
+            store = CaseWorkspaceStore(location/'registry')
+            state_path = store._path_for(evaluation._read(location)['project_id'])
+            before = state_path.read_bytes()
+        for label in ('Material only', 'Unresolved', 'Conflicts', 'Changes', 'Evidence', 'Technical', 'All'):
+            report.get_by_role('link', name=label, exact=True).click()
+            selected_url = page.url
+            page.get_by_role('link', name='Reload', exact=True).click()
+            assert page.url == selected_url
+            if before is not None:
+                assert state_path.read_bytes() == before
+        group = report.locator('[data-report-group]').first
+        group.locator(':scope > details > summary').filter(has_text='Show evidence and provenance').click()
+        occurrence = group.locator('details').filter(has=page.get_by_text('Occurrence 1', exact=False)).last
+        occurrence.locator(':scope > summary').click()
+        occurrence.locator('details > summary').click()
+        assert occurrence.locator('pre').is_visible()
+        source_link = group.get_by_role('link', name='Open source 1', exact=True)
+        assert source_link.is_visible()
+        source_link.click()
+        assert 'Generic kernel mapping' in page.title() or 'Generic kernel mapping' in page.locator('body').inner_text()
+        page.goto(entry)
+        proof['compressed_reports'].append(dict(case=case, entry=urlparse(entry).path+'?'+urlparse(entry).query,
+            default_controls_collapsed=True, filters_and_reload_readonly=True, raw_json_hidden=True,
+            complete_occurrence_expanded=True, original_source_jump=True))
+    page.screenshot(path=str(output/'compressed-report.png'), full_page=True)
+    if app:
+        records = [read(app, row['trace']) for row in proof['traces']]
+        (output/'runtime-traces.json').write_text(json.dumps(records, indent=2), encoding='utf-8')
+        for row, record in zip(proof['traces'], records):
+            if row['method'] == 'GET' and row['path'].endswith('/attention'):
+                invoked = {event['owner'] for event in record['events'] if event['phase'] == 'INVOKED'}
+                assert 'services.case_workspace.CaseWorkspaceStore.project_attention_report' in invoked
+                assert 'services.work_product_export.compress_presentation_records' in invoked
+                assert not any(owner.endswith(('.run_requirement_matching', '.run_role_composition', '.record_go_attention')) for owner in invoked)
+                assert any(event['owner'] == 'components/attention_report.html' and event['phase'] == 'CONSUMED' for event in record['events'])
+        proof['report_invoked_consumed_surfaced_without_analysis'] = True
+    assert not proof['browser_errors']
+    (output/'proof.json').write_text(json.dumps(proof, indent=2), encoding='utf-8')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
     parser.add_argument('--games', action='store_true', help='Exercise continuum and constraint games through real evaluation forms.')
     parser.add_argument('--propositions', action='store_true', help='Exercise sourced subject classification, correction and review through the real UI.')
     parser.add_argument('--matching-games', action='store_true', help='Exercise controlled matching/composition games through the real evaluation UI.')
+    parser.add_argument('--report-compression', action='store_true', help='Exercise compact reports, expansion, filters and read-only Reload.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -58,6 +119,15 @@ def main():
             browser=driver.chromium.launch(headless=True)
             page=browser.new_page(viewport={'width':1440,'height':1000})
             page.set_default_timeout(120000)
+            def reveal_investigation():
+                controls = page.locator('#investigation-controls')
+                if controls.count() and controls.get_attribute('open') is None:
+                    controls.locator(':scope > summary').click()
+            def click_and_reveal(locator):
+                reveal_investigation()
+                locator.click()
+                page.wait_for_load_state('domcontentloaded')
+                reveal_investigation()
             page.on('pageerror',lambda error:proof['browser_errors'].append(str(error)))
             def capture(response):
                 if response and response.headers.get('x-archiosk-observation'):
@@ -69,41 +139,46 @@ def main():
                 page.goto(access); access=''
             else:
                 page.fill('#username','local-review-test'); page.fill('#password','Local-Test-Only-2026!')
-                page.get_by_role('button',name='Sign in',exact=True).click()
+                click_and_reveal(page.get_by_role('button',name='Sign in',exact=True))
                 page.wait_for_load_state('domcontentloaded')
             csrf=page.locator('meta[name="csrf-token"]').get_attribute('content')
             assert page.request.post(base+'/developer-mode/toggle',form={'csrf_token':csrf},headers={'Referer':base+'/'}).ok
             page.goto(base+'/admin/survey-evaluation')
-            page.get_by_role('button',name='Observe my real requests',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Observe my real requests',exact=True))
+            if args.report_compression:
+                verify_report_compression(page, base, None if args.live else app, proof, output)
+                browser.close()
+                print(json.dumps(proof, indent=2))
+                return
             page.select_option('#case','source-review')
-            page.get_by_role('button',name='Run isolated evaluation',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))
             page.wait_for_load_state('domcontentloaded')
             proof['evaluation_path']=urlparse(page.url).path
-            page.get_by_role('link',name='Review source frame, anchored machine readings and unresolved stages').click()
+            click_and_reveal(page.get_by_role('link',name='Review source frame, anchored machine readings and unresolved stages'))
             page.wait_for_load_state('domcontentloaded')
             proof['review_path']=urlparse(page.url).path
             page.select_option('select[name="view_action"]', 'MIRROR_HORIZONTAL')
             page.locator('form').filter(has=page.locator('select[name="view_action"]')).locator('input[name="reason"]').fill('EVALUATION_INPUT: inspect a mirrored working representation without changing the source.')
-            page.get_by_role('button',name='Create working view',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Create working view',exact=True))
             assert page.get_by_alt_text('Derived working view; original pixels transformed').count() == 1
             proof['working_view_created_through_ui'] = True
-            page.get_by_role('button',name='Select four corners on original').click()
+            click_and_reveal(page.get_by_role('button',name='Select four corners on original'))
             image=page.locator('#review-original')
             box=image.bounding_box()
             for x,y in ((.05,.05),(.95,.08),(.9,.95),(.1,.9)):
                 image.click(position={'x':box['width']*x,'y':box['height']*y})
             assert len(json.loads(page.input_value('#corners')))==4
             page.fill('#frame-reason','EVALUATION_INPUT: supplied document control quadrilateral; display aspect only.')
-            page.get_by_role('button',name='Create qualified rectified view',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Create qualified rectified view',exact=True))
             page.wait_for_load_state('domcontentloaded')
             assert page.get_by_alt_text('Qualified rectified document preview').count()==1
             options=page.locator('#review-field option').evaluate_all('nodes => nodes.map(n => ({value:n.value,text:n.textContent}))')
             field=next(row['value'] for row in options if 'A-2O3' in row['text'])
             page.select_option('#review-field',field)
             page.fill('#after','Sheet: A-203'); page.fill('#text-reason','Controlled source title block visibly reads A-203.')
-            page.get_by_role('button',name='Propose correction',exact=True).click()
-            page.get_by_role('button',name='Accept reviewed correction',exact=True).click()
-            page.get_by_role('button',name='Re-evaluate reviewed source',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Propose correction',exact=True))
+            click_and_reveal(page.get_by_role('button',name='Accept reviewed correction',exact=True))
+            click_and_reveal(page.get_by_role('button',name='Re-evaluate reviewed source',exact=True))
             page.wait_for_load_state('domcontentloaded')
             assert 'Regulatory frontage / front lot line' in page.locator('.survey-evaluation').inner_text()
             before=page.locator('.survey-evaluation').inner_text()
@@ -116,16 +191,16 @@ def main():
                 state_path=store._path_for(evaluation._read(location)['project_id'])
                 persisted_before=state_path.read_bytes()
             page.screenshot(path=str(output/'source-review.png'),full_page=True)
-            page.get_by_role('button',name='Reload view',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Reload view',exact=True))
             page.wait_for_load_state('domcontentloaded')
             after=page.locator('.survey-evaluation').inner_text()
             assert before==after
             if not args.live:
                 assert state_path.read_bytes()==persisted_before
                 proof['reload_persisted_bytes_unchanged']=True
-            page.get_by_role('button',name='Revert correction',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Revert correction',exact=True))
             assert 'RE-EVALUATION REQUIRED' in page.locator('.survey-evaluation').inner_text()
-            page.get_by_role('button',name='Re-evaluate reviewed source',exact=True).click()
+            click_and_reveal(page.get_by_role('button',name='Re-evaluate reviewed source',exact=True))
             proof['reload_preserves_visible_state']=True
             proof['accept_explicit_reevaluate_revert']=True
             run=proof['evaluation_path'].rsplit('/',1)[1]
@@ -133,25 +208,27 @@ def main():
             page.fill('input[name="objective"]', 'Inspect sheet identity and retained source readings')
             page.locator('input[name="included_id"]').first.check()
             page.locator('input[name="included_id"]').nth(1).check()
-            page.get_by_role('button', name='Set attention', exact=True).click()
+            click_and_reveal(page.get_by_role('button', name='Set attention', exact=True))
             assert 'Persisted attention: SCOPED' in page.locator('body').inner_text()
             scope_text=page.locator('section').first.inner_text()
-            page.get_by_role('link', name='Reload', exact=True).click()
+            click_and_reveal(page.get_by_role('link', name='Reload', exact=True))
             assert page.locator('section').first.inner_text() == scope_text
             proof['attention_invoked_and_reload_preserved_scope']=True
             choices=page.locator('select[name="to_id"] option').evaluate_all('nodes => nodes.map(n => n.value)')
             page.select_option('select[name="to_id"]', choices[1])
             page.fill('input[name="hypothesis"]', 'Possible related sheet readings')
             page.locator('form').filter(has=page.locator('input[value="temporary_relationship"]')).locator('input[name="reason"]').fill('EVALUATION_INPUT: inspect a bounded hypothesis without promoting source authority.')
-            page.get_by_role('button', name='Add temporary relationship', exact=True).click()
+            click_and_reveal(page.get_by_role('button', name='Add temporary relationship', exact=True))
             assert 'TEMPORARY · Possible related sheet readings' in page.locator('body').inner_text()
             proof['temporary_relationship_invoked_through_ui']=True
             def action_form(action):
+                reveal_investigation()
                 return page.locator('form').filter(has=page.locator(f'input[name="action"][value="{action}"]'))
             def open_coverage():
-                detail=page.locator('details').filter(has=page.get_by_text('Record conditions and corresponding representations for coverage review', exact=True))
+                reveal_investigation()
+                detail=page.get_by_text('Record conditions and corresponding representations for coverage review', exact=True).locator('..')
                 if detail.get_attribute('open') is None:
-                    detail.locator('summary').click()
+                    click_and_reveal(detail.locator('summary'))
             open_coverage()
             form=action_form('record_condition')
             assert form.locator('select[name="evidence_id"] option').count() > 0
@@ -159,22 +236,22 @@ def main():
             form.locator('input[name="affected_disciplines"]').fill('architectural, mechanical')
             form.locator('select[name="required_resolution"]').select_option('ASSEMBLY_LAYERS')
             form.locator('input[name="reason"]').fill('Evaluation of explicit anchored review; no claim of automatic condition recognition.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             open_coverage()
             form=action_form('confirm_condition')
             form.locator('input[name="reason"]').fill('EVALUATION_INPUT: confirm the bounded review condition and scope.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             open_coverage()
             form=action_form('record_representation')
             form.locator('input[name="discipline"]').fill('architectural')
             form.locator('select[name="representation_class"]').select_option('WALL_SECTION')
             form.locator('select[name="resolution_class"]').select_option('ASSEMBLY_LAYERS')
             form.locator('input[name="reason"]').fill('EVALUATION_INPUT: explicit applicability premise for this bounded condition.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             open_coverage()
             form=action_form('resolve_representation')
             form.locator('input[name="reason"]').fill('EVALUATION_INPUT: reviewed applicability; source authority remains unchanged.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             form=action_form('professional_review')
             form.locator('select[name="narrative"]').select_option('building_science')
             form.locator('input[name="subject"]').fill('EVALUATION_INPUT envelope interface')
@@ -184,12 +261,12 @@ def main():
             form.locator('select[name="participation_expectation"]').select_option('upstream')
             form.locator('select[name="required_resolution"]').select_option('LOCAL_TIE_IN')
             form.locator('input[name="reason"]').fill('An overall representation cannot establish the exact seal termination.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             assert 'INSUFFICIENT_SCALE' in page.locator('body').inner_text()
             assert 'DISCIPLINE_COVERAGE_GAP' in page.locator('body').inner_text()
-            action_form('professional_presentation').locator('button').click()
+            click_and_reveal(action_form('professional_presentation').locator('button'))
             with page.expect_download() as download_info:
-                page.locator('a[href*="presentations/"][href$=".docx"]').click()
+                click_and_reveal(page.locator('a[href*="presentations/"][href$=".docx"]:visible'))
             download=download_info.value
             report_path=output/'professional-review.docx'
             download.save_as(str(report_path))
@@ -204,10 +281,10 @@ def main():
             for name, value in {'lower_1':'990','upper_1':'1010','lower_2':'1000','upper_2':'1020','baseline':'1005'}.items():
                 form.locator(f'input[name="{name}"]').fill(value)
             form.locator('input[name="reason"]').fill('Explicit hypothetical bounds; no project measurement is inferred.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             assert 'BOUNDARY_FOUND' in page.locator('body').inner_text()
             assert 'Actual project value: UNRESOLVED' in page.locator('body').inner_text()
-            page.get_by_role('link', name='Reload', exact=True).click()
+            click_and_reveal(page.get_by_role('link', name='Reload', exact=True))
             assert 'BOUNDARY_FOUND' in page.locator('body').inner_text()
             proof['hypothetical_constraint_and_breakpoint_invoked_through_ui']=True
             form=action_form('information_comparison')
@@ -223,7 +300,7 @@ def main():
             assert len(mirrored) == 1
             form.locator('select[name="left_view"]').select_option(mirrored[0])
             form.locator('input[name="reason"]').fill('EVALUATION_INPUT: compare explicit width hypotheses using the retained mirrored view; no factual consistency is inferred.')
-            form.locator('button').click()
+            click_and_reveal(form.locator('button'))
             assert 'model MATCH' in page.locator('body').inner_text()
             assert 'Factual consistency: UNRESOLVED' in page.locator('body').inner_text()
             if not args.live:
@@ -232,46 +309,46 @@ def main():
                 comparison=workspace.analyses[-1]['governed_result']
                 assert comparison['views'][0]['transform']['type'] == 'MIRROR_HORIZONTAL'
                 assert comparison['evaluation_only'] and not comparison['canonical']
-            page.get_by_role('link', name='Reload', exact=True).click()
+            click_and_reveal(page.get_by_role('link', name='Reload', exact=True))
             assert 'model MATCH' in page.locator('body').inner_text()
             if not args.live:
                 assert state_path.read_bytes() == persisted_before
             proof['normalized_comparison_retained_view_and_reload_invoked_through_ui']=True
             attention_url=page.url
-            page.get_by_role('link', name='Inspect muscles for this execution', exact=True).last.click()
+            click_and_reveal(page.get_by_role('link', name='Inspect muscles for this execution', exact=True).last)
             inspector=page.locator('#muscle-inspector')
             assert inspector.is_visible()
             comparison_contract=inspector.locator('[data-muscle-owner="services.cross_modal_investigation.compare_normalized_information"]')
             assert comparison_contract.get_attribute('data-invocation') == 'INVOKED'
-            comparison_contract.locator('summary').first.click()
+            click_and_reveal(comparison_contract.locator('summary').first)
             assert 'Factual consistency: UNRESOLVED' in comparison_contract.inner_text()
             assert 'UNRESOLVED' in comparison_contract.inner_text()
-            comparison_contract.get_by_text('Recorded inputs / result / provenance', exact=True).first.click()
+            click_and_reveal(comparison_contract.get_by_text('Recorded inputs / result / provenance', exact=True).first)
             assert 'opening-width' in comparison_contract.inner_text()
             comparison_contract.scroll_into_view_if_needed()
             page.screenshot(path=str(output/'muscle-inspector.png'))
             inspector_text=inspector.text_content()
-            page.get_by_role('button', name='Reload view', exact=True).click()
+            click_and_reveal(page.get_by_role('button', name='Reload view', exact=True))
             assert page.locator('#muscle-inspector').text_content() == inspector_text
             page.goto(attention_url)
             if not args.live:
                 assert state_path.read_bytes() == persisted_before
             proof['linked_muscle_inspector_actual_invocation_and_read_only_reload']=True
             if args.propositions:
-                page.get_by_text('Add a subject reference', exact=True).click()
+                click_and_reveal(page.get_by_text('Add a subject reference', exact=True))
                 form=action_form('record_subject')
                 form.locator('input[name="subject_name"]').fill('EVALUATION subject')
                 form.locator('input[name="subject_role"]').fill('institutional_investor')
-                form.locator('button').click()
-                page.get_by_text('Record a sourced proposition', exact=True).click()
+                click_and_reveal(form.locator('button'))
+                click_and_reveal(page.get_by_text('Record a sourced proposition', exact=True))
                 form=action_form('subject_proposition')
                 evidence_id=form.locator('select[name="evidence_id"]').input_value()
                 citation=page.locator('a[href*="item=evidence_items:'+evidence_id+'"]').first.get_attribute('href')
                 page.goto(base+citation)
-                page.locator('details').filter(has=page.locator('#kernel-record')).locator('summary').click()
+                click_and_reveal(page.locator('details').filter(has=page.locator('#kernel-record')).locator('summary'))
                 source_quote=json.loads(page.locator('#kernel-record').inner_text())['content'][:200]
                 page.goto(attention_url)
-                page.get_by_text('Record a sourced proposition', exact=True).click()
+                click_and_reveal(page.get_by_text('Record a sourced proposition', exact=True))
                 form=action_form('subject_proposition')
                 subject=form.locator('select[name="subject_key"] option').evaluate_all(
                     'nodes => nodes.find(n => n.textContent.includes("EVALUATION subject")).value')
@@ -290,7 +367,7 @@ def main():
                 form.locator('input[name="as_of"]').fill('2020-01-01')
                 form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT categorization only; no investor fact or current mandate is established.')
                 form.locator('input[name="attribution"][value="agent_assessment"]').check()
-                form.locator('button').click()
+                click_and_reveal(form.locator('button'))
                 rows=page.locator('[data-proposition-id]')
                 assert rows.count() == 1 and 'EVALUATION_INPUT' in rows.first.inner_text()
                 original_id=rows.first.get_attribute('data-proposition-id')
@@ -299,26 +376,26 @@ def main():
                     # Automated live verification must not attest human review.
                     rows.first.locator('input[name="reason"]').fill('Retain this evaluation interpretation only.')
                     rows.first.locator('input[name="attribution"]').check()
-                    rows.first.get_by_role('button', name='Accept as interpretation', exact=True).click()
+                    click_and_reveal(rows.first.get_by_role('button', name='Accept as interpretation', exact=True))
                 assert 'NOT_ESTABLISHED' in page.locator('[data-proposition-id]').first.inner_text()
-                page.get_by_role('link', name='Correct this proposition', exact=True).click()
+                click_and_reveal(page.get_by_role('link', name='Correct this proposition', exact=True))
                 form=action_form('subject_proposition')
                 assert form.locator('textarea[name="original_quote"]').input_value() == source_quote
                 form.locator('input[name="value"]').fill('EVALUATION_UPDATED_TOPIC')
                 form.locator('textarea[name="reason"]').fill('Correct the evaluation categorization without changing its source.')
                 form.locator('input[name="attribution"][value="agent_assessment"]').check()
-                form.get_by_role('button', name='Record corrected successor', exact=True).click()
+                click_and_reveal(form.get_by_role('button', name='Record corrected successor', exact=True))
                 rows=page.locator('[data-proposition-id]')
                 assert rows.count() == 2
                 assert 'superseded' in page.locator('[data-proposition-id="'+original_id+'"]').inner_text()
                 if not args.live:
                     rows.last.locator('input[name="reason"]').fill('Reject the proposed evaluation categorization.')
                     rows.last.locator('input[name="attribution"]').check()
-                    rows.last.get_by_role('button', name='Reject interpretation', exact=True).click()
+                    click_and_reveal(rows.last.get_by_role('button', name='Reject interpretation', exact=True))
                     assert 'rejected' in page.locator('[data-proposition-id]').last.inner_text()
                 if not args.live:
                     persisted_before=state_path.read_bytes()
-                page.get_by_role('link', name='Reload', exact=True).click()
+                click_and_reveal(page.get_by_role('link', name='Reload', exact=True))
                 assert page.locator('[data-proposition-id]').count() == 2
                 if not args.live:
                     assert state_path.read_bytes() == persisted_before
@@ -328,7 +405,7 @@ def main():
                 proof['subject_proposition_human_curation_local_fixture_only']=not args.live
                 matching_claims=[]
                 for temporal in ('DATED_REQUIREMENT', 'CURRENT_DISCLOSED_MANDATE'):
-                    page.get_by_text('Record a sourced proposition', exact=True).click()
+                    click_and_reveal(page.get_by_text('Record a sourced proposition', exact=True))
                     form=action_form('subject_proposition')
                     form.locator('select[name="subject_key"]').select_option(subject)
                     form.locator('input[name="property_key"]').fill('evaluation-sector')
@@ -346,7 +423,7 @@ def main():
                     form.locator('input[name="valid_until"]').fill('2027-01-01')
                     form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT typed premise only; not an investor fact.')
                     form.locator('input[name="attribution"][value="agent_assessment"]').check()
-                    form.locator('button').click()
+                    click_and_reveal(form.locator('button'))
                     matching_claims.append(page.locator('[data-proposition-id]').last.get_attribute('data-proposition-id'))
                 form=action_form('requirement_matching')
                 form.locator('select[name="context_key"]').select_option('investment')
@@ -356,32 +433,32 @@ def main():
                 form.locator('select[name="criterion_0_candidate"]').select_option(matching_claims[1])
                 form.locator('select[name="criterion_0_operator"]').select_option('CONTAINS_ALL')
                 form.locator('input[name="reason"]').fill('Compare declared evaluation premises; preserve unresolved factual fit.')
-                form.get_by_role('button', name='Run requirement matching', exact=True).click()
+                click_and_reveal(form.get_by_role('button', name='Run requirement matching', exact=True))
                 matching=page.locator('#requirement-matching')
                 assert 'conditional model FIT' in matching.inner_text()
                 assert 'Governed factual fit: UNRESOLVED' in matching.inner_text()
                 if not args.live:
                     persisted_before=state_path.read_bytes()
-                page.get_by_role('link', name='Reload', exact=True).click()
+                click_and_reveal(page.get_by_role('link', name='Reload', exact=True))
                 assert 'conditional model FIT' in matching.inner_text()
                 if not args.live:
                     assert state_path.read_bytes() == persisted_before
                 matching.scroll_into_view_if_needed()
                 page.screenshot(path=str(output/'requirement-matching.png'),full_page=True)
                 proof['requirement_matching_conditional_fit_and_read_only_reload']=True
-                page.get_by_text('Add a subject reference', exact=True).click()
+                click_and_reveal(page.get_by_text('Add a subject reference', exact=True))
                 form=action_form('record_subject')
                 form.locator('input[name="subject_name"]').fill('EVALUATION debt participant')
                 form.locator('input[name="subject_role"]').fill('lender')
-                form.locator('button').click()
-                page.get_by_text('Record a sourced proposition', exact=True).click()
+                click_and_reveal(form.locator('button'))
+                click_and_reveal(page.get_by_text('Record a sourced proposition', exact=True))
                 options=action_form('subject_proposition').locator('select[name="subject_key"] option')
                 debtor=options.evaluate_all('nodes => nodes.find(n => n.textContent.includes("EVALUATION debt participant")).value')
                 opportunity=options.evaluate_all('nodes => nodes.find(n => n.value.startsWith("source:")).value')
                 role_claims=[]
                 for role_subject, role_value in [(opportunity,'EQUITY'),(opportunity,'DEBT'),(subject,'EQUITY'),(debtor,'DEBT')]:
                     page.goto(attention_url)
-                    page.get_by_text('Record a sourced proposition', exact=True).click()
+                    click_and_reveal(page.get_by_text('Record a sourced proposition', exact=True))
                     form=action_form('subject_proposition')
                     form.locator('select[name="subject_key"]').select_option(role_subject)
                     form.locator('input[name="property_key"]').fill('role')
@@ -397,7 +474,7 @@ def main():
                     form.locator('select[name="temporal_class"]').select_option('CURRENTNESS_UNRESOLVED')
                     form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT role premise only; not a verified financial commitment.')
                     form.locator('input[name="attribution"][value="agent_assessment"]').check()
-                    form.locator('button').click()
+                    click_and_reveal(form.locator('button'))
                     role_claims.append(page.locator('[data-proposition-id]').last.get_attribute('data-proposition-id'))
                 role_matches=[]
                 for target, candidate_claim in [(subject,role_claims[2]),(debtor,role_claims[3])]:
@@ -405,7 +482,7 @@ def main():
                     form.locator('select[name="context_key"]').select_option('investment')
                     form.locator('select[name="target_subject"]').select_option(target)
                     form.locator('select[name="require_currentness"]').select_option('no')
-                    form.locator('details').nth(1).locator('summary').click()
+                    click_and_reveal(form.locator('details').nth(1).locator('summary'))
                     for index in (0,1):
                         prefix='criterion_'+str(index)+'_'
                         form.locator('select[name="'+prefix+'required"]').select_option(role_claims[index])
@@ -413,7 +490,7 @@ def main():
                         form.locator('select[name="'+prefix+'operator"]').select_option('CONTAINS_ALL')
                         form.locator('select[name="'+prefix+'mandatory"]').select_option('no')
                     form.locator('input[name="reason"]').fill('Evaluate the role contribution of this candidate.')
-                    form.get_by_role('button',name='Run requirement matching',exact=True).click()
+                    click_and_reveal(form.get_by_role('button',name='Run requirement matching',exact=True))
                     role_matches.append(page.locator('input[name="matching_id"]').last.input_value())
                 form=action_form('role_composition')
                 for identifier in role_claims[:2]:
@@ -421,18 +498,18 @@ def main():
                 for identifier in role_matches:
                     form.locator('input[name="matching_id"][value="'+identifier+'"]').check()
                 form.locator('input[name="reason"]').fill('Compose distinct equity and debt role coverage without summing capital.')
-                form.get_by_role('button',name='Compose role coverage',exact=True).click()
+                click_and_reveal(form.get_by_role('button',name='Compose role coverage',exact=True))
                 composition=page.locator('#role-composition')
                 assert 'Conditional role coverage MATCH' in composition.inner_text()
                 assert 'factual configuration UNRESOLVED' in composition.inner_text()
                 if not args.live:
                     persisted_before=state_path.read_bytes()
-                page.get_by_role('link',name='Reload',exact=True).click()
+                click_and_reveal(page.get_by_role('link',name='Reload',exact=True))
                 if not args.live:
                     assert state_path.read_bytes() == persisted_before
-                composition.get_by_role('button',name='Render Capital Alignment Brief',exact=True).click()
+                click_and_reveal(composition.get_by_role('button',name='Render Capital Alignment Brief',exact=True))
                 with page.expect_download() as brief_download:
-                    page.get_by_role('link',name='Capital Alignment Brief',exact=False).click()
+                    click_and_reveal(page.get_by_role('link',name='Capital Alignment Brief',exact=False))
                 brief_download.value.save_as(str(output/'capital-alignment-brief.docx'))
                 import docx
                 brief_text='\n'.join(p.text for p in docx.Document(str(output/'capital-alignment-brief.docx')).paragraphs)
@@ -448,14 +525,14 @@ def main():
                 for case in evaluation.MATCHING_GAMES:
                     page.goto(base+'/admin/survey-evaluation')
                     page.select_option('#case',case)
-                    page.get_by_role('button',name='Run isolated evaluation',exact=True).click()
+                    click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))
                     page.wait_for_url('**/attention?analysis=*')
                     surface=page.locator('#role-composition' if case.endswith('composition') else '#requirement-matching')
                     phrase='Conditional role coverage ' if case.endswith('composition') else 'conditional model '
                     assert phrase+expected[case] in surface.inner_text()
                     assert 'UNRESOLVED' in surface.inner_text() and 'EVALUATION_INPUT' in surface.inner_text()
                     before=surface.inner_text()
-                    page.get_by_role('link',name='Reload',exact=True).click()
+                    click_and_reveal(page.get_by_role('link',name='Reload',exact=True))
                     assert surface.inner_text() == before
                     proof['matching_games'].append(dict(case=case, model=expected[case], factual_state='UNRESOLVED',
                         entry=urlparse(page.url).path+'?'+urlparse(page.url).query))
@@ -468,7 +545,7 @@ def main():
                 for game in evaluation.REVIEW_GAMES:
                     page.goto(base+'/admin/survey-evaluation')
                     page.select_option('#case', game)
-                    page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
+                    click_and_reveal(page.get_by_role('button', name='Run isolated evaluation', exact=True))
                     page.wait_for_url('**/attention?analysis=*')
                     assert 'EVALUATION_INPUT' in page.locator('body').inner_text()
                     run_id = urlparse(page.url).path.split('/')[-2]
@@ -479,8 +556,8 @@ def main():
                         game_store = CaseWorkspaceStore(game_path/'registry')
                         workspace_path = game_store._path_for(game_record['project_id'])
                         before = hashlib.sha256(workspace_path.read_bytes()).hexdigest()
-                    page.get_by_role('link', name='Reload', exact=True).click()
-                    page.locator('a').filter(has_text='Jump to evidence').first.click()
+                    click_and_reveal(page.get_by_role('link', name='Reload', exact=True))
+                    click_and_reveal(page.locator('a').filter(has_text='Jump to evidence').first)
                     assert 'Generic' in page.locator('body').inner_text() or 'kernel' in page.locator('body').inner_text().lower()
                     page.goto(game_url)
                     if not args.live:

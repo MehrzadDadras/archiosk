@@ -93,10 +93,22 @@ def test_real_matching_route_reload_and_superseded_premises(project):
     assert page.status_code == 200 and b'conditional model FIT' in page.data
     assert b'Governed factual fit: <strong>UNRESOLVED' in page.data
     assert store._path_for('project').read_bytes() == original
+    # A deliberate repeat creates a retained execution; presentation alone groups it.
+    assert client.post('/projects/project/attention', data=command).status_code == 303
+    workspace = store.get('project')
+    report = store.project_attention_report(workspace, 'reviewer', attention['id'])
+    groups = [g for g in report['groups'] if g['occurrences'][0]['kind'] == 'analyses']
+    assert len(groups) == 1 and groups[0]['occurrence_count'] == 2
+    assert len(groups[0]['runtime_trace_ids']) == 2
+    retained = copy.deepcopy(workspace.analyses)
     form.update(predecessor_id=claims[1]['id'], value='OTHER_SECTOR', reason='Correct the candidate classification.')
     client.post('/projects/project/attention', data=form)
     page = client.get(response.location)
     assert b'REVIEW_REQUIRED' in page.data
+    report = store.project_attention_report(store.get('project'), 'reviewer', attention['id'])
+    result_groups = [g for g in report['groups'] if g['occurrences'][0]['kind'] == 'analyses']
+    assert all(g['semantic']['consumption_state'] == 'REVIEW_REQUIRED' and g['changed'] for g in result_groups)
+    assert store.get('project').analyses == retained
     assert store.get('project').analyses[-1]['governed_result']['model_label'] == 'FIT'
     client.post('/projects/project/attention', data=command)
     assert store.get('project').analyses[-1]['governed_result']['model_label'] == 'UNRESOLVED'

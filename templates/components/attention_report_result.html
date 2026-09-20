@@ -1,0 +1,21 @@
+{# Render committed result fields only. No predicates, authority or coverage are recomputed here. #}
+{% if result.kind == 'professional_review' %}
+<table><thead><tr><th>Review question</th><th>State</th><th>Finding / next premise</th></tr></thead><tbody>
+{% for key,label in [('resolution','Scale sufficiency'),('expected_next','Expected next'),('root_trace','Root trace / return'),('continuum','Continuum participation')] %}
+<tr><td>{{ label }}</td><td>{{ result[key].state }}</td><td>{{ result[key].reason }} {{ result[key].next_question or '' }}</td></tr>{% endfor %}
+</tbody></table>
+<h4>Section and discipline coverage</h4><table><thead><tr><th>Condition</th><th>Section</th><th>Disciplines</th><th>Physical control</th></tr></thead><tbody>
+{% for condition in result.coverage.conditions %}<tr><td>{{ condition.meaning }}</td><td>{{ condition.section_state }}</td><td>{% for discipline in condition.disciplines %}{{ discipline.discipline }}: {{ discipline.state }}<br>{% else %}UNRESOLVED{% endfor %}</td><td>{{ condition.physical_control.state }}</td></tr>{% else %}<tr><td colspan="4">UNRESOLVED — no scoped condition inventory.</td></tr>{% endfor %}
+</tbody></table>
+{% elif result.kind == 'constraint_review' %}
+<p>Actual project value: UNRESOLVED. EVALUATION_INPUT baseline: {{ result.breakpoint.baseline }} · {{ result.breakpoint.direction }}.</p>
+<p>{{ result.model.reason }} Common admissible interval: {{ result.model.common_interval if result.model.common_interval is not none else 'UNRESOLVED' }}.</p>
+<p>Breakpoint {{ result.breakpoint.state }} · failure point {{ result.breakpoint.failure_point if result.breakpoint.failure_point is not none else 'UNRESOLVED' }} · margin {{ result.breakpoint.margin_to_failure if result.breakpoint.margin_to_failure is not none else 'UNRESOLVED' }}.</p>
+<p>{{ result.breakpoint.reason }}</p>
+{% elif result.kind == 'information_comparison' %}
+<p>{{ result.comparison.reason }} Factual consistency: {{ result.comparison.factual_consistency }}.</p>
+<table><thead><tr><th>Premise</th><th>Subject</th><th>Property</th><th>Value</th></tr></thead><tbody>{% for side in ['left','right'] %}{% set premise = result.comparison[side] %}<tr><td>{{ side|capitalize }}</td><td>{{ presentation_report.subject_labels.get(premise.subject_key, premise.subject_key) }}</td><td>{{ premise.property_key }}</td><td>{{ premise.value }} {{ premise.unit or '' }}</td></tr>{% endfor %}</tbody></table>
+{% elif result.kind == 'role_composition' %}
+<p>{{ result.model.reason }} · {{ result.model.configurations|length }} retained minimum configuration(s) · {{ result.model.missing|length }} missing required roles.</p>
+<table><thead><tr><th>Candidate</th><th>Covered roles</th><th>Exclusions</th></tr></thead><tbody>{% for candidate in result.candidates %}<tr><td>{{ presentation_report.subject_labels.get(candidate.subject, candidate.subject) }}</td><td>{{ candidate.covered_claim_ids|length }}</td><td>{{ candidate.excluded_reasons|join(' ') or 'No recorded exclusion; compatibility remains unresolved.' }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}

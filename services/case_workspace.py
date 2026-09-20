@@ -7496,6 +7496,107 @@ class CaseWorkspaceStore:
         return self._find(workspace.work_products, product['id'])
 
     @observed
+    def project_attention_report(self, workspace, actor, analysis_id):
+        """Observational presentation over existing records; never saves or analyzes."""
+        from services.work_product_export import compress_presentation_records
+        if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
+            raise CaseWorkspaceError('Report requires a fully visible workspace.')
+        attention = self._find(workspace.analyses, analysis_id)
+        if not attention or not attention.get('attention_scope'):
+            return compress_presentation_records([])
+        records = []
+        scope = attention['attention_scope']
+        def add(kind, identifier, semantic, raw, sources=(), traces=(), reasons=(), changed=False):
+            records.append(dict(kind=kind, id=identifier, semantic=semantic, raw=deepcopy(raw),
+                source_ids=list(dict.fromkeys(sources)), runtime_trace_ids=[t for t in dict.fromkeys(traces) if t],
+                reasons=list(dict.fromkeys(str(r) for r in reasons if r)), changed=changed))
+        def admission_semantics(admission):
+            material = deepcopy({k:v for k,v in admission.items() if k not in ('evidence_item_id','source_id')})
+            for anchor in (material.get('currentness') or {}).get('anchors', []):
+                if ((anchor.get('object_type') == 'evidence_item' and anchor.get('object_id') == admission.get('evidence_item_id'))
+                    or (anchor.get('object_type') == 'source' and anchor.get('object_id') == admission.get('source_id'))):
+                    anchor['object_id'] = 'THIS_OCCURRENCE'
+            source = self._find(workspace.sources, admission.get('source_id')) or {}
+            material['source_qualification'] = {k:source.get(k) for k in
+                ('document_authority','document_status','issue_date','revision','authority','currentness','evaluation_only','superseded_by','applicability','removed_at')}
+            return material
+        for row in self.inspect_subject_propositions(workspace, actor, analysis_id):
+            claim, status = row['claim'], row['status']
+            prop = claim['structured_proposition']
+            norm = prop['normalization']
+            material = deepcopy(prop)
+            for key in ('original_quote','evidence_fingerprints','classification_reason'):
+                material.pop(key, None)
+            material['normalization'] = {k:v for k,v in norm.items() if k not in ('premise_ids','basis')}
+            add('claims', claim['id'], dict(subject=norm['subject_key'], proposition=norm['property_key'], scope=norm['scope_key'],
+                value=norm['value'], state=status['status'], authority=row['authority'], temporal_class=prop['temporal_class'],
+                supersession=status['status'], material=material, confidence=claim['confidence_state'], claim_class=claim['claim_class'],
+                source_integrity=row['source_integrity'], admissions=[admission_semantics(a) for a in row['admissions']]), row,
+                sources=[a['source_id'] for a in row['admissions'] if a.get('source_id')], traces=[claim.get('runtime_trace_id')],
+                reasons=['Authority not established', 'Temporal applicability unresolved']
+                    + ([status['status']] if status['status'] in ('superseded','disputed','rejected') else [])
+                    + (['Source premises changed'] if row['source_integrity'] != 'UNCHANGED' else []),
+                changed=bool(row['changes'] or row['predecessor_claim_id'] or status['status'] in ('superseded','disputed','rejected')))
+        for evidence in workspace.evidence_items:
+            source = self._find(workspace.sources, evidence.get('source_id')) or {}
+            admission = self.admit_proposition(workspace, evidence['id'])
+            currentness = deepcopy(admission.get('currentness'))
+            if isinstance(currentness, dict):
+                # An occurrence's own anchor is provenance, not a difference in
+                # currentness. Preserve all other anchors and resolver fields.
+                for anchor in currentness.get('anchors', []):
+                    if anchor.get('object_type') == 'evidence_item' and anchor.get('object_id') == evidence['id']:
+                        anchor['object_id'] = 'THIS_OCCURRENCE'
+            material = {k:v for k,v in evidence.items() if k not in ('id','source_id','created_at','created_by','job_id','runtime_trace_id')}
+            add('evidence_items', evidence['id'], dict(subject=evidence.get('subject_id') or evidence.get('region_id') or 'Unbound source observation',
+                proposition='Source observation', scope=evidence.get('scope') or 'Unresolved applicability', value=evidence.get('content'),
+                state=admission['state'], authority=admission['authority'], material=material,
+                source_qualification={k:source.get(k) for k in ('document_authority','authority','currentness','evaluation_only','superseded_by','applicability')},
+                currentness=currentness, evaluation_only=admission.get('evaluation_only'),
+                attention_category=next((r['category'] for r in scope['entries'] if r['evidence_item_id'] == evidence['id']), 'outside_scope'),
+                noise=evidence.get('content_type') in ('ocr_noise','parsing_noise')),
+                dict(evidence=evidence, source=source, admission=admission,
+                    attention=next((row for row in scope['entries'] if row['evidence_item_id'] == evidence['id']), None)), sources=[source['id']] if source else [],
+                traces=[evidence.get('runtime_trace_id')], reasons=admission.get('errors', []))
+        current_results = {row['run']['id']: row for row in
+            self.inspect_requirement_matches(workspace, actor, analysis_id)
+            + self.inspect_role_compositions(workspace, actor, analysis_id)}
+        for run in workspace.analyses:
+            result = run.get('governed_result') or {}
+            if result.get('attention_analysis_id') != analysis_id:
+                continue
+            value = result.get('model_label') or (result.get('comparison') or result.get('model') or {}).get('state') or result['state']
+            payload = {k:v for k,v in result.items() if k not in ('actor','reason','attention_analysis_id')}
+            reasons = [result.get('qualification')] if result.get('state') in ('UNRESOLVED','PARTIAL','REFUSED','INCOMPARABLE') else []
+            reasons += result.get('uncertainty', [])
+            current_result = current_results.get(run['id'])
+            if current_result and current_result['consumption_state'] == 'REVIEW_REQUIRED':
+                reasons.append('REVIEW_REQUIRED: retained result premises changed; explicit re-evaluation is required.')
+            add('analyses', run['id'], dict(subject=result.get('target_subject') or result.get('subject') or scope['objective'],
+                proposition=result.get('context_label') or (result.get('narrative') or {}).get('professional_lens') or result['kind'].replace('_',' ').title(),
+                scope=scope['objective'], state=result['state'], value=value, payload=payload, result=True,
+                evaluation_only=result.get('evaluation_only'), conditional_state=value,
+                consumption_state=current_result['consumption_state'] if current_result else 'RETAINED_EXECUTION'),
+                current_result or run, run['source_ids'], [run.get('runtime_trace_id')], reasons,
+                changed=bool(current_result and current_result['consumption_state'] == 'REVIEW_REQUIRED'))
+        for product in workspace.work_products:
+            if product.get('artifact_type') in ('professional_review','capital_alignment_brief','alignment_review'):
+                add('work_products', product['id'], dict(subject=product['title'], proposition='Retained presentation', scope=scope['objective'],
+                    state=product['state'], value=product['title'], sections=product['sections']), product)
+        independent_pairs = [(edge['from_id'],edge['to_id']) for edge in workspace.relationships
+            if edge.get('relationship_type') == 'independent_of' and edge.get('from_type') == edge.get('to_type') == 'source'
+            and edge.get('confirmed_by') and not edge.get('provisional') and not edge.get('analytical_scope')
+            and self.resolve_relationship_status(workspace,edge['id'])['status'] == 'confirmed']
+        report = compress_presentation_records(records, independent_pairs)
+        labels = {'participant:'+p['id']: p['name'] for p in workspace.participants}
+        labels.update({'source:'+s['id']: s.get('name') or 'Source' for s in workspace.sources})
+        report['subject_labels'] = labels
+        for group in report['groups']:
+            subject = group['semantic'].get('subject')
+            group['subject_label'] = labels.get(subject, subject) if isinstance(subject, str) else 'Recorded subject'
+        return report
+
+    @observed
     def inspect_kernel_mapping(self, workspace, actor, selection="", *, evaluation_only=False):
         """Read-only vocabulary projection over this owner's records and resolvers.
 

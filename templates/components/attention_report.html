@@ -1,0 +1,49 @@
+<section id="attention-report" aria-label="Governed report">
+<h2>{{ analysis.attention_scope.objective }}</h2>
+<details><summary>Attention · {{ analysis.attention_scope.included_evidence_ids|length }} focused readings</summary>
+{% for category,label in [('included','Focused'),('de_emphasized','De-emphasized'),('relevant_unselected','Relevant but unselected'),('outside_scope','Outside scope')] %}<p>{{ label }}: {{ analysis.attention_scope.entries|selectattr('category','equalto',category)|list|length }}. Individual reasons remain with each occurrence.</p>{% endfor %}
+<p>{{ analysis.attention_scope.uncertainty|join(' ') }}</p></details>
+<p>{{ presentation_report.occurrence_count }} retained occurrences · {{ presentation_report.group_count }} presentation groups. {{ presentation_report.qualification }}</p>
+<nav aria-label="Report filters">{% for key,label in [('all','All'),('material','Material only'),('unresolved','Unresolved'),('conflicts','Conflicts'),('changes','Changes'),('evidence','Evidence'),('technical','Technical')] %}<a href="{{ attention_url }}?analysis={{ analysis.id|urlencode }}&amp;filter={{ key }}{% if selected_proposition %}&amp;claim={{ selected_proposition.id|urlencode }}{% endif %}" {% if report_filter == key %}aria-current="page"{% endif %}>{{ label }}</a> {% endfor %}</nav>
+{% if presentation_report.shared_reasons %}<details><summary>Shared governed qualifications</summary><ul>{% for reason in presentation_report.shared_reasons %}<li>{{ reason }}</li>{% endfor %}</ul><p>These qualifications remain attached to each applicable occurrence in the expandable evidence.</p></details>{% endif %}
+{% macro finding(group) %}
+<article data-report-group="{{ group.id }}" data-importance="{{ group.importance }}" data-occurrence-count="{{ group.occurrence_count }}">
+<h3>{{ group.semantic.proposition }} · {{ group.semantic.state }}</h3>
+<p>{{ group.subject_label }}{% if group.semantic.scope != analysis.attention_scope.objective %} · {{ group.semantic.scope }}{% endif %}</p>
+{% if group.semantic.result %}<p>Conditional model: <strong>{{ group.semantic.value }}</strong> · {{ 'Evidence class' if group.semantic.state == 'EVALUATION_INPUT' else 'Governed factual state' }}: <strong>{{ group.semantic.state }}</strong> · {{ group.semantic.consumption_state }}</p>{% else %}<p>{{ group.semantic.value|string|truncate(300) }}</p>{% endif %}
+{% if group.semantic.payload and group.semantic.payload.model and group.semantic.payload.model.criteria %}
+<table><thead><tr><th>Criterion</th><th>Obligation</th><th>Result</th><th>Reason</th></tr></thead><tbody>
+{% for criterion in group.semantic.payload.model.criteria %}<tr><td>{% set premise = group.semantic.payload.criteria[loop.index0].required if group.semantic.payload.criteria else none %}{{ premise.claim.structured_proposition.normalization.property_key if premise else loop.index }}</td><td>{{ 'Mandatory' if criterion.mandatory else 'Optional' }}</td><td>{{ criterion.comparison.state }}</td><td>{% if criterion.comparison.state != 'MATCH' %}{{ criterion.comparison.reason }}{% else %}<details><summary>Qualification</summary>{{ criterion.comparison.reason }}</details>{% endif %}</td></tr>{% endfor %}
+</tbody></table>{% endif %}
+{% if group.semantic.payload %}{% set result = group.semantic.payload %}{% include 'components/attention_report_result.html' %}{% endif %}
+{% if group.occurrences[0].kind == 'work_products' %}{% set product = group.occurrences[0].raw %}<p><a href="{{ url_for('portal.evaluation_narrative_export', run_id=evaluation_run_id, work_product_id=product.id) if evaluation_only else url_for('workspace.export_work_product_route', project_id=workspace.project_id, work_product_id=product.id, export_format='docx') }}">Download retained presentation · {{ product.state }}</a></p>{% endif %}
+{% if group.conflict %}<p><strong>{{ 'Different recorded values — inspect qualification and history' if group.value_disagreement else 'Conflicting or failed criterion — review required' }}</strong></p>{% endif %}
+{% if group.recorded_conflicts %}<p><strong>{{ group.recorded_conflicts|join(' · ') }}</strong></p>{% endif %}
+<p>{{ group.classification }} · {{ group.occurrence_count }} occurrence{{ 's' if group.occurrence_count != 1 else '' }}{% if group.independent_source_count %} · Corroborated by {{ group.independent_source_count }} independent sources{% elif group.source_count > 1 %} · {{ group.source_count }} source references; independence not established{% endif %}</p>
+{% if group.reasons %}<ul>{% for reason in group.reasons if reason not in presentation_report.shared_reasons or group.conflict %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+<details><summary>Show evidence and provenance ({{ group.occurrence_count }} retained occurrences)</summary>
+{% for source_id in group.source_ids %}<p><a href="{{ mapping_url }}?item=sources:{{ source_id|urlencode }}">Open source {{ loop.index }}</a></p>{% endfor %}
+{% for occurrence in group.occurrences %}<details><summary>Occurrence {{ loop.index }} · {{ occurrence.kind }}{% if occurrence.changed %} · recorded change{% endif %}</summary>
+{% if occurrence.kind in ('claims','evidence_items') %}<a href="{{ mapping_url }}?item={{ occurrence.kind }}:{{ occurrence.id|urlencode }}">Open original record</a>{% endif %}
+{% if occurrence.kind == 'claims' %}<p>{{ occurrence.raw.claim.structured_proposition.original_quote }}</p>{% elif occurrence.kind == 'evidence_items' %}<p>{{ occurrence.raw.evidence.content }}</p>{% endif %}
+<details><summary>Technical details — complete original record</summary><pre>{{ occurrence|tojson(indent=2) }}</pre></details></details>{% endfor %}</details>
+<details><summary>Technical details — traces and grouping</summary>{% for trace in group.runtime_trace_ids %}<p><a href="{{ url_for('portal.survey_evaluation', observation=trace) }}#muscle-inspector">Runtime trace {{ loop.index }}</a></p>{% endfor %}<pre>{{ group.semantic|tojson(indent=2) }}</pre></details>
+</article>
+{% endmacro %}
+{% for section,title in [('matters','What matters'),('changes','What changed'),('unresolved','What remains unresolved'),('evidence','Supporting evidence'),('technical','Technical details')] %}
+{% if report_filter == 'all' or (report_filter == 'material' and section == 'matters') or (report_filter == 'conflicts' and section == 'matters') or report_filter == section %}
+{% if section in ('evidence','technical') %}<details {% if report_filter == section %}open{% endif %}><summary>{{ title }}</summary>{% else %}<section><h2>{{ title }}</h2>{% endif %}
+{% if section == 'changes' %}<p>Recorded corrections, disputes and supersessions. No previous-view baseline is inferred from timestamps.</p>{% endif %}
+{% for group in presentation_report.groups %}
+{% if (report_filter == 'all' and group.section == section) or
+      (report_filter == 'material' and group.importance in ('MATERIAL','CRITICAL')) or
+      (report_filter == 'conflicts' and group.conflict) or
+      (report_filter == 'changes' and group.changed) or
+      (report_filter == 'unresolved' and group.unresolved) or
+      (report_filter == 'evidence' and group.source_ids) or
+      (report_filter == 'technical') %}
+{{ finding(group) }}
+{% endif %}{% endfor %}
+{% if section in ('evidence','technical') %}</details>{% else %}</section>{% endif %}
+{% endif %}{% endfor %}
+</section>

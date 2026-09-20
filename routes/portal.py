@@ -4499,6 +4499,10 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     selected_proposition = next((row['claim'] for row in propositions if row['claim']['id'] == request.args.get('claim')), None)
     if request.args.get('claim') and not selected_proposition:
         abort(404)
+    presentation_report = store.project_attention_report(workspace, actor, analysis['id']) if analysis else None
+    event('components/attention_report.html', 'CONSUMED',
+          occurrence_count=presentation_report['occurrence_count'] if presentation_report else 0,
+          group_count=presentation_report['group_count'] if presentation_report else 0)
     event('go_attention.html', 'CONSUMED', analysis_id=analysis['id'] if analysis else None,
           state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
@@ -4509,6 +4513,8 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         constraint_reviews=[r for r in reviews if r['governed_result']['kind'] == 'constraint_review'],
         information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
         subject_propositions=propositions, selected_proposition=selected_proposition,
+        presentation_report=presentation_report,
+        report_filter=request.args.get('filter', 'all') if request.args.get('filter', 'all') in ('all','material','unresolved','conflicts','changes','evidence','technical') else 'all',
         requirement_matches=store.inspect_requirement_matches(workspace, actor, analysis['id']) if analysis else [],
         role_compositions=store.inspect_role_compositions(workspace, actor, analysis['id']) if analysis else [],
         matching_contexts=MATCHING_CONTEXTS, declared_temporal_classes=DECLARED_CURRENT_TEMPORAL_CLASSES,

@@ -1,5 +1,12 @@
 # MANIFEST
 
+Governed report compression projects existing evidence, propositions, analyses
+and retained presentations into a result-first notebook. Material distinctions
+remain separate, conflicts remain prominent, and every occurrence/source/trace
+remains expandable. Filters and Reload are read-only; shared qualifications and
+corroboration counts cannot strengthen authority. See
+`governance/current/governed-report-compression.md`.
+
 Role composition consumes retained matching runs through the existing bounded
 coverage solver. It exposes distinct role contributions, overlaps, missing roles
 and mandatory exclusions without ranking entities or summing capital. The shared
