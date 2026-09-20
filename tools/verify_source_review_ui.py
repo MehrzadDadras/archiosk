@@ -229,7 +229,7 @@ def main():
                     report = page.locator('#attention-report')
                     assert report.is_visible() and report.locator('pre:visible').count() == 0
                     assert 'Governed factual status: UNRESOLVED' in report.inner_text()
-                    assert 'Lifecycle: SUSPENDED' in report.inner_text()
+                    assert 'Lifecycle: UNRESOLVED' in report.inner_text()
                     reveal_investigation()
                     if name == 'unverified-signing':
                         interpretations = [json.loads(value) for value in page.locator('#transaction-review pre').all_text_contents()]
@@ -450,6 +450,25 @@ def main():
             import docx
             report_text='\n'.join(p.text for p in docx.Document(report_path).paragraphs)
             assert 'INSUFFICIENT_SCALE' in report_text and 'DISCIPLINE_COVERAGE_GAP' in report_text
+            proof['retained_presentation_formats'] = []
+            for extension, label in [('pdf', 'PDF'), ('pptx', 'PowerPoint'), ('html', 'Web report')]:
+                with page.expect_download() as format_download:
+                    click_and_reveal(page.get_by_role('link', name='Download ' + label, exact=True).filter(visible=True).first)
+                artifact_path = output / ('professional-review.' + extension)
+                format_download.value.save_as(str(artifact_path))
+                if extension == 'pdf':
+                    import fitz
+                    with fitz.open(artifact_path) as artifact:
+                        rendered = '\n'.join(p.get_text() for p in artifact)
+                elif extension == 'pptx':
+                    from pptx import Presentation
+                    rendered = '\n'.join(shape.text for slide in Presentation(artifact_path).slides
+                        for shape in slide.shapes if shape.has_text_frame)
+                else:
+                    rendered = artifact_path.read_text(encoding='utf-8')
+                assert 'INSUFFICIENT_SCALE' in rendered and 'DISCIPLINE_COVERAGE_GAP' in rendered
+                assert 'EVALUATION_INPUT' in rendered or 'Evaluation Only: True' in rendered
+                proof['retained_presentation_formats'].append(dict(format=extension, real_download=True, unresolved_preserved=True))
             proof['professional_review_coverage_and_retained_report_invoked_through_ui']=True
             form=action_form('constraint_review')
             form.locator('input[name="subject"]').fill('EVALUATION_INPUT opening')
@@ -623,6 +642,40 @@ def main():
                 matching.scroll_into_view_if_needed()
                 page.screenshot(path=str(output/'requirement-matching.png'),full_page=True)
                 proof['requirement_matching_conditional_fit_and_read_only_reload']=True
+                click_and_reveal(page.get_by_text('Record a sourced proposition', exact=True))
+                form=action_form('subject_proposition')
+                form.locator('select[name="subject_key"]').select_option(subject)
+                form.locator('input[name="property_key"]').fill('complete_requirement_inventory')
+                form.locator('input[name="scope_key"]').fill('evaluation-source-classification')
+                form.locator('select[name="kind"]').select_option('TOKEN_SET')
+                form.locator('input[name="value"]').fill(matching_claims[0])
+                form.locator('input[name="vocabulary"]').fill('requirement_claims')
+                form.locator('input[name="qualifiers"]').fill('[]')
+                form.locator('select[name="view_basis"]').select_option('VIEW_INVARIANT')
+                form.locator('select[name="evidence_id"]').select_option(evidence_id)
+                form.locator('textarea[name="original_quote"]').fill(source_quote)
+                form.locator('select[name="source_class"]').select_option('PROJECT_DOCUMENT')
+                form.locator('select[name="temporal_class"]').select_option('DATED_REQUIREMENT')
+                form.locator('input[name="as_of"]').fill('2026-01-01')
+                form.locator('input[name="valid_until"]').fill('2027-01-01')
+                form.locator('textarea[name="reason"]').fill('EVALUATION_INPUT inventory proposal; no complete governing scope is established.')
+                form.locator('input[name="attribution"][value="agent_assessment"]').check()
+                click_and_reveal(form.locator('button'))
+                inventory=page.locator('[data-proposition-id]').last.get_attribute('data-proposition-id')
+                form=action_form('requirement_matching')
+                form.locator('select[name="context_key"]').select_option('investment')
+                form.locator('select[name="target_subject"]').select_option(subject)
+                form.locator('input[name="query_date"]').fill('2026-09-20')
+                form.locator('select[name="criterion_0_required"]').select_option(matching_claims[0])
+                form.locator('select[name="criterion_0_candidate"]').select_option(matching_claims[1])
+                form.locator('select[name="criterion_0_operator"]').select_option('CONTAINS_ALL')
+                click_and_reveal(form.get_by_text('Reviewed factual scope', exact=True))
+                form.locator('select[name="inventory_claim_id"]').select_option(inventory)
+                form.locator('input[name="reason"]').fill('Exercise scoped admission; hypothetical inventory must remain unresolved.')
+                click_and_reveal(form.get_by_role('button', name='Run requirement matching', exact=True))
+                assert 'Complete requirement inventory authority or applicability is not established.' in page.locator('body').inner_text()
+                assert 'Reviewed inventory result: UNRESOLVED' in matching.inner_text()
+                proof['reviewed_scope_form_invoked_without_fabricated_authority']=True
                 click_and_reveal(page.get_by_text('Add a subject reference', exact=True))
                 form=action_form('record_subject')
                 form.locator('input[name="subject_name"]').fill('EVALUATION debt participant')

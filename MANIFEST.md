@@ -663,6 +663,19 @@ modules qualify source lineage, identity, history, lifecycle and actual routes.
 invocation. No transaction database, graph, independent report interpreter or
 automatic canonical promotion is introduced.
 
+Retained narrative exports extend `services/work_product_export.py` with PDF
+(existing `document_export` paginator), PowerPoint and standalone HTML alongside
+Word/Excel. `components/presentation_downloads.html` exposes the same governed
+WorkProduct through existing authorized routes. `test_retained_presentation_formats`
+checks qualification, source references, pagination, escaping and actual export
+records. `python-pptx` is a pinned local renderer; it is not an analysis service.
+
+`test_reviewed_requirement_matching` qualifies the existing matcher receiving
+scoped, reviewed inventory/policy/candidate Claims. The source policy, not the
+comparison form, determines factual obligation, operator and temporal meaning.
+The same Finding review and Apply owners admit these Claims. Conditional and
+factual results remain separate; omitted scope and later changes remain visible.
+
 **Document ingestion (API):**
 `POST /api/v1/documents/ingest` (`routes/api.py`) → `services.ingestion.ingest_upload` → `services.bhive_parser.BHiveParser.parse` → `services.requirements_registry.RequirementsRegistry.save` → JSON response.
 

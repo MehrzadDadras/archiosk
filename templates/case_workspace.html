@@ -1584,6 +1584,7 @@
         <p style="margin-top:0.6rem;">
             <a class="btn btn-ghost" href="{{ url_for('workspace.export_work_product_route', project_id=project_id, work_product_id=selected_work_product.id, export_format='docx') }}">Download .docx</a>
             <a class="btn btn-ghost" href="{{ url_for('workspace.export_work_product_route', project_id=project_id, work_product_id=selected_work_product.id, export_format='xlsx') }}">Download .xlsx</a>
+            {% with product=selected_work_product %}{% include 'components/presentation_downloads.html' %}{% endwith %}
         </p>
         {% if selected_work_product.exports %}
         <p class="pane-note">Exported {{ selected_work_product.exports|length }} time(s); latest: {{ selected_work_product.exports[-1].format }} at {{ selected_work_product.exports[-1].exported_at }}.</p>

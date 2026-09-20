@@ -59,6 +59,130 @@ class WorkProductExportError(Exception):
     """Raised when a work product cannot be exported as requested."""
 
 
+PRESENTATION_MIMETYPES = {
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'pdf': 'application/pdf',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'html': 'text/html',
+}
+
+
+def _retained_presentation_blocks(work_product):
+    """Rendering projection only: no model, inference, filtering or state change."""
+    def text(value):
+        return json.dumps(value, ensure_ascii=False, indent=2) if isinstance(value, (dict, list)) else str(value)
+    blocks = [dict(heading='Retained governed review', lines=[work_product['title'], _status_banner(work_product),
+        'This presentation renders a retained result. It does not re-evaluate current evidence.',
+        'Project: ' + work_product['project_id'], 'Author: ' + work_product['created_by']], evidence=[], technical=[])]
+    for section in _active_sections(work_product):
+        lines, technical = ['Source class: ' + section['content_class']], []
+        for key, value in section['content'].items():
+            rendered = text(value) if key == 'text' else key.replace('_', ' ').title() + ': ' + text(value)
+            if isinstance(value, (dict, list)) or key.endswith('_id'):
+                technical.append(rendered)
+                # Surface recorded result fields only; no new decision or prose.
+                if isinstance(value, dict):
+                    lines.extend(key.replace('_', ' ').title() + ' / ' + field.replace('_', ' ') + ': ' + text(value[field])
+                        for field in ('state', 'governed_state', 'factual_state', 'model_label', 'qualification', 'reason')
+                        if field in value)
+            else:
+                lines.append(rendered)
+        blocks.append(dict(heading=section['section_type'].replace('_', ' ').title(), lines=lines,
+            evidence=[link['object_type'] + ': ' + link['object_id'] for link in section['evidence_links']], technical=technical))
+    return blocks
+
+
+def build_work_product_pdf(work_product):
+    from html import escape
+    from services.document_export import ExportDocument, build_pdf
+    # Paragraph flow uses the existing paginator; it never clips long sections
+    # into a single fixed-height table row. Markup in source text stays text.
+    paragraphs = []
+    for block in _retained_presentation_blocks(work_product):
+        paragraphs.append(escape(block['heading']))
+        for text in block['lines']:
+            paragraphs.extend(escape(line) for line in text.splitlines() or [''])
+    for block in _retained_presentation_blocks(work_product):
+        paragraphs.append(escape('Evidence and technical detail / ' + block['heading']))
+        for text in block['technical'] + ['Evidence reference: ' + ref for ref in block['evidence']]:
+            paragraphs.extend(escape(line) for line in text.splitlines() or [''])
+    try:
+        ('\n'.join(paragraphs) + work_product['title']).encode('cp1252')
+    except UnicodeEncodeError:
+        raise WorkProductExportError('The current PDF font cannot preserve these characters. Use the Web report, Word or PowerPoint export.') from None
+    return build_pdf(ExportDocument(title=escape(work_product['title']), preamble=paragraphs))
+
+
+def build_work_product_pptx(work_product):
+    import unicodedata
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    presentation = Presentation()
+    presentation.slide_width, presentation.slide_height = Inches(13.333), Inches(7.5)
+    blocks = _retained_presentation_blocks(work_product)
+    pages = blocks + [dict(heading='Evidence and technical detail / ' + block['heading'],
+        lines=block['technical'], evidence=block['evidence']) for block in blocks if block['technical'] or block['evidence']]
+    for block in pages:
+        lines = []
+        texts = [block['heading'], *block['lines']]
+        if block not in blocks:
+            texts += ['Evidence reference: ' + ref for ref in block['evidence']]
+        for text in texts:
+            for line in text.splitlines() or ['']:
+                visual, width = '', 0
+                for character in line.expandtabs(4):
+                    cells = 0 if unicodedata.combining(character) else 2 if unicodedata.east_asian_width(character) in ('W', 'F') else 1
+                    if width + cells > 86:
+                        lines.append(visual)
+                        visual, width = '', 0
+                    visual += character
+                    width += cells
+                lines.append(visual)
+        # Continue onto another slide rather than dropping overflow or shrinking
+        # evidence into unreadable text. The complete text is also in notes.
+        for offset in range(0, len(lines), 14):
+            slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+            title = slide.shapes.add_textbox(Inches(.5), Inches(.3), Inches(12.3), Inches(.7))
+            title.text = 'Governed review' + (' — continued' if offset else '')
+            title.text_frame.paragraphs[0].font.size = Pt(26)
+            box = slide.shapes.add_textbox(Inches(.5), Inches(1.15), Inches(12.3), Inches(5.8))
+            frame = box.text_frame
+            frame.word_wrap = False
+            for index, line in enumerate(lines[offset:offset+14]):
+                paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+                paragraph.text = line
+                paragraph.font.name = 'Courier New'
+                paragraph.font.size = Pt(16)
+                paragraph.space_after = Pt(4)
+            footer = slide.shapes.add_textbox(Inches(.5), Inches(7), Inches(12.3), Inches(.3))
+            footer.text = 'Retained result · ' + work_product['state'] + ' · Slide ' + str(len(presentation.slides))
+            footer.text_frame.paragraphs[0].font.size = Pt(10)
+            slide.notes_slide.notes_text_frame.text = '\n'.join([block['heading'], *block['lines'], *block['evidence']])
+    output = io.BytesIO()
+    presentation.save(output)
+    output.seek(0)
+    return output
+
+
+def build_work_product_html(work_product):
+    from html import escape
+    blocks = _retained_presentation_blocks(work_product)
+    markup = ['<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">',
+        '<title>' + escape(work_product['title']) + '</title>',
+        '<style>body{max-width:65rem;margin:2rem auto;padding:1rem;font:18px/1.6 system-ui}pre{white-space:pre-wrap;overflow-wrap:anywhere}section{border-top:1px solid #bbb}summary{cursor:pointer}</style><main>']
+    for block in blocks:
+        markup.append('<section><h2>' + escape(block['heading']) + '</h2>')
+        markup.extend('<pre>' + escape(line) + '</pre>' for line in block['lines'])
+        if block['evidence']:
+            markup.append('<details><summary>Evidence references</summary><pre>' + escape('\n'.join(block['evidence'])) + '</pre></details>')
+        if block['technical']:
+            markup.append('<details><summary>Supporting evidence and technical details</summary><pre>' + escape('\n'.join(block['technical'])) + '</pre></details>')
+        markup.append('</section>')
+    markup.append('</main></html>')
+    return io.BytesIO('\n'.join(markup).encode('utf-8'))
+
+
 @observed
 def compress_presentation_records(records, independent_pairs=()):
     """Lossless occurrence projection. Semantic identity never uses similarity.
@@ -150,9 +274,15 @@ def _active_sections(work_product: dict) -> list[dict]:
 
 def _status_banner(work_product: dict) -> str:
     state = work_product["state"]
+    observed = work_product.get('_presentation_status') or {}
+    warning = ''
+    if observed.get('work_product', {}).get('status') == 'superseded':
+        warning += ' | SUPERSEDED: retained historical version'
+    if observed.get('evidence', {}).get('has_stale_or_broken_evidence'):
+        warning += ' | REVIEW REQUIRED: stale or unavailable cited evidence; prior content retained'
     if state == "issued":
-        return f"ISSUED — v{work_product['version']} — {work_product.get('issued_at')} by {work_product.get('issued_by')}"
-    return f"DRAFT (v{work_product['version']}, state={state}) — not yet issued; for internal review only"
+        return f"ISSUED — v{work_product['version']} — {work_product.get('issued_at')} by {work_product.get('issued_by')}" + warning
+    return f"DRAFT (v{work_product['version']}, state={state}) — not yet issued; for internal review only" + warning
 
 
 def build_work_product_docx(work_product: dict, sensitivity_note: str | None = None) -> io.BytesIO:
@@ -265,18 +395,25 @@ def build_work_product_xlsx(work_product: dict) -> io.BytesIO:
 
 
 @observed
-def export_work_product(work_product: dict, export_format: str) -> tuple[io.BytesIO, str]:
+def export_work_product(work_product: dict, export_format: str, *, status=None) -> tuple[io.BytesIO, str]:
     """Dispatches to the correct renderer by format, then computes the
     SHA-256 checksum of the actual exported bytes (Section 19's own
     required export-record field) - the checksum is of what was really
     produced, never a value derived independently that could drift from
     the file a caller actually receives."""
+    work_product = dict(work_product, _presentation_status=copy.deepcopy(status))
     if export_format == "docx":
         buffer = build_work_product_docx(work_product)
     elif export_format == "xlsx":
         buffer = build_work_product_xlsx(work_product)
+    elif export_format == 'pdf':
+        buffer = build_work_product_pdf(work_product)
+    elif export_format == 'pptx':
+        buffer = build_work_product_pptx(work_product)
+    elif export_format == 'html':
+        buffer = build_work_product_html(work_product)
     else:
-        raise WorkProductExportError(f"Unsupported export format: '{export_format}'. Use 'docx' or 'xlsx'.")
+        raise WorkProductExportError(f"Unsupported export format: '{export_format}'. Use docx, xlsx, pdf, pptx or html.")
 
     checksum = hashlib.sha256(buffer.getvalue()).hexdigest()
     buffer.seek(0)

@@ -5,8 +5,8 @@
 {% for claim in transaction_claims %}<article><h3>{{ claim.event_proposition.data.event_dimension or 'Identity' }} · {{ claim.event_proposition.data.identity.transaction_reference }}</h3>
 <p>{{ claim.statement }} · {{ claim.adoption_state }}</p>
 {% if claim.finding_id %}{% set finding = workspace.findings|selectattr('id','equalto',claim.finding_id)|first %}<a href="{{ url_for('workspace.show_workspace', project_id=workspace.project_id, case=finding.case_id) }}">Open the workspace to review this Finding, set its disposition and explicitly Apply</a>
-{% elif not expired and workspace.cases %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="adopt_transaction_finding"><input type="hidden" name="analysis_id" value="{{ analysis.id }}"><input type="hidden" name="claim_id" value="{{ claim.id }}">
-<label>Review case <select name="case_id">{% for case in workspace.cases if not case.archived_at %}<option value="{{ case.id }}">{{ case.title }}</option>{% endfor %}</select></label>
+{% elif not expired and review_cases %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="adopt_transaction_finding"><input type="hidden" name="analysis_id" value="{{ analysis.id }}"><input type="hidden" name="claim_id" value="{{ claim.id }}">
+<label>Review case <select name="case_id">{% for case in review_cases if not case.archived_at %}<option value="{{ case.id }}">{{ case.title }}</option>{% endfor %}</select></label>
 <label>Reason <input name="reason" required maxlength="2000"></label>
 <label><input type="checkbox" name="attribution" value="human_reviewed" required>I choose to submit this interpretation as a Finding for review.</label>
 <button>Submit for existing Finding review</button></form>{% endif %}

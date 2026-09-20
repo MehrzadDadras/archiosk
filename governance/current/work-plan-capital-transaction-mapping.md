@@ -71,3 +71,22 @@ Qualification includes `test_transaction_propositions`,
 Local browser proof is not authenticated production proof. Component configuration
 amendments and the remaining programme work must be qualified before claiming
 complete master-directive coverage.
+
+Presentation formats are EXTEND_EXISTING: WorkProduct sections and their cited
+evidence remain the content owner. PDF reuses document_export; PowerPoint and
+standalone web output extend work_product_export. No new durable abstraction or
+generated narrative is introduced. Export preserves draft state, qualifications,
+complete retained content and citation identifiers. Format conversion cannot
+assert currentness or replace explicit re-evaluation of changed premises.
+
+Verified requirement scope is EXTEND_EXISTING: a source-anchored, reviewed
+structured Claim may declare a `complete_requirement_inventory` (TOKEN_SET,
+vocabulary `requirement_claims`, values are the explicitly bound requirement
+Claim identities). Separate `requirement_policy` Claims use vocabulary
+`requirement:<claim-id>` and identify obligation and comparison operator.
+These remain ordinary Claims with original source quotes and the existing
+scoped ReviewerValidation / Disposition / Apply chain. A form checkbox is not
+the governing policy. Missing inventory, ambiguous policy, unknown mandatory
+premises or unreviewed candidate facts cannot earn factual fit. Inventory
+requirements outside attention remain visible dependencies. The same normalized
+comparison owner handles conditional and admitted inputs; no second matcher.

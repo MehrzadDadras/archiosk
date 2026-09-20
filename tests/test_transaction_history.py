@@ -46,6 +46,25 @@ def test_signing_is_not_execution_or_close_and_reload_does_not_persist(project):
     assert store._path_for(workspace.project_id).read_bytes() == before
 
 
+def test_unverified_events_do_not_imply_previously_established_maturity(project):
+    _, _, _, _, append, inspect = history(project)
+    append('SIGNED', reviewed=False)
+    result = inspect()
+    assert result['maturity_state'] is None
+    assert result['lifecycle_status'] == 'UNRESOLVED'
+    assert result['events']['SIGNED']['state'] == 'UNRESOLVED'
+    assert not result['transitions']
+
+
+def test_suspension_assertion_does_not_invent_prior_maturity(project):
+    _, _, _, _, append, inspect = history(project)
+    append('SUSPENSION', occurred_at='2024-03-01')
+    result = inspect()
+    assert result['maturity_state'] is None
+    assert result['lifecycle_status'] == 'UNRESOLVED'
+    assert any(row.get('reason') == 'PRIOR_MATURITY_NOT_ESTABLISHED' for row in result['unresolved'])
+
+
 def test_missing_current_interval_does_not_erase_scoped_historical_signing(project):
     _, _, _, _, append, inspect = history(project)
     append('SIGNED', effective_until=None)

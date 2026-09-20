@@ -6982,6 +6982,61 @@ class CaseWorkspaceStore:
             return value.replace('\r\n', '\n').replace('\r', '\n')
         return line_endings(quote) in line_endings(source_text)
 
+    def _claim_citation_ancestry(self, workspace, evidence_links):
+        """Inspect declared Claim citations, not graph proximity or new authority.
+
+        Untyped Claims cannot strip evaluation qualification from their sources.
+        Bound traversal and fail closed for broken or cyclic citation chains.
+        """
+        claims, evidence_ids, visiting, anchors = {}, set(), set(), {}
+        evaluation_only = False
+
+        def visit(links, depth):
+            nonlocal evaluation_only
+            if depth > 32 or len(claims) + len(evidence_ids) + len(anchors) > 256:
+                raise CaseWorkspaceError('Narrow the proposition citation ancestry before review.')
+            for link in links:
+                kind, identifier = link['object_type'], link['object_id']
+                if kind == 'evidence_item':
+                    if not self.get_evidence_item(workspace, identifier):
+                        raise CaseWorkspaceError('A proposition ancestor observation is unavailable.')
+                    evidence_ids.add(identifier)
+                    evaluation_only |= self.admit_proposition(workspace, identifier).get('evaluation_only', False)
+                elif kind == 'claim':
+                    if identifier in visiting:
+                        raise CaseWorkspaceError('Cyclic proposition citation ancestry requires review.')
+                    if identifier in claims:
+                        continue
+                    parent = self.get_claim(workspace, identifier)
+                    if not parent or parent.get('project_id') != workspace.project_id:
+                        raise CaseWorkspaceError('A proposition ancestor Claim is unavailable.')
+                    claims[identifier] = hashlib.sha256(json.dumps(parent, sort_keys=True, allow_nan=False).encode()).hexdigest()
+                    payload = parent.get('event_proposition') or parent.get('structured_proposition') or {}
+                    evaluation_only |= bool(payload.get('evaluation_only'))
+                    step = self._find(workspace.investigation_steps, parent.get('investigation_step_id')) or {}
+                    origin = self._find(workspace.analyses, step.get('analysis_id')) or {}
+                    evaluation_only |= bool((origin.get('attention_scope') or {}).get('evaluation_only')
+                                            or (origin.get('governed_result') or {}).get('evaluation_only'))
+                    visiting.add(identifier)
+                    visit(parent.get('evidence_links', []), depth + 1)
+                    visiting.remove(identifier)
+                elif kind in ('source', 'addressable_region'):
+                    endpoint = self._resolve_mm6_endpoint(workspace, kind, identifier)
+                    if not endpoint:
+                        raise CaseWorkspaceError('A proposition ancestor source anchor is unavailable.')
+                    source = endpoint if kind == 'source' else self._find(workspace.sources, endpoint.get('source_id')) or {}
+                    if not source or source.get('removed_at'):
+                        raise CaseWorkspaceError('A proposition ancestor source is unavailable.')
+                    anchors[kind + ':' + identifier] = dict(source_id=source['id'], source_file_hash=source.get('file_hash'),
+                        anchor_sha256=hashlib.sha256(json.dumps(endpoint, sort_keys=True, allow_nan=False).encode()).hexdigest())
+                    evaluation_only |= bool(source.get('evaluation_only'))
+
+        visit(evidence_links, 0)
+        if len(claims) + len(evidence_ids) + len(anchors) > 256:
+            raise CaseWorkspaceError('Narrow the proposition citation ancestry before review.')
+        return dict(evaluation_only=bool(evaluation_only), evidence_ids=sorted(evidence_ids),
+                    claim_fingerprints=claims, source_anchors=anchors)
+
     def _validate_event_proposition(self, workspace, proposition, evidence_links):
         """Validate citations and typed source assertions, never transaction truth."""
         from services.cross_modal_investigation import validate_transaction_event_data, PROPOSITION_SOURCE_CLASSES
@@ -7015,6 +7070,8 @@ class CaseWorkspaceStore:
         cited_claims = {link['object_id'] for link in evidence_links if link['object_type'] == 'claim'}
         if not set(references).issubset(cited_claims):
             raise CaseWorkspaceError('Every event dependency must remain an explicit Claim citation.')
+        if self._claim_citation_ancestry(workspace, evidence_links)['evaluation_only'] and not proposition['evaluation_only']:
+            raise CaseWorkspaceError('Evaluation ancestry cannot be removed from an event.')
         for identifier in references:
             claim = self.get_claim(workspace, identifier)
             if not claim or claim.get('project_id') != workspace.project_id:
@@ -7081,6 +7138,7 @@ class CaseWorkspaceStore:
         for identifier in references:
             parent = self.get_claim(workspace, identifier) or {}
             evaluation_only |= bool((parent.get('event_proposition') or parent.get('structured_proposition') or {}).get('evaluation_only'))
+        evaluation_only |= self._claim_citation_ancestry(workspace, links)['evaluation_only']
         proposition = dict(data=deepcopy(data), evidence_tier=evidence_tier, source_class=source_class,
             original_quote=original_quote, classification_reason=reason,
             evidence_fingerprints=fingerprints, evaluation_only=bool(evaluation_only))
@@ -7148,9 +7206,88 @@ class CaseWorkspaceStore:
                 qualification='Source and temporal labels are proposed classifications. Adoption does not authenticate a source or establish a current mandate.'))
         return rows
 
+    def _reviewed_matching_scope(self, workspace, criteria, inventory_claim_id, query_date):
+        """Admit sourced inventory/policies, then reuse the one criteria matcher."""
+        from services.cross_modal_investigation import match_normalized_criteria, inspect_declared_temporal_scope, DECLARED_CURRENT_TEMPORAL_CLASSES
+        result = dict(state='UNRESOLVED', reasons=[], admissions={}, model=None,
+            inventory_claim_id=inventory_claim_id, used_policy_claim_ids=[], scope_crossing_dependencies=[])
+        if not inventory_claim_id or not query_date:
+            result['reasons'].append('A reviewed complete requirement inventory and analysis date are required for factual fit.')
+            return result
+        inventory = self.get_claim(workspace, inventory_claim_id)
+        norm = ((inventory or {}).get('structured_proposition') or {}).get('normalization') or {}
+        if (norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'complete_requirement_inventory'
+                or norm.get('vocabulary') != 'requirement_claims' or not norm.get('value')
+                or len(norm['value']) > 16 or len(set(norm['value'])) != len(norm['value'])):
+            result['reasons'].append('The selected Claim does not establish a bounded complete requirement inventory.')
+            return result
+
+        def admitted(claim):
+            if not claim:
+                return False
+            admission = self.admit_reviewed_proposition(workspace, claim['id'], query_date=query_date)
+            result['admissions'][claim['id']] = admission
+            temporal = inspect_declared_temporal_scope(claim.get('structured_proposition') or {}, query_date)
+            return (admission['admissible'] and (admission.get('evidence_tier') or 0) >= 2
+                    and temporal['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY')
+
+        if not admitted(inventory):
+            result['reasons'].append('Complete requirement inventory authority or applicability is not established.')
+            return result
+        for claim in workspace.claims:
+            other = (claim.get('structured_proposition') or {}).get('normalization') or {}
+            if (claim['id'] != inventory_claim_id and other.get('property_key') == 'complete_requirement_inventory'
+                    and other.get('subject_key') == norm['subject_key'] and other.get('scope_key') == norm['scope_key']
+                    and admitted(claim) and set(other.get('value') or []) != set(norm['value'])):
+                result['reasons'].append('CONFLICTING_EVIDENCE: another applicable reviewed inventory identifies different requirements.')
+                return result
+        selected = {row['required_claim_id']:row for row in criteria}
+        factual = []
+        for identifier in norm['value']:
+            required = self.get_claim(workspace, identifier)
+            required_norm = ((required or {}).get('structured_proposition') or {}).get('normalization') or {}
+            chosen = selected.get(identifier)
+            if not chosen:
+                result['scope_crossing_dependencies'].append(dict(kind='SCOPE_CROSSING_DEPENDENCY', claim_id=identifier,
+                    reason='A governing inventory requirement is outside the selected comparison.'))
+            policies = []
+            for claim in workspace.claims:
+                policy_norm = (claim.get('structured_proposition') or {}).get('normalization') or {}
+                if (policy_norm.get('kind') == 'TOKEN_SET' and policy_norm.get('property_key') == 'requirement_policy'
+                        and policy_norm.get('vocabulary') == 'requirement:' + identifier
+                        and policy_norm.get('subject_key') == norm['subject_key'] and policy_norm.get('scope_key') == norm['scope_key']
+                        and admitted(claim)):
+                    policies.append(claim)
+            policy_values = {tuple(sorted(claim['structured_proposition']['normalization']['value'])) for claim in policies}
+            result['used_policy_claim_ids'].extend(claim['id'] for claim in policies)
+            policy = set(next(iter(policy_values))) if len(policy_values) == 1 else set()
+            obligations = policy & {'MANDATORY','OPTIONAL','PREFERRED','COMPOSITIONAL','HARD_EXCLUSION'}
+            operators = policy & {'EQUAL','AT_LEAST','AT_MOST','CONTAINS_ALL','CONTAINS_ANY','EXCLUDES_ALL'}
+            temporal_classes = policy & set(DECLARED_CURRENT_TEMPORAL_CLASSES)
+            valid_policy = len(obligations) == 1 and len(operators) == 1 and len(temporal_classes) == 1 and policy == obligations | operators | temporal_classes
+            blocked = []
+            if not valid_policy:
+                blocked.append('The sourced obligation and comparison policy are missing or ambiguous.')
+            if (required_norm.get('subject_key') != norm['subject_key'] or required_norm.get('scope_key') != norm['scope_key']
+                    or not admitted(required)):
+                blocked.append('The requirement identity, scope or authority is unresolved.')
+            candidate = self.get_claim(workspace, chosen['candidate_claim_id']) if chosen and chosen['candidate_claim_id'] else None
+            if not admitted(candidate):
+                blocked.append('Candidate facts are not positively admitted for this analysis date.')
+            elif (not valid_policy or inspect_declared_temporal_scope(candidate['structured_proposition'], query_date,
+                    expected_class=next(iter(temporal_classes)))['state'] != 'DECLARED_INTERVAL_CONTAINS_QUERY'):
+                blocked.append('Candidate temporal meaning does not satisfy the governing policy.')
+            factual.append(dict(id=identifier, mandatory=not valid_policy or not bool(obligations & {'OPTIONAL','PREFERRED'}),
+                required=required_norm, candidate=(candidate or {}).get('structured_proposition', {}).get('normalization'),
+                operator=next(iter(operators)) if len(operators) == 1 else 'EQUAL', blocked_reason=' '.join(blocked)))
+        result['model'] = match_normalized_criteria(factual)
+        result['state'] = result['model']['state']
+        result['reasons'].append('Factual comparison is confined to the explicitly reviewed inventory, policy, date and candidate propositions; it is not approval or a commitment.')
+        return result
+
     @observed
     def run_requirement_matching(self, workspace, actor, analysis_id, target_subject, criteria,
-                                 context_key, reason, *, require_currentness=True, query_date=None):
+                                 context_key, reason, *, require_currentness=True, query_date=None, inventory_claim_id=None):
         """Reuse typed comparison over individual Claims, retaining every qualification.
 
         Classification/adoption is not factual verification. The model may FIT
@@ -7218,10 +7355,13 @@ class CaseWorkspaceStore:
                 operator=criterion['operator'], blocked_reason=' '.join(dict.fromkeys(blocked))))
             provenance.append(dict(criterion=deepcopy(criterion), required=deepcopy(required), candidate=deepcopy(candidate), temporal=temporal))
         model = match_normalized_criteria(comparisons)
+        reviewed = self._reviewed_matching_scope(workspace, criteria, inventory_claim_id, query_date if require_currentness else None)
         context = MATCHING_CONTEXTS[context_key]
         model_label = context['match'] if model['state'] == 'MATCH' else context['non_match'] if model['state'] == 'NON_MATCH' else model['state']
         source_ids = sorted({a['source_id'] for row in provenance for side in ('required', 'candidate')
                              if row[side] for a in row[side]['admissions'] if a.get('source_id')})
+        source_ids = sorted(set(source_ids) | {a['source_id'] for admission in reviewed['admissions'].values()
+                            for a in admission.get('admissions', []) if a.get('source_id')})
         result = dict(kind='requirement_matching', state='UNRESOLVED', canonical=False,
             evaluation_only=bool(scope['evaluation_only'] or any(inspected[i]['claim']['structured_proposition']['evaluation_only'] for i in used)),
             context_key=context_key, context_label=context['label'], target_subject=target_subject,
@@ -7231,12 +7371,19 @@ class CaseWorkspaceStore:
             unselected_claim_ids=sorted(set(inspected)-used),
             qualification='Conditional comparison of proposed interpretations, not an approved fit or verified investor profile. '
                 'Factual fit and complete requirement coverage remain unresolved. Source quality, adoption and repeated claims do not confer authority.')
+        result['reviewed_scope'] = reviewed
+        if inventory_claim_id:
+            result['state'] = (context['match'] if reviewed['state'] == 'MATCH' else context['non_match']
+                if reviewed['state'] == 'NON_MATCH' else reviewed['state']) if not result['evaluation_only'] else 'UNRESOLVED'
+            result['qualification'] = 'Conditional coverage and governed factual status are separate. ' + ' '.join(reviewed['reasons'])
+            result['source_premises'] = self._work_plan_premises(workspace)
         return self.record_analysis(workspace, source_ids=source_ids, objective=scope['objective'],
-            engine_name='cross_modal_investigation', engine_version='criteria-matching-2', findings=[],
+            engine_name='cross_modal_investigation', engine_version='criteria-matching-3', findings=[],
             trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
             muscle_profile=[dict(muscle='MATCHING', owner='match_normalized_criteria', result=model),
-                dict(muscle='AUTHORITY / UNCERTAINTY', owner='CaseWorkspaceStore.inspect_subject_propositions',
-                     result=dict(state='UNRESOLVED', reason='Categorization and adoption do not establish factual fit.'))])
+                dict(muscle='AUTHORITY / UNCERTAINTY', owner='CaseWorkspaceStore.admit_reviewed_proposition' if inventory_claim_id
+                     else 'CaseWorkspaceStore.inspect_subject_propositions',
+                     result=dict(state=result['state'], reason=' '.join(reviewed['reasons'])))])
 
     @observed
     def inspect_requirement_matches(self, workspace, actor, analysis_id):
@@ -7256,6 +7403,8 @@ class CaseWorkspaceStore:
                         and (a.get('currentness') or {}).get('status') == 'current' for a in row['admissions'])))
             changed = any(row['source_integrity'] != 'UNCHANGED' or row['state'] not in
                 ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding') or not row['lineage_current'] for row in statuses)
+            if result.get('source_premises') and result['source_premises'] != self._work_plan_premises(workspace):
+                changed = True
             results.append(dict(run=deepcopy(run), premise_statuses=statuses,
                 consumption_state='REVIEW_REQUIRED' if changed else 'HISTORICAL_RESULT',
                 qualification='This is the persisted result at execution time. Changed or superseded premises require explicit re-evaluation.'))
@@ -13321,7 +13470,7 @@ class CaseWorkspaceStore:
         common = {'action', 'analysis_id', 'reason'}
         fields = {
             '': {'objective', 'included_id', 'de_emphasized_id', 'lifetime_minutes'},
-            'requirement_matching': {'target_subject', 'context_key', 'require_currentness', 'query_date'} |
+            'requirement_matching': {'target_subject', 'context_key', 'require_currentness', 'query_date', 'inventory_claim_id'} |
                 {f'criterion_{index}_{key}' for index in range(16) for key in ('required', 'candidate', 'mandatory', 'operator', 'temporal')},
             'role_composition': {'matching_id', 'required_role_id', 'coverage_mode'} |
                 {key for key in inputs if re.fullmatch(r'coverage_[a-f0-9-]{36}_(classification|divisible|basis)', key)},
@@ -14966,6 +15115,14 @@ class CaseWorkspaceStore:
                 continue
             for link in section["evidence_links"]:
                 info = self._resolve_mm6_endpoint_status(workspace, link["object_type"], link["object_id"])
+                if link['object_type'] == 'claim' and info['resolved']:
+                    claim_status = self.resolve_claim_status(workspace, link['object_id'])
+                    info['claim_status'] = claim_status
+                    info['stale'] = bool(claim_status.get('stale') or claim_status['status'] in
+                        ('rejected', 'disputed', 'superseded', 'broken', 'unresolved'))
+                elif link['object_type'] == 'evidence_item' and info['resolved']:
+                    admission = self.admit_proposition(workspace, link['object_id'])
+                    info['stale'] = bool(info.get('stale') or admission['state'] in ('CONTESTED', 'REFUSED', 'UNRESOLVED'))
                 if not info["resolved"] or info.get("stale"):
                     stale_links.append({"section_id": section["id"], **info})
         return {
@@ -15412,8 +15569,8 @@ class CaseWorkspaceStore:
                 claim['evidence_links'], check_normalization=False)
         else:
             raise CaseWorkspaceError('Scoped verification requires a source-anchored typed Claim.')
-        identifiers = sorted(set(additional_ids) | {link['object_id'] for link in claim['evidence_links']
-                                                  if link['object_type'] == 'evidence_item'})
+        ancestry = self._claim_citation_ancestry(workspace, claim['evidence_links'])
+        identifiers = sorted(set(additional_ids) | set(ancestry['evidence_ids']))
         if len(identifiers) > 32:
             raise CaseWorkspaceError('Narrow this review to at most 32 retained observations.')
         fingerprints = []
@@ -15427,7 +15584,7 @@ class CaseWorkspaceStore:
                 content_sha256=hashlib.sha256((evidence.get('content') or '').encode()).hexdigest(),
                 source_file_hash=source.get('file_hash')))
         return dict(claim_sha256=hashlib.sha256(json.dumps(claim, sort_keys=True, allow_nan=False).encode()).hexdigest(),
-                    evidence_fingerprints=fingerprints)
+                    evidence_fingerprints=fingerprints, citation_ancestry=ancestry)
 
     def _prepare_proposition_review(self, workspace, finding_id, proposal, reviewer):
         """Record explicit human verification dimensions within ReviewerValidation.
@@ -15530,6 +15687,7 @@ class CaseWorkspaceStore:
         if snapshot != scope.get('scope_fingerprint'):
             return dict(result, errors=['REVIEW_PREMISES_CHANGED'])
         result['review_history_intact'] = True
+        result['evaluation_only'] |= snapshot['citation_ancestry']['evaluation_only']
         if result['claim_status']['status'] != CLAIM_ADOPTION_ACCEPTED_AS_FINDING:
             result['errors'].append('CLAIM_NOT_CURRENTLY_ADMISSIBLE')
         for key, check in scope['checks'].items():
@@ -15557,6 +15715,17 @@ class CaseWorkspaceStore:
                     review_source_bytes(self, workspace, fingerprint['source_id'], allowed_root=allowed_root)
                 except (ValueError, OSError):
                     result['errors'].append('IMMUTABLE_SOURCE_UNAVAILABLE')
+        for anchor in snapshot['citation_ancestry']['source_anchors'].values():
+            if not historical and self.resolve_anchor_currentness(workspace, 'source', anchor['source_id'])['status'] != 'current':
+                result['errors'].append('SOURCE_CURRENTNESS_UNRESOLVED')
+            if anchor['source_id'] not in seen_sources:
+                seen_sources.add(anchor['source_id'])
+                try:
+                    if not re.fullmatch(r'[a-fA-F0-9]{64}', anchor.get('source_file_hash') or ''):
+                        raise ValueError('No immutable source fingerprint')
+                    review_source_bytes(self, workspace, anchor['source_id'], allowed_root=allowed_root)
+                except (ValueError, OSError):
+                    result['errors'].append('IMMUTABLE_SOURCE_UNAVAILABLE')
         try:
             query = date.fromisoformat(query_date) if query_date else None
             start = date.fromisoformat(scope.get('valid_from'))
@@ -15574,7 +15743,8 @@ class CaseWorkspaceStore:
             result.update(state='ESTABLISHED', admissible=True, authority='REVIEWED_APPLIED_PROPOSITION',
                 evidence_tier=scope['evidence_tier'], provenance=dict(claim_id=claim_id, review_id=review['id'],
                     finding_id=finding['id'], apply_ids=[r['id'] for r in workspace.applies if finding['id'] in r['finding_ids']],
-                    evidence_fingerprints=deepcopy(snapshot['evidence_fingerprints'])))
+                    evidence_fingerprints=deepcopy(snapshot['evidence_fingerprints']),
+                    citation_ancestry=deepcopy(snapshot['citation_ancestry'])))
         return result
 
     def record_reviewer_validation(

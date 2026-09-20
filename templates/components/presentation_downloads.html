@@ -1,0 +1,5 @@
+<p aria-label="Retained presentation formats">
+{% for format, label in [('pdf', 'PDF'), ('pptx', 'PowerPoint'), ('html', 'Web report')] %}
+<a href="{{ url_for('portal.evaluation_narrative_export', run_id=evaluation_run_id, work_product_id=product.id, format=format) if evaluation_run_id else url_for('workspace.export_work_product_route', project_id=workspace.project_id, work_product_id=product.id, export_format=format) }}">Download {{ label }}</a>{{ ' · ' if not loop.last else '' }}
+{% endfor %}
+</p>

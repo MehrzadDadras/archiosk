@@ -4425,7 +4425,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                         form.get('target_subject'), criteria, form.get('context_key'),
                         form.get('reason', ''),
                         require_currentness=form.get('require_currentness') == 'yes',
-                        query_date=form.get('query_date'))
+                        query_date=form.get('query_date'), inventory_claim_id=form.get('inventory_claim_id') or None)
                     analysis = {'id': form['analysis_id']}
                 elif form.get('action') == 'role_composition':
                     coverage_policies = None
@@ -4459,12 +4459,12 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                     store.run_information_comparison(workspace, actor, form.get('analysis_id'),
                         *premises, form.get('operator'), form.get('reason', ''), allowed_root=evaluation_path)
                     analysis = {'id': form['analysis_id']}
-                elif form.get('action') == 'adopt_transaction_finding':
+                elif form.get('action') in ('adopt_transaction_finding', 'adopt_proposition_finding'):
                     if form.get('attribution') != 'human_reviewed':
                         raise CaseWorkspaceError('A human must explicitly choose to submit this interpretation for review.')
                     claim = store.get_claim(workspace, form.get('claim_id')) or {}
-                    if not claim.get('event_proposition'):
-                        raise CaseWorkspaceError('Select an existing transaction interpretation.')
+                    if not (claim.get('event_proposition') or claim.get('structured_proposition')):
+                        raise CaseWorkspaceError('Select an existing source-anchored interpretation.')
                     store.accept_claim_as_finding(workspace, claim['id'], actor, form.get('case_id'),
                         reason=form.get('reason'), governance_log=get_governance_log(current_app))
                     analysis = {'id':form['analysis_id']}
@@ -4592,6 +4592,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     work_plans = store.inspect_go_work_plans(workspace, actor, analysis['id'] if analysis else None, app=current_app)
     event('go_work_plans', 'CONSUMED', plan_ids=[row['plan']['plan_id'] for row in work_plans])
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
+        review_cases=store.visible_cases_for(workspace, actor),
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
         evaluation_only=evaluation_only, temporary_edges=edges,
         execution_runs=([analysis] + reviews) if analysis else [],
@@ -4657,7 +4658,7 @@ def evaluation_go_attention(run_id):
 def evaluation_narrative_export(run_id, work_product_id):
     _require_developer_tools()
     from services import survey_evaluation as evaluation
-    from services.work_product_export import export_work_product
+    from services.work_product_export import export_work_product, PRESENTATION_MIMETYPES, WorkProductExportError
     from flask import send_file
     try:
         path = evaluation.location(current_app, run_id)
@@ -4668,8 +4669,15 @@ def evaluation_narrative_export(run_id, work_product_id):
         product = next((p for p in workspace.work_products if p['id'] == work_product_id), None)
         if not product or len(store.visible_cases_for(workspace, session.get('username'))) != len(workspace.cases):
             abort(404)
-        buffer, _ = export_work_product(product, 'docx')
-        return send_file(buffer, as_attachment=True, download_name='EVALUATION_INPUT-professional-review.docx',
-                         mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', max_age=0)
+        export_format = request.args.get('format', 'docx')
+        if export_format not in PRESENTATION_MIMETYPES:
+            abort(404)
+        buffer, _ = export_work_product(product, export_format, status=dict(
+            work_product=store.resolve_work_product_status(workspace, work_product_id),
+            evidence=store.stale_evidence_for_work_product(workspace, work_product_id)))
+        return send_file(buffer, as_attachment=True, download_name='EVALUATION_INPUT-professional-review.' + export_format,
+                         mimetype=PRESENTATION_MIMETYPES[export_format], max_age=0)
+    except WorkProductExportError as exc:
+        return str(exc), 422
     except (ValueError, OSError, KeyError):
         abort(404)

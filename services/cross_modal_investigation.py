@@ -323,7 +323,7 @@ def investigate_transaction_history(store, workspace, root_claim_id, *, as_of):
     root_admission = store.admit_reviewed_proposition(workspace, root_claim_id, query_date=as_of, historical=True)
     result = dict(engine_version='transaction-history-1', transaction_claim_id=root_claim_id,
         as_of=as_of, identity=root_data['identity'], governed_state='UNRESOLVED',
-        maturity_state=None, lifecycle_status='SUSPENDED', evaluation_only=root_admission['evaluation_only'],
+        maturity_state=None, lifecycle_status='UNRESOLVED', evaluation_only=root_admission['evaluation_only'],
         events={name:dict(state='UNRESOLVED', evidence_refs=[], reasons=[]) for name in TRANSACTION_MATURITY},
         history=[], component_changes=[], financing_relationships=[], configuration_history=[], transitions=[], unresolved=[], root_admission=root_admission,
         qualification='Analytical reconstruction of retained Claims. Capability coverage is not a JV, and a JV is not funding close.')
@@ -595,7 +595,12 @@ def investigate_transaction_history(store, workspace, root_claim_id, *, as_of):
             result['component_changes'].append(row)
             continue
         if dimension == 'SUSPENSION':
-            lifecycle.append((data['occurred_at'], 'SUSPENDED', row))
+            prior_maturity = {ref for event in result['events'].values() if event['state'] == 'ESTABLISHED'
+                              for ref in event['evidence_refs']}
+            if any(r['claim_id'] in prior_maturity and r['data']['occurred_at'] <= data['occurred_at'] for r in eligible):
+                lifecycle.append((data['occurred_at'], 'SUSPENDED', row))
+            else:
+                result['unresolved'].append(dict(claim_id=row['claim_id'], reason='PRIOR_MATURITY_NOT_ESTABLISHED'))
         elif dimension == 'TERMINATION' and result['events']['EXECUTED']['state'] == 'ESTABLISHED':
             executed_dates = [r['data']['occurred_at'] for r in eligible if r['claim_id'] in result['events']['EXECUTED']['evidence_refs']]
             if executed_dates and min(executed_dates) <= data['occurred_at']:
@@ -622,7 +627,7 @@ def investigate_transaction_history(store, workspace, root_claim_id, *, as_of):
             lifecycle.append((data['occurred_at'], 'REINSTATED', row))
         else:
             result['unresolved'].append(dict(claim_id=row['claim_id'], reason='LIFECYCLE_PREREQUISITES_REQUIRE_REVIEW'))
-    status = 'SUSPENDED'
+    status = 'SUSPENDED' if result['maturity_state'] else 'UNRESOLVED'
     prior_refs = []
     interrupted = False
     for occurred in sorted({r[0] for r in lifecycle}):

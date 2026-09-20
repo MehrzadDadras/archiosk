@@ -7774,7 +7774,9 @@ def export_work_product_route(project_id, work_product_id, export_format):
         abort(404)
 
     try:
-        buffer, checksum = export_work_product(work_product, export_format)
+        buffer, checksum = export_work_product(work_product, export_format, status=dict(
+            work_product=store.resolve_work_product_status(workspace, work_product_id),
+            evidence=store.stale_evidence_for_work_product(workspace, work_product_id)))
     except WorkProductExportError as exc:
         flash(str(exc), "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, work_product=work_product_id))
@@ -7784,10 +7786,8 @@ def export_work_product_route(project_id, work_product_id, export_format):
         checksum=checksum, governance_log=_log(),
     )
 
-    mimetypes_by_format = {
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }
+    from services.work_product_export import PRESENTATION_MIMETYPES
+    mimetypes_by_format = PRESENTATION_MIMETYPES
     status_label = "issued" if work_product["state"] == "issued" else "draft"
     return send_file(
         buffer, mimetype=mimetypes_by_format[export_format], as_attachment=True,

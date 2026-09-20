@@ -44,6 +44,12 @@
 <p>{{ 'EVALUATION_INPUT' if p.evaluation_only else 'Source-anchored proposal' }} · authority {{ row.authority }} · temporal applicability {{ row.temporal_applicability }} · source integrity {{ row.source_integrity }}</p>
 <p>Source class: {{ p.source_class }} · temporal class: {{ p.temporal_class }} · as of {{ p.as_of or 'UNRESOLVED' }} · valid until {{ p.valid_until or 'UNRESOLVED' }}</p>
 <blockquote>{{ p.original_quote }}</blockquote><p>{{ row.qualification }}</p>
+{% if claim.finding_id %}{% set finding = workspace.findings|selectattr('id','equalto',claim.finding_id)|first %}<p><a href="{{ url_for('workspace.show_workspace', project_id=workspace.project_id, case=finding.case_id) }}">Open Finding verification, disposition and Apply</a></p>
+{% elif not expired and review_cases and not evaluation_run_id %}<details><summary>Submit for scoped factual verification</summary>
+<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="adopt_proposition_finding"><input type="hidden" name="analysis_id" value="{{ analysis.id }}"><input type="hidden" name="claim_id" value="{{ claim.id }}">
+<label>Review case <select name="case_id">{% for case in review_cases if not case.archived_at %}<option value="{{ case.id }}">{{ case.title }}</option>{% endfor %}</select></label>
+<label>Reason <input name="reason" required maxlength="2000"></label><label><input type="checkbox" name="attribution" value="human_reviewed" required>I choose to submit this interpretation as a Finding for review.</label><button>Submit for existing Finding review</button></form>
+</details>{% endif %}
 <p>Proposed by {{ claim.created_by }} ({{ claim.author_type }}) at {{ claim.created_at }}. {{ p.classification_reason }}</p>
 {% if claim.runtime_trace_id %}<p><a href="{{ url_for('portal.survey_evaluation', observation=claim.runtime_trace_id) }}#muscle-inspector">Inspect proposition creation runtime</a> · trace is not evidence.</p>{% endif %}
 {% if row.predecessor_claim_id %}<p>Corrects Claim {{ row.predecessor_claim_id }}. {{ row.supersession.reason }}</p>

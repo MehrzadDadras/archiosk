@@ -119,3 +119,35 @@ def test_browser_line_endings_match_without_rewriting_quote_or_machine_observati
     assert claim['event_proposition']['original_quote'] == 'First line\r\nSecond line\r\n'
     assert workspace.evidence_items == before
     assert not store._source_quote_matches('First  line\nSecond line', multiline['content'])
+
+
+def test_untyped_claim_cannot_launder_evaluation_source_ancestry(project):
+    store, workspace, evidence, attention, party = source_case(project)
+    root = record(store, workspace, evidence, attention, event_data(party))
+    candidate = store.register_evidence_item(workspace, evidence['source_id'], 'direct_source_evidence',
+        '{"evaluation_only":true,"statement":"Hypothetical activity"}', 'text')
+    parent = store.record_investigation_claim(workspace, root['investigation_step_id'],
+        statement='Untyped candidate from evaluation material', claim_class='ai_proposal', method='source_review',
+        confidence_state=root['confidence_state'], author_type='ai', created_by='reviewer',
+        evidence_links=[dict(object_type='evidence_item', object_id=candidate['id'])])
+    event = record(store, workspace, evidence, attention,
+        event_data(party, root['id'], 'SIGNED', related_claim_ids=[parent['id']]))
+    assert event['event_proposition']['evaluation_only']
+    forged = copy.deepcopy(event['event_proposition'])
+    forged['evaluation_only'] = False
+    before = store._path_for(workspace.project_id).read_bytes()
+    with pytest.raises(CaseWorkspaceError, match='Evaluation ancestry'):
+        store.record_investigation_claim(workspace, event['investigation_step_id'],
+            statement='Attempted indirect laundering', claim_class='ai_proposal', method='source_event_interpretation',
+            confidence_state=event['confidence_state'], author_type='ai', created_by='reviewer',
+            evidence_links=event['evidence_links'], event_proposition=forged)
+    assert store._path_for(workspace.project_id).read_bytes() == before
+
+
+def test_cyclic_claim_ancestry_is_refused_without_a_write(project):
+    store, workspace, evidence, attention, party = source_case(project)
+    root = record(store, workspace, evidence, attention, event_data(party))
+    altered = copy.deepcopy(workspace)
+    altered.claims[0]['evidence_links'].append(dict(object_type='claim', object_id=root['id']))
+    with pytest.raises(CaseWorkspaceError, match='Cyclic'):
+        store._claim_citation_ancestry(altered, [dict(object_type='claim', object_id=root['id'])])
