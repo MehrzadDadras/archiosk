@@ -1,7 +1,32 @@
 """The real Flask dispatcher persists and surfaces the shared transaction resolver."""
 from services.runtime_observation import read
+import pytest
+from services import survey_evaluation as evaluation
 from tests.test_kernel_mapping import project
 from tests.test_transaction_propositions import source_case, event_data, record
+from tests.test_survey_evaluation import evaluation_app
+
+
+@pytest.mark.parametrize('case', evaluation.TRANSACTION_GAMES)
+def test_transaction_evaluation_roundtrip_never_fabricates_geometry_or_human_authority(evaluation_app, case):
+    from pathlib import Path
+    from services.case_workspace import CaseWorkspaceStore
+    identifier = evaluation.create(evaluation_app, case, 'evaluation reviewer')
+    location = evaluation.location(evaluation_app, identifier)
+    record = evaluation._read(location)
+    store = CaseWorkspaceStore(location/'registry')
+    workspace = store.get(record['project_id'])
+    result = workspace.analyses[-1]['governed_result']
+    assert record['origin'] == 'EVALUATION_INPUT'
+    assert result['kind'] == 'transaction_review' and result['state'] == 'UNRESOLVED'
+    assert result['transaction']['history'] and workspace.evidence_items
+    assert all(claim['event_proposition']['evaluation_only'] for claim in workspace.claims)
+    assert not workspace.applies and not workspace.reviewer_validations
+    before = store._path_for(workspace.project_id).read_bytes()
+    rows = store.inspect_transaction_reviews(workspace, 'evaluation reviewer', record['attention_id'])
+    assert len(rows) == 1
+    assert store._path_for(workspace.project_id).read_bytes() == before
+    assert not Path(evaluation_app.config['REGISTRY_STORE_PATH']).exists()
 
 
 def test_real_route_invocation_persistence_and_read_only_reload(project):

@@ -125,6 +125,18 @@ def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
 # One catalogue beside the existing capability/action metadata. Each key names
 # its actual implementation. Being registered is not proof of invocation.
 MUSCLE_CONTRACTS = {
+    'services.case_workspace.CaseWorkspaceStore.admit_reviewed_proposition': _muscle('SCOPED PROPOSITION AUTHORITY',
+        'Exact retained Claim, immutable source fingerprints, scoped human checks, Disposition and Apply',
+        'Proposition-confined admission with independent historical and current applicability',
+        'Reviewed evidence and explicit Apply may admit only the checked scope',
+        'UNRESOLVED for incomplete review or missing currentness; evaluation input cannot become project authority',
+        'This admission does not alter original observations, raw-source authority, geometry or IFC admission.'),
+    'services.case_workspace.CaseWorkspaceStore.record_event_proposition': _muscle('SOURCE EVENT INTERPRETATION',
+        'Existing source/page evidence, exact quote and typed identity or event interpretation',
+        'Append-only proposed Claim with source fingerprints and occurrence/discovery dates',
+        'Source interpretation -> proposed Claim; no factual promotion',
+        'REFUSED for foreign references, changed source bytes or removed evaluation ancestry',
+        'Source classification, dates and event labels do not establish identity, maturity or authority.'),
     'services.cross_modal_investigation.resolve_transaction_identity': _muscle('TRANSACTION IDENTITY',
         'Source-anchored identity and event Claims, scoped review, Apply and explicit date',
         'Separate project, participant, transaction and temporal closure',

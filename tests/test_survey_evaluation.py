@@ -18,7 +18,8 @@ def evaluation_app(tmp_path):
     return app
 
 
-@pytest.mark.parametrize("case", [case for case in evaluation.CASES if case not in evaluation.REVIEW_GAMES and case not in evaluation.MATCHING_GAMES])
+@pytest.mark.parametrize("case", [case for case in evaluation.CASES if case not in
+    (evaluation.REVIEW_GAMES | evaluation.MATCHING_GAMES | evaluation.TRANSACTION_GAMES)])
 def test_real_case_roundtrip(evaluation_app, case):
     run_id = evaluation.create(evaluation_app, case, "evaluation reviewer")
     report = evaluation.inspect(evaluation_app, run_id)
