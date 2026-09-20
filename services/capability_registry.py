@@ -79,6 +79,97 @@ def action_catalogue(action_ids):
     return {key: ACTION_REGISTRY[key] for key in action_ids if key in ACTION_REGISTRY}
 
 
+def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
+    """Contracts describe owned operations; they never execute or admit a result."""
+    return dict(name=name, inputs=inputs, outputs=outputs, allowed_transitions=transitions,
+        refusal_states=refusal_states, authority_rule=authority_rule,
+        provenance_requirements='Retain source/evidence/object identities and applicable premise lineage. '
+            'Trace records describe execution and never substitute for evidence.',
+        runtime_hooks=('INVOKED', 'RETURNED', 'RAISED'), version='1')
+
+
+# One catalogue beside the existing capability/action metadata. Each key names
+# its actual implementation. Being registered is not proof of invocation.
+MUSCLE_CONTRACTS = {
+    'services.case_workspace.CaseWorkspaceStore.record_go_attention': _muscle('ATTENTION',
+        'Objective, project evidence, explicit selection and lifetime', 'Persisted analytical attention scope',
+        'Selection -> bounded scope; excluded evidence remains present', 'REFUSED: missing objective, foreign evidence or invalid lifetime',
+        'Focus does not change binding, authority or certainty.'),
+    'services.case_workspace.CaseWorkspaceStore.record_temporary_relationship': _muscle('TEMPORARY RELATIONSHIPS',
+        'Active attention, two endpoints, supporting evidence and hypothesis', 'Bounded temporary edge',
+        'Hypothesis -> temporary edge only; no automatic promotion', 'REFUSED: expired scope, foreign or unselected endpoints',
+        'Temporary relationships are not canonical project truth.'),
+    'services.cross_modal_investigation.compare_normalized_information': _muscle('COMPARISON / MATCHING',
+        'Two normalized premises, scope, units/vocabulary, qualifiers and viewpoint basis', 'Conditional model predicate and retained qualifications',
+        'Explicit comparable premises -> MATCH/NON_MATCH; no factual consistency inferred', 'UNRESOLVED, PARTIAL, INCOMPARABLE, REFUSED',
+        'Entered normalizations remain EVALUATION_INPUT; model agreement grants no authority.'),
+    'services.quantitative_investigation.compare_scalar_values': _muscle('QUANTITATIVE COMPARISON',
+        'Finite required/candidate scalars and typed predicate', 'MATCH/NON_MATCH over supplied values',
+        'Finite supplied values -> arithmetic predicate only', 'UNRESOLVED for invalid values; REFUSED for unsupported predicate',
+        'Computable does not mean established. The caller must govern source premises.'),
+    'services.cross_modal_investigation.cover_requirements': _muscle('COMPOSITION / MINIMUM COVERAGE',
+        'Required coverage keys and applicable candidate coverage', 'Minimum covering configurations and missing keys',
+        'Declared coverage -> bounded set selection; no ranking', 'UNRESOLVED, REFUSED, PARTIAL',
+        'Coverage is limited to supplied requirements and established applicability.'),
+    'services.cross_modal_investigation.inspect_representation_necessity': _muscle('REPRESENTATION NECESSITY',
+        'Required keys and applicable representations', 'Unique contribution, overlap and removal gaps',
+        'Known coverage -> essential/representative/unresolved role', 'NECESSITY_UNRESOLVED; duplicate agreement remains UNRESOLVED',
+        'Overlap does not prove semantic equivalence or permission to delete.'),
+    'services.cross_modal_investigation.inspect_continuum_participation': _muscle('CONTINUUM PARTICIPATION',
+        'Scoped evidence, existing relationships and explicit participation expectation', 'Participation, missing connections and qualifications',
+        'Expected connections -> participation/gap; legitimate independence is preserved', 'CONTINUUM_PARTICIPATION_UNRESOLVED, ORPHANED_INFORMATION, COORDINATION_GAP',
+        'Connected does not mean authoritative; isolated does not mean incorrect.'),
+    'services.quantitative_investigation.probe_interval_constraints': _muscle('CONSTRAINT PROBING',
+        'Explicit scalar bounds sharing subject, parameter and unit', 'Common admissible interval or incompatibility',
+        'Supplied bounds -> conditional intersection; no missing premise invented', 'UNRESOLVED, INCOMPARABLE, REFUSED',
+        'Mathematical feasibility does not establish physical adequacy or source authority.'),
+    'services.quantitative_investigation.search_interval_breakpoint': _muscle('BREAKPOINT SEARCH',
+        'Bounded interval model, hypothetical baseline and direction', 'Boundary, first limiting constraint and margin',
+        'Admissible hypothetical baseline -> first constraint boundary', 'UNRESOLVED for missing model or invalid baseline/direction',
+        'Test variations remain EVALUATION_INPUT and never become actual project values.'),
+    'services.cross_modal_investigation.assess_review_resolution': _muscle('SCALE-SEEKING',
+        'Narrative, current/required resolution classes and evidence references', 'Resolution sufficiency and next question',
+        'Explicit classes -> QUALIFIED for resolution only or INSUFFICIENT_SCALE', 'UNRESOLVED, INSUFFICIENT_SCALE',
+        'Resolution does not establish content sufficiency, applicability or authority.'),
+    'services.cross_modal_investigation.expected_next_information': _muscle('EXPECTED-NEXT',
+        'Narrative, representation classes, subject, phase, discipline and evidence state', 'Expected next class versus scoped available information',
+        'Explicit review sequence -> next information requirement; no sheet-number inference', 'UNRESOLVED, MISSING, SURPRISING, SUPERSEDED',
+        'Absence is limited to the reviewed scope; unselected evidence still exists.'),
+    'services.drawing_conditions.review_representation_coverage': _muscle('SECTION / DISCIPLINE COVERAGE',
+        'Scoped conditions, review requirements and reviewed representation applicability', 'Condition coverage map and remaining gaps',
+        'Current reviewed applicability -> qualified coverage of known conditions only', 'SECTION_COVERAGE_GAP, DISCIPLINE_COVERAGE_GAP, PARTIAL, UNRESOLVED',
+        'More drawings do not prove complete inventory or engineering adequacy.'),
+    'services.cross_modal_investigation.trace_governing_root': _muscle('ROOT-TRACE / RETURN',
+        'Focal evidence and bounded governed dependency chain', 'Trace, root if admitted, controlling premise and return target',
+        'Confirmed dependency -> next scoped premise; stop on ambiguity or broken authority', 'UNRESOLVED, REFUSED',
+        'Connectivity or a terminal reference does not establish governing authority.'),
+    'services.document_examination.create_working_view': _muscle('VIEW NORMALIZATION',
+        'Immutable source, typed transform, parameters and reason', 'Retained derived view with transform lineage',
+        'Original/parent view -> derived representation only', 'REFUSED through owner error for invalid frame, source or transform',
+        'View transforms do not mutate the source or establish factual consistency.'),
+    'services.package_muscles.inspect_view_normalization': _muscle('VIEW-NORMALIZATION BEFORE CONTRADICTION',
+        'Source identities and retained transformed views', 'View-normalization qualification',
+        'Retained representation chain -> visible qualification only', 'UNRESOLVED',
+        'Visual alignment and mirrored pixels are not proof of consistency.'),
+    'services.case_workspace.CaseWorkspaceStore.admit_proposition': _muscle('AUTHORITY / UNCERTAINTY / EVIDENCE SUFFICIENCY',
+        'Existing scoped evidence and its governed producer/review lineage', 'Existing admission state and weakest applicable qualification',
+        'Evidence -> existing admission rules only; no trace or narrative admission', 'UNRESOLVED, REFUSED, CONTESTED, SOURCE_REFERENCE',
+        'No stronger conclusion without the premises required by the existing admission owner.'),
+    'services.case_workspace.CaseWorkspaceStore.resolve_anchor_currentness': _muscle('CURRENTNESS',
+        'Existing object identity and governed successor relationships', 'Currentness of the referenced anchor',
+        'Existing succession -> currentness projection; timestamps alone do not decide', 'Unresolved, unavailable or stale anchors remain qualified',
+        'Newer does not mean authoritative.'),
+    'services.document_examination.review_text_correction': _muscle('HUMAN READING CORRECTION',
+        'Anchored immutable machine read, proposed correction and explicit reviewer action', 'Accept/revert history preserving the original reading',
+        'Proposed reading -> reviewed correction; downstream re-evaluation stays explicit', 'Owner refusal for missing source, correction or invalid action',
+        'Reading correction does not settle binding, authority, applicability or geometry.'),
+    'services.case_workspace.CaseWorkspaceStore.render_professional_review': _muscle('CONSUMER / PROVENANCE PRESERVATION',
+        'Committed governed analysis and surviving evidence references', 'Retained presentation of the actual analysis',
+        'Persisted analysis -> shared WorkProduct rendering; no new interpretation', 'REFUSED for unavailable analysis or broken lineage',
+        'Presentation polish does not strengthen evidence or conceal unresolved states.'),
+}
+
+
 def resolve_view_action(text):
     """Choose a typed action only. Ambiguous viewpoint requests remain unresolved."""
     normalized = ' '.join(str(text or '').lower().strip().rstrip('.').split())

@@ -235,6 +235,26 @@ def main():
             if not args.live:
                 assert state_path.read_bytes() == persisted_before
             proof['normalized_comparison_retained_view_and_reload_invoked_through_ui']=True
+            attention_url=page.url
+            page.get_by_role('link', name='Inspect muscles for this execution', exact=True).last.click()
+            inspector=page.locator('#muscle-inspector')
+            assert inspector.is_visible()
+            comparison_contract=inspector.locator('[data-muscle-owner="services.cross_modal_investigation.compare_normalized_information"]')
+            assert comparison_contract.get_attribute('data-invocation') == 'INVOKED'
+            comparison_contract.locator('summary').first.click()
+            assert 'Factual consistency: UNRESOLVED' in comparison_contract.inner_text()
+            assert 'UNRESOLVED' in comparison_contract.inner_text()
+            comparison_contract.get_by_text('Recorded inputs / result / provenance', exact=True).first.click()
+            assert 'opening-width' in comparison_contract.inner_text()
+            comparison_contract.scroll_into_view_if_needed()
+            page.screenshot(path=str(output/'muscle-inspector.png'))
+            inspector_text=inspector.text_content()
+            page.get_by_role('button', name='Reload view', exact=True).click()
+            assert page.locator('#muscle-inspector').text_content() == inspector_text
+            page.goto(attention_url)
+            if not args.live:
+                assert state_path.read_bytes() == persisted_before
+            proof['linked_muscle_inspector_actual_invocation_and_read_only_reload']=True
             page.screenshot(path=str(output/'professional-review.png'), full_page=True)
             if args.games:
                 import hashlib

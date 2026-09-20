@@ -27,7 +27,40 @@ _keys = {"id", "project_id", "source_id", "evidence_item_id", "region_id",
          "parent_view_id", "matrix", "type", "coordinate_space_before", "coordinate_space_after",
          "clockwise_degrees", "lower", "upper", "subject", "parameter", "unit", "common_interval",
          "baseline", "failure_point", "margin_to_failure", "origin", "canonical", "direction",
-         "first_violated_constraints"}
+         "first_violated_constraints", "subject_key", "property_key", "scope_key", "kind", "basis",
+         "qualifiers", "view_basis", "vocabulary", "factual_consistency", "input_status"}
+
+
+def current_reference():
+    """Optional operational link; retaining a link does not confer authority."""
+    record = _active.get()
+    return record['id'] if record is not None else None
+
+
+def muscle_exposure(record):
+    """Project recorded events against contracts without invoking a domain owner.
+
+    Calls/returns are retained in sequence, not paired by guessed causality.
+    A catalogue entry, a return alone or an incomplete trace is not invocation
+    proof. No PASS score or stronger governed state is manufactured here.
+    """
+    from services.capability_registry import MUSCLE_CONTRACTS
+    events = (record or {}).get('events', [])
+    rows = []
+    for owner, contract in MUSCLE_CONTRACTS.items():
+        recorded = [event for event in events if event.get('owner') == owner
+                    and event.get('phase') in contract['runtime_hooks']]
+        invoked = sum(event['phase'] == 'INVOKED' for event in recorded)
+        rows.append(dict(owner=owner, contract=contract, events=recorded, invoked_count=invoked,
+            invocation_state='INVOKED' if invoked else 'NOT_OBSERVED',
+            return_count=sum(event['phase'] == 'RETURNED' for event in recorded),
+            error_count=sum(event['phase'] == 'RAISED' for event in recorded)))
+    return dict(trace_id=(record or {}).get('id'), request=(record or {}).get('request'),
+        truncated=bool((record or {}).get('truncated')), muscles=rows,
+        consumer_events=[event for event in events if event.get('phase') in ('CONSUMED', 'SURFACED')],
+        qualification='Observational projection of this trace only. NOT_OBSERVED does not mean unimplemented. '
+            'Invocation does not prove correctness; returns retain their recorded qualification. '
+            'Consumers and surfaced responses are request-level records, not inferred per-muscle success.')
 
 
 def summary(value, depth=0):

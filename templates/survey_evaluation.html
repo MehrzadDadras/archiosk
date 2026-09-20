@@ -9,6 +9,17 @@
 <nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav>{% include 'components/review_reload.html' %}</header>
 <ol class="se-sequence"><li>SITUATE</li><li>BIND</li><li>COMPARE</li><li>REASON</li><li>GOVERN</li><li>CONSUME</li><li>SURFACE</li></ol>
 {% if not report %}
+{% if muscle_exposure %}<section id="muscle-inspector"><h2>GO muscle inspector</h2>
+<p>{{ muscle_exposure.request.method }} {{ muscle_exposure.request.path }} · Trace {{ muscle_exposure.trace_id }}</p><p>{{ muscle_exposure.qualification }}</p>
+{% if muscle_exposure.truncated %}<p>INCOMPLETE TRACE — the recording limit was reached. Missing events cannot establish a refusal, success or non-invocation.</p>{% endif %}
+{% for muscle in muscle_exposure.muscles %}<details class="muscle-contract" data-muscle-owner="{{ muscle.owner }}" data-invocation="{{ muscle.invocation_state }}"><summary>{{ muscle.contract.name }} · {{ muscle.invocation_state }} · {{ muscle.invoked_count }} recorded calls</summary>
+<p>Existing owner: {{ muscle.owner }}. Returns: {{ muscle.return_count }}. Raised errors: {{ muscle.error_count }}.</p>
+<dl><dt>Inputs</dt><dd>{{ muscle.contract.inputs }}</dd><dt>Outputs</dt><dd>{{ muscle.contract.outputs }}</dd><dt>Allowed transitions</dt><dd>{{ muscle.contract.allowed_transitions }}</dd><dt>Refusal / qualification</dt><dd>{{ muscle.contract.refusal_states }}</dd><dt>Authority</dt><dd>{{ muscle.contract.authority_rule }}</dd><dt>Provenance</dt><dd>{{ muscle.contract.provenance_requirements }}</dd></dl>
+{% for event in muscle.events %}<h4>{{ event.sequence }} · {{ event.phase }}</h4>
+{% if event.result is defined and event.result is mapping %}<p>Returned state: <strong>{{ event.result.get('state', event.result.get('status', 'See returned fields')) }}</strong>. {% if event.result.get('authority') %}Authority: {{ event.result.authority }}.{% endif %} {% if event.result.get('factual_consistency') %}Factual consistency: {{ event.result.factual_consistency }}.{% endif %}</p><p>{{ event.result.get('reason', '') }}</p>{% endif %}
+{% if event.exception is defined %}<p>Raised: {{ event.exception }}. No successful result is inferred.</p>{% endif %}
+<details><summary>Recorded inputs / result / provenance</summary><pre>{{ event|tojson(indent=2) }}</pre></details>{% else %}<p>No invocation recorded in this trace. The implementation is not invoked by opening this inspector.</p>{% endfor %}</details>{% endfor %}
+<details><summary>Actual request consumers and surfaced response</summary><pre>{{ muscle_exposure.consumer_events|tojson(indent=2) }}</pre></details></section>{% endif %}
 <section><h2>Observe real execution</h2>
 <p>LIVE PROJECT EXECUTION opens the ordinary project/document route. Observations record calls that actually execute; they do not re-run a resolver or grant authority. Controlled cases remain isolated below.</p>
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="observe"><input type="hidden" name="enabled" value="{{ 'no' if session.get('survey_observe') else 'yes' }}"><button>{{ 'Stop observing my requests' if session.get('survey_observe') else 'Observe my real requests' }}</button></form>

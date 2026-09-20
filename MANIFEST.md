@@ -1,5 +1,12 @@
 # MANIFEST
 
+The existing capability registry now describes nineteen instrumented muscle
+owners. Runtime observations project recorded events against those contracts
+without invoking domain resolvers or inventing PASS states. AnalysisRun keeps an
+optional operational trace link; the attention UI opens the actual execution in
+the existing Survey Evaluation inspector. Missing or retired trace IDs return
+404. See `governance/current/muscle-inspector.md` and `tests/test_muscle_inspector.py`.
+
 Normalized comparison extends the existing attention/AnalysisRun path with
 explicit source-anchored scalar and vocabulary-set hypotheses. The shared
 cross-modal and quantitative owners retain scope, qualifiers, source admissions

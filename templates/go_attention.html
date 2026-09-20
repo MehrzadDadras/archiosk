@@ -125,6 +125,10 @@
 {% if professional_presentations %}<section><h2>Retained review presentations</h2><p>Reports render committed analysis. Unresolved and unevaluated sections remain visible; a report is not new evidence.</p>
 {% for product in professional_presentations %}<p><a href="{{ url_for('portal.evaluation_narrative_export', run_id=evaluation_run_id, work_product_id=product.id) if evaluation_only else url_for('workspace.export_work_product_route', project_id=workspace.project_id, work_product_id=product.id, export_format='docx') }}">{{ product.title }} · {{ product.state }}</a></p>{% endfor %}</section>{% endif %}
 <section><h2>Real runtime exposure</h2><p>Input: the submitted objective and evidence IDs. Route: {{ attention_url }}.</p>
+<h3>Recorded executions and muscle traces</h3>
+<p>State below is the retained execution result. Trace links are operational records, never evidence; missing observation is not proof of invocation.</p>
+{% for execution in execution_runs %}<p>{{ execution.engine_name }} · {{ execution.started_at }} · {{ execution.id }} · {{ execution.governed_result.state if execution.governed_result else execution.attention_scope.state }}
+{% if execution.runtime_trace_id %}<a href="{{ url_for('portal.survey_evaluation', observation=execution.runtime_trace_id) }}#muscle-inspector">Inspect muscles for this execution</a>{% else %} · No runtime observation retained for this execution.{% endif %}</p>{% endfor %}
 <p>Muscle invoked: CaseWorkspaceStore.record_go_attention. Recorded state: AnalysisRun.attention_scope.</p>
 <p>Consumer: go_attention.html. Visible result: this persisted scope. Reload reads the record; it does not execute attention again. Runtime observations remain operational records, not evidence.</p></section>
 {% endif %}

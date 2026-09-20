@@ -31,7 +31,7 @@ Finding. Apply requires a Disposition of "Confirmed" already on record.
 """
 from __future__ import annotations
 
-from services.runtime_observation import observed
+from services.runtime_observation import observed, current_reference
 from copy import deepcopy
 
 import hashlib
@@ -3371,6 +3371,7 @@ class AnalysisRun:
     attention_scope: Optional[dict] = None
     governed_result: Optional[dict] = None
     muscle_profile: list = field(default_factory=list)
+    runtime_trace_id: Optional[str] = None  # operational reference only, never evidence
 
 
 @dataclass
@@ -12325,6 +12326,7 @@ class CaseWorkspaceStore:
             attention_scope=attention_scope,
             governed_result=governed_result,
             muscle_profile=list(muscle_profile or []),
+            runtime_trace_id=current_reference(),
         )
         workspace.analyses.append(asdict(analysis))
         if case is not None:

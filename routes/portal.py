@@ -769,8 +769,11 @@ def survey_evaluation():
             url=url_for(endpoint, project_id=identifier), project_id=identifier, workspace=workspace,
             sources=[dict(id=s['id'], name=s.get('name')) for s in workspace.sources if not s.get('removed_at')]))
     selected_observation = runtime_observation.read(current_app, request.args.get('observation', ''))
+    if request.args.get('observation') and selected_observation is None:
+        abort(404)
     response = current_app.make_response(render_template('survey_evaluation.html',
         cases=evaluation.CASES, runs=evaluation.recent(current_app), report=None,
+        muscle_exposure=runtime_observation.muscle_exposure(selected_observation) if selected_observation else None,
         observations=[selected_observation] if selected_observation else runtime_observation.recent(current_app), live_documents=live_documents))
     response.headers['Cache-Control'] = 'private, no-store'
     return response
@@ -4408,6 +4411,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
         evaluation_only=evaluation_only, temporary_edges=edges,
+        execution_runs=([analysis] + reviews) if analysis else [],
         governed_reviews=[r for r in reviews if r['governed_result']['kind'] == 'professional_review'],
         constraint_reviews=[r for r in reviews if r['governed_result']['kind'] == 'constraint_review'],
         information_comparisons=[r for r in reviews if r['governed_result']['kind'] == 'information_comparison'],
