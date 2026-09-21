@@ -237,6 +237,16 @@ def main():
                     assert not workspace.reviewer_validations and not workspace.applies
                     persisted = store._path_for(workspace.project_id).read_bytes()
                 page.screenshot(path=str(output/'candidate-reference.png'), full_page=True)
+                attention_entry = page.url
+                page.locator('#attention-report').get_by_role('link',name='Inspect retained evidence',exact=True).first.click()
+                with page.expect_download() as download_info:
+                    page.get_by_role('link',name='Download original retained source',exact=True).click()
+                download = download_info.value
+                assert download.failure() is None
+                if not args.live:
+                    assert hashlib.sha256(Path(download.path()).read_bytes()).hexdigest() == result['response_sha256']
+                proof['exact_retained_source_download'] = True
+                page.goto(attention_entry)
                 page.get_by_role('link',name='Reload',exact=True).click()
                 page.wait_for_load_state('domcontentloaded')
                 if not args.live:

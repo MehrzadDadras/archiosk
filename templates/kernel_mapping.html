@@ -22,7 +22,7 @@
 <section><h2>Provenance and source jumps</h2><pre>{{ item.provenance|tojson(indent=2) }}</pre>
 {% if item.source %}<p>Source: {{ item.source.get('name') }} · {{ item.source_id }}</p>
 {% if not run_id %}<a href="{{ url_for('workspace.source_review', project_id=report.project_id, source_id=item.source_id) }}">Review source frame and machine readings</a>{% endif %}
-{% if run_id %}<a href="{{ url_for('portal.survey_evaluation_artifact', run_id=run_id, artifact='source.pdf') }}">Open controlled source PDF (evaluation run)</a>
+{% if run_id %}<a href="{{ url_for('portal.evaluation_source_file', run_id=run_id, source_id=item.source_id) }}">Download original retained source</a>
 {% else %}<a href="{{ url_for('workspace.show_workspace', project_id=report.project_id, source=item.source_id) }}">Open source in project</a>{% if item.source.get('file_path') %} · <a href="{{ url_for('workspace.source_file', project_id=report.project_id, source_id=item.source_id) }}">Open original source file</a>{% endif %}{% endif %}
 <details><summary>Source record</summary><pre>{{ item.source|tojson(indent=2) }}</pre></details>{% else %}<p>No direct source pointer is recorded for this item. Inspect its recorded references below; none is inferred.</p>{% endif %}
 <details><summary>Complete stored item, including binding and derivation if recorded</summary><pre id="kernel-record">{{ item.record|tojson(indent=2) }}</pre></details></section>

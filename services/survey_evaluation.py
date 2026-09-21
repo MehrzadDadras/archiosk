@@ -124,6 +124,9 @@ def location(app, run_id):
 def isolated(app, path):
     child = Flask("survey-evaluation-context")
     child.config.update(app.config)
+    # Isolation changes candidate persistence, never deployment-wide authority.
+    child.config['EVALUATION_SECURITY_REGISTRY_PATH'] = app.config.get(
+        'EVALUATION_SECURITY_REGISTRY_PATH') or app.config.get('REGISTRY_STORE_PATH')
     child.config["REGISTRY_STORE_PATH"] = str(path / "registry")
     with child.app_context():
         yield child

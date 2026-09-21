@@ -56,3 +56,15 @@ Tests: test_candidate_reference.py and test_airlock_web_research_01.py. Browser
 proof uses verify_source_review_ui.py --public-reference against the actual
 configured endpoint inside EVALUATION_INPUT scope. No production profile truth
 is seeded from either a conversation or a test fixture.
+
+Evaluation persistence isolation does not isolate security authority. The child
+context retains a read-only reference to the deployment security registry;
+Airlock admission uses that baseline and organization-wide exceptions. An
+evaluation workspace cannot borrow a real project's exception through a matching
+project ID. A missing deployment policy location refuses outbound retrieval.
+The candidate build's first full-gate run was deliberately stopped when this
+gap was found; only the corrected tree is eligible for deployment.
+Evaluation source jumps resolve the selected Source identity through the existing
+document_examination byte/hash boundary. They no longer link every representation
+to a fixed first PDF. Unknown/removed sources are refused; untrusted responses
+download as attachments and never render active HTML in the application origin.

@@ -886,6 +886,29 @@ def evaluation_review_image(run_id, kind):
         abort(404)
 
 
+@portal_bp.route('/admin/survey-evaluation/<run_id>/sources/<source_id>/file')
+@admin_required
+def evaluation_source_file(run_id, source_id):
+    """Download the exact selected retained source, never a fixed run fixture."""
+    _require_developer_tools()
+    from services import survey_evaluation as evaluation, document_examination as dx
+    from flask import send_file
+    import io
+    try:
+        path = evaluation.location(current_app, run_id)
+        store = CaseWorkspaceStore(path/'registry')
+        workspace = store.get(evaluation._read(path)['project_id'])
+        if not workspace or workspace.removed_at or workspace.document_desk_state != 'active':
+            abort(404)
+        _, raw, filename = dx.review_source_bytes(store, workspace, source_id, allowed_root=path)
+    except (ValueError, OSError, KeyError, TypeError):
+        abort(404)
+    response = send_file(io.BytesIO(raw), mimetype='application/octet-stream', as_attachment=True,
+        download_name=filename, max_age=0)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @portal_bp.route('/admin/survey-evaluation/<run_id>/kernel')
 @admin_required
 def evaluation_kernel_mapping(run_id):

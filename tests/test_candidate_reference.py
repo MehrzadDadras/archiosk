@@ -121,3 +121,70 @@ def test_private_workspace_denies_route_before_retrieval(project, monkeypatch):
     response = client.post('/projects/project/attention', data=dict(action='public_reference',
         analysis_id=attention['id'], source_key='cib-sectors', reason='Not authorized'))
     assert response.status_code == 403 and not opener.calls
+
+
+def test_evaluation_inherits_deployment_policy_without_borrowing_project_exception(project, monkeypatch):
+    from services import survey_evaluation as evaluation
+    from services.security_governance import SecurityGovernanceStore
+    from services.security_policy import ACTION_EXTERNAL_AI_REQUEST
+    from services.case_workspace import CaseWorkspaceStore
+    app, store, _, _, client = project
+    _, _, _, _, _, opener = setup_reference(project, monkeypatch)
+    security = SecurityGovernanceStore(store.store_path)
+    record = security.get()
+    baseline = security.create_baseline_draft(record, 'controlled-security-reviewer')
+    security.add_control_decision(record, baseline['id'], ACTION_EXTERNAL_AI_REQUEST, 'deny',
+        'policy_statement', 'controlled-security-reviewer', rationale='Controlled deployment-wide test denial.')
+    security.acknowledge_capability_impact(record, baseline['id'], 'controlled-security-reviewer')
+    security.activate_baseline(record, baseline['id'], 'controlled-security-reviewer')
+    security.grant_exception(record, ACTION_EXTERNAL_AI_REQUEST, 'allow', 'Controlled project-specific test exception.',
+        'controlled-security-reviewer', project_id='evaluation')
+    policy_before = security._path().read_bytes()
+    with app.app_context():
+        run = evaluation.create(app, 'matching:fit', 'reviewer')
+        path = evaluation.location(app, run)
+        retained = evaluation._read(path)
+    child = CaseWorkspaceStore(path/'registry')
+    before = child._path_for(retained['project_id']).read_bytes()
+    response = client.post('/admin/survey-evaluation/'+run+'/attention', data=dict(action='public_reference',
+        analysis_id=retained['attention_id'], source_key='cib-sectors', reason='Controlled evaluation must obey the deployment policy.'))
+    assert response.status_code == 303 and not opener.calls
+    saved = child.get(retained['project_id'])
+    assert not any((r.get('governed_result') or {}).get('kind') == 'public_reference' for r in saved.analyses)
+    assert b'not authorized' in client.get(response.location).data
+    assert security._path().read_bytes() == policy_before
+
+
+def test_evaluation_missing_deployment_policy_location_refuses_network(project, monkeypatch):
+    from services import survey_evaluation as evaluation
+    store, workspace, attention, _, _, opener = setup_reference(project, monkeypatch, evaluation=True)
+    app = project[0]
+    monkeypatch.delitem(app.config, 'REGISTRY_STORE_PATH')
+    with evaluation.isolated(app, store.store_path/'controlled-evaluation'):
+        with pytest.raises(CaseWorkspaceError, match='baseline location is unavailable'):
+            store.retain_public_reference(workspace, 'reviewer', attention['id'], 'cib-sectors', 'Controlled missing policy location')
+    assert not opener.calls
+
+
+def test_evaluation_source_jump_resolves_selected_identity_and_retains_bytes(project):
+    from services import survey_evaluation as evaluation
+    from services.case_workspace import CaseWorkspaceStore
+    from pathlib import Path
+    app, _, _, _, client = project
+    with app.app_context():
+        run = evaluation.create(app, 'matching:fit', 'reviewer')
+        path = evaluation.location(app, run)
+        store = CaseWorkspaceStore(path/'registry')
+        workspace = store.get(evaluation._read(path)['project_id'])
+    before = store._path_for(workspace.project_id).read_bytes()
+    first, second = workspace.sources[:2]
+    assert Path(first['file_path']).read_bytes() != Path(second['file_path']).read_bytes()
+    endpoint = '/admin/survey-evaluation/'+run+'/sources/'+second['id']+'/file'
+    response = client.get(endpoint)
+    assert response.status_code == 200 and response.data == Path(second['file_path']).read_bytes()
+    assert response.headers['Content-Disposition'].startswith('attachment')
+    assert client.get(endpoint.replace(second['id'], 'foreign')).status_code == 404
+    item = next(e for e in workspace.evidence_items if e['source_id'] == second['id'])
+    page = client.get('/admin/survey-evaluation/'+run+'/kernel?item=evidence_items:'+item['id'])
+    assert endpoint.encode() in page.data
+    assert store._path_for(workspace.project_id).read_bytes() == before

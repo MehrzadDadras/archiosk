@@ -340,7 +340,11 @@ def verify_interpretation(
 
 
 def _evaluate_policy(store: CaseWorkspaceStore, workspace: ProjectWorkspace):
-    security_store = SecurityGovernanceStore(store.store_path)
+    from flask import current_app, has_app_context
+    evaluation_root = current_app.config.get('EVALUATION_SECURITY_REGISTRY_PATH') if has_app_context() else None
+    if has_app_context() and 'EVALUATION_SECURITY_REGISTRY_PATH' in current_app.config and not evaluation_root:
+        raise AirlockMissionError('The deployment security baseline location is unavailable; outbound retrieval is refused.')
+    security_store = SecurityGovernanceStore(evaluation_root or store.store_path)
     security_record = security_store.get()
     active_baseline = security_store.active_baseline(security_record)
     return evaluate_action(
@@ -353,7 +357,7 @@ def _evaluate_policy(store: CaseWorkspaceStore, workspace: ProjectWorkspace):
         baseline_version_id=active_baseline["id"] if active_baseline else None,
         profile_decision=profile_decision_for(workspace.security_profile, ACTION_EXTERNAL_AI_REQUEST),
         active_exception=security_store.active_exception_for(
-            security_record, ACTION_EXTERNAL_AI_REQUEST, project_id=workspace.project_id,
+            security_record, ACTION_EXTERNAL_AI_REQUEST, project_id=None if evaluation_root else workspace.project_id,
         ),
     )
 
