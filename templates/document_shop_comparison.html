@@ -17,7 +17,7 @@
 <section><h2>How the views were compared</h2><p>{{ comparison.normalization.state }} · {{ comparison.normalization.reason }}</p>
 <details><summary>View transformations and lineage</summary>
 {% for chain in comparison.normalization.chains %}<p>Source {{ chain.source_id }} → {{ chain.transform.type }} → {{ chain.view_id or 'Original representation' }} · {{ chain.qualification }}</p>{% endfor %}
-<details><summary>Transform lineage and muscle result</summary><pre>{{ comparison.normalization|tojson(indent=2) }}</pre></details>
+<details><summary>View normalization before contradiction</summary><pre>{{ comparison.normalization|tojson(indent=2) }}</pre></details>
 </details><details><summary>Compare another working view</summary>
 <form method="post" action="{{ url_for('portal.document_shop_bulk') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="compare">
 {% for source in comparison.sources %}<input type="hidden" name="project_id" value="{{ source.project_id }}">{% endfor %}
