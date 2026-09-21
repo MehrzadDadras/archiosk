@@ -42,6 +42,8 @@
 <label>Reason <input name="reason" required maxlength="2000"></label><button>Create working view</button></form>
 {% for view in report.working_views %}<article><h3>{{ view.view_transform.type }} · QUALIFIED VIEW</h3>
 <img src="{{ url_for('portal.evaluation_review_image', run_id=evaluation_run_id, kind='view-'+view.id) if evaluation_only else url_for('workspace.working_view_image', project_id=report.project_id, source_id=report.source.id, view_id=view.id) }}" alt="Derived working view; original pixels transformed" style="max-width:100%">
+{% set annotation_image_url = url_for('portal.evaluation_review_image', run_id=evaluation_run_id, kind='view-'+view.id) if evaluation_only else url_for('workspace.working_view_image', project_id=report.project_id, source_id=report.source.id, view_id=view.id) %}
+{% include 'components/working_view_annotations.html' %}
 <p>{{ view.view_transform.qualification }} Original source: {{ view.source_id }} · Parent view: {{ view.view_transform.parent_view_id or 'Original' }} · {{ view.created_by }} · {{ view.created_at }}</p>
 <details><summary>Transform matrix, coordinate spaces and provenance</summary><pre>{{ view|tojson(indent=2) }}</pre></details></article>{% endfor %}</section>{% endif %}
 <details><summary>Actual consumer result and provenance</summary><pre>{{ report.result|tojson(indent=2) }}</pre></details>

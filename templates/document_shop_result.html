@@ -297,7 +297,9 @@
 {% endif %}
 {% if working_views %}<h2 class="np-section-title">Working views</h2>
 <p>Derived views preserve your uploaded original. A rotation or mirror does not establish orientation, consistency or authority.</p>
-{% for view in working_views %}<figure><img src="{{ url_for('portal.document_shop_working_view', project_id=project_id, view_id=view.id) }}" class="asread-source-image" alt="{{ view.view_transform.type }} derived working view"><figcaption>{{ view.view_transform.type }} · {{ view.created_at }} · {{ view.id }}<br>{{ view.view_transform.qualification }}<br>Text: {{ view.view_transform.text_rendering }}</figcaption><details><summary>Source and transformation provenance</summary><pre>{{ view.view_transform|tojson(indent=2) }}</pre></details></figure>{% endfor %}{% endif %}
+{% for view in working_views %}<figure><img src="{{ url_for('portal.document_shop_working_view', project_id=project_id, view_id=view.id) }}" class="asread-source-image" alt="{{ view.view_transform.type }} derived working view"><figcaption>{{ view.view_transform.type }} · {{ view.created_at }} · {{ view.id }}<br>{{ view.view_transform.qualification }}<br>Text: {{ view.view_transform.text_rendering }}</figcaption><details><summary>Source and transformation provenance</summary><pre>{{ view.view_transform|tojson(indent=2) }}</pre></details></figure>
+{% set annotation_image_url = url_for('portal.document_shop_working_view', project_id=project_id, view_id=view.id) %}{% include 'components/working_view_annotations.html' %}
+{% endfor %}{% endif %}
 
 {# CLAUDE-SURVEY-REFERENCE-03: the actions menu for each uploaded document.
 

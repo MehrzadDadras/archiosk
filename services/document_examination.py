@@ -400,6 +400,7 @@ def create_working_view(store, workspace, source_id, action, reason, actor, *, p
     if action not in VIEW_ACTIONS or not isinstance(reason, str) or not reason.strip():
         raise ValueError('Select a supported view action and record its justification.')
     source, raw, filename = review_source_bytes(store, workspace, source_id, allowed_root=allowed_root)
+    original_raw = raw
     original_hash = hashlib.sha256(raw).hexdigest()
     parent = None
     north_premise = None
@@ -467,6 +468,11 @@ def create_working_view(store, workspace, source_id, action, reason, actor, *, p
         pages = [store.create_structural_unit(workspace, source_id, 'page' if rendering else 'image', 0,
                                               label='Retained source page 1' if rendering else 'Retained source image', actor=actor)]
     page_id = parent['page_structural_unit_id'] if parent else pages[0]['id']
+    if action.startswith('MIRROR_') or (parent and parent['view_transform'].get('readable_annotations')):
+        transform['readable_annotations'] = _working_view_annotations(store, workspace, source_id, page_id,
+            original_raw, transform, parent)
+        if transform['readable_annotations']['items']:
+            transform['text_rendering'] = 'MIRRORED VIEW — TEXT RE-ORIENTED'
     directory = Path(store.store_path) / 'workspace_sources' / workspace.project_id
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / (uuid.uuid4().hex + '_working_view.png')
@@ -480,6 +486,66 @@ def create_working_view(store, workspace, source_id, action, reason, actor, *, p
     return store.create_derived_view(workspace, source_id, page_id,
         region={'x': 0, 'y': 0, 'width': 1, 'height': 1},
         derivation_reason=reason.strip(), actor=actor, view_transform=transform)
+
+
+def _working_view_annotations(store, workspace, source_id, page_id, original_raw, transform, parent):
+    """Readable projection of retained machine text; never a new OCR observation.
+
+    Native PDF positions are checked against the same source through the existing
+    native-text reader. Unknown processing frames are kept as unplaced annotations.
+    The existing spatial compiler transforms coordinates, without geometry promotion.
+    """
+    from copy import deepcopy
+    from engine.spatial_compiler import validate_homography, transform_homogeneous_point
+    source_plane = 'view:' + parent['id'] if parent else 'source:' + source_id
+    matrix = validate_homography(transform['matrix'], source_space='NORMALIZED_IMAGE', target_space='NORMALIZED_IMAGE',
+        source_plane=source_plane, target_plane='derived-display', geometry_level='PROJECTIVE')
+    native = []
+    if not parent and original_raw.startswith(b'%PDF-'):
+        import pymupdf
+        from services.positioned_text import _native_positioned_lines
+        with pymupdf.open(stream=original_raw, filetype='pdf') as document:
+            if len(document) == 1 and document[0].rotation == 0:
+                native = (_native_positioned_lines(original_raw, 0) or {}).get('lines', [])
+    if parent:
+        previous = parent['view_transform'].get('readable_annotations') or {}
+        fields = deepcopy(previous.get('items', []))
+    else:
+        fields = []
+        for field in review_text_fields(workspace, source_id):
+            if field['anchor']['structural_unit_id'] != page_id:
+                continue
+            box = field['anchor'].get('address') or {}
+            placement = None
+            if field['path'] == 'content' and box.get('extraction_pass') == 'native_text':
+                for line in native:
+                    if str(field['value']) == line['text'] and all(abs(float(box.get(k, -1))-float(line[k])) <= 1e-9
+                            for k in ('x', 'y', 'width', 'height')):
+                        placement = {k:box[k] for k in ('x', 'y', 'width', 'height')}
+                        break
+            fields.append(dict(evidence_id=field['evidence_id'], field_path=field['path'], text=str(field['value']),
+                label=field['label'], anchor=deepcopy(field['anchor']), box=placement,
+                source_text_sha256=hashlib.sha256(str(field['value']).encode()).hexdigest(), text_basis='RETAINED_MACHINE_READ'))
+    retained_count = previous.get('retained_field_count', len(fields)) if parent else len(fields)
+    rows = []
+    for field in fields[:500]:
+        box = field.get('box')
+        result = dict(field, box=None, placement_state='UNRESOLVED',
+            qualification='Re-rendered retained text, not original source imagery. Reading, binding and authority are unchanged.')
+        if box and matrix['state'] == 'ESTABLISHED':
+            points = [transform_homogeneous_point(matrix, [x, y, 1], point_space='NORMALIZED_IMAGE', point_plane=source_plane)
+                for x, y in ((box['x'],box['y']), (box['x']+box['width'],box['y']),
+                    (box['x'],box['y']+box['height']), (box['x']+box['width'],box['y']+box['height']))]
+            if all(p['state'] == 'ESTABLISHED' and all(-1e-9 <= v <= 1+1e-9 for v in p['value']) for p in points):
+                xs, ys = [p['value'][0] for p in points], [p['value'][1] for p in points]
+                result.update(box=dict(x=min(xs), y=min(ys), width=max(xs)-min(xs), height=max(ys)-min(ys)),
+                    placement_state='QUALIFIED_DISPLAY')
+        rows.append(result)
+    return dict(state='PARTIAL' if retained_count > len(rows) or any(r['placement_state']=='UNRESOLVED' for r in rows) else
+            'QUALIFIED' if rows else 'UNRESOLVED', items=rows, retained_field_count=retained_count,
+        displayed_field_count=len(rows), parent_view_id=parent['id'] if parent else None,
+        qualification='Readable annotation projection only. Unknown frames and cropped-out positions remain unplaced. '
+            'The source and derived pixel image remain unchanged; all underlying machine readings remain retained.')
 
 
 @observed

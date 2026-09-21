@@ -60,6 +60,7 @@ CASES = {
 }
 CONTROLS=evaluation_controls()
 REVIEW_GAMES = {
+    'review:readable-mirror': dict(title='Native annotations remain readable in a derived mirrored view', native_annotations=True),
     'review:orphan': dict(title='Required detail has no upstream connection', expectation='upstream'),
     'review:independent': dict(title='Independent information needs no continuum connection', expectation='independent'),
     'review:essential': dict(title='Unique required representation', conditions=1, representation=True),
@@ -428,6 +429,16 @@ def _create_review_game(app, case, actor):
             store.save(workspace)
             store.register_pdf_page_structure(workspace, source['id'], pages,
                 extractor_version='pymupdf-controlled-evaluation-pdf', actor=actor)
+            if spec.get('native_annotations'):
+                from services.positioned_text import _native_positioned_lines
+                unit = next(item for item in workspace.structural_units
+                    if item['source_id'] == source['id'] and item['unit_type'] == 'page')
+                positioned = _native_positioned_lines(file.read_bytes(), 0)
+                store.register_positioned_text_regions(workspace, source['id'], unit['id'], positioned['lines'],
+                    frame=positioned['frame'], extractor_version='pymupdf-native', actor=actor)
+                if number == 0:
+                    with pymupdf.open(file) as document:
+                        document[0].get_pixmap().save(path/'source.png')
             rows = [item for item in workspace.evidence_items if item['source_id'] == source['id'] and item.get('region_id')]
             if not rows:
                 raise ValueError('The controlled source did not produce addressed evidence.')

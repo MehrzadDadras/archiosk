@@ -1,0 +1,14 @@
+{% set annotations = view.view_transform.readable_annotations %}
+{% if annotations and annotations['items'] %}
+<details class="readable-view-annotations"><summary>MIRRORED VIEW — TEXT RE-ORIENTED · {{ annotations.state }}</summary>
+<p>Re-rendered retained machine text, not original source imagery. Reading errors and source qualifications remain. The pixel-only view above is unchanged.</p>
+<p>{{ annotations.qualification }}</p>
+{% set placed = annotations['items']|selectattr('placement_state', 'equalto', 'QUALIFIED_DISPLAY')|list %}
+{% if placed %}<svg viewBox="0 0 1 1" preserveAspectRatio="none" role="img" aria-label="Derived view with separately re-rendered annotations" style="width:100%;aspect-ratio:{{ view.view_transform.output_size[0] }}/{{ view.view_transform.output_size[1] }}">
+<image href="{{ annotation_image_url }}" width="1" height="1" preserveAspectRatio="none"/>
+{% for item in placed %}<g><title>{{ item.text }} — retained machine reading</title><rect x="{{ item.box.x }}" y="{{ item.box.y }}" width="{{ item.box.width }}" height="{{ item.box.height }}" fill="white" fill-opacity="0.9"/>
+<text x="{{ item.box.x }}" y="{{ item.box.y + item.box.height * 0.85 }}" font-size="{{ item.box.height * 0.85 }}" textLength="{{ item.box.width }}" lengthAdjust="spacingAndGlyphs" fill="black">{{ item.text }}</text></g>{% endfor %}
+</svg>{% endif %}
+<p>{{ annotations.displayed_field_count }} of {{ annotations.retained_field_count }} retained fields in this annotation projection. Missing positions are not inferred.</p>
+<ul>{% for item in annotations['items'] %}<li>{{ item.text }} · {{ item.placement_state }}<details><summary>Original source anchor and reading provenance</summary><pre>{{ item|tojson(indent=2) }}</pre></details></li>{% endfor %}</ul>
+</details>{% endif %}

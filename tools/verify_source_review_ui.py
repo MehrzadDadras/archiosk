@@ -137,6 +137,7 @@ def main():
     parser.add_argument('--coverage-games', action='store_true', help='Exercise the shared requirement coverage matrix and minimum configurations.')
     parser.add_argument('--transaction-games', action='store_true', help='Exercise retained transaction Claims, real review execution and read-only Reload.')
     parser.add_argument('--cross-domain', action='store_true', help='Compare actual shared-matcher invocation across retained domain cases.')
+    parser.add_argument('--readable-mirror', action='store_true', help='Exercise separately rendered native annotations through the real view action.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -207,6 +208,44 @@ def main():
             assert page.request.post(base+'/developer-mode/toggle',form={'csrf_token':csrf},headers={'Referer':base+'/'}).ok
             page.goto(base+'/admin/survey-evaluation')
             click_and_reveal(page.get_by_role('button',name='Observe my real requests',exact=True))
+            if args.readable_mirror:
+                page.select_option('#case', 'review:readable-mirror')
+                click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))
+                page.wait_for_url('**/attention?analysis=*')
+                identifier = urlparse(page.url).path.split('/')[-2]
+                page.goto(base+'/admin/survey-evaluation/'+identifier+'/source-review')
+                page.select_option('select[name="view_action"]', 'MIRROR_HORIZONTAL')
+                form = page.locator('form').filter(has=page.locator('select[name="view_action"]'))
+                form.locator('input[name="reason"]').fill('EVALUATION_INPUT: inspect retained readable annotations on an opposite-side working view.')
+                click_and_reveal(page.get_by_role('button',name='Create working view',exact=True))
+                annotations = page.locator('.readable-view-annotations')
+                annotations.locator(':scope > summary').click()
+                assert annotations.locator('svg text').count() > 0
+                assert 'not original source imagery' in annotations.inner_text()
+                assert 'QUALIFIED_DISPLAY' in annotations.inner_text()
+                before = None
+                if not args.live:
+                    from services import survey_evaluation as evaluation
+                    from services.case_workspace import CaseWorkspaceStore
+                    path = evaluation.location(app, identifier)
+                    store = CaseWorkspaceStore(path/'registry')
+                    project_id = evaluation._read(path)['project_id']
+                    before = store._path_for(project_id).read_bytes()
+                page.screenshot(path=str(output/'readable-mirror.png'), full_page=True)
+                page.reload()
+                assert annotations.count() == 1
+                if before is not None:
+                    assert store._path_for(project_id).read_bytes() == before
+                assert not proof['browser_errors']
+                proof.update(readable_mirror_action=True, reload_read_only=True,
+                    entry_path=urlparse(page.url).path)
+                if not args.live:
+                    from services.runtime_observation import read
+                    (output/'runtime-traces.json').write_text(json.dumps([read(app, row['trace']) for row in proof['traces']],indent=2),encoding='utf-8')
+                (output/'proof.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
+                browser.close()
+                print(json.dumps(proof,indent=2))
+                return
             if args.cross_domain:
                 identifiers, retained_files = [], []
                 for case in ('matching:construction', 'matching:rfp', 'matching:fit', 'matching:asset'):

@@ -31,3 +31,20 @@ View transformation is not source mutation. Mirroring is not new evidence.
 Visual alignment does not prove consistency. Geometric agreement does not grant
 authority. Reload only reads committed state. Derived consumers retain the weakest
 applicable qualification and the complete source lineage.
+
+## Readable annotation projection
+
+`EXTEND_EXISTING`: document_examination retains display annotations in the existing
+DerivedView transform metadata. No additional OCR truth store is introduced.
+Native PDF text placement requires an exact retained text/box match against the
+original, unrotated PDF page. Existing spatial_compiler transforms the display
+boxes. Unknown raster/OCR frame mappings remain unplaced readable text; image
+dimensions alone do not establish correspondence. Chained views preserve the
+original text anchor and snapshot. The original source and pixel-only derived
+view are unchanged. Re-rendering does not correct recognition or establish binding.
+
+The existing Source Review and Document Shop templates expose the labelled
+annotation projection separately. GET/Reload only reads retained metadata.
+The `review:readable-mirror` evaluation case supplies native PDF text through the
+normal ingestion owners; the Product Owner must invoke Create working view to
+produce its transformed representation. It remains EVALUATION_INPUT.
