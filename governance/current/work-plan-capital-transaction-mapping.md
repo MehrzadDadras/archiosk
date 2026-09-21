@@ -90,3 +90,28 @@ the governing policy. Missing inventory, ambiguous policy, unknown mandatory
 premises or unreviewed candidate facts cannot earn factual fit. Inventory
 requirements outside attention remain visible dependencies. The same normalized
 comparison owner handles conditional and admitted inputs; no second matcher.
+
+Reviewed composition is EXTEND_EXISTING: the same retained matching runs feed
+`evaluate_requirement_coverage` and `cover_requirements`. Source policies may
+declare `DIVISIBLE` only for numeric quantities. Combining partial quantities
+requires an admitted, current `additive_capacity_basis` Claim naming the
+participating subjects and exact property/unit/scope. Absence of that premise
+leaves collective coverage unresolved. No source record is rewritten.
+
+Partnership requirements are EXISTING_EQUIVALENT structured Claims. A
+`complete_partnership_inventory` uses the same requirement-Claim vocabulary and
+source-policy admission, with qualifiers naming the exact participant subjects.
+One retained, current reviewed matching run per party must positively satisfy
+every blocking dimension for that configuration. Complete capability coverage
+does not substitute for this evidence. Neither result establishes commitment,
+transaction identity, an actual JV, or financial close.
+
+The existing composition UI selects the reviewed procedure and retained
+partnership executions. Its result-first matrix renders persisted assignments,
+all minimum capability sets, and failed smaller configurations. Selecting all
+candidates is a separate configuration from a sufficient subset; the retained
+selected-configuration result remains inspectable. Source changes flag historical
+results for explicit re-evaluation. Reload and report filters are observational.
+Tests: `test_reviewed_composition.py`; actual browser negative admission:
+`tools/verify_source_review_ui.py --propositions`. Automated production verification
+does not manufacture the human attestations needed for positive factual coverage.

@@ -676,6 +676,15 @@ def main():
                 assert 'Complete requirement inventory authority or applicability is not established.' in page.locator('body').inner_text()
                 assert 'Reviewed inventory result: UNRESOLVED' in matching.inner_text()
                 proof['reviewed_scope_form_invoked_without_fabricated_authority']=True
+                form=action_form('role_composition')
+                form.locator('select[name="coverage_mode"]').select_option('reviewed_requirements')
+                form.locator('input[name="matching_id"]').last.check()
+                form.locator('input[name="required_role_id"][value="'+matching_claims[0]+'"]').check()
+                form.locator('input[name="reason"]').fill('Exercise reviewed composition; evaluation evidence cannot establish factual coverage.')
+                click_and_reveal(form.get_by_role('button', name='Compose role coverage', exact=True))
+                assert 'CONFIGURATION_UNRESOLVED' in page.locator('#attention-report').inner_text()
+                assert 'A common reviewed complete inventory is required.' in page.locator('#attention-report').inner_text()
+                proof['reviewed_composition_form_invoked_without_fabricated_authority']=True
                 click_and_reveal(page.get_by_text('Add a subject reference', exact=True))
                 form=action_form('record_subject')
                 form.locator('input[name="subject_name"]').fill('EVALUATION debt participant')
@@ -737,7 +746,7 @@ def main():
                 click_and_reveal(page.get_by_role('link',name='Reload',exact=True))
                 if not args.live:
                     assert state_path.read_bytes() == persisted_before
-                click_and_reveal(composition.get_by_role('button',name='Render Capital Alignment Brief',exact=True))
+                click_and_reveal(composition.get_by_role('button',name='Render Capital Alignment Brief',exact=True).first)
                 with page.expect_download() as brief_download:
                     click_and_reveal(page.get_by_role('link',name='Capital Alignment Brief',exact=False))
                 brief_download.value.save_as(str(output/'capital-alignment-brief.docx'))

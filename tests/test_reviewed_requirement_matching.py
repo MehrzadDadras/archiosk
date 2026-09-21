@@ -10,7 +10,8 @@ from tests.test_normalized_comparison import premise
 
 
 def matching_scope(project, *, candidate_value='120', candidate_reviewed=True, inventory_reviewed=True,
-                   obligation='MANDATORY', policy_operator='AT_LEAST', candidate_temporal='CURRENT_DISCLOSED_MANDATE', omitted_requirement=False):
+                   obligation='MANDATORY', policy_operator='AT_LEAST', candidate_temporal='CURRENT_DISCLOSED_MANDATE', omitted_requirement=False,
+                   divisible=False):
     store, workspace, evidence, _, _, proposal, _ = prepared(project)
     attention = store.record_go_attention(workspace, 'reviewer', 'Test reviewed requirement scope', [evidence['id']])
     opportunity = store.record_participant(workspace, 'Test opportunity', 'opportunity', 'reviewer')
@@ -18,9 +19,10 @@ def matching_scope(project, *, candidate_value='120', candidate_reviewed=True, i
     subject = 'participant:' + opportunity['id']
 
     def append(property_key, value, *, kind='NUMBER', vocabulary='', owner=subject,
-               temporal='DATED_REQUIREMENT', reviewed=True):
+               temporal='DATED_REQUIREMENT', reviewed=True, qualifiers=None):
         normalization = premise(value, subject_key=owner, property_key=property_key, scope_key='controlled-scope',
-            kind=kind, unit='USD' if kind == 'NUMBER' else '', vocabulary=vocabulary, premise_ids=[evidence['id']])
+            kind=kind, unit='USD' if kind == 'NUMBER' else '', vocabulary=vocabulary, premise_ids=[evidence['id']],
+            qualifiers=qualifiers or [])
         claim = store.record_subject_proposition(workspace, 'reviewer', attention['id'], normalization,
             'PROJECT_DOCUMENT', temporal, evidence['content'], 'Explicit local test interpretation only.',
             as_of='2024-01-01', valid_until='2024-12-31', attribution='agent_assessment')
@@ -31,7 +33,7 @@ def matching_scope(project, *, candidate_value='120', candidate_reviewed=True, i
     requirement = append('capital', '100')
     candidate_claim = append('capital', candidate_value, owner='participant:'+candidate['id'],
         temporal=candidate_temporal, reviewed=candidate_reviewed)
-    policy = append('requirement_policy', [obligation, policy_operator, 'CURRENT_DISCLOSED_MANDATE'],
+    policy = append('requirement_policy', [obligation, policy_operator, 'CURRENT_DISCLOSED_MANDATE'] + (['DIVISIBLE'] if divisible else []),
         kind='TOKEN_SET', vocabulary='requirement:'+requirement['id'])
     inventory_ids = [requirement['id']]
     if omitted_requirement:

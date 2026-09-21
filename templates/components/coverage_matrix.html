@@ -1,18 +1,18 @@
 {% macro matrix(coverage) %}
 <p>Analytical configuration: <strong>{{ coverage.state }}</strong></p>
-<p>Governed factual status: <strong>{{ coverage.factual_state }}</strong> · Evidence: Evaluation only</p>
+<p>Governed factual status: <strong>{{ coverage.factual_state }}</strong> · Evidence: {{ 'Qualified for the reviewed scope' if result.reviewed_configuration and not result.evaluation_only else 'Evaluation only' }}</p>
 <table><thead><tr><th>Requirement</th><th>Coverage</th><th>Participant role / contribution</th><th>Gaps</th></tr></thead><tbody>
 {% for assignment in coverage.assignments %}<tr><td>{{ result.requirement_labels.get(assignment.requirement_id, 'Required condition') }}<br>{{ assignment.classification }}</td>
-<td>{{ {'COVERED':'Covered','PARTIALLY_COVERED':'Partially covered','NOT_COVERED':'Not covered','COVERAGE_UNRESOLVED':'Unresolved','HARD_CONFLICT':'Conflict'}.get(assignment.coverage_state, assignment.coverage_state) }}<br>Evaluation only</td>
+<td>{{ {'COVERED':'Covered','PARTIALLY_COVERED':'Partially covered','NOT_COVERED':'Not covered','COVERAGE_UNRESOLVED':'Unresolved','HARD_CONFLICT':'Conflict'}.get(assignment.coverage_state, assignment.coverage_state) }}<br>{{ assignment.evidence_status }}</td>
 <td>{% for party in assignment.participant_ids %}{{ presentation_report.subject_labels.get(party, 'Participant') }}{{ ', ' if not loop.last else '' }}{% else %}No established assignment{% endfor %}
 {% if assignment.coverage_logic.combined_amount is not none %}<br>Conditional combined quantity: {{ assignment.coverage_logic.combined_amount }}{% endif %}</td>
-<td>{{ assignment.unresolved_gaps|join(' ') or 'No gap in the declared coverage model; factual support remains unverified.' }}
+<td>{{ assignment.unresolved_gaps|join(' ') or ('No gap under the retained reviewed premises; this is not a commitment or JV.' if result.reviewed_configuration else 'No gap in the declared coverage model; factual support remains unverified.') }}
 <details><summary>Evidence and coverage logic</summary><pre>{{ assignment|tojson(indent=2) }}</pre></details></td></tr>{% endfor %}
 </tbody></table>
 <p>Partnership compatibility: <strong>{{ coverage.partnership_compatibility.state }}</strong> — {{ coverage.partnership_compatibility.reason }}</p>
 {% endmacro %}
 {% if result.minimum_configurations %}
-<h4>Minimum sufficient configuration{{ 's' if result.minimum_configurations|length != 1 else '' }} — conditional coverage</h4>
+<h4>Minimum sufficient configuration{{ 's' if result.minimum_configurations|length != 1 else '' }} — {{ 'reviewed scope' if result.reviewed_configuration else 'conditional coverage' }}</h4>
 {% for configuration in result.minimum_configurations %}<article><p>{% for party in configuration.participant_ids %}{{ presentation_report.subject_labels.get(party, 'Participant') }}{{ ' + ' if not loop.last else '' }}{% endfor %}</p>
 {{ matrix(configuration.result) }}
 <details><summary>Why fewer participants fail</summary>

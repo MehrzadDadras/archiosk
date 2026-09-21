@@ -214,7 +214,7 @@ def compress_presentation_records(records, independent_pairs=()):
         values_by_identity.setdefault(identity_for(group['semantic']), set()).add(
             json.dumps(group['semantic'].get('value'), sort_keys=True))
     conflict_states = {'CONFLICTING', 'CONTESTED', 'INCONSISTENT', 'NON_MATCH', 'NON_FIT',
-                       'REDUNDANT_CONFLICTING', 'NO_COMMON_ADMISSIBLE_CONDITION'}
+                       'REDUNDANT_CONFLICTING', 'NO_COMMON_ADMISSIBLE_CONDITION', 'HARD_CONFLICT', 'CONFIGURATION_NON_FIT'}
     def recorded_conflicts(value):
         if isinstance(value, dict):
             for key, child in value.items():
@@ -237,7 +237,10 @@ def compress_presentation_records(records, independent_pairs=()):
         # Flag differing values; do not merge them or adjudicate their truth.
         group['value_disagreement'] = semantic.get('subject') != 'Unbound source observation' and len(values_by_identity[identity_for(semantic)]) > 1
         group['conflict'] |= group['value_disagreement']
-        group['unresolved'] = bool(group['reasons']) or semantic.get('state') in ('UNRESOLVED','PARTIAL','REFUSED','INCOMPARABLE','INSUFFICIENT_SCALE')
+        group['unresolved'] = bool(group['reasons']) or semantic.get('state') in (
+            'UNRESOLVED','PARTIAL','REFUSED','INCOMPARABLE','INSUFFICIENT_SCALE',
+            'CONFIGURATION_UNRESOLVED','PARTNERSHIP_COMPATIBILITY_UNRESOLVED',
+            'PARTIAL_CONFIGURATION','COMPLEMENTARY_CONFIGURATION','COVERAGE_UNRESOLVED')
         historical = semantic.get('temporal_class') == 'HISTORICAL_ACTIVITY' or semantic.get('supersession') == 'superseded'
         group['classification'] = ('CONFLICTING_EVIDENCE' if group['conflict'] else 'PARSING_NOISE' if semantic.get('noise')
             else 'TECHNICAL_TRACE' if semantic.get('technical') else 'HISTORICAL_OCCURRENCE' if historical

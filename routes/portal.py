@@ -4439,7 +4439,9 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                             coverage_policies[identifier] = dict(classification=form.get(prefix + 'classification', 'MANDATORY'),
                                 divisible=divisible == 'yes', combination_claim_id=form.get(prefix + 'basis') or None)
                     store.run_role_composition(workspace, actor, form.get('analysis_id'),
-                        form.getlist('matching_id'), form.getlist('required_role_id'), form.get('reason', ''), coverage_policies=coverage_policies)
+                        form.getlist('matching_id'), form.getlist('required_role_id'), form.get('reason', ''), coverage_policies=coverage_policies,
+                        reviewed_scope=form.get('coverage_mode') == 'reviewed_requirements',
+                        compatibility_matching_ids=form.getlist('compatibility_matching_id'))
                     analysis = {'id': form['analysis_id']}
                 elif form.get('action') == 'information_comparison':
                     def explicit_tokens(value):

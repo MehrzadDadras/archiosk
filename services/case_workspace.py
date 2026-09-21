@@ -7210,17 +7210,19 @@ class CaseWorkspaceStore:
         """Admit sourced inventory/policies, then reuse the one criteria matcher."""
         from services.cross_modal_investigation import match_normalized_criteria, inspect_declared_temporal_scope, DECLARED_CURRENT_TEMPORAL_CLASSES
         result = dict(state='UNRESOLVED', reasons=[], admissions={}, model=None,
-            inventory_claim_id=inventory_claim_id, used_policy_claim_ids=[], scope_crossing_dependencies=[])
+            inventory_claim_id=inventory_claim_id, used_policy_claim_ids=[], scope_crossing_dependencies=[], requirements=[])
         if not inventory_claim_id or not query_date:
             result['reasons'].append('A reviewed complete requirement inventory and analysis date are required for factual fit.')
             return result
         inventory = self.get_claim(workspace, inventory_claim_id)
         norm = ((inventory or {}).get('structured_proposition') or {}).get('normalization') or {}
-        if (norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'complete_requirement_inventory'
+        if (norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') not in ('complete_requirement_inventory', 'complete_partnership_inventory')
                 or norm.get('vocabulary') != 'requirement_claims' or not norm.get('value')
                 or len(norm['value']) > 16 or len(set(norm['value'])) != len(norm['value'])):
             result['reasons'].append('The selected Claim does not establish a bounded complete requirement inventory.')
             return result
+        result['inventory_scope'] = dict(subject_key=norm['subject_key'], scope_key=norm['scope_key'],
+            participant_scope=deepcopy(norm['qualifiers']), kind=norm['property_key'])
 
         def admitted(claim):
             if not claim:
@@ -7236,8 +7238,9 @@ class CaseWorkspaceStore:
             return result
         for claim in workspace.claims:
             other = (claim.get('structured_proposition') or {}).get('normalization') or {}
-            if (claim['id'] != inventory_claim_id and other.get('property_key') == 'complete_requirement_inventory'
+            if (claim['id'] != inventory_claim_id and other.get('property_key') == norm['property_key']
                     and other.get('subject_key') == norm['subject_key'] and other.get('scope_key') == norm['scope_key']
+                    and set(other.get('qualifiers') or []) == set(norm.get('qualifiers') or [])
                     and admitted(claim) and set(other.get('value') or []) != set(norm['value'])):
                 result['reasons'].append('CONFLICTING_EVIDENCE: another applicable reviewed inventory identifies different requirements.')
                 return result
@@ -7264,7 +7267,12 @@ class CaseWorkspaceStore:
             obligations = policy & {'MANDATORY','OPTIONAL','PREFERRED','COMPOSITIONAL','HARD_EXCLUSION'}
             operators = policy & {'EQUAL','AT_LEAST','AT_MOST','CONTAINS_ALL','CONTAINS_ANY','EXCLUDES_ALL'}
             temporal_classes = policy & set(DECLARED_CURRENT_TEMPORAL_CLASSES)
-            valid_policy = len(obligations) == 1 and len(operators) == 1 and len(temporal_classes) == 1 and policy == obligations | operators | temporal_classes
+            valid_policy = (len(obligations) == 1 and len(operators) == 1 and len(temporal_classes) == 1
+                and policy <= obligations | operators | temporal_classes | {'DIVISIBLE'})
+            divisible = 'DIVISIBLE' in policy
+            if divisible and (required_norm.get('kind') != 'NUMBER' or required_norm.get('property_key', '').lower() in
+                    ('authority', 'currentness', 'geography', 'sector', 'mandate', 'identity')):
+                valid_policy = False
             blocked = []
             if not valid_policy:
                 blocked.append('The sourced obligation and comparison policy are missing or ambiguous.')
@@ -7280,6 +7288,11 @@ class CaseWorkspaceStore:
             factual.append(dict(id=identifier, mandatory=not valid_policy or not bool(obligations & {'OPTIONAL','PREFERRED'}),
                 required=required_norm, candidate=(candidate or {}).get('structured_proposition', {}).get('normalization'),
                 operator=next(iter(operators)) if len(operators) == 1 else 'EQUAL', blocked_reason=' '.join(blocked)))
+            result['requirements'].append(dict(id=identifier, normalization=deepcopy(required_norm),
+                policy=dict(classification=next(iter(obligations)) if valid_policy else 'UNRESOLVED',
+                    divisible=bool(valid_policy and divisible), combination_basis=None),
+                policy_claim_ids=[claim['id'] for claim in policies],
+                operator=next(iter(operators)) if valid_policy else None))
         result['model'] = match_normalized_criteria(factual)
         result['state'] = result['model']['state']
         result['reasons'].append('Factual comparison is confined to the explicitly reviewed inventory, policy, date and candidate propositions; it is not approval or a commitment.')
@@ -7411,7 +7424,8 @@ class CaseWorkspaceStore:
         return results
 
     @observed
-    def run_role_composition(self, workspace, actor, analysis_id, matching_ids, required_claim_ids, reason, *, coverage_policies=None):
+    def run_role_composition(self, workspace, actor, analysis_id, matching_ids, required_claim_ids, reason, *, coverage_policies=None,
+                             reviewed_scope=False, compatibility_matching_ids=None):
         """Compose explicit role coverage with the existing bounded set solver.
 
         This does not add monetary amounts, rank entities, prove collaboration
@@ -7435,7 +7449,7 @@ class CaseWorkspaceStore:
         for identifier in required_claim_ids:
             row = propositions.get(identifier)
             norm = ((row or {}).get('claim', {}).get('structured_proposition') or {}).get('normalization', {})
-            if (not row or (coverage_policies is None and (norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'role' or not norm.get('value')))
+            if (not row or (coverage_policies is None and not reviewed_scope and (norm.get('kind') != 'TOKEN_SET' or norm.get('property_key') != 'role' or not norm.get('value')))
                     or row['source_integrity'] != 'UNCHANGED' or row['status']['status'] not in
                     ('proposed', 'under_review', 'accepted_as_observation', 'accepted_as_finding')):
                 raise CaseWorkspaceError('Select current explicit role propositions; financial amounts cannot be combined as role coverage.')
@@ -7448,6 +7462,38 @@ class CaseWorkspaceStore:
         subjects = [row['run']['governed_result']['target_subject'] for row in runs]
         if len(contexts) != 1 or len(set(subjects)) != len(subjects):
             raise CaseWorkspaceError('Choose one matching run per candidate, with the same context and temporal scope.')
+        if type(reviewed_scope) is not bool:
+            raise CaseWorkspaceError('Select an explicit composition evidence procedure.')
+        if reviewed_scope:
+            compatibility_matching_ids = compatibility_matching_ids or []
+            if (not isinstance(compatibility_matching_ids, list) or len(compatibility_matching_ids) > 8
+                    or any(identifier not in available for identifier in compatibility_matching_ids)
+                    or len(set(compatibility_matching_ids)) != len(compatibility_matching_ids)):
+                raise CaseWorkspaceError('Select bounded, retained partnership matching runs from this attention scope.')
+            compatibility_runs = [available[i] for i in compatibility_matching_ids]
+            reviewed = self._reviewed_configuration(workspace, runs, compatibility_runs)
+            result = dict(kind='role_composition', state=reviewed['state'], canonical=False,
+                evaluation_only=bool(scope['evaluation_only'] or any(r['run']['governed_result']['evaluation_only'] for r in runs)),
+                attention_analysis_id=analysis_id, objective=scope['objective'], context_key=next(iter(contexts))[0],
+                reason=reason.strip(), requirements=requirements, candidates=reviewed['candidates'], model=reviewed['model'],
+                reviewed_configuration=reviewed, overlaps={}, required_claim_ids=list(required_claim_ids),
+                selected_configuration=reviewed.get('selected_configuration'),
+                minimum_configurations=reviewed.get('minimum_configurations', []),
+                selected_removal_checks=reviewed.get('selected_removal_checks', []),
+                requirement_labels={row['id']:row['normalization'].get('property_key', 'Required condition')
+                    for row in reviewed.get('requirements', [])},
+                matching_analysis_ids=list(matching_ids), compatibility_matching_ids=compatibility_matching_ids,
+                source_premises=self._work_plan_premises(workspace),
+                qualification='Coverage is derived from reviewed requirement inventories and source policies. '
+                    'Capability coverage is separate from partnership compatibility, commitment and actual JV confirmation.')
+            if result['evaluation_only']:
+                result['state'] = 'CONFIGURATION_UNRESOLVED'
+            return self.record_analysis(workspace, source_ids=sorted({s for row in runs + compatibility_runs for s in row['run']['source_ids']}),
+                objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='reviewed-coverage-1', findings=[],
+                trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
+                muscle_profile=([dict(muscle='COMPOSITION', owner='cover_requirements', result=reviewed['model']),
+                    dict(muscle='REQUIREMENT COVERAGE', owner='evaluate_requirement_coverage', result=dict(state=result['state']))]
+                    if reviewed.get('selected_configuration') else []))
         if coverage_policies is not None:
             return self._compose_declared_coverage(workspace, actor, analysis_id, scope, requirements,
                 runs, propositions, coverage_policies, reason)
@@ -7487,6 +7533,120 @@ class CaseWorkspaceStore:
             objective=scope['objective'], engine_name='cross_modal_investigation', engine_version='role-composition-2', findings=[],
             trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result,
             muscle_profile=[dict(muscle='COMPOSITION', owner='cover_requirements', result=model)])
+
+    def _reviewed_configuration(self, workspace, runs, compatibility_runs):
+        """Supply admitted inputs to the existing coverage and minimum-set owners."""
+        from services.cross_modal_investigation import cover_requirements, evaluate_requirement_coverage, inspect_declared_temporal_scope
+        unresolved = dict(state='CONFIGURATION_UNRESOLVED', candidates=[], minimum_configurations=[],
+            model=dict(state='UNRESOLVED', configurations=[], missing=[], reason='A common reviewed complete inventory is required.'),
+            reasons=[], selected_configuration=None)
+        if len(runs) > 8:
+            raise CaseWorkspaceError('Reviewed composition is bounded to eight participants.')
+        scoped = [row['run']['governed_result'].get('reviewed_scope') or {} for row in runs]
+        inventory_ids = {row.get('inventory_claim_id') for row in scoped}
+        if (len(inventory_ids) != 1 or None in inventory_ids or any(not row.get('model') or not row.get('requirements')
+                or row.get('inventory_scope', {}).get('kind') != 'complete_requirement_inventory' for row in scoped)):
+            return unresolved
+        requirements = deepcopy(scoped[0]['requirements'])
+        if any(row['requirements'] != scoped[0]['requirements'] for row in scoped[1:]):
+            return dict(unresolved, reasons=['Requirement policies differ across retained matching runs. Re-evaluate against one current inventory.'])
+        candidates, provenance = {}, []
+        query_date = runs[0]['run']['governed_result']['query_date']
+        for entry, scope in zip(runs, scoped):
+            result = entry['run']['governed_result']
+            original = {row['criterion']['required_claim_id']:row for row in result['criteria']}
+            rows = {}
+            for criterion in scope['model']['criteria']:
+                selected = original.get(criterion['id']) or {}
+                candidate = (selected.get('candidate') or {}).get('claim') or {}
+                normalization = (candidate.get('structured_proposition') or {}).get('normalization')
+                policy = next(row for row in requirements if row['id'] == criterion['id'])
+                refs = [criterion['id'], scope['inventory_claim_id'], *policy['policy_claim_ids']]
+                if candidate:
+                    refs += [candidate['id'], *normalization['premise_ids']]
+                blocked = entry['consumption_state'] == 'REVIEW_REQUIRED' or result['evaluation_only']
+                rows[criterion['id']] = dict(state='UNRESOLVED' if blocked else criterion['comparison']['state'],
+                    normalization=deepcopy(normalization), operator=policy['operator'], evidence_refs=refs if candidate else [])
+            candidates[result['target_subject']] = rows
+            provenance.append(dict(subject=result['target_subject'], matching_analysis_id=entry['run']['id'], matching=deepcopy(entry),
+                covered_claim_ids=[key for key,row in rows.items() if row['state'] == 'MATCH'],
+                excluded_reasons=['Current matching premises require explicit re-evaluation.'] if entry['consumption_state'] == 'REVIEW_REQUIRED' else []))
+        basis_reviews = []
+        inventory_scope = scoped[0]['inventory_scope']
+        for requirement in requirements:
+            norm = requirement['normalization']
+            if not requirement['policy']['divisible']:
+                continue
+            applicable = []
+            for claim in workspace.claims:
+                basis = (claim.get('structured_proposition') or {}).get('normalization') or {}
+                if (basis.get('property_key') == 'additive_capacity_basis' and basis.get('kind') == 'TOKEN_SET'
+                        and basis.get('vocabulary') == 'additive:' + norm['property_key'] + ':' + norm['unit']
+                        and basis.get('subject_key') == norm['subject_key'] and basis.get('scope_key') == norm['scope_key']):
+                    admission = self.admit_reviewed_proposition(workspace, claim['id'], query_date=query_date)
+                    basis_reviews.append(admission)
+                    if (admission['admissible'] and (admission.get('evidence_tier') or 0) >= 2
+                            and inspect_declared_temporal_scope(claim['structured_proposition'], query_date)['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY'):
+                        applicable.append(dict(claim_id=claim['id'], participant_ids=basis['value'],
+                            evidence_refs=[claim['id'], *basis['premise_ids']]))
+            if len(applicable) == 1:
+                requirement['policy']['combination_basis'] = applicable[0]
+
+        def compatibility(parties):
+            if len(parties) == 1:
+                return dict(state='NOT_EVALUATED', reason='No multi-party compatibility is inferred or required for individual coverage.')
+            eligible = []
+            for entry in compatibility_runs:
+                result = entry['run']['governed_result']
+                review = result.get('reviewed_scope') or {}
+                scope = review.get('inventory_scope') or {}
+                if (entry['consumption_state'] != 'REVIEW_REQUIRED' and not result['evaluation_only']
+                        and result['query_date'] == query_date and scope.get('kind') == 'complete_partnership_inventory'
+                        and scope.get('subject_key') == inventory_scope['subject_key']
+                        and scope.get('scope_key') == inventory_scope['scope_key']
+                        and set(scope.get('participant_scope') or []) == set(parties)
+                        and result['target_subject'] in parties and review.get('model')):
+                    eligible.append(result)
+            ids = {row['reviewed_scope']['inventory_claim_id'] for row in eligible}
+            if len(ids) == 1:
+                if any(row['reviewed_scope']['model']['mandatory_failures'] for row in eligible):
+                    return dict(state='CONFLICTING', reason='A positively admitted blocking partnership predicate fails.',
+                        matching_analysis_ids=[entry['run']['id'] for entry in compatibility_runs])
+                by_party = {party:[row for row in eligible if row['target_subject'] == party] for party in parties}
+                def blocking_dimensions_closed(rows):
+                    if len(rows) != 1:
+                        return False
+                    mandatory = [criterion for criterion in rows[0]['reviewed_scope']['model']['criteria'] if criterion['mandatory']]
+                    return bool(mandatory) and all(criterion['comparison']['state'] == 'MATCH' for criterion in mandatory)
+                if all(blocking_dimensions_closed(rows) for rows in by_party.values()):
+                    return dict(state='ESTABLISHED', reason='Every blocking dimension in the reviewed configuration-specific partnership inventory is positively compatible.',
+                        matching_analysis_ids=[entry['run']['id'] for entry in compatibility_runs])
+            return dict(state='UNRESOLVED', reason='Complete, current partnership evidence is not established for this exact participant configuration.')
+
+        def evaluate(parties):
+            typed = deepcopy(requirements)
+            for requirement in typed:
+                basis = requirement['policy']['combination_basis']
+                if basis and not set(parties).issubset(basis['participant_ids']):
+                    requirement['policy']['combination_basis'] = None
+            assessment = evaluate_requirement_coverage(typed, candidates, parties, compatibility=compatibility(parties), evidence_mode='QUALIFIED')
+            assessment['factual_state'] = assessment['state']
+            return assessment
+
+        mandatory = [row['id'] for row in requirements if row['policy']['classification'] not in ('OPTIONAL','PREFERRED')]
+        coverage = {party:[key for key,row in rows.items() if row['state'] == 'MATCH'] for party,rows in candidates.items()}
+        model = cover_requirements(mandatory, coverage, max_candidates=8, configuration_evaluator=evaluate)
+        minimal = [dict(participant_ids=parties, result=evaluate(parties),
+            removal_checks=[dict(participant_id=party, remaining=evaluate([p for p in parties if p != party])) for party in parties])
+            for parties in model['configurations']]
+        selected = evaluate(list(candidates))
+        return dict(state=selected['state'], model=model, requirements=requirements, candidates=provenance,
+            selected_configuration=selected, minimum_configurations=minimal, basis_reviews=basis_reviews,
+            selected_removal_checks=[dict(participant_id=party, result=evaluate([p for p in candidates if p != party]))
+                for party in candidates],
+            compatibility_analyses=deepcopy(compatibility_runs),
+            configuration_set_state='MINIMAL_CONFIGURATION_SET' if minimal else 'CONFIGURATION_UNRESOLVED',
+            qualification='Minimum evidence-supported capability coverage; partnership compatibility remains separate. No commitment or actual JV is inferred.')
 
     def _compose_declared_coverage(self, workspace, actor, analysis_id, scope, requirements, runs,
                                     propositions, policies, reason):
@@ -7607,6 +7767,8 @@ class CaseWorkspaceStore:
                 continue
             changed = any(identifier not in matches or matches[identifier]['consumption_state'] == 'REVIEW_REQUIRED'
                           for identifier in result['matching_analysis_ids'])
+            if result.get('source_premises') and result['source_premises'] != self._work_plan_premises(workspace):
+                changed = True
             for identifier, fingerprint in result.get('composition_premise_fingerprints', {}).items():
                 claim = self.get_claim(workspace, identifier)
                 if (not claim or hashlib.sha256(json.dumps(claim, sort_keys=True).encode()).hexdigest() != fingerprint
@@ -13472,7 +13634,7 @@ class CaseWorkspaceStore:
             '': {'objective', 'included_id', 'de_emphasized_id', 'lifetime_minutes'},
             'requirement_matching': {'target_subject', 'context_key', 'require_currentness', 'query_date', 'inventory_claim_id'} |
                 {f'criterion_{index}_{key}' for index in range(16) for key in ('required', 'candidate', 'mandatory', 'operator', 'temporal')},
-            'role_composition': {'matching_id', 'required_role_id', 'coverage_mode'} |
+            'role_composition': {'matching_id', 'required_role_id', 'coverage_mode', 'compatibility_matching_id'} |
                 {key for key in inputs if re.fullmatch(r'coverage_[a-f0-9-]{36}_(classification|divisible|basis)', key)},
             'information_comparison': {'property_key', 'kind', 'operator', 'vocabulary'} |
                 {f'{side}_{key}' for side in ('left', 'right') for key in ('subject', 'evidence', 'scope', 'value', 'unit', 'qualifiers', 'view')},
@@ -13485,7 +13647,7 @@ class CaseWorkspaceStore:
         }
         if set(inputs) - common - fields[action]:
             raise CaseWorkspaceError('Unsupported procedure parameters cannot be retained.')
-        multiple = {'included_id', 'de_emphasized_id', 'matching_id', 'required_role_id'}
+        multiple = {'included_id', 'de_emphasized_id', 'matching_id', 'required_role_id', 'compatibility_matching_id'}
         if any(len(values) != 1 for key, values in inputs.items() if key not in multiple):
             raise CaseWorkspaceError('Single-valued procedure parameters must be unambiguous.')
         title, executor, muscles = REVIEW_WORK_PROCEDURES[action]

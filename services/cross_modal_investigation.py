@@ -872,7 +872,7 @@ def cover_requirements(required_keys, candidates, *, max_candidates=16, configur
 
 
 @observed
-def evaluate_requirement_coverage(requirements, candidates, participant_ids, *, compatibility=None):
+def evaluate_requirement_coverage(requirements, candidates, participant_ids, *, compatibility=None, evidence_mode='EVALUATION_ONLY'):
     """Configuration checks over retained, typed matching premises.
 
     Values/predicates come from the existing comparison path. This is conditional
@@ -880,6 +880,8 @@ def evaluate_requirement_coverage(requirements, candidates, participant_ids, *, 
     Unknown inputs never satisfy a mandatory dimension.
     """
     from decimal import Decimal, InvalidOperation
+    if evidence_mode not in ('EVALUATION_ONLY', 'QUALIFIED'):
+        raise CrossModalInvestigationError('Select the admitted producer evidence mode.')
     assignments = []
     for requirement in requirements:
         identifier, policy = requirement['id'], requirement['policy']
@@ -943,7 +945,7 @@ def evaluate_requirement_coverage(requirements, candidates, participant_ids, *, 
             refs = sorted(set(refs) | set(policy['combination_basis']['evidence_refs']))
         assignments.append(dict(requirement_id=identifier, classification=classification,
             coverage_mode=mode, participant_ids=[row['participant_id'] for row in used],
-            coverage_state=state, evidence_status='EVALUATION_ONLY', evidence_refs=refs,
+            coverage_state=state, evidence_status=evidence_mode if refs else 'UNRESOLVED', evidence_refs=refs,
             coverage_logic=dict(predicate='existing normalized predicates', explanation='Conditional coverage of declared, source-anchored premises.',
                 additive_allowed=bool(policy.get('divisible') and policy.get('combination_basis')),
                 combination_rule=policy.get('combination_basis'), combined_amount=str(amount) if amount is not None else None),
