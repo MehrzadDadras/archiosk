@@ -973,7 +973,7 @@ def evaluate_requirement_coverage(requirements, candidates, participant_ids, *, 
 
 
 @observed
-def inspect_representation_necessity(required_keys, candidates):
+def inspect_representation_necessity(required_keys, candidates, *, store=None, workspace=None, query_date=None):
     """Removal sensitivity over the same explicit coverage used by composition.
 
     Shared coverage does not establish consistent duplication: semantic equivalence,
@@ -981,19 +981,107 @@ def inspect_representation_necessity(required_keys, candidates):
     """
     required = set(required_keys)
     coverage = {key: set(values) & required for key, values in candidates.items()}
+    comparisons = (_compare_representation_inventories(store, workspace, coverage, query_date)
+                   if store is not None and workspace is not None and len(coverage) <= 32 else [])
     rows = []
     for key, values in coverage.items():
         remaining = set().union(*(other for identifier, other in coverage.items() if identifier != key))
         unique = sorted(values - remaining)
         duplicates = sorted(identifier for identifier, other in coverage.items() if identifier != key and values & other)
+        related = [pair for pair in comparisons if key in pair['representation_ids']]
+        conflicts = [pair for pair in related if pair['state'] == 'REDUNDANT_CONFLICTING']
+        consistent = [pair for pair in related if pair['state'] == 'REDUNDANT_CONSISTENT']
+        role = ('REDUNDANT_CONFLICTING' if conflicts else 'REDUNDANT_CONSISTENT' if consistent and not unique
+                else 'ESSENTIAL' if unique else 'REPRESENTATIVE' if len(values) > 1 else 'NECESSITY_UNRESOLVED')
         rows.append(dict(representation_id=key,
-            necessity_class='ESSENTIAL' if unique else 'REPRESENTATIVE' if len(values) > 1 else 'NECESSITY_UNRESOLVED',
+            necessity_class=role,
             covered_requirements=sorted(values), unique_contribution=unique, overlapping_representations=duplicates,
             removal_state='COVERAGE_GAP' if unique else 'NO_ADDITIONAL_KNOWN_COVERAGE_GAP',
-            duplicate_consistency='UNRESOLVED', safe_to_remove=False,
+            duplicate_consistency='CONFLICTING' if conflicts else 'QUALIFIED_CONSISTENT' if consistent else 'UNRESOLVED',
+            comparison_proof=related, safe_to_remove=False,
             qualification='Role is limited to supplied, applicable coverage. Overlap is not semantic equivalence or permission to remove.'))
     return dict(state='PARTIAL' if required else 'UNRESOLVED', representations=rows,
+                comparison_limit='Narrow to at most 32 applicable representations.' if len(coverage) > 32 else None,
                 minimum_sufficient_set=cover_requirements(required, coverage), canonical=False)
+
+
+def _compare_representation_inventories(store, workspace, coverage, query_date):
+    """Read existing reviewed Claims; never infer whole-document equivalence.
+
+    An inventory attests the complete typed proposition set for one addressed
+    representation and its declared subject/scope. It remains a normal Claim
+    with ordinary review/admission and temporal qualification, not new storage.
+    """
+    from itertools import combinations
+    inventories = {}
+    def admitted(claim):
+        review = store.admit_reviewed_proposition(workspace, claim['id'], query_date=query_date)
+        temporal = inspect_declared_temporal_scope(claim['structured_proposition'], query_date)
+        return dict(claim=claim, admission=review, temporal=temporal,
+            usable=bool(review['admissible'] and (review.get('evidence_tier') or 0) >= 2
+                and temporal['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY'))
+    for claim in workspace.claims:
+        prop = claim.get('structured_proposition') or {}
+        norm = prop.get('normalization') or {}
+        if norm.get('property_key') != 'complete_representation_inventory' or norm.get('kind') != 'TOKEN_SET':
+            continue
+        representation = norm.get('vocabulary', '').removeprefix('representation:')
+        if norm.get('vocabulary') != 'representation:' + representation or representation not in coverage:
+            continue
+        inventories.setdefault(representation, []).append(admitted(claim))
+    result = []
+    # Coverage bounds the comparison candidates; similarity cannot create identity.
+    for a, b in combinations(sorted(coverage), 2):
+        if not coverage[a] or coverage[a] != coverage[b]:
+            continue
+        pair = dict(representation_ids=[a,b], state='UNRESOLVED', inventories=[], comparisons=[],
+            reason='Two current reviewed complete inventories are required for the same addressed coverage and scope.')
+        result.append(pair)
+        for identifier in (a,b):
+            pair['inventories'].extend(inventories.get(identifier, []))
+        if any(len(inventories.get(i, [])) != 1 or not inventories[i][0]['usable'] for i in (a,b)):
+            continue
+        norms = [inventories[i][0]['claim']['structured_proposition']['normalization'] for i in (a,b)]
+        if any(norms[0].get(k) != norms[1].get(k) for k in ('subject_key','scope_key','qualifiers','view_basis')):
+            pair['reason'] = 'Inventory identity, applicability, qualification or viewpoint differs.'
+            continue
+        sets, invalid = [], False
+        for identifier, norm in zip((a,b), norms):
+            indexed = {}
+            identifiers = norm.get('value') or []
+            if not identifiers or len(identifiers) != len(set(identifiers)):
+                invalid = True
+            for claim_id in identifiers:
+                claim = store.get_claim(workspace, claim_id)
+                structured = (claim or {}).get('structured_proposition') or {}
+                normalized = structured.get('normalization') or {}
+                if (not normalized or normalized.get('property_key') == 'complete_representation_inventory'
+                        or normalized.get('subject_key') != norm['subject_key']
+                        or normalized.get('scope_key') != norm['scope_key']
+                        or normalized.get('premise_ids') != [identifier]):
+                    invalid = True
+                    continue
+                proof = admitted(claim)
+                property_key = normalized['property_key']
+                if not proof['usable'] or property_key in indexed:
+                    invalid = True
+                indexed[property_key] = proof
+            sets.append(indexed)
+        pair['propositions'] = sets
+        if invalid or not sets[0] or sets[0].keys() != sets[1].keys():
+            pair['reason'] = 'Complete, uniquely keyed, current reviewed propositions anchored to each representation are not established.'
+            continue
+        for key in sorted(sets[0]):
+            left, right = [items[key]['claim']['structured_proposition']['normalization'] for items in sets]
+            pair['comparisons'].append(dict(property_key=key, result=compare_normalized_information(left, right)))
+        states = [item['result']['state'] for item in pair['comparisons']]
+        if 'NON_MATCH' in states:
+            pair.update(state='REDUNDANT_CONFLICTING', reason='At least one admitted typed proposition conflicts within the same complete representation scope.')
+        elif states and all(state == 'MATCH' for state in states):
+            pair.update(state='REDUNDANT_CONSISTENT', reason='Every proposition in both admitted complete scoped inventories agrees under the retained typed comparison premises.')
+        else:
+            pair['reason'] = 'One or more typed propositions remain incomparable or qualified differently.'
+    return result
 
 
 @observed

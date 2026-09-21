@@ -8021,7 +8021,7 @@ class CaseWorkspaceStore:
         continuum = inspect_continuum_participation(self, workspace, focus_id, participation_expectation)
         from services.drawing_conditions import review_representation_coverage
         coverage = review_representation_coverage(self, workspace,
-            {e['source_id'] for e in scope['entries'] if e['category'] == 'included'}, narrative)
+            {e['source_id'] for e in scope['entries'] if e['category'] == 'included'}, narrative, query_date=query_date)
         additional_ids = (set(coverage['consumed_evidence_ids']) | set(continuum['consumed_evidence_ids'])
                           | {node['evidence_item_id'] for node in root_trace['trace']})
         admissions.extend(self.admit_proposition(workspace, identifier) for identifier in sorted(additional_ids - set(identifiers)))
@@ -8030,7 +8030,7 @@ class CaseWorkspaceStore:
             evaluation_only=scope['evaluation_only'], resolution=resolution, expected_next=sequence,
             root_trace=root_trace,
             continuum=continuum,
-            coverage=coverage,
+            coverage=coverage, source_premises=self._work_plan_premises(workspace),
             traversal_outside_initial_attention=[dict(evidence_item_id=identifier,
                 reason='Existing governing dependency or condition representation reference; qualification retained.')
                 for identifier in sorted(additional_ids - set(scope['included_evidence_ids']))],

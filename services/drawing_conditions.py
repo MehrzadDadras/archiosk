@@ -580,7 +580,7 @@ def boundary_report(store, workspace, condition_id: str) -> dict:
 
 
 @observed
-def review_representation_coverage(store, workspace, source_ids, narrative):
+def review_representation_coverage(store, workspace, source_ids, narrative, *, query_date=None):
     """Coverage of known conditions, never a claim of complete building inventory."""
     from services.cross_modal_investigation import assess_review_resolution, cover_requirements, inspect_representation_necessity
     rows, section_candidates, section_requirements, consumed = [], {}, [], set()
@@ -664,9 +664,16 @@ def review_representation_coverage(store, workspace, source_ids, narrative):
     minimum = cover_requirements(section_requirements, section_candidates)
     gaps = [r['condition_id'] for r in rows if r['section_state'] == 'SECTION_COVERAGE_GAP'
             or any(d['state'] == 'DISCIPLINE_COVERAGE_GAP' for d in r['disciplines'])]
+    necessity = inspect_representation_necessity(all_requirements, all_candidates,
+        store=store, workspace=workspace, query_date=query_date)
+    for representation in necessity['representations']:
+        for pair in representation['comparison_proof']:
+            proofs = pair['inventories'] + [proof for group in pair.get('propositions', []) for proof in group.values()]
+            for proof in proofs:
+                consumed.update(proof['claim']['structured_proposition']['normalization']['premise_ids'])
     return dict(state='PARTIAL' if rows else 'UNRESOLVED', conditions=rows, gaps=gaps,
         minimum_sections_for_known_conditions=minimum, consumed_evidence_ids=sorted(consumed),
-        representation_necessity=inspect_representation_necessity(all_requirements, all_candidates),
+        representation_necessity=necessity,
         inventory_completeness='UNRESOLVED',
         qualification='Coverage is limited to recorded, scoped conditions and explicit professional applicability. '
         'A complete perimeter/vertical inventory and regulatory adequacy are not established by drawing count or this map.')

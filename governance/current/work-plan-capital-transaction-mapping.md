@@ -135,3 +135,19 @@ is checked; unrelated branches are not traversed after sufficient premises are
 obtained. Historical presentation sections remain immutable when new governing
 evidence arrives. The existing export-status projection then exposes
 REVIEW_REQUIRED from the original analysis's retained premise fingerprints.
+
+Representation redundancy is EXTEND_EXISTING: professional coverage calls the
+existing necessity and normalized-comparison owners. A normal reviewed Claim
+may attest `complete_representation_inventory`, with TOKEN_SET values naming
+the scoped proposition Claims and vocabulary `representation:<evidence-id>`.
+Both inventories must close the same subject, scope, coverage and qualification;
+each member must be anchored solely to its addressed representation, current,
+and admitted through ReviewerValidation / Disposition / Apply. Ambiguous,
+unreviewed, stale or incomplete inventories remain unresolved. An inventory is
+not an authority shortcut: every member must independently pass admission.
+Typed agreement earns only scoped REDUNDANT_CONSISTENT, and an admitted positive
+value conflict earns REDUNDANT_CONFLICTING. Neither authorizes deletion. Shared
+coverage alone still proves neither equivalence nor physical performance.
+All inventory/member evidence remains recoverable in the retained professional
+result, including dependencies outside attention. At most 32 representations
+are compared per review; larger scopes explicitly request narrowing.
