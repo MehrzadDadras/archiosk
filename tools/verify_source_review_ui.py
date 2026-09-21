@@ -136,6 +136,7 @@ def main():
     parser.add_argument('--work-plans', action='store_true', help='Prove persisted plan display before real runtime execution and read-only Reload.')
     parser.add_argument('--coverage-games', action='store_true', help='Exercise the shared requirement coverage matrix and minimum configurations.')
     parser.add_argument('--transaction-games', action='store_true', help='Exercise retained transaction Claims, real review execution and read-only Reload.')
+    parser.add_argument('--cross-domain', action='store_true', help='Compare actual shared-matcher invocation across retained domain cases.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -206,6 +207,48 @@ def main():
             assert page.request.post(base+'/developer-mode/toggle',form={'csrf_token':csrf},headers={'Referer':base+'/'}).ok
             page.goto(base+'/admin/survey-evaluation')
             click_and_reveal(page.get_by_role('button',name='Observe my real requests',exact=True))
+            if args.cross_domain:
+                identifiers, retained_files = [], []
+                for case in ('matching:construction', 'matching:rfp', 'matching:fit', 'matching:asset'):
+                    page.goto(base+'/admin/survey-evaluation')
+                    page.select_option('#case', case)
+                    page.get_by_role('button',name='Run isolated evaluation',exact=True).click()
+                    page.wait_for_url('**/attention?analysis=*')
+                    identifiers.append(urlparse(page.url).path.split('/')[-2])
+                    assert 'Governed factual state: UNRESOLVED' in page.locator('#attention-report').inner_text()
+                    if not args.live:
+                        from services import survey_evaluation as evaluation
+                        from services.case_workspace import CaseWorkspaceStore
+                        path = evaluation.location(app, identifiers[-1])
+                        record = evaluation._read(path)
+                        retained = CaseWorkspaceStore(path/'registry')._path_for(record['project_id'])
+                        retained_files.append((retained, retained.read_bytes()))
+                page.goto(base+'/admin/survey-evaluation')
+                surface = page.locator('#cross-domain-runtime')
+                surface.get_by_text('Select retained executions',exact=True).click()
+                for identifier in identifiers:
+                    surface.locator('input[value="'+identifier+'"]').check()
+                surface.get_by_role('button',name='Compare runtime invocations',exact=True).click()
+                current_url = page.url
+                shared = surface.locator('[data-shared-owner="services.cross_modal_investigation.match_normalized_criteria"]')
+                shared.locator(':scope > summary').click()
+                for domain in ('construction', 'rfp', 'investment', 'asset'):
+                    assert domain+' · INVOKED' in shared.inner_text()
+                page.screenshot(path=str(output/'cross-domain-runtime.png'), full_page=True)
+                page.get_by_role('button',name='Reload view',exact=True).click()
+                assert page.url == current_url
+                assert all(path.read_bytes() == before for path, before in retained_files)
+                assert not proof['browser_errors']
+                proof['cross_domain_actual_shared_invocation'] = True
+                proof['reload_preserves_selection_without_analysis'] = True
+                proof['entry_path'] = urlparse(current_url).path+'?'+urlparse(current_url).query
+                if not args.live:
+                    from services.runtime_observation import read
+                    (output/'runtime-traces.json').write_text(json.dumps([read(app, row['trace']) for row in proof['traces']],indent=2),encoding='utf-8')
+                (output/'proof.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
+                browser.close()
+                print(json.dumps(proof,indent=2))
+                return
             if args.report_compression:
                 verify_report_compression(page, base, None if args.live else app, proof, output)
                 browser.close()

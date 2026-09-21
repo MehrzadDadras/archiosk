@@ -771,8 +771,15 @@ def survey_evaluation():
     selected_observation = runtime_observation.read(current_app, request.args.get('observation', ''))
     if request.args.get('observation') and selected_observation is None:
         abort(404)
+    try:
+        runtime_comparison = evaluation.compare_runtime_domains(current_app, request.args.getlist('compare_run'))
+    except ValueError as error:
+        abort(400, description=str(error))
+    runtime_observation.event('components/cross_domain_runtime.html', 'CONSUMED',
+        selected_ids=runtime_comparison['selected_ids'], execution_count=len(runtime_comparison['executions']))
     response = current_app.make_response(render_template('survey_evaluation.html',
         cases=evaluation.CASES, runs=evaluation.recent(current_app), report=None,
+        runtime_comparison=runtime_comparison,
         muscle_exposure=runtime_observation.muscle_exposure(selected_observation) if selected_observation else None,
         observations=[selected_observation] if selected_observation else runtime_observation.recent(current_app), live_documents=live_documents))
     response.headers['Cache-Control'] = 'private, no-store'

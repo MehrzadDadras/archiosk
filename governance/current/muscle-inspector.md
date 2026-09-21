@@ -34,3 +34,19 @@ tools/verify_source_review_ui.py and follows the real execution link.
 The broader programme remains incomplete: this inspector does not manufacture
 semantic drift, binding, engineering validation or cross-domain business results
 for muscles that have not produced them.
+
+Cross-domain operational exposure is EXTEND_EXISTING. The same Survey Evaluation
+page selects up to eight retained evaluation runs and reads their AnalysisRuns
+and runtime_observation muscle projections. It performs no comparison or matching
+again. Every displayed invocation comes from an actual recorded owner event.
+Unavailable/truncated traces stay explicit; a catalogue entry never supplies proof.
+Counts are request-level when several analyses share a trace, not invented
+per-analysis call counts. The real result/evidence and exact trace remain linked.
+
+Construction assembly layers, RFP discipline capability, capital requirements and
+asset control-function cases supply distinct typed EVALUATION_INPUT premises to
+the same existing matching path. Their computed predicates do not establish
+physical adequacy, verified capability, mandate or factual fit. They do not
+promote fixtures into project authority. Tests: test_cross_domain_runtime.py;
+actual browser: tools/verify_source_review_ui.py --cross-domain. Reload retains
+selections and does not mutate either evaluation or normal workspace records.

@@ -9,6 +9,7 @@
 <nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav>{% include 'components/review_reload.html' %}</header>
 <ol class="se-sequence"><li>SITUATE</li><li>BIND</li><li>COMPARE</li><li>REASON</li><li>GOVERN</li><li>CONSUME</li><li>SURFACE</li></ol>
 {% if not report %}
+{% include 'components/cross_domain_runtime.html' %}
 {% if muscle_exposure %}<section id="muscle-inspector"><h2>GO muscle inspector</h2>
 <p>{{ muscle_exposure.request.method }} {{ muscle_exposure.request.path }} · Trace {{ muscle_exposure.trace_id }}</p><p>{{ muscle_exposure.qualification }}</p>
 {% if muscle_exposure.truncated %}<p>INCOMPLETE TRACE — the recording limit was reached. Missing events cannot establish a refusal, success or non-invocation.</p>{% endif %}

@@ -75,6 +75,9 @@ REVIEW_GAMES = {
 }
 CASES.update({key: value['title'] for key, value in REVIEW_GAMES.items()})
 MATCHING_GAMES = {
+    'matching:construction': dict(title='Construction: required and represented assembly layers', matching='domain', context='construction', property_key='assembly_layers', tokens=['AIR_CONTROL', 'DRAINAGE']),
+    'matching:rfp': dict(title='RFP: required discipline and company capability', matching='domain', context='rfp', property_key='discipline', tokens=['STRUCTURAL']),
+    'matching:asset': dict(title='Asset: deterioration control and proposed intervention', matching='domain', context='asset', property_key='control_function', tokens=['DRAINAGE']),
     'matching:fit': dict(title='Capital alignment: all declared predicates fit, factual authority unresolved', matching='fit'),
     'matching:partial': dict(title='Capital alignment: one match and missing geographic evidence', matching='partial'),
     'matching:known-partial': dict(title='Known optional geographic preference mismatch; mandatory criteria match', matching='known_partial'),
@@ -143,6 +146,45 @@ def recent(app):
         record = json.loads(path.read_text(encoding="utf-8"))
         rows.append({k: record[k] for k in ("id", "title", "case", "actor")})
     return rows
+
+
+@observed
+def compare_runtime_domains(app, run_ids):
+    """Read retained evaluation analyses and their actual trace owners only."""
+    from services import runtime_observation
+    if (not isinstance(run_ids, list) or len(run_ids) > 8 or len(set(run_ids)) != len(run_ids)):
+        raise ValueError('Select at most eight distinct retained evaluation runs.')
+    executions, traces, owners = [], {}, {}
+    for identifier in run_ids:
+        path = location(app, identifier)
+        record = _read(path)
+        store = CaseWorkspaceStore(path / 'registry')
+        workspace = store.get(record['project_id'])
+        if not workspace or workspace.removed_at or workspace.document_desk_state != 'active':
+            raise ValueError('A selected evaluation workspace is unavailable.')
+        for analysis in workspace.analyses:
+            result = analysis.get('governed_result') or {}
+            if not result:
+                continue
+            trace_id = analysis.get('runtime_trace_id')
+            if trace_id not in traces:
+                traces[trace_id] = runtime_observation.muscle_exposure(runtime_observation.read(app, trace_id) if trace_id else None)
+            exposure = traces[trace_id]
+            execution = dict(run_id=identifier, analysis_id=analysis['id'], title=record['title'],
+                attention_id=result.get('attention_analysis_id'), kind=result['kind'],
+                domain=result.get('context_key') or (result.get('narrative') or {}).get('professional_lens') or 'Survey',
+                state=result['state'], evaluation_only=True, trace_id=trace_id,
+                trace_available=exposure['trace_id'] is not None, truncated=exposure['truncated'],
+                consumer_events=exposure['consumer_events'])
+            executions.append(execution)
+            for muscle in exposure['muscles']:
+                if muscle['invoked_count']:
+                    row = owners.setdefault(muscle['owner'], dict(owner=muscle['owner'], name=muscle['contract']['name'], executions=[]))
+                    row['executions'].append(dict(execution=execution, invoked_count=muscle['invoked_count'],
+                        return_count=muscle['return_count'], error_count=muscle['error_count'], events=muscle['events']))
+    return dict(executions=executions, muscles=list(owners.values()), selected_ids=list(run_ids),
+        qualification='Actual request-level invocations only. A shared trace may contain several analyses; counts are not per-analysis calls. '
+            'Missing or truncated traces cannot prove complete activation. This view reruns no analysis and grants no authority.')
 
 
 def _rect(a, b, c, d):
@@ -362,6 +404,11 @@ def _create_review_game(app, case, actor):
             'parties EVAL-PARTY-A and EVAL-PARTY-B. No human verification, executed instrument or current authority is supplied.']
         other_text = ['EVALUATION_INPUT: proposed signing occurred 2024-01-01, proposed execution 2024-02-01, '
             'proposed close 2024-03-01. Discovery order does not establish event order. All assertions remain hypothetical.']
+    if spec.get('matching') == 'domain':
+        condition_text = ['EVALUATION_INPUT requirement: ' + spec['property_key'] + ' = ' + ', '.join(spec['tokens'])
+            + '. Declared interval 2026-01-01 to 2027-01-01; no source authority is asserted.']
+        other_text = ['EVALUATION_INPUT candidate representation: ' + spec['property_key'] + ' = ' + ', '.join(spec['tokens'])
+            + '. Declared interval 2026-01-01 to 2027-01-01; applicability and physical sufficiency remain unverified.']
     evidence = []
     with isolated(app, path):
         for number, lines in enumerate((condition_text, other_text)):
@@ -403,7 +450,7 @@ def _create_review_game(app, case, actor):
         if spec.get('transaction'):
             analysis = _transaction_game_inputs(store, workspace, actor, attention['id'], evidence, spec['transaction'], reason)
         elif spec.get('matching'):
-            analysis = _matching_game_inputs(store, workspace, actor, attention['id'], evidence, spec['matching'], reason)
+            analysis = _matching_game_inputs(store, workspace, actor, attention['id'], evidence, spec['matching'], reason, specification=spec)
         elif spec.get('constraints'):
             constraints = [dict(id=f'constraint-{index}', subject=subject, parameter='opening_width', unit='mm',
                 lower=lower, upper=upper, premise_ids=[evidence[index][0]['id']])
@@ -450,8 +497,9 @@ def _transaction_game_inputs(store, workspace, actor, attention_id, evidence, va
     return store.run_transaction_review(workspace, actor, attention_id, root_claim['id'], '2024-06-01', reason)
 
 
-def _matching_game_inputs(store, workspace, actor, attention_id, evidence, variant, reason):
+def _matching_game_inputs(store, workspace, actor, attention_id, evidence, variant, reason, *, specification=None):
     """Supply declared fixture premises; ordinary Claim/matching/composition owners execute."""
+    specification = specification or {}
     parties = [store.record_review_subject(workspace, actor, attention_id, 'EVALUATION '+name, role)
         for name, role in [('opportunity', 'opportunity'), ('candidate A','investor'), ('candidate B','lender')]]
 
@@ -464,9 +512,17 @@ def _matching_game_inputs(store, workspace, actor, attention_id, evidence, varia
             qualifiers=[], view_basis='VIEW_INVARIANT', view_id=None, basis=reason, premise_ids=[item['id']])
         return store.record_subject_proposition(workspace, actor, attention_id, norm,
             'REPORTING' if reporting else 'PROJECT_DOCUMENT',
-            'HISTORICAL_ACTIVITY' if historical else 'DATED_REQUIREMENT' if party == 0 else 'CURRENT_DISCLOSED_MANDATE',
+            'HISTORICAL_ACTIVITY' if historical else 'DATED_REQUIREMENT' if party == 0 else
+                'CURRENT_DISCLOSED_CAPABILITY' if variant == 'domain' else 'CURRENT_DISCLOSED_MANDATE',
             item['content'], reason, as_of='2026-01-01', valid_until='2027-01-01', attribution='agent_assessment')
 
+    if variant == 'domain':
+        required = proposition(0, specification['property_key'], specification['tokens'])
+        candidate = proposition(1, specification['property_key'], specification['tokens'])
+        return store.run_requirement_matching(workspace, actor, attention_id, 'participant:'+parties[1]['id'],
+            [dict(required_claim_id=required['id'], candidate_claim_id=candidate['id'], mandatory=True,
+                operator='CONTAINS_ALL', candidate_temporal_class='CURRENT_DISCLOSED_CAPABILITY')],
+            specification['context'], reason, query_date='2026-09-20')
     if variant.startswith('coverage_') or variant.startswith('additive_'):
         if variant in ('coverage_three', 'coverage_alternatives'):
             parties.append(store.record_review_subject(workspace, actor, attention_id, 'EVALUATION candidate C', 'operator'))

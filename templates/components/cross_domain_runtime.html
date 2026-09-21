@@ -1,0 +1,16 @@
+<section id="cross-domain-runtime"><h2>Same muscle across domains</h2>
+<p>Compare retained executions. Selecting a run reads its results and traces; it does not run analysis.</p>
+<form method="get" action="{{ url_for('portal.survey_evaluation') }}"><details><summary>Select retained executions</summary>
+{% for run in runs %}<label><input type="checkbox" name="compare_run" value="{{ run.id }}" {% if run.id in runtime_comparison.selected_ids %}checked{% endif %}>{{ run.title }}</label>{% else %}<p>Run a controlled case below to record an execution.</p>{% endfor %}
+</details><button>Compare runtime invocations</button></form>
+{% if runtime_comparison.executions %}<p><strong>EVALUATION_INPUT</strong> · {{ runtime_comparison.qualification }}</p>
+<table><thead><tr><th>Domain / case</th><th>Governed state</th><th>Runtime proof</th></tr></thead><tbody>
+{% for execution in runtime_comparison.executions %}<tr><td>{{ execution.domain }} · {{ execution.title }}</td><td>{{ execution.state }}</td><td>{{ 'Retained trace' if execution.trace_available else 'NOT_OBSERVED — trace unavailable' }}{{ ' · INCOMPLETE TRACE' if execution.truncated else '' }} · <a href="{{ url_for('portal.evaluation_go_attention', run_id=execution.run_id, analysis=execution.attention_id) }}">Open result and evidence</a></td></tr>{% endfor %}
+</tbody></table>
+{% for muscle in runtime_comparison.muscles %}<details data-shared-owner="{{ muscle.owner }}"><summary>{{ muscle.name }} · {{ muscle.executions|length }} retained execution references</summary>
+<p>One existing owner: <code>{{ muscle.owner }}</code></p>
+{% for item in muscle.executions %}<article><p>{{ item.execution.domain }} · INVOKED {{ item.invoked_count }} · RETURNED {{ item.return_count }} · RAISED {{ item.error_count }}.</p>
+<p><a href="{{ url_for('portal.survey_evaluation', observation=item.execution.trace_id) }}#muscle-inspector">Inspect actual inputs and returned states</a></p>
+<details><summary>Recorded events and request consumers</summary><pre>{{ item.events|tojson(indent=2) }}</pre><pre>{{ item.execution.consumer_events|tojson(indent=2) }}</pre></details></article>{% endfor %}
+</details>{% else %}<p>No muscle invocation is recoverable from the selected traces.</p>{% endfor %}
+{% endif %}</section>

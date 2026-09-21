@@ -13693,6 +13693,8 @@ class CaseWorkspaceStore:
         if any(len(values) != 1 for key, values in inputs.items() if key not in multiple):
             raise CaseWorkspaceError('Single-valued procedure parameters must be unambiguous.')
         title, executor, muscles = REVIEW_WORK_PROCEDURES[action]
+        if action == 'professional_review' and ((inputs.get('upstream_claim_id') or [''])[0] or (inputs.get('target_claim_id') or [''])[0]):
+            muscles = (*muscles, 'INTERPRETATION DRIFT')
         attention_id = (inputs.get('analysis_id') or [None])[0]
         if action == 'professional_presentation':
             review = self._find(workspace.analyses, (inputs.get('review_id') or [None])[0])
