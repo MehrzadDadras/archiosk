@@ -1,16 +1,12 @@
 <section id="attention-report" aria-label="Governed report">
-<h2>{{ analysis.attention_scope.objective }}</h2>
-<details><summary>Attention · {{ analysis.attention_scope.included_evidence_ids|length }} focused readings</summary>
-{% for category,label in [('included','Focused'),('de_emphasized','De-emphasized'),('relevant_unselected','Relevant but unselected'),('outside_scope','Outside scope')] %}<p>{{ label }}: {{ analysis.attention_scope.entries|selectattr('category','equalto',category)|list|length }}. Individual reasons remain with each occurrence.</p>{% endfor %}
-<p>{{ analysis.attention_scope.uncertainty|join(' ') }}</p></details>
-<details><summary>How this report is organized</summary><p>{{ presentation_report.occurrence_count }} retained occurrences · {{ presentation_report.group_count }} presentation groups. {{ presentation_report.qualification }}</p></details>
+<h2>{{ analysis.attention_scope.objective.removeprefix('EVALUATION_INPUT:').strip() }}</h2>
 <nav aria-label="Report filters">{% for key,label in [('all','All'),('material','Material only'),('unresolved','Unresolved'),('conflicts','Conflicts'),('changes','Changes'),('evidence','Evidence'),('technical','Technical')] %}<a href="{{ attention_url }}?analysis={{ analysis.id|urlencode }}&amp;filter={{ key }}{% if selected_proposition %}&amp;claim={{ selected_proposition.id|urlencode }}{% endif %}" {% if report_filter == key %}aria-current="page"{% endif %}>{{ label }}</a> {% endfor %}</nav>
 {% if presentation_report.shared_reasons %}<details><summary>Shared governed qualifications</summary><ul>{% for reason in presentation_report.shared_reasons %}<li>{{ reason }}</li>{% endfor %}</ul><p>These qualifications remain attached to each applicable occurrence in the expandable evidence.</p></details>{% endif %}
 {% macro finding(group) %}
 <article data-report-group="{{ group.id }}" data-importance="{{ group.importance }}" data-occurrence-count="{{ group.occurrence_count }}">
 <h3>{{ group.semantic.proposition }} · {{ 'Review required' if group.semantic.consumption_state == 'REVIEW_REQUIRED' else {'UNRESOLVED':'Unresolved — inspect missing premises below', 'HARD_CONFLICT':'Incompatible constraint', 'CONFLICTING':'Conflicting evidence', 'PARTIAL':'Partially covered', 'REFUSED':'Cannot proceed with these inputs', 'EVALUATION_INPUT':'Evaluation only'}.get(group.semantic.state, group.semantic.state|replace('_', ' ')|capitalize) }}</h3>
 <p>{{ group.subject_label }}{% if group.semantic.scope != analysis.attention_scope.objective %} · {{ group.semantic.scope }}{% endif %}</p>
-{% if group.semantic.result %}{% if not group.semantic.payload or group.semantic.payload.kind != 'transaction_review' %}<p>Conditional model: <strong>{{ group.semantic.value }}</strong> · {{ 'Evidence class' if group.semantic.state == 'EVALUATION_INPUT' else 'Governed factual state' }}: <strong>{{ group.semantic.state }}</strong> · {{ group.semantic.consumption_state }}</p>{% endif %}{% else %}<p>{{ group.semantic.value|string|truncate(300) }}</p>{% endif %}
+{% if group.semantic.result %}{% if not group.semantic.payload or group.semantic.payload.kind != 'transaction_review' %}<dl class="ui-status-strip"><div><dt>Analytical result</dt><dd>{{ group.semantic.value }}</dd></div><div><dt>{{ 'Evidence class' if group.semantic.state == 'EVALUATION_INPUT' else 'Governed factual state' }}</dt><dd>{{ group.semantic.state }}</dd></div></dl>{% endif %}{% else %}<p>{{ group.semantic.value|string|truncate(300) }}</p>{% endif %}
 {% if group.semantic.payload and group.semantic.payload.model and group.semantic.payload.model.criteria %}
 <table><thead><tr><th>Criterion</th><th>Obligation</th><th>Result</th><th>Reason</th></tr></thead><tbody>
 {% for criterion in group.semantic.payload.model.criteria %}<tr><td>{% set premise = group.semantic.payload.criteria[loop.index0].required if group.semantic.payload.criteria else none %}{{ premise.claim.structured_proposition.normalization.property_key if premise else loop.index }}</td><td>{{ 'Mandatory' if criterion.mandatory else 'Optional' }}</td><td>{{ criterion.comparison.state }}</td><td>{% if criterion.comparison.state != 'MATCH' %}{{ criterion.comparison.reason }}{% else %}<details><summary>Qualification</summary>{{ criterion.comparison.reason }}</details>{% endif %}</td></tr>{% endfor %}
@@ -46,4 +42,9 @@
 {% endif %}{% endfor %}
 {% if section in ('evidence','technical') %}</details>{% else %}</section>{% endif %}
 {% endif %}{% endfor %}
+<details><summary>Scope and report organization</summary><details><summary>Attention · {{ analysis.attention_scope.included_evidence_ids|length }} focused readings</summary>
+{% for category,label in [('included','Focused'),('de_emphasized','De-emphasized'),('relevant_unselected','Relevant but unselected'),('outside_scope','Outside scope')] %}<p>{{ label }}: {{ analysis.attention_scope.entries|selectattr('category','equalto',category)|list|length }}. Individual reasons remain with each occurrence.</p>{% endfor %}
+<p>{{ analysis.attention_scope.uncertainty|join(' ') }}</p></details>
+<details><summary>How this report is organized</summary><p>{{ presentation_report.occurrence_count }} retained occurrences · {{ presentation_report.group_count }} presentation groups. {{ presentation_report.qualification }}</p></details>
+</details>
 </section>

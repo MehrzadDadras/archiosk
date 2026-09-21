@@ -9,52 +9,17 @@
    here, and this view is now the single home destination for a signed-in
    session - so its heading is the one place that names what you are looking
    at, and it should name it the same way the navigation does. #}
-{% call macros.page_header('All Projects') %}
-    {# CLAUDE-PROJECTS-NEW-ACTION-01: project creation was reachable from this
-       page ONLY in its empty state - the moment an admin had one project, the
-       directory offered no way to make another, and the landing page's own
-       `+ New Project` is likewise admin-gated but a page away. A persistent
-       header action closes that.
-
-       Placed BEFORE Removed Projects and styled primary: creating is the
-       ordinary act, recovering an archived project is the exceptional one, and
-       the cluster should read in that order rather than by which arrived first.
-
-       The empty-state "Create New Project" button below is deliberately LEFT
-       ALONE. On an otherwise blank directory it is the entire point of the
-       screen, not a duplicate of a small header control - and
-       test_empty_state_with_no_projects_offers_new_project_not_ingestion
-       protects a still-valid intent (that the empty state points at project
-       creation rather than document ingestion). Both render only when empty,
-       which is the one state where a large call to action earns its place. #}
-    {% if is_admin %}
-    {# CLAUDE-HOME-UNIFY-01: carries the operating-environment PRESET the old
-       home offered. index.html preset /upload's radio for an admin whose
-       projects all sit in one environment, so they were not re-answering a
-       settled question; unifying the home would otherwise have dropped that
-       quietly. Preset only when there is exactly ONE accessible environment -
-       with none (a zero-project admin) or several there is nothing to infer,
-       and inferring anyway is how a convenience becomes a wrong default. It
-       stays a pre-selection: /upload's own radio and confirmation checkbox are
-       still the real commissioning step, never bypassed. #}
-    <a class="btn btn-primary" href="{{ url_for('portal.upload', environment=(accessible_environments[0] if accessible_environments | length == 1 else None)) }}" data-ui-ref="projects-directory.new-project">+ New Project</a>
-    {# CLAUDE-BLACK-BOX-DOOR-01: the other way in. A person who has a
-       document but not yet a project has, until now, had no door at all -
-       every entrance on this page asks them to declare an engagement
-       first. Deliberately secondary styling: this is a second real
-       entrance, not a competing call to action. #}
-    <a class="btn" href="{{ url_for('portal.document_shop_intake') }}" data-ui-ref="projects-directory.document-shop">Document Upload</a>
-    {% endif %}
-    {# CLAUDE-PLANNING-ZONING-DOOR-01: the third real entrance, and the only one
-       that does not require a document or a declared engagement first - an
-       address is all a person has when a property question starts. Visible to
-       every signed-in session rather than admin-gated: this asks for no
-       durable storage and creates nothing, so the authority that gates project
-       creation has nothing to say about it. Placed before Removed Projects with
-       the other entrances, since recovering an archive is the exceptional act. #}
-    <a class="btn" href="{{ url_for('planning_zoning.planning_zoning') }}" data-ui-ref="projects-directory.planning-zoning">Planning &amp; Zoning</a>
-    <a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
+<div class="ui-project-start">
+<p class="ui-eyebrow">Your working environment</p>
+{% call macros.page_header('All Projects', subtitle='Open a project, review what needs attention, or start new work.', subtitle_class='ui-purpose') %}
+{% if is_admin %}<a class="btn btn-primary" href="{{ url_for('portal.upload', environment=(accessible_environments[0] if accessible_environments | length == 1 else None)) }}" data-ui-ref="projects-directory.new-project">+ New Project</a>{% endif %}
 {% endcall %}
+<details><summary>Other ways to start or recover work</summary><div class="ui-secondary-actions">
+{% if is_admin %}<a class="btn" href="{{ url_for('portal.document_shop_intake') }}" data-ui-ref="projects-directory.document-shop">Document Upload</a>{% endif %}
+<a class="btn" href="{{ url_for('planning_zoning.planning_zoning') }}" data-ui-ref="projects-directory.planning-zoning">Planning &amp; Zoning</a>
+<a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
+</div></details>
+
 
 {# CLAUDE-HOME-UNIFY-01: the orientation Composer, MOVED here from
    templates/index.html rather than reimplemented - same ids, same form, same
@@ -80,6 +45,7 @@
 {# attach=False for the same reason New Project's is - _classify_gateway_
    orientation takes (message, projects, can_create_project) and no image.
    See upload.html's own note for what unlocks it. #}
+<details class="ui-help-composer"><summary>Ask GO to help you find your next step</summary>
 {{ macros.composer_shell(
     prefix="index-orientation",
     ui_prefix="index.orientation",
@@ -88,6 +54,7 @@
     placeholder="Open a project, or ask what you can do here",
     aria_label="Ask Archiosk",
     attach=False) }}
+</details>
 
 {# CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives here now.
 
@@ -137,7 +104,7 @@
         <a class="project-card-link" data-ui-ref="projects-directory.leaf" href="{{ url_for('workspace.show_workspace', project_id=p.project_id) }}">
             <div class="project-card-main">
                 <span class="project-card-name">{{ p.display_name }}</span>
-                <span class="project-card-id mono">{{ p.project_id }}</span>
+
             </div>
             <div class="project-card-meta">
                 <span>Updated {{ p.last_activity | humanize }}</span>
@@ -155,6 +122,7 @@
                 {% endif %}
             </div>
         </a>
+        <details class="ui-metadata"><summary>Project reference</summary><span class="project-card-id mono">{{ p.project_id }}</span></details>
         {% if is_admin %}
         <form method="post" action="{{ url_for('portal.delete_project', project_id=p.project_id) }}">
             <button type="submit" class="link-button" data-ui-ref="projects-directory.leaf.delete">Delete</button>
@@ -173,7 +141,7 @@
     {% else %}
     <p>No projects yet.</p>
     {% if is_admin %}
-    <a class="btn btn-primary" href="{{ url_for('portal.upload') }}">Create New Project</a>
+    <a class="btn btn-ghost" href="{{ url_for('portal.upload') }}">Create New Project</a>
     {% endif %}
     {% endif %}
 </div>
@@ -185,6 +153,7 @@
 {% set footer_minimal = true %}
 {% set footer_explore = true %}
 {% include "components/public_footer.html" %}
+</div>
 {% endblock %}
 
 {% block extra_scripts %}

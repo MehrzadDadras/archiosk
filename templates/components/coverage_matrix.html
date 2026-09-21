@@ -1,7 +1,8 @@
 {% macro matrix(coverage) %}
-<p>Analytical configuration: <strong>{{ coverage.state }}</strong></p>
+<div data-ui-shell="compare-compose">
+<p>Analytical configuration: <strong title="{{ coverage.state }}">{{ {'INDIVIDUAL_CONFIGURATION_FEASIBLE':'One participant covers the requirements', 'JOINT_CONFIGURATION_FEASIBLE':'Joint coverage and compatibility established', 'PARTNERSHIP_COMPATIBILITY_UNRESOLVED':'Coverage met; partnership compatibility unresolved', 'CONFIGURATION_UNRESOLVED':'Required coverage remains unresolved', 'CONFIGURATION_NON_FIT':'A mandatory constraint is incompatible', 'PARTIAL_CONFIGURATION':'Partial requirement coverage', 'COMPLEMENTARY_CONFIGURATION':'Complementary capabilities; coverage incomplete'}.get(coverage.state, coverage.state|replace('_',' ')|capitalize) }}</strong></p>
 <p>Governed factual status: <strong>{{ coverage.factual_state }}</strong> · Evidence: {{ 'Qualified for the reviewed scope' if result.reviewed_configuration and not result.evaluation_only else 'Evaluation only' }}</p>
-<table><thead><tr><th>Requirement</th><th>Coverage</th><th>Participant role / contribution</th><th>Gaps</th></tr></thead><tbody>
+<h4>Requirements and coverage</h4><table><thead><tr><th>Requirement</th><th>Coverage</th><th>Participant role / contribution</th><th>Unresolved gaps</th></tr></thead><tbody>
 {% for assignment in coverage.assignments %}<tr><td>{{ result.requirement_labels.get(assignment.requirement_id, 'Required condition') }}<br>{{ assignment.classification }}</td>
 <td>{{ {'COVERED':'Covered','PARTIALLY_COVERED':'Partially covered','NOT_COVERED':'Not covered','COVERAGE_UNRESOLVED':'Unresolved','HARD_CONFLICT':'Conflict'}.get(assignment.coverage_state, assignment.coverage_state) }}<br>{{ assignment.evidence_status }}</td>
 <td>{% for party in assignment.participant_ids %}{{ presentation_report.subject_labels.get(party, 'Participant') }}{{ ', ' if not loop.last else '' }}{% else %}No established assignment{% endfor %}
@@ -10,6 +11,7 @@
 <details><summary>Evidence and coverage logic</summary><pre>{{ assignment|tojson(indent=2) }}</pre></details></td></tr>{% endfor %}
 </tbody></table>
 <p>Partnership compatibility: <strong>{{ coverage.partnership_compatibility.state }}</strong> — {{ coverage.partnership_compatibility.reason }}</p>
+</div>
 {% endmacro %}
 {% if result.minimum_configurations %}
 <h4>Minimum sufficient configuration{{ 's' if result.minimum_configurations|length != 1 else '' }} — {{ 'reviewed scope' if result.reviewed_configuration else 'conditional coverage' }}</h4>

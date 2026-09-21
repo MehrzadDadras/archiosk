@@ -7,12 +7,14 @@
 {% elif result.kind == 'transaction_review' %}
 {% include 'components/transaction_result.html' %}
 {% elif result.kind == 'professional_review' %}
+<p><strong>Condition:</strong> {{ result.subject }} · {{ result.narrative.professional_lens }}</p>
+<p><strong>Expected representation:</strong> {{ result.expected_next.expected or 'Not yet established' }}. {{ result.resolution.next_question or '' }}</p>
 {% if result.interpretation_drift %}<p>Interpretation: <strong>{{ result.interpretation_drift.state }}</strong> · {{ result.interpretation_drift.meaning_state }} · {{ result.interpretation_drift.wording_state }}.</p><p>{{ result.interpretation_drift.reason }}</p><p>Proposition root / return: {{ result.proposition_root_trace.state }}. {{ result.proposition_root_trace.reason }}</p>{% endif %}
 <table><thead><tr><th>Review question</th><th>State</th><th>Finding / next premise</th></tr></thead><tbody>
-{% for key,label in [('resolution','Scale sufficiency'),('expected_next','Expected next'),('root_trace','Root trace / return'),('continuum','Continuum participation')] %}
-<tr><td>{{ label }}</td><td>{{ result[key].state }}</td><td>{{ result[key].reason }} {{ result[key].next_question or '' }}</td></tr>{% endfor %}
+{% for key,label in [('resolution','Is the detail sufficient?'),('expected_next','What information should come next?'),('root_trace','What governs this condition?'),('continuum','Does the information connect to its context?')] %}
+<tr><td>{{ label }}</td><td title="{{ result[key].state }}">{{ result[key].state|replace('_',' ')|capitalize }}</td><td>{{ result[key].reason }} {{ result[key].next_question or '' }}</td></tr>{% endfor %}
 </tbody></table>
-<h4>Section and discipline coverage</h4><table><thead><tr><th>Condition</th><th>Section</th><th>Disciplines</th><th>Physical control</th></tr></thead><tbody>
+<h4>Actual representation and continuity</h4><table><thead><tr><th>Condition</th><th>Section coverage</th><th>Discipline coverage</th><th>Continuity / constraint test</th></tr></thead><tbody>
 {% for condition in result.coverage.conditions %}<tr><td>{{ condition.meaning }}</td><td>{{ condition.section_state }}</td><td>{% for discipline in condition.disciplines %}{{ discipline.discipline }}: {{ discipline.state }}<br>{% else %}UNRESOLVED{% endfor %}</td><td>{{ condition.physical_control.state }}</td></tr>{% else %}<tr><td colspan="4">UNRESOLVED — no scoped condition inventory.</td></tr>{% endfor %}
 </tbody></table>
 {% elif result.kind == 'constraint_review' %}

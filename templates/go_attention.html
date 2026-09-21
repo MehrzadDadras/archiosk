@@ -1,21 +1,23 @@
 ﻿{% extends 'base.html' %}
 {% block title %}GO Review Workspace — ARCHIOSK{% endblock %}
+{% block ui_shell %}work-result{% endblock %}
 {% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css', v=static_version ~ '-go-workspace-2') }}">{% endblock %}
 {% block content %}
 <div class="survey-evaluation go-attention">
-<h1>GO Review Workspace</h1>
-<p>{{ workspace.display_title or (evaluation_game.title if evaluation_game else 'Project review') }}</p>
+<p class="ui-eyebrow">GO Review Workspace</p><h1>Review result</h1>
+{% if not evaluation_only %}<p class="ui-metadata">{{ workspace.display_title or 'Project review' }}</p>{% endif %}
 <p>{{ 'Evaluation example — not established project facts.' if evaluation_only else 'Project evidence — qualifications remain attached to each finding.' }}</p>
 <nav><a href="{{ url_for('portal.survey_evaluation') }}">Choose a review task</a> · <a href="{{ back_url }}">Back to case</a> · <a href="{{ request.url }}">Reload</a></nav>
-{% if analysis %}<section id="review-next-step"><h2>{{ review_tasks[review_task][0] if review_task else 'Your review' }}</h2>
-<p>{{ analysis.objective }}</p>
-{% if execution_runs|length == 1 %}<p><strong>Evidence scope prepared.</strong> This step identifies relevant evidence; it has not yet reached a domain decision. Choose a check below and supply its required premises.</p>{% endif %}
-<nav aria-label="Review tasks">{% for key, task in review_tasks.items() %}<a href="#{{ task[2] }}" data-open-review-section>{{ task[0] }}</a> {% endfor %}</nav></section>{% endif %}
-{% if presentation_report %}{% include 'components/attention_report.html' %}{% endif %}
+
 <section id="go-work-plans" aria-label="Governed work plans" data-actions='{{ work_procedure_actions|tojson }}'>
 {% if work_plans %}<details><summary>Governed work plans — {{ work_plans|length }} recorded</summary>
 {% for work_plan in work_plans|reverse %}{% include 'components/go_work_plan.html' %}{% endfor %}
 </details>{% endif %}</section>
+{% if presentation_report %}{% include 'components/attention_report.html' %}{% endif %}
+
+{% if analysis %}<section id="review-next-step"><h2>{{ review_tasks[review_task][0] if review_task else 'Next actions' }}</h2>
+{% if execution_runs|length == 1 %}<p><strong>Evidence scope prepared.</strong> This step identifies relevant evidence; it has not yet reached a domain decision. Choose a check below and supply its required premises.</p>{% endif %}
+<nav aria-label="Review tasks">{% for key, task in review_tasks.items() %}<a href="#{{ task[2] }}" data-open-review-section>{{ task[0] }}</a> {% endfor %}</nav></section>{% endif %}
 <details id="investigation-controls" {% if selected_proposition or not analysis %}open{% endif %}><summary>Review inputs and run a check</summary>
 <form method="post" action="{{ attention_url }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

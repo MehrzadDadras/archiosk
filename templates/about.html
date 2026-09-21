@@ -2,11 +2,16 @@
 {% import "_macros.html" as macros %}
 
 {% block title %}About Archiosk{% endblock %}
+{% block ui_density %}public{% endblock %}
+{% block ui_shell %}public-explain{% endblock %}
 
 {% block content %}
-{% call macros.page_header('Archiosk', subtitle='Architectural Project Investigation Workspace') %}
+{% call macros.page_header('Archiosk', subtitle='Governed project & asset intelligence', subtitle_class='ui-purpose') %}
 {% endcall %}
 
-<p data-ui-ref="about.tagline">Flat-JSON registry &middot; Static build v{{ static_version }}</p>
-<p class="pane-note" data-ui-ref="about.note">No client-side build step; no external database. See <a href="{{ url_for('portal.index') }}">Archiosk Home</a> to continue.</p>
+<p>Investigate technical, commercial and market information through one governed evidence engine. Review projects, compare sources, examine capital alignment and understand asset decisions with the supporting evidence available on demand.</p>
+<p>Missing information remains unresolved. Human judgment governs consequential decisions.</p>
+<p><a class="btn btn-primary" href="{{ url_for('portal.explore') }}">What Archiosk does</a></p>
+<details><summary>Technical details</summary><p data-ui-ref="about.tagline">Flat-JSON registry &middot; Static build v{{ static_version }}</p>
+<p class="pane-note" data-ui-ref="about.note">No client-side build step; no external database. See <a href="{{ url_for('portal.index') }}">Archiosk Home</a> to continue.</p></details>
 {% endblock %}

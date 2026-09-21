@@ -1,22 +1,28 @@
 ﻿{% extends "base.html" %}
 {% block title %}Compare selected documents{% endblock %}
+{% block ui_shell %}compare-compose{% endblock %}
 {% block content %}
+<div class="survey-evaluation">
 <h1>Compare selected documents</h1>
+<h2>What matters</h2>
 <p><strong>{{ comparison.state }}</strong> — Analytical, non-canonical result.</p>
 <p>{{ comparison.qualification }}</p>
 <p>Compares the full normalized image region using the existing pixel comparator. A matching image does not establish matching requirements or survey authority.</p>
 {% for source in comparison.sources %}
 <section><h2>{{ source.name }}</h2>
-<dl>{% for key, value in source.items() %}<dt>{{ key|replace('_', ' ') }}</dt><dd>{{ value if value is not none else 'UNRESOLVED' }}</dd>{% endfor %}</dl>
+<details><summary>Evidence and provenance</summary><dl>{% for key, value in source.items() %}<dt>{{ key|replace('_', ' ') }}</dt><dd>{{ value if value is not none else 'UNRESOLVED' }}</dd>{% endfor %}</dl></details>
 <a href="{{ url_for('portal.document_shop_result', project_id=source.project_id) }}">Open source analysis</a></section>
 {% endfor %}
-<p>Not established by this comparison: {{ comparison.unsupported|join(', ') }}.</p>
-<section><h2>View normalization before contradiction</h2><p>{{ comparison.normalization.state }} · {{ comparison.normalization.reason }}</p>
+<h2>What remains unresolved</h2><p>Not established by this comparison: {{ comparison.unsupported|join(', ') }}.</p>
+<section><h2>How the views were compared</h2><p>{{ comparison.normalization.state }} · {{ comparison.normalization.reason }}</p>
+<details><summary>View transformations and lineage</summary>
 {% for chain in comparison.normalization.chains %}<p>Source {{ chain.source_id }} → {{ chain.transform.type }} → {{ chain.view_id or 'Original representation' }} · {{ chain.qualification }}</p>{% endfor %}
 <details><summary>Transform lineage and muscle result</summary><pre>{{ comparison.normalization|tojson(indent=2) }}</pre></details>
+</details><details><summary>Compare another working view</summary>
 <form method="post" action="{{ url_for('portal.document_shop_bulk') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="compare">
 {% for source in comparison.sources %}<input type="hidden" name="project_id" value="{{ source.project_id }}">{% endfor %}
 {% for name in ['view_a','view_b'] %}{% set index = loop.index0 %}<label>{{ comparison.sources[index].name }} view <select name="{{ name }}"><option value="">Original</option>{% for view in comparison.available_views[index] %}<option value="{{ view.id }}" {% if view.id == comparison.selected_views[index] %}selected{% endif %}>{{ view.label }} · {{ view.id }}</option>{% endfor %}</select></label>{% endfor %}
-<button>Compare selected representations</button></form></section>
+<button>Compare selected representations</button></form></details></section>
 <a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">Back to My documents</a>
+</div>
 {% endblock %}

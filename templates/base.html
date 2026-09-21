@@ -81,8 +81,9 @@
         } catch (e) { /* localStorage unavailable - default to shown */ }
     </script>
     {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/product_ui.css', v=static_version ~ '-ui-shell-1') }}">
 </head>
-<body>
+<body data-ui-density="{% block ui_density %}{{ 'inspect' if request.args.get('density') == 'inspect' else 'work' }}{% endblock %}">
     <div class="blueprint-grid"></div>
 
     {# CLAUDE-DOCUMENT-SHOP-DOOR-01: a Document Shop customer is not operating
@@ -1035,7 +1036,7 @@
            offset. #}
         <div class="workspace-main-column">
         <div class="app-main">
-            <main>
+            <main data-ui-shell="{% block ui_shell %}work-start{% endblock %}">
                 {% with flashed = get_flashed_messages(with_categories=true) %}
                 {% if flashed %}
                 <div class="flash-stack">
@@ -1354,6 +1355,9 @@
         // discipline VW3's own original comment established for plain
         // -> light.
         window.__resolveStoredAppearanceMode = function (stored) {
+            // New sessions start in the accepted Deep Ocean direction. Explicit
+            // existing appearance choices retain their established migration.
+            if (stored === null) return 'deep-ocean';
             // dark/tinted are the pre-VW8-QA stored vocabulary; graphite
             // is the brief interim vocabulary - map all of them
             // losslessly onto the current one, exactly once.
@@ -2219,7 +2223,7 @@
        from case_workspace.html) lazily and settles the grabber in a
        requestAnimationFrame - i.e. after every DOMContentLoaded handler has
        run - so load order between the two files does not matter. #}
-    <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}"></script>
+    <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}-ui-shell-1"></script>
     <script src="{{ url_for('static', filename='js/composer_attach.js') }}?v={{ static_version }}"></script>
     {# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the pen. Loaded beside the attachment
        script it sits next to in the composer row; both no-op immediately when
@@ -2494,6 +2498,7 @@
         })();
     </script>
     {% block extra_scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/product_ui.js', v=static_version ~ '-ui-shell-1') }}"></script>
     <script src="{{ url_for('static', filename='js/developer_composer_input.js') }}?v={{ static_version }}"></script>
     {# CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: loaded here rather than from
        index.html's own content block so it runs AFTER composer_attach.js has

@@ -505,7 +505,7 @@
         document.addEventListener('click', function (event) {
             if (!html.classList.contains('mobile-nav-open')) return;
             var el = event.target;
-            if (el === toggle || (el && el.closest && (el.closest('#mobile-nav-toggle') || el.closest('.workspace-menubar')))) return;
+            if (el === toggle || (el && el.closest && (el.closest('#mobile-nav-toggle') || el.closest('.workspace-menubar') || el.closest('.ui-primary-nav')))) return;
             setOpen(false);
         });
     }

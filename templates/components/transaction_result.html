@@ -1,14 +1,18 @@
 {% set transaction = result.transaction %}
 {% set retained_stale = (group is defined and group.semantic.consumption_state == 'REVIEW_REQUIRED') or (review is defined and review.consumption_state == 'REVIEW_REQUIRED') %}
-<p><strong>Analysis date:</strong> {{ transaction.as_of }} · retained execution</p>
+<p class="ui-metadata">Status as of {{ transaction.as_of }}</p>
 {% if retained_stale %}<p role="status"><strong>Current applicability unresolved:</strong> supporting premises have changed. Re-evaluate explicitly. The original result and its proof remain below.</p>{% endif %}
 <p><strong>Project:</strong> {{ transaction.identity.project.name }} · {{ transaction.identity.project.phase }}</p>
-<p><strong>Originally recorded participants:</strong> {% for party in transaction.identity.participants %}{{ party.legal_name }} ({{ party.role }}){% if not loop.last %}; {% endif %}{% endfor %}</p>
+<p><strong>Participants:</strong> {% for party in transaction.identity.participants %}{{ party.legal_name }} ({{ party.role }}){% if not loop.last %}; {% endif %}{% endfor %}</p>
+<p><strong>Transaction:</strong> {{ transaction.identity.transaction_class|default('Unresolved')|replace('_',' ')|title }}</p>
 {% if transaction.current_configuration %}<p><strong>Configuration at analysis date:</strong> {{ transaction.current_configuration.state }} · {% for party in transaction.current_configuration.identity.participants %}{{ party.legal_name }} ({{ party.role }}){% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
 <p><strong>{{ 'Factual status at earlier execution' if retained_stale else 'Governed factual status' }}:</strong> {{ result.state }}{% if result.evaluation_only %} · Evaluation only{% endif %}</p>
 <p><strong>Maturity:</strong> {{ transaction.maturity_state or 'Unresolved' }} · <strong>Lifecycle:</strong> {{ transaction.lifecycle_status }}</p>
-<table><thead><tr><th>Independent event</th><th>State</th><th>Missing premise</th></tr></thead><tbody>
-{% for name,event in transaction.events.items() %}<tr><td>{{ name|replace('_',' ')|title }}</td><td>{{ event.state }}</td><td>{% for reason in event.reasons %}{{ reason|replace('_',' ')|capitalize }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table>
+<ol class="ui-timeline" aria-label="Transaction maturity">
+{% for key, label in [('ANNOUNCED','Announced'),('SIGNED','Signed'),('EXECUTED','Executed'),('FINANCIALLY_CLOSED','Financial close')] %}{% set event = transaction.events.get(key, {}) %}<li data-event-state="{{ event.get('state', 'UNRESOLVED') }}"><strong>{{ label }}</strong><small>{{ {'ESTABLISHED':'Established','NOT_OCCURRED':'Did not occur','CONFLICTING':'Conflicting evidence','UNRESOLVED':'Not established'}.get(event.get('state'), 'Not established') }}</small></li>{% endfor %}
+</ol>
+<details><summary>Event states and missing premises</summary><table><thead><tr><th>Independent event</th><th>State</th><th>Missing premise</th></tr></thead><tbody>
+{% for name,event in transaction.events.items() %}<tr><td>{{ name|replace('_',' ')|title }}</td><td>{{ event.state }}</td><td>{% for reason in event.reasons %}{{ reason|replace('_',' ')|capitalize }}{% if not loop.last %}; {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table></details>
 {% if transaction.unresolved %}<h4>What remains unresolved</h4>
 {% set summary = namespace(reasons=[]) %}{% for finding in transaction.unresolved %}{% for reason in ([finding.reason] if finding.reason else finding.reasons) %}{% if reason not in summary.reasons %}{% set summary.reasons = summary.reasons + [reason] %}{% endif %}{% endfor %}{% endfor %}
 <ul>{% for reason in summary.reasons %}<li>{{ reason|replace('_',' ')|capitalize }}</li>{% endfor %}</ul>

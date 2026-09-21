@@ -802,3 +802,12 @@
     outline: 2px solid rgba(105, 224, 255, .92);
     outline-offset: 2px;
 }
+
+/* PUBLIC density: the accepted blue Deep Ocean direction, not aqua. */
+body[data-ui-density="public"] .landing-doc { max-width: 780px; padding-top: clamp(3rem, 8vh, 7rem); }
+body[data-ui-density="public"] .landing-doc-section { margin-top: 2.75rem; }
+body[data-ui-density="public"] .landing-doc-kicker { color: rgba(176, 219, 255, .85); }
+body[data-ui-density="public"] .landing-doc-section h2 { color: rgba(200, 230, 255, .85); }
+body[data-ui-density="public"] .landing-doc-section p,
+body[data-ui-density="public"] .landing-doc-section li { color: rgba(228, 243, 255, .82); }
+body[data-ui-density="public"] .landing-action-primary { background: linear-gradient(120deg, rgb(152, 199, 244), rgb(194, 222, 248)); color: rgb(2, 8, 18); box-shadow: none; }

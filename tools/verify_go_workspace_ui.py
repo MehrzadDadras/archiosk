@@ -52,7 +52,7 @@ def main():
             page = browser.new_page()
             page.set_default_timeout(30000)
             page.on('pageerror', lambda error: proof['errors'].append(str(error)))
-            for width in (1440, 390, 320):
+            for width in (1440, 820, 390, 320):
                 page.set_viewport_size(dict(width=width, height=1000))
                 page.goto(base + '/explore')
                 assert page.get_by_role('heading', name='What Archiosk does').is_visible()
@@ -81,8 +81,6 @@ def main():
                 csrf = page.locator('meta[name="csrf-token"]').get_attribute('content')
                 assert page.request.post(base + '/developer-mode/toggle', form={'csrf_token': csrf}, headers={'Referer': base + '/'}).ok
                 page.goto(base + '/admin/survey-evaluation')
-                page.locator('#review-technical > summary').click()
-                page.get_by_role('button', name='Observe my real requests', exact=True).click()
                 page.locator('#review-examples > summary').click()
                 page.select_option('#case', 'matching:fit')
                 page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
@@ -99,12 +97,27 @@ def main():
                 original_evidence = json.dumps(before.evidence_items, sort_keys=True)
                 original_sources = json.dumps(before.sources, sort_keys=True)
                 page.goto(base + '/admin/survey-evaluation')
-                for width in (1440, 390):
+                for width in (1440, 820, 390):
                     page.set_viewport_size(dict(width=width, height=1000))
-                    assert page.get_by_role('heading', name='GO Review Workspace', exact=True).is_visible()
-                    assert page.locator('#review-entry input[type=radio]').count() == 6
+                    assert page.get_by_role('heading', name='GO', exact=True).is_visible()
+                    assert page.locator('#review-entry input[type=radio]').count() == 7
                     assert not page.get_by_role('heading', name='Same muscle across domains').is_visible()
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    assert page.locator('.app-main').evaluate('(el) => el.scrollWidth <= el.clientWidth + 2')
+                    if width == 390:
+                        assert not page.locator('.ui-primary-nav').is_visible()
+                        page.locator('#mobile-nav-toggle').click()
+                        assert page.locator('.ui-primary-nav').is_visible()
+                        page.locator('.ui-primary-nav').get_by_role('link', name='Review', exact=True).click()
+                        assert urlparse(page.url).path == '/admin/survey-evaluation'
+                        assert not page.locator('.ui-primary-nav').is_visible()
+                        page.locator('.ui-tools-menu > summary').click()
+                        page.locator('[data-ui-ref="menu.file"] > summary').click()
+                        assert page.locator('[data-ui-ref="menu.file.all-projects"]').is_visible()
+                        page.locator('[data-ui-ref="menu.file.all-projects"]').click()
+                        assert urlparse(page.url).path == '/projects'
+                        page.locator('#mobile-nav-toggle').click()
+                        page.locator('.ui-primary-nav').get_by_role('link', name='Review', exact=True).click()
                     page.screenshot(path=str(output / ('workspace-' + str(width) + '.png')), full_page=True)
                 page.check('[name=review_task][value=capital]')
                 page.select_option('#review-target', '/admin/survey-evaluation/' + run_id + '/attention')
@@ -118,6 +131,10 @@ def main():
                 assert all(label in seen for label in ('Scope:', 'Stop conditions:', 'Evidence:', 'Expected output:'))
                 assert 'task=capital' in page.url
                 assert page.get_by_text('Evidence scope prepared.', exact=False).is_visible()
+                attention = store.get(project_id).analyses[-1]
+                attention_trace = read(app, attention['runtime_trace_id'])
+                assert any(e['owner'].endswith('.record_go_attention') and e['phase'] == 'INVOKED'
+                           for e in attention_trace['events'])
                 assert page.locator('#attention-report pre:visible').count() == 0
                 page.get_by_role('navigation', name='Review tasks').get_by_role('link', name='Evaluate capital alignment').click()
                 assert page.locator('#requirement-matching').is_visible()
@@ -143,7 +160,67 @@ def main():
                 assert store._path_for(project_id).read_bytes() == committed
                 page.set_viewport_size(dict(width=1440, height=1000))
                 page.screenshot(path=str(output / 'result.png'), full_page=True)
+                # Actual shared navigation and presentation-only density.
+                page.locator('.ui-tools-menu > summary').click()
+                page.get_by_role('button', name='Inspect', exact=True).click()
+                assert page.locator('body').get_attribute('data-ui-density') == 'inspect'
+                page.get_by_role('link', name='Reload', exact=True).click()
+                assert page.locator('body').get_attribute('data-ui-density') == 'inspect'
+                assert store._path_for(project_id).read_bytes() == committed
+                page.locator('.ui-tools-menu > summary').click()
+                page.get_by_role('button', name='Work', exact=True).click()
+                page.locator('.ui-primary-nav').get_by_role('link', name='Projects', exact=True).click()
+                for width in (1440, 820, 390):
+                    page.set_viewport_size(dict(width=width, height=1000))
+                    assert page.get_by_role('heading', name='All Projects', exact=True).is_visible()
+                    assert page.locator('[data-ui-ref="projects-directory.new-project"]').is_visible()
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                    page.screenshot(path=str(output / ('projects-' + str(width) + '.png')), full_page=True)
+                page.get_by_role('searchbox', name='Search projects', exact=True).fill('No such project')
+                page.get_by_role('searchbox', name='Search projects', exact=True).press('Enter')
+                assert 'No projects match' in page.inner_text('body')
+                proof['projects_navigation_filter_density'] = True
+                proof['result_surfaces'] = []
+                for case in ('matching:composition', 'transaction:out-of-order', 'review:section-gap'):
+                    page.goto(base + '/admin/survey-evaluation')
+                    page.locator('#review-examples > summary').click()
+                    page.select_option('#case', case)
+                    page.get_by_role('button', name='Run isolated evaluation', exact=True).click()
+                    page.wait_for_url(lambda url: '/attention?analysis=' in url, wait_until='domcontentloaded')
+                    case_path = evaluation.location(app, urlparse(page.url).path.split('/')[-2])
+                    case_store = CaseWorkspaceStore(case_path / 'registry')
+                    case_id = evaluation._read(case_path)['project_id']
+                    snapshot = case_store._path_for(case_id).read_bytes()
+                    report = page.locator('#attention-report')
+                    assert report.locator('pre:visible').count() == 0
+                    for width in (1440, 820, 390):
+                        page.set_viewport_size(dict(width=width, height=1000))
+                        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                        assert page.locator('.app-main').evaluate('(el) => el.scrollWidth <= el.clientWidth + 2')
+                        page.screenshot(path=str(output / (case.replace(':', '-') + '-' + str(width) + '.png')), full_page=True)
+                    if case.startswith('transaction:'):
+                        timeline = report.locator('.ui-timeline').first
+                        assert timeline.locator('li').count() == 4
+                        persisted = case_store.get(case_id)
+                        transaction = next(r['governed_result']['transaction'] for r in reversed(persisted.analyses)
+                                           if (r.get('governed_result') or {}).get('kind') == 'transaction_review')
+                        assert timeline.locator('li').evaluate_all('(items) => items.map(x => x.dataset.eventState)') == [
+                            transaction['events'][key]['state'] for key in ('ANNOUNCED','SIGNED','EXECUTED','FINANCIALLY_CLOSED')]
+                        report.locator('summary').filter(has_text='Evidence and transaction history').first.click()
+                        assert report.locator('summary').filter(has_text='Exact evidence and provenance').first.is_visible()
+                    evidence = report.locator('summary').filter(has_text='Show evidence and provenance').first
+                    evidence.click()
+                    group = evidence.locator('..')
+                    group.locator('summary').filter(has_text='Occurrence 1').first.click()
+                    group.locator('summary').filter(has_text='Technical details').first.click()
+                    assert group.locator('pre:visible').count() > 0
+                    report.get_by_role('link', name='Unresolved', exact=True).click()
+                    page.get_by_role('link', name='Reload', exact=True).click()
+                    assert 'filter=unresolved' in page.url
+                    assert case_store._path_for(case_id).read_bytes() == snapshot
+                    proof['result_surfaces'].append(case)
                 proof.update(plan_displayed_before_execution=True, task_entry_invoked_existing_attention=True,
+                             automatic_trace_without_manual_observation=True,
                              matching_invoked=True, missing_evidence_unresolved=True, reload_read_only=True,
                              sources_evidence_unchanged=True, trace_id=trace['id'])
             assert not proof['errors']

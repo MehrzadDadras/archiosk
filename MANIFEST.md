@@ -621,6 +621,13 @@ deploy/*  (nginx, gunicorn) — infra wrapping wsgi:app, not imported by Python
 
 ## Request-flow reference
 
+**Product Owner page grammar:** `static/css/product_ui.css` and
+`static/js/product_ui.js` extend the existing shells with PUBLIC/WORK/INSPECT
+density, intent navigation, result hierarchy and labelled mobile table records.
+`governance/current/product-ui-grammar.md` maps the fixed component vocabulary to
+existing template owners and records the presentation-only boundary. Base and
+gateway shells share the same menu; public pages keep the existing landing shell.
+
 **GO review task entry:** `templates/components/go_review_entry.html` provides
 six task choices and an objective on the existing Survey Evaluation route.
 `routes/portal.py` dispatches only generated accessible destinations to their

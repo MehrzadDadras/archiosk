@@ -742,9 +742,10 @@ def operational_flight_deck():
 GO_REVIEW_TASKS = {
     'project': ('Review a project', 'Inspect the evidence and open questions for a project.', 'subject-propositions'),
     'compare': ('Compare sources', 'Compare source-backed values and preserve conflicting or missing information.', 'information-comparison'),
+    'coordination': ('Review coordination', 'Check how disciplines represent the same condition and where coverage is missing.', 'professional-review'),
     'capital': ('Evaluate capital alignment', 'Check opportunity requirements against sourced investor capabilities.', 'requirement-matching'),
-    'composition': ('Review participant composition', 'Find which participants cover the required roles and where compatibility is unresolved.', 'role-composition'),
-    'transaction': ('Review transaction status', 'Inspect identity, maturity, current applicability and transaction history.', 'transaction-review'),
+    'composition': ('Compose participants', 'Find which participants cover the required roles and where compatibility is unresolved.', 'role-composition'),
+    'transaction': ('Review a transaction', 'Inspect identity, maturity, current applicability and transaction history.', 'transaction-review'),
     'professional': ('Run professional review', 'Choose a professional lens and examine coverage, continuity and missing detail.', 'professional-review'),
 }
 

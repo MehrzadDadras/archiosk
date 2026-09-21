@@ -5,13 +5,15 @@ from services.runtime_observation import read
 
 def test_task_entry_declares_then_executes_existing_owner(project):
     app, store, workspace, evidence, client = project
+    with client.session_transaction() as session:
+        session['survey_observe'] = False
     before = store._path_for('project').read_bytes()
     page = client.get('/admin/survey-evaluation')
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     for label in ('GO Review Workspace', 'Review a project', 'Compare sources',
-                  'Evaluate capital alignment', 'Review participant composition',
-                  'Review transaction status', 'Run professional review', 'What do you want GO to evaluate?'):
+                  'Evaluate capital alignment', 'Compose participants', 'Review coordination',
+                  'Review a transaction', 'Run professional review', 'What do you want GO to evaluate?'):
         assert label in html
     assert '<details id="review-technical" >' in html
     assert store._path_for('project').read_bytes() == before

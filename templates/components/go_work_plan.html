@@ -5,7 +5,7 @@
 <p><strong>Evidence:</strong> {{ work_plan.plan.evidence_classes.required|join('; ') }}.</p>
 <p><strong>Stop conditions:</strong> {{ work_plan.plan.stop_conditions|join('; ') }}.</p>
 <p>Procedure only — not evidence, authority, execution, result or approval.</p>
-<ol>{% for check in work_plan.plan.intended_checks %}<li>{{ check.name }} — {{ check.purpose }}</li>{% endfor %}</ol>
+<ol>{% for check in work_plan.plan.intended_checks %}<li>{{ check.name|replace('_',' ')|capitalize }}{% if check.required %} — required for this objective{% endif %}</li>{% endfor %}</ol>
 <p>Expected output: a qualified result with evidence references. Execution proceeds automatically; missing premises remain unresolved.</p>
 {% for step in work_plan.history if step.step_kind == 'work_plan_revision' %}
 <p><strong>PLAN_REVISION</strong> {{ step.governed_work_plan.reason }}</p>

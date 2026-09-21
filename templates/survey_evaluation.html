@@ -3,7 +3,7 @@
 {% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css', v=static_version ~ '-go-workspace-2') }}">{% endblock %}
 {% block content %}
 <main class="survey-evaluation go-review-home">
-<header><h1>GO Review Workspace</h1>
+<header><p class="ui-eyebrow">GO Review Workspace</p><h1>GO</h1>
 <p>Investigate a question, understand the result, and inspect the evidence behind it.</p>
 <nav><a href="{{ url_for('portal.survey_evaluation') }}">Choose a review task</a></nav>
 {% include 'components/review_reload.html' %}</header>

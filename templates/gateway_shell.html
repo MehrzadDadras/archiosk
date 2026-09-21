@@ -97,8 +97,9 @@
             }
         } catch (e) { /* localStorage unavailable - default to off */ }
     </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/product_ui.css', v=static_version ~ '-ui-shell-1') }}">
 </head>
-<body>
+<body data-ui-density="work">
     {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: landing-page replaces
        this shell's own former light "blueprint-grid on sand" backdrop
        -- the SAME wrapper class/canvas element landing_shell.html and
@@ -197,12 +198,13 @@
        phone widths. Gateway has no Lists/Display/Eye/Toolbox and no Composer,
        so the tray half of this module self-guards into a no-op here; only the
        drawer toggle actually does anything. #}
-    <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}"></script>
+    <script src="{{ url_for('static', filename='js/workspace_trays.js') }}?v={{ static_version }}-ui-shell-1"></script>
     {# CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01: the shared background
        script -- ocean_field.js only, never landing.js itself (which
        also contains the knowledge field, spoken welcome greeting, and
        voice input -- none of which belong on this authenticated
        shell). #}
     <script src="{{ url_for('static', filename='js/ocean_field.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/product_ui.js', v=static_version ~ '-ui-shell-1') }}"></script>
 </body>
 </html>

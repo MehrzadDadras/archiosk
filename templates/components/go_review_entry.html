@@ -1,16 +1,17 @@
 <section id="review-entry" aria-label="Start a GO review">
-<h2>What would you like to investigate?</h2>
+<h2>What do you want to evaluate?</h2>
 <p>Choose a task, select a project or example, and describe your objective. GO will show its work plan, then examine the available evidence. Domain decisions require the relevant source-backed inputs.</p>
 <form method="post" action="{{ url_for('portal.survey_evaluation') }}" id="review-entry-form" class="go-review-form">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="ui-objective"><label for="review-objective">What do you want GO to evaluate?</label>
+<textarea id="review-objective" name="objective" required maxlength="2000" rows="3" placeholder="For example: What evidence is missing before we can confirm this project's capital alignment?"></textarea></div>
 <fieldset class="go-task-grid"><legend>Choose a task</legend>
-{% for key, task in review_tasks.items() %}<label class="go-task-card"><input type="radio" name="review_task" value="{{ key }}" {% if loop.first %}checked{% endif %}><strong>{{ task[0] }}</strong><span>{{ task[1] }}</span></label>{% endfor %}
+{% for key, task in review_tasks.items() %}<label class="go-task-card"><input type="radio" name="review_task" value="{{ key }}" {% if request.args.get('task', 'project') == key %}checked{% endif %}><strong>{{ task[0] }}</strong><span>{{ task[1] }}</span></label>{% endfor %}
 </fieldset>
 <label for="review-target">Project or example</label>
 <select id="review-target" name="review_target" required><option value="">Choose what GO should examine</option>{% for choice in review_choices %}<option value="{{ choice.url }}">{{ choice.kind }} — {{ choice.title }}</option>{% endfor %}</select>
 <p>Examples are evaluation-only; their premises do not establish project facts.</p>
-<label for="review-objective">What do you want GO to evaluate?</label>
-<textarea id="review-objective" name="objective" required maxlength="2000" rows="3" placeholder="For example: What evidence is missing before we can confirm this project's capital alignment?"></textarea>
+
 <input type="hidden" name="lifetime_minutes" value="60">
 <button class="btn btn-primary" type="submit" {% if not review_choices %}disabled{% endif %}>Start review</button>
 <p>The first step identifies relevant evidence and gaps. You can then run the selected check with explicit inputs. Missing premises remain unresolved.</p>

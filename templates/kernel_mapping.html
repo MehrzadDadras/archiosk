@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% block ui_density %}{{ 'work' if request.args.get('density') == 'work' else 'inspect' }}{% endblock %}
+{% block ui_shell %}inspect{% endblock %}
 {% block title %}Generic kernel mapping — ARCHIOSK{% endblock %}
 {% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
 {% block content %}

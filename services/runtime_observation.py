@@ -248,7 +248,9 @@ def install(app):
     @app.before_request
     def begin():
         planned_operation = (session.get('username')
-            and request.endpoint in ('workspace.go_attention', 'portal.evaluation_go_attention')
+            and (request.endpoint in ('workspace.go_attention', 'portal.evaluation_go_attention')
+                 or (request.endpoint == 'portal.survey_evaluation' and request.form.get('review_target')
+                     and session.get('developer_mode') and is_admin()))
             and (request.method == 'GET' or request.form.get('plan_id') or request.form.get('declare_work_plan') == 'yes'))
         if (not planned_operation and (not session.get("survey_observe") or not session.get("developer_mode")
                 or not is_admin())) or request.path.startswith("/static/"):
