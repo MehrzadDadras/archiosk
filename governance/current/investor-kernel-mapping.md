@@ -33,3 +33,26 @@ comm-i5a-opr-5-3-human-authority-provenance-correction.md. No investor names,
 mandates, commitments or AUM values from conversation examples are production
 seeds. Evaluation fixtures remain EVALUATION_INPUT. Outreach is a separate
 authorized action and is not executed by matching or brief generation.
+
+Candidate discovery is now an EXTEND_EXISTING operation through the existing
+external_research fixed-route catalogue, Airlock policy resolver and workspace
+Source/EvidenceItem/AnalysisRun owners. The attention UI declares its work plan
+and retrieves the selected public page. No project content is transmitted in
+the fixed GET. The bounded catalogue includes CIB priority-sector and process
+pages, not seeded investor facts. An arbitrary URL or redirected route is refused.
+
+Original response bytes/hash, URL, publisher attribution, retrieval time,
+extraction limits and screening notes are retained. Source, unvalidated evidence
+and analysis commit together through the existing workspace save. Identical
+URL/bytes reuse the retained source and evidence; an explicit later retrieval
+records its own analysis without strengthening currentness. Reload reads only.
+Post-commit failure cannot delete the retained original. Candidate text remains
+outside the previous attention selection until explicitly selected for further
+classification/matching. Human review and canonical promotion remain separate.
+
+The existing session-only research answer path remains session-only; it does not
+silently retain sources. Retention is the distinct typed attention action.
+Tests: test_candidate_reference.py and test_airlock_web_research_01.py. Browser
+proof uses verify_source_review_ui.py --public-reference against the actual
+configured endpoint inside EVALUATION_INPUT scope. No production profile truth
+is seeded from either a conversation or a test fixture.

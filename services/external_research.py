@@ -108,6 +108,18 @@ REFERENCE_SOURCES: tuple[ReferenceSource, ...] = (
         publisher="CSA Group",
         topics=("csa", "canadian standard", "z662", "b149", "s832"),
     ),
+    ReferenceSource(
+        key="cib-sectors", label="Canada Infrastructure Bank — priority sectors",
+        url="https://cib-bic.ca/en/sectors/priority-sectors/",
+        publisher="Canada Infrastructure Bank",
+        topics=("canada infrastructure bank", "cib mandate", "infrastructure capital"),
+    ),
+    ReferenceSource(
+        key="cib-process", label="Canada Infrastructure Bank — investment process",
+        url="https://cib-bic.ca/en/work-with-us/investment-process/",
+        publisher="Canada Infrastructure Bank",
+        topics=("canada infrastructure bank", "cib investment process", "infrastructure capital"),
+    ),
 )
 
 
@@ -121,6 +133,10 @@ class RetrievedReference:
     text: str
     retrieved_at: str
     screening_notes: tuple[str, ...] = ()
+    raw_bytes: bytes = b""  # immutable response; session-only unless explicitly retained through the Airlock
+    content_type: str = ""
+    visible_text: str = ""  # original extraction, before prompt screening
+    extraction_truncated: bool = False
 
 
 @dataclass
@@ -193,7 +209,7 @@ def retrieve_reference(
     """One bounded GET against one allow-listed source."""
     parsed = urlsplit(source.url)
     allowed = {urlsplit(entry.url).hostname for entry in REFERENCE_SOURCES}
-    if parsed.scheme != "https" or parsed.hostname not in allowed:
+    if source not in REFERENCE_SOURCES or parsed.scheme != "https" or parsed.hostname not in allowed:
         raise ExternalResearchError("Only allow-listed HTTPS reference sources may be retrieved.")
 
     opener = opener or urllib.request.build_opener(_NoRedirect())
@@ -209,8 +225,8 @@ def retrieve_reference(
             # _NoRedirect, but the final URL is checked anyway rather than
             # trusted because the request started out allowed.
             final = urlsplit(response.geturl())
-            if final.hostname not in allowed:
-                raise ExternalResearchError("Retrieval left the allow-listed host.")
+            if response.geturl() != source.url or final.scheme != 'https' or final.hostname not in allowed:
+                raise ExternalResearchError("Retrieval left the fixed allow-listed HTTPS route.")
             content_type = response.headers.get_content_type().lower()
             if content_type not in ALLOWED_CONTENT_TYPES:
                 raise ExternalResearchError(f"Unsupported content type: {content_type or 'missing'}.")
@@ -223,10 +239,13 @@ def retrieve_reference(
     if len(raw) > MAX_RESPONSE_BYTES:
         raise ExternalResearchError("Response exceeded the permitted size.")
 
-    text = _visible_text(raw.decode("utf-8", errors="replace"))[:MAX_EXTRACTED_CHARS]
+    visible = _visible_text(raw.decode("utf-8", errors="replace"))
+    text = visible[:MAX_EXTRACTED_CHARS]
     screened, notes = screen_untrusted_text(text)
     stamp = (now or (lambda: datetime.now(timezone.utc)))().isoformat()
-    return RetrievedReference(source=source, text=screened, retrieved_at=stamp, screening_notes=notes)
+    return RetrievedReference(source=source, text=screened, retrieved_at=stamp, screening_notes=notes,
+        raw_bytes=raw, content_type=content_type, visible_text=text,
+        extraction_truncated=len(visible) > MAX_EXTRACTED_CHARS)
 
 
 RESEARCH_CONTRACT = (
@@ -272,7 +291,7 @@ def research(
         return ResearchResult(
             ran=False,
             refusal=(
-                "I can research published code and standards material, but this question is "
+                "I can research the configured public reference material, but this question is "
                 "outside the reference sources I am currently allowed to retrieve."
             ),
         )

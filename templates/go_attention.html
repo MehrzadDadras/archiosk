@@ -28,6 +28,16 @@
 </form>
 {% if runs %}<form method="get" action="{{ attention_url }}"><label>Recorded execution <select name="analysis">{% for run in runs|reverse %}<option value="{{ run.id }}" {% if analysis and run.id == analysis.id %}selected{% endif %}>{{ run.started_at }} · {{ run.objective }}</option>{% endfor %}</select></label><button>Inspect execution</button></form>{% endif %}
 {% if analysis %}{% set scope = analysis.attention_scope %}
+<section id="public-reference-discovery"><h2>Candidate public sources</h2>
+<p>Retrieve a configured public disclosure into this case for investigation. No project content is sent in the request. Retrieval does not verify identity, mandate, authority or currentness.</p>
+<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="public_reference"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
+<label>Public reference <select name="source_key">{% for source in public_reference_sources %}<option value="{{ source.key }}">{{ source.label }}</option>{% endfor %}</select></label>
+<label>Investigation reason <input name="reason" required maxlength="2000"></label><button>Retrieve candidate source</button></form>
+<p>The catalogue is bounded. Additional disclosures can use the existing document upload path. Select retained evidence in a new attention scope before classifying or matching it.</p>
+{% for run in public_reference_runs|reverse %}{% set result = run.governed_result %}<article><h3>{{ result.label }}</h3><p>Retained candidate · factual status {{ result.state }} · {{ result.currentness }}</p><p>{{ result.qualification }}</p>
+<p><a href="{{ mapping_url }}?item=evidence_items:{{ result.premise_ids[0] }}">Inspect retained evidence</a> · <a href="{{ result.url }}" target="_blank" rel="noopener noreferrer">Publisher page</a></p>
+{% if result.extraction_truncated %}<p>Text preview is partial. The full original response remains retained.</p>{% endif %}
+<details><summary>Retrieval provenance and technical details</summary><pre>{{ result|tojson(indent=2) }}</pre></details></article>{% endfor %}</section>
 <section><h2>Persisted attention: {{ scope.state }}{{ ' · EXPIRED' if expired else '' }}</h2>
 <p>Objective: {{ scope.objective }} · Expires {{ scope.expires_at }} · Analysis {{ analysis.id }}</p>
 <p>Scope: {{ scope.scope }} · {{ 'EVALUATION_INPUT' if scope.evaluation_only else 'Project-bound' }}</p>

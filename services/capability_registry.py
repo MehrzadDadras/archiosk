@@ -102,6 +102,7 @@ def action_catalogue(action_ids):
 # Procedure declarations for the existing attention/review dispatcher. These
 # describe its real executors; they neither execute actions nor admit evidence.
 REVIEW_WORK_PROCEDURES = {
+    'public_reference': ('Retrieve candidate public source', 'retain_public_reference', ('PROVENANCE PRESERVATION', 'UNCERTAINTY')),
     '': ('Set attention', 'record_go_attention', ('ATTENTION',)),
     'requirement_matching': ('Match requirements', 'run_requirement_matching', ('AUTHORITY', 'MATCHING', 'UNCERTAINTY')),
     'role_composition': ('Compose required roles', 'run_role_composition', ('MATCHING', 'ROLE COMPOSITION', 'UNCERTAINTY')),
@@ -125,6 +126,12 @@ def _muscle(name, inputs, outputs, transitions, refusal_states, authority_rule):
 # One catalogue beside the existing capability/action metadata. Each key names
 # its actual implementation. Being registered is not proof of invocation.
 MUSCLE_CONTRACTS = {
+    'services.case_workspace.CaseWorkspaceStore.retain_public_reference': _muscle('CANDIDATE SOURCE PROVENANCE',
+        'Existing attention scope, configured public route and outbound policy',
+        'Immutable response Source, unvalidated EvidenceItem and retained AnalysisRun',
+        'Successful retrieval -> retained candidate only; identical bytes reuse their source identity',
+        'REFUSED for denied policy, unknown route, access challenge, absent bytes or changed retained source',
+        'Retrieval, publisher identity and repetition cannot establish mandate, currentness or proposition authority.'),
     'services.case_workspace.CaseWorkspaceStore.admit_reviewed_proposition': _muscle('SCOPED PROPOSITION AUTHORITY',
         'Exact retained Claim, immutable source fingerprints, scoped human checks, Disposition and Apply',
         'Proposition-confined admission with independent historical and current applicability',

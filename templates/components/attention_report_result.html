@@ -1,5 +1,10 @@
 {# Render committed result fields only. No predicates, authority or coverage are recomputed here. #}
-{% if result.kind == 'transaction_review' %}
+{% if result.kind == 'public_reference' %}
+<p><strong>{{ result.label }}</strong> · Candidate source retained. Current status unverified.</p>
+<p>{{ result.qualification }}</p>
+<p><a href="{{ mapping_url }}?item=evidence_items:{{ result.premise_ids[0] }}">Inspect retained evidence</a> · <a href="{{ result.url }}" target="_blank" rel="noopener noreferrer">Publisher page</a></p>
+{% if result.extraction_truncated %}<p>Text preview is partial; original response bytes remain retained.</p>{% endif %}
+{% elif result.kind == 'transaction_review' %}
 {% include 'components/transaction_result.html' %}
 {% elif result.kind == 'professional_review' %}
 {% if result.interpretation_drift %}<p>Interpretation: <strong>{{ result.interpretation_drift.state }}</strong> · {{ result.interpretation_drift.meaning_state }} · {{ result.interpretation_drift.wording_state }}.</p><p>{{ result.interpretation_drift.reason }}</p><p>Proposition root / return: {{ result.proposition_root_trace.state }}. {{ result.proposition_root_trace.reason }}</p>{% endif %}

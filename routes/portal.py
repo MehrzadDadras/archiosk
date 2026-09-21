@@ -4383,7 +4383,11 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                     plan_id = plan['plan_id']
                     store.begin_go_work_plan(workspace, actor, plan_id)
                     started_plan = True
-                if form.get('action') == 'record_subject':
+                if form.get('action') == 'public_reference':
+                    store.retain_public_reference(workspace, actor, form.get('analysis_id'),
+                        form.get('source_key'), form.get('reason', ''))
+                    analysis = {'id': form['analysis_id']}
+                elif form.get('action') == 'record_subject':
                     store.record_review_subject(workspace, actor, form.get('analysis_id'),
                         form.get('subject_name', ''), form.get('subject_role', ''))
                     analysis = {'id': form['analysis_id']}
@@ -4602,6 +4606,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
           state=analysis['attention_scope']['state'] if analysis else 'NOT_RUN', evaluation_only=evaluation_only)
     work_plans = store.inspect_go_work_plans(workspace, actor, analysis['id'] if analysis else None, app=current_app)
     event('go_work_plans', 'CONSUMED', plan_ids=[row['plan']['plan_id'] for row in work_plans])
+    from services.external_research import REFERENCE_SOURCES as public_reference_sources
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
         review_cases=store.visible_cases_for(workspace, actor),
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
@@ -4619,6 +4624,10 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
         transaction_components=TRANSACTION_COMPONENTS,
         transaction_claims=[c for c in workspace.claims if c.get('event_proposition')],
         work_procedure_actions=list(REVIEW_WORK_PROCEDURES),
+        public_reference_sources=public_reference_sources,
+        public_reference_runs=[run for run in workspace.analyses
+            if (run.get('governed_result') or {}).get('kind') == 'public_reference'
+            and analysis and run['governed_result'].get('attention_analysis_id') == analysis['id']],
         presentation_report=presentation_report,
         report_filter=request.args.get('filter', 'all') if request.args.get('filter', 'all') in ('all','material','unresolved','conflicts','changes','evidence','technical') else 'all',
         requirement_matches=store.inspect_requirement_matches(workspace, actor, analysis['id']) if analysis else [],

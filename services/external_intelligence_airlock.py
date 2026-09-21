@@ -362,6 +362,25 @@ def _canonical_snapshot(workspace: ProjectWorkspace) -> dict[str, Any]:
     return {name: json.loads(json.dumps(getattr(workspace, name))) for name in CANONICAL_COLLECTIONS}
 
 
+def retrieve_candidate_reference(store, workspace, source_key):
+    """Extend the existing fixed-route Airlock; retrieval is never promotion."""
+    from services.external_research import REFERENCE_SOURCES, retrieve_reference, ExternalResearchError
+    policy = _evaluate_policy(store, workspace)
+    if policy.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        raise AirlockMissionError('External reference retrieval is not authorized: ' + policy.reason)
+    source = next((row for row in REFERENCE_SOURCES if row.key == source_key), None)
+    if source is None:
+        raise AirlockMissionError('Select a configured public source; arbitrary URLs are not accepted.')
+    try:
+        retrieved = retrieve_reference(source)
+    except ExternalResearchError as exc:
+        raise AirlockMissionError(str(exc)) from None
+    text = retrieved.visible_text.strip()
+    if len(text) < 100 or any(marker in text.lower() for marker in ('verify that you are not a robot', 'enable javascript and then reload')):
+        raise AirlockMissionError('The source did not supply usable reference content; no access challenge was bypassed.')
+    return retrieved
+
+
 def run_mission_01a(
     *,
     project_id: str,

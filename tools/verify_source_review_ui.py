@@ -138,6 +138,7 @@ def main():
     parser.add_argument('--transaction-games', action='store_true', help='Exercise retained transaction Claims, real review execution and read-only Reload.')
     parser.add_argument('--cross-domain', action='store_true', help='Compare actual shared-matcher invocation across retained domain cases.')
     parser.add_argument('--readable-mirror', action='store_true', help='Exercise separately rendered native annotations through the real view action.')
+    parser.add_argument('--public-reference', action='store_true', help='Retrieve an actual configured public source through the real UI in evaluation scope.')
     parser.add_argument('--output', required=True)
     args=parser.parse_args()
     output=Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -208,6 +209,46 @@ def main():
             assert page.request.post(base+'/developer-mode/toggle',form={'csrf_token':csrf},headers={'Referer':base+'/'}).ok
             page.goto(base+'/admin/survey-evaluation')
             click_and_reveal(page.get_by_role('button',name='Observe my real requests',exact=True))
+            if args.public_reference:
+                page.select_option('#case', 'matching:fit')
+                click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))
+                page.wait_for_url('**/attention?analysis=*')
+                identifier = urlparse(page.url).path.split('/')[-2]
+                reveal_investigation()
+                form = page.locator('#public-reference-discovery form')
+                form.locator('[name="source_key"]').select_option('cib-sectors')
+                form.locator('[name="reason"]').fill('EVALUATION_INPUT: retrieve a real public disclosure as unvalidated candidate source data; no investor facts are asserted.')
+                click_and_reveal(form.get_by_role('button',name='Retrieve candidate source',exact=True))
+                assert 'Candidate source retained. Current status unverified.' in page.locator('#attention-report').inner_text()
+                assert 'CURRENTNESS_UNRESOLVED' in page.locator('#public-reference-discovery').inner_text()
+                proof['entry_path'] = urlparse(page.url).path+'?'+urlparse(page.url).query
+                if not args.live:
+                    from services import survey_evaluation as evaluation
+                    from services.case_workspace import CaseWorkspaceStore
+                    path = evaluation.location(app, identifier)
+                    record = evaluation._read(path)
+                    store = CaseWorkspaceStore(path/'registry')
+                    workspace = store.get(record['project_id'])
+                    result = workspace.analyses[-1]['governed_result']
+                    assert result['evaluation_only'] and result['state'] == 'UNRESOLVED'
+                    source = next(s for s in workspace.sources if s['id'] == result['source_id'])
+                    import hashlib
+                    assert hashlib.sha256(Path(source['file_path']).read_bytes()).hexdigest() == result['response_sha256']
+                    assert not workspace.reviewer_validations and not workspace.applies
+                    persisted = store._path_for(workspace.project_id).read_bytes()
+                page.screenshot(path=str(output/'candidate-reference.png'), full_page=True)
+                page.get_by_role('link',name='Reload',exact=True).click()
+                page.wait_for_load_state('domcontentloaded')
+                if not args.live:
+                    assert store._path_for(workspace.project_id).read_bytes() == persisted
+                    from services.runtime_observation import read
+                    (output/'runtime-traces.json').write_text(json.dumps([read(app, row['trace']) for row in proof['traces']],indent=2),encoding='utf-8')
+                assert not proof['browser_errors']
+                proof.update(public_reference_actual_network_action=True, reload_read_only=True)
+                (output/'proof.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
+                browser.close()
+                print(json.dumps(proof,indent=2))
+                return
             if args.readable_mirror:
                 page.select_option('#case', 'review:readable-mirror')
                 click_and_reveal(page.get_by_role('button',name='Run isolated evaluation',exact=True))

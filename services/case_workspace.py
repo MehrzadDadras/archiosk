@@ -7968,6 +7968,99 @@ class CaseWorkspaceStore:
                             dict(muscle='BREAKPOINT SEARCH', owner='search_interval_breakpoint', result=probe)])
 
     @observed
+    def retain_public_reference(self, workspace, actor, analysis_id, source_key, reason):
+        """One fixed-route retrieval, committed through existing Source/Evidence/Analysis.
+
+        No investor profile, proposition, review or authority is synthesized.
+        Original response bytes and unscreened extraction remain source data.
+        """
+        scope = self._coverage_attention_scope(workspace, actor, analysis_id)
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
+            raise CaseWorkspaceError('Record the investigation objective for this candidate source.')
+        from services.external_intelligence_airlock import retrieve_candidate_reference, AirlockMissionError
+        try:
+            retrieved = retrieve_candidate_reference(self, workspace, source_key)
+        except AirlockMissionError as exc:
+            raise CaseWorkspaceError(str(exc)) from None
+        raw = retrieved.raw_bytes
+        if not isinstance(raw, bytes) or not raw:
+            raise CaseWorkspaceError('Original retrieval bytes are required before retaining candidate evidence.')
+        digest = hashlib.sha256(raw).hexdigest()
+        source = next((s for s in workspace.sources if s.get('origin_reference') == retrieved.source.url
+            and s.get('file_hash') == digest and not s.get('removed_at')
+            and bool(s.get('evaluation_only')) == bool(scope['evaluation_only'])), None)
+        reused = source is not None
+        evidence = None
+        if source:
+            path = Path(source.get('file_path') or '')
+            if (not path.is_file() or not path.resolve().is_relative_to(self.store_path.resolve())
+                    or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
+                raise CaseWorkspaceError('The retained original does not match its recorded bytes; no replacement was made.')
+            evidence = next((e for e in workspace.evidence_items if e['source_id'] == source['id']
+                and e.get('evidence_class') == EVIDENCE_CLASS_EXTERNALLY_RESEARCHED
+                and e.get('content') == retrieved.visible_text), None)
+            if not evidence:
+                raise CaseWorkspaceError('The prior retrieval lacks the matching original extraction; explicit investigation is required.')
+        counts = (len(workspace.sources), len(workspace.evidence_items), len(workspace.analyses))
+        created_path = None
+        try:
+            if not source:
+                identifier = _new_id()
+                directory = self.store_path / 'workspace_sources' / workspace.project_id
+                if not directory.resolve().is_relative_to(self.store_path.resolve()):
+                    raise CaseWorkspaceError('Source storage is outside the project boundary.')
+                directory.mkdir(parents=True, exist_ok=True)
+                created_path = directory / (identifier + '.bin')
+                with created_path.open('xb') as original:
+                    original.write(raw)
+                source = asdict(Source(id=identifier, project_id=workspace.project_id,
+                    kind=SOURCE_KIND_PROJECT_DOCUMENT, name=retrieved.source.label, added_at=_now(),
+                    file_path=str(created_path.resolve()), file_hash=digest, issuer=retrieved.source.publisher,
+                    origin_type=SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR, origin_reference=retrieved.source.url,
+                    mime_type=retrieved.content_type, size_bytes=len(raw),
+                    document_status='externally researched; unvalidated',
+                    note='Retained public response. Retrieval time is not publication time or mandate currentness.',
+                    extractor_version='airlock-visible-text-1'))
+                if scope['evaluation_only']:
+                    source['evaluation_only'] = True
+                evidence = asdict(EvidenceItem(id=_new_id(), project_id=workspace.project_id, source_id=identifier,
+                    evidence_class=EVIDENCE_CLASS_EXTERNALLY_RESEARCHED, content=retrieved.visible_text,
+                    content_type='text', created_at=_now(), created_by=actor, extractor_version='airlock-visible-text-1',
+                    content_hash=hashlib.sha256(retrieved.visible_text.encode('utf-8')).hexdigest()))
+                workspace.sources.append(source)
+                workspace.evidence_items.append(evidence)
+            result = dict(kind='public_reference', state='UNRESOLVED', canonical=False,
+                attention_analysis_id=analysis_id, evaluation_only=scope['evaluation_only'],
+                objective=scope['objective'], reason=reason.strip(), source_id=source['id'],
+                premise_ids=[evidence['id']], source_key=source_key, url=retrieved.source.url,
+                label=retrieved.source.label, publisher=retrieved.source.publisher,
+                retrieved_at=retrieved.retrieved_at, response_sha256=digest,
+                screening_notes=list(retrieved.screening_notes), extraction_truncated=retrieved.extraction_truncated,
+                reused_identical_source=reused, currentness='CURRENTNESS_UNRESOLVED', authority='NOT_ESTABLISHED',
+                qualification='Candidate source retained, not a verified investor proposition. Publication date, '
+                    'identity, binding, mandate and currentness require separate source-based review. '
+                    'The source is outside the previous attention selection until explicitly included.')
+            return self.record_analysis(workspace, source_ids=[source['id']], objective=scope['objective'],
+                engine_name='external_intelligence_airlock', engine_version='candidate-reference-1', findings=[],
+                trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor), governed_result=result)
+        except Exception:
+            # A post-commit telemetry failure must not destroy committed bytes.
+            # When commit status cannot be read, retain the file for recovery.
+            committed = None
+            try:
+                persisted = json.loads(self._path_for(workspace.project_id).read_text(encoding='utf-8'))
+                committed = any(row['id'] == source['id'] for row in persisted.get('sources', [])) if source else False
+            except (OSError, ValueError):
+                pass
+            if committed is False:
+                del workspace.sources[counts[0]:]
+                del workspace.evidence_items[counts[1]:]
+                del workspace.analyses[counts[2]:]
+                if created_path is not None and created_path.is_file():
+                    created_path.unlink()
+            raise
+
+    @observed
     def run_professional_review(self, workspace, actor, analysis_id, narrative_key, focus_id,
                                 subject, representation_class, current_resolution, required_resolution,
                                 project_phase, discipline, reason, *, next_evidence_id=None, next_class=None,
@@ -13673,6 +13766,7 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError('This action has no declared review procedure.')
         common = {'action', 'analysis_id', 'reason'}
         fields = {
+            'public_reference': {'source_key'},
             '': {'objective', 'included_id', 'de_emphasized_id', 'lifetime_minutes'},
             'requirement_matching': {'target_subject', 'context_key', 'require_currentness', 'query_date', 'inventory_claim_id'} |
                 {f'criterion_{index}_{key}' for index in range(16) for key in ('required', 'candidate', 'mandatory', 'operator', 'temporal')},
