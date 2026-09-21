@@ -10666,6 +10666,28 @@ dl.plain-list dd {
    door with it. Closed by default is the answer to both. */
 .ds-rawtext { margin: 8px 0 14px; }
 .ds-rawtext summary { cursor: pointer; }
+
+/* CLAUDE-ANSWER-PRESENTATION-01 - the answer reads first.
+   Weight, not colour, carries the hierarchy: the answer is the only thing at
+   full strength, governance sits quieter beneath it, and the disclosures look
+   like the optional things they are. Tokens only. */
+.ds-answer { font-weight: 600; }
+.ds-answer-found,
+.ds-answer-status { margin: 6px 0 0; opacity: 0.85; }
+.ds-answer-found strong,
+.ds-answer-status strong,
+.ds-answer-conflict strong { display: block; opacity: 0.7; font-weight: 600; }
+.ds-answer-where { display: block; }
+/* A disagreement is the one thing here allowed to draw the eye. */
+.ds-answer-conflict {
+    margin: 8px 0 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--attention-amber);
+}
+.ds-answer-conflict-line { display: block; }
+.ds-answer-more { margin-top: 8px; }
+.ds-answer-more summary { cursor: pointer; opacity: 0.8; }
+.ds-answer-canonical-note { margin: 8px 0 4px; opacity: 0.7; }
 @media (max-width: 720px) {
     .sr-review { grid-template-columns: 1fr; }
 }

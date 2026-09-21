@@ -166,16 +166,33 @@ def conversation_for(workspace) -> list[dict]:
     means this list cannot contain another document's turns. There is no filter
     to get wrong.
     """
-    return [
-        {
+    # CLAUDE-ANSWER-PRESENTATION-01: the answer first, the machinery on
+    # request. This function already projected stored messages into a view for
+    # rendering, so the re-ordering belongs here and nowhere new - no second
+    # reporting engine, no parallel response path.
+    #
+    # NOTHING STORED CHANGES. `text` still carries the message exactly as it
+    # was recorded, and `view.canonical_text` is the same string again. The
+    # projection only decides what is shown first and what waits behind a
+    # disclosure.
+    from services import answer_presentation
+
+    turns = []
+    for m in (getattr(workspace, "project_conversation", None) or []):
+        text = m.get("text") or ""
+        if not text.strip():
+            continue
+        is_customer = m.get("role") == ROLE_HUMAN
+        turns.append({
             "role": m.get("role"),
-            "text": m.get("text") or "",
+            "text": text,
             "created_at": m.get("created_at") or "",
-            "is_customer": m.get("role") == ROLE_HUMAN,
-        }
-        for m in (getattr(workspace, "project_conversation", None) or [])
-        if (m.get("text") or "").strip()
-    ]
+            "is_customer": is_customer,
+            # A person's own question is not projected: they wrote it, and
+            # re-ordering someone's words back at them would be absurd.
+            "view": None if is_customer else answer_presentation.project(text),
+        })
+    return turns
 
 
 def _evidence_text(workspace, source_id: str) -> str:

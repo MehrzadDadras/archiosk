@@ -350,10 +350,71 @@
 {% if conversation %}
 <ol class="ds-conversation" data-ui-ref="document-shop.conversation.thread">
     {% for turn in conversation %}
+    {# CLAUDE-ANSWER-PRESENTATION-01: RESULT FIRST, GOVERNANCE SECOND, TRACE ON
+       DEMAND.
+
+       The answer used to arrive underneath the machinery - evidence admission,
+       then the same source-reference qualification once per item, then the same
+       "not established as a project fact" sentence again, then raw OCR. Every
+       sentence true; the order wrong and the repetition needless.
+
+       Nothing is deleted. `turn.text` is still the stored message, and opening
+       Technical details returns every line that was moved out of the way. A
+       contradiction is NEVER folded into the status line - two pieces of
+       evidence that disagree look repetitive and are the opposite of it. #}
     <li class="ds-turn {{ 'ds-turn-you' if turn.is_customer else 'ds-turn-go' }}"
         data-ui-ref="document-shop.conversation.turn">
         <span class="ds-turn-who mono">{{ 'You' if turn.is_customer else 'GO' }}</span>
+        {% if turn.is_customer or not turn.view %}
         <span class="ds-turn-text mono">{{ turn.text }}</span>
+        {% else %}
+        <span class="ds-turn-text mono ds-answer"
+              data-ui-ref="document-shop.answer.direct">{{ turn.view.answer or turn.text }}</span>
+
+        {% if turn.view.found_in %}
+        <p class="mono ds-answer-found" data-ui-ref="document-shop.answer.found-in">
+            <strong>Found in</strong>
+            {% for where in turn.view.found_in %}<span class="ds-answer-where">{{ where }}</span>{% endfor %}
+        </p>
+        {% endif %}
+
+        {# A disagreement is surfaced, not summarised. #}
+        {% if turn.view.contradictions %}
+        <p class="mono ds-answer-conflict" data-ui-ref="document-shop.answer.contradictions">
+            <strong>Not everything agrees</strong>
+            {% for line in turn.view.contradictions %}<span class="ds-answer-conflict-line">{{ line }}</span>{% endfor %}
+        </p>
+        {% endif %}
+
+        {% if turn.view.status %}
+        <p class="mono ds-answer-status" data-ui-ref="document-shop.answer.status">
+            <strong>Status</strong> {{ turn.view.status }}
+        </p>
+        {% endif %}
+
+        {% if turn.view.evidence %}
+        <details class="ds-answer-more" data-ui-ref="document-shop.answer.evidence">
+            <summary class="mono">Show evidence</summary>
+            <ul class="plain-list mono">
+                {% for item in turn.view.evidence %}<li class="plain-list-item">{{ item }}</li>{% endfor %}
+            </ul>
+        </details>
+        {% endif %}
+
+        {# EVERYTHING MOVED OUT LIVES HERE, so the canonical message is whole
+           again for anyone who opens it. #}
+        <details class="ds-answer-more" data-ui-ref="document-shop.answer.technical">
+            <summary class="mono">Technical details</summary>
+            {% if turn.view.technical %}
+            <pre class="mono asread-recovered-text"
+                 data-ui-ref="document-shop.answer.technical-residue">{{ turn.view.technical | join('
+') }}</pre>
+            {% endif %}
+            <p class="mono ds-answer-canonical-note">The answer as recorded:</p>
+            <pre class="mono asread-recovered-text"
+                 data-ui-ref="document-shop.answer.canonical">{{ turn.view.canonical_text }}</pre>
+        </details>
+        {% endif %}
     </li>
     {% endfor %}
 </ol>
