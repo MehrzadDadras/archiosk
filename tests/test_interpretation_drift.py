@@ -36,8 +36,8 @@ def interpretation_scope(project, *, changed=False, qualifier_loss=False, author
         store.confirm_relationship(workspace, edge['id'], 'reviewer')
     if authorization:
         for decision in authorization.split(','):
-            append([upstream['id'], target['id']], evidence['content'], property_key='interpretation_change_authorization',
-                kind='TOKEN_SET', vocabulary='claim_transition', qualifiers=[decision])
+            append([target['id']], evidence['content'], property_key='interpretation_change_authorization',
+                kind='TOKEN_SET', vocabulary='claim_transition:' + upstream['id'], qualifiers=[decision])
     return store, workspace, attention, evidence, upstream, target
 
 
@@ -70,6 +70,38 @@ def test_same_scoped_root_returns_to_target_without_following_peripheral_links(p
     assert [row['claim_id'] for row in trace['trace']] == [target['id'], upstream['id']]
     stale = trace_governing_root(store, workspace, target['id'], target_type='claim', query_date='2025-06-01')
     assert stale['state'] == 'UNRESOLVED' and stale['root'] is None
+
+
+def test_positive_change_authorization_cannot_be_reused_in_reverse(project):
+    store, workspace, _, _, upstream, target = interpretation_scope(project, changed=True, authorization='AUTHORIZED')
+    edge = store.record_relationship(workspace, 'claim', upstream['id'], 'claim', target['id'], 'based_on')
+    store.confirm_relationship(workspace, edge['id'], 'reviewer')
+    forward = inspect_interpretation_drift(store, workspace, upstream['id'], target['id'], query_date='2024-06-01')
+    assert forward['state'] == 'AUTHORIZED_CHANGE'
+    reverse = inspect_interpretation_drift(store, workspace, target['id'], upstream['id'], query_date='2024-06-01')
+    assert reverse['meaning_state'] == 'MEANING_CHANGED'
+    assert reverse['state'] == reverse['authorization_state'] == 'UNRESOLVED'
+    assert not reverse['authorization_evidence']
+
+
+def test_root_trace_returns_from_multi_hop_intent_without_peripheral_traversal(project):
+    store, workspace, attention, evidence, upstream, target = interpretation_scope(project, dependency=False)
+    norm = copy.deepcopy(target['structured_proposition']['normalization'])
+    middle = store.record_subject_proposition(workspace, 'reviewer', attention['id'], norm,
+        'PROJECT_DOCUMENT', 'DATED_REQUIREMENT', evidence['content'], 'Intermediate controlled representation.',
+        as_of='2024-01-01', valid_until='2024-12-31', attribution='agent_assessment')
+    proposal = copy.deepcopy(workspace.reviewer_validations[0]['proposition_review'])
+    for key in ('scope_fingerprint', 'qualification', 'reviewer'):
+        proposal.pop(key, None)
+    admit(store, workspace, middle, proposal)
+    for child, parent in ((target, middle), (middle, upstream)):
+        edge = store.record_relationship(workspace, 'claim', child['id'], 'claim', parent['id'], 'based_on')
+        store.confirm_relationship(workspace, edge['id'], 'reviewer')
+    result = inspect_interpretation_drift(store, workspace, upstream['id'], target['id'], query_date='2024-06-01')
+    assert result['state'] == 'MEANING_PRESERVED'
+    trace = result['dependency_trace']
+    assert [row['claim_id'] for row in trace['trace']] == [target['id'], middle['id'], upstream['id']]
+    assert trace['root'] == upstream['id'] and trace['return_target'] == target['id']
 
 
 def test_real_professional_route_invokes_and_retains_drift_and_root_trace(project):

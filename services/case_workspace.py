@@ -8009,7 +8009,8 @@ class CaseWorkspaceStore:
             except (TypeError, ValueError):
                 raise CaseWorkspaceError('Interpretation review requires an explicit applicability date.') from None
             interpretation = inspect_interpretation_drift(self, workspace, upstream_claim_id, target_claim_id, query_date=query_date)
-            claim_trace = trace_governing_root(self, workspace, target_claim_id, target_type='claim', query_date=query_date)
+            claim_trace = interpretation.get('dependency_trace') or trace_governing_root(
+                self, workspace, target_claim_id, target_type='claim', query_date=query_date)
         resolution = assess_review_resolution(narrative, current_resolution, required_resolution, premise_ids=[focus_id])
         sequence = expected_next_information(narrative, representation_class,
             [next_class] if next_evidence_id else [], subject=subject.strip(), project_phase=project_phase,
@@ -15319,6 +15320,17 @@ class CaseWorkspaceStore:
         for section in work_product["sections"]:
             if section["removed"]:
                 continue
+            if (work_product.get('artifact_type') in ('professional_review', 'capital_alignment_brief', 'alignment_review')
+                    and section.get('section_type') == 'provenance' and isinstance(section.get('content'), dict)):
+                analysis_id = section['content'].get('analysis_id')
+                analysis = self._find(workspace.analyses, analysis_id) if analysis_id else None
+                result = (analysis or {}).get('governed_result') or {}
+                if analysis_id and (not analysis or result.get('source_premises') and
+                        result['source_premises'] != self._work_plan_premises(workspace)):
+                    stale_links.append(dict(section_id=section['id'], object_type='analysis', object_id=analysis_id,
+                        resolved=bool(analysis), stale=True,
+                        reason='REVIEW_REQUIRED: governing premises changed or the retained analysis is unavailable. '
+                            'This historical presentation is unchanged; explicit re-evaluation is required.'))
             for link in section["evidence_links"]:
                 info = self._resolve_mm6_endpoint_status(workspace, link["object_type"], link["object_id"])
                 if link['object_type'] == 'claim' and info['resolved']:

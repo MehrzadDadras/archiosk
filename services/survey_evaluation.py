@@ -500,8 +500,10 @@ def _transaction_game_inputs(store, workspace, actor, attention_id, evidence, va
 def _matching_game_inputs(store, workspace, actor, attention_id, evidence, variant, reason, *, specification=None):
     """Supply declared fixture premises; ordinary Claim/matching/composition owners execute."""
     specification = specification or {}
+    subjects = ([('required condition', 'requirement'), ('candidate representation', 'representation'), ('support', 'support')]
+        if variant == 'domain' else [('opportunity', 'opportunity'), ('candidate A','investor'), ('candidate B','lender')])
     parties = [store.record_review_subject(workspace, actor, attention_id, 'EVALUATION '+name, role)
-        for name, role in [('opportunity', 'opportunity'), ('candidate A','investor'), ('candidate B','lender')]]
+        for name, role in subjects]
 
     def proposition(party, property_key, value, *, historical=False, reporting=False):
         item = evidence[0 if party == 0 else 1][0]

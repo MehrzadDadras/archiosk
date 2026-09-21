@@ -1184,7 +1184,7 @@ def inspect_continuum_participation(store, workspace, evidence_id, expectation='
 
 
 @observed
-def trace_governing_root(store, workspace, target_id, *, max_depth=12, target_type='evidence_item', query_date=None):
+def trace_governing_root(store, workspace, target_id, *, max_depth=12, target_type='evidence_item', query_date=None, stop_at=None):
     """Follow only explicit governing dependencies, then return to the focal target.
 
     Connectivity and a terminal node do not establish governing authority. The
@@ -1225,6 +1225,9 @@ def trace_governing_root(store, workspace, target_id, *, max_depth=12, target_ty
         if not available:
             result['reason'] = 'Authority/currentness is unresolved or contested; returned to target.'
             return result
+        if stop_at == current and admitted['admissible']:
+            return dict(result, state='QUALIFIED', root=current, controlling_premise=admitted,
+                reason='The requested admitted controlling premise was reached; returned immediately to the focal target.')
         edges = [edge for edge in store.relationships_for(workspace, target_type, current, direction='from')
                  if edge['relationship_type'] in ('derived_from', 'based_on')]
         if not edges:
@@ -1283,7 +1286,9 @@ def inspect_interpretation_drift(store, workspace, upstream_id, target_id, *, qu
     edges = [e for e in store.relationships_for(workspace, 'claim', target_id, direction='from')
         if e['to_type'] == 'claim' and e['to_id'] == upstream_id and e['relationship_type'] in ('derived_from', 'based_on')]
     result['dependencies'] = [dict(record=e, status=store.resolve_relationship_status(workspace, e['id'])) for e in edges]
-    bound = any(not e['record'].get('analytical_scope') and e['status']['status'] == 'confirmed' for e in result['dependencies'])
+    result['dependency_trace'] = trace_governing_root(store, workspace, target_id, target_type='claim',
+        query_date=query_date, stop_at=upstream_id)
+    bound = result['dependency_trace']['state'] == 'QUALIFIED' and result['dependency_trace']['root'] == upstream_id
     admitted = all(review['admissible'] and (review.get('evidence_tier') or 0) >= 2 and
         inspect_declared_temporal_scope(claim['structured_proposition'], query_date)['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY'
         for review, claim in zip(result['admissions'], claims))
@@ -1297,7 +1302,7 @@ def inspect_interpretation_drift(store, workspace, upstream_id, target_id, *, qu
         prop = claim.get('structured_proposition') or {}
         norm = prop.get('normalization') or {}
         if (norm.get('property_key') == 'interpretation_change_authorization' and norm.get('kind') == 'TOKEN_SET'
-                and norm.get('vocabulary') == 'claim_transition' and set(norm.get('value') or []) == {upstream_id, target_id}
+                and norm.get('vocabulary') == 'claim_transition:' + upstream_id and norm.get('value') == [target_id]
                 and norm.get('subject_key') == a['subject_key'] and norm.get('scope_key') == a['scope_key']):
             review = store.admit_reviewed_proposition(workspace, claim['id'], query_date=query_date)
             result['authorization_evidence'].append(dict(claim=claim, admission=review))

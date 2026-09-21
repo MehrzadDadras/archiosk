@@ -92,3 +92,22 @@ def test_pdf_refuses_unsupported_font_instead_of_silently_losing_source_characte
     for kind in ('html', 'pptx'):
         buffer, _ = export_work_product(product, kind)
         assert '未決' in extract(buffer, kind)
+
+
+def test_later_governing_evidence_warns_on_historical_brief_without_rewriting_it(project):
+    from tests.test_reviewed_requirement_matching import matching_scope
+    _, _, _, _, client = project
+    store, workspace, append, run, _, _, _ = matching_scope(project)
+    assert run()['state'] == 'FIT'
+    product = store.render_professional_review(workspace, 'reviewer', workspace.analyses[-1]['id'])
+    original = copy.deepcopy(product['sections'])
+    assert not store.stale_evidence_for_work_product(workspace, product['id'])['has_stale_or_broken_evidence']
+    append('new_governing_constraint', ['REVIEW'], kind='TOKEN_SET', vocabulary='review')
+    before = store._path_for('project').read_bytes()
+    status = store.stale_evidence_for_work_product(workspace, product['id'])
+    assert status['has_stale_or_broken_evidence']
+    assert any(link['object_type'] == 'analysis' for link in status['stale_links'])
+    assert store._path_for('project').read_bytes() == before
+    response = client.get(f'/projects/project/workspace/work-products/{product["id"]}/export.html')
+    assert response.status_code == 200 and b'REVIEW REQUIRED' in response.data
+    assert store.get_work_product(store.get('project'), product['id'])['sections'] == original

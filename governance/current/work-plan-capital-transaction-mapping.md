@@ -122,8 +122,16 @@ existing professional AnalysisRun remain the owners. No durable primitive is add
 The same bounded root tracer accepts a Claim target and stops on missing authority,
 scope change, ambiguity or a broken chain before returning to the target.
 Wording is compared independently from the declared typed meaning. A separately
-reviewed `interpretation_change_authorization` Claim uses `claim_transition` tokens
-for the exact upstream/target Claim IDs and one qualifier, `AUTHORIZED` or
+reviewed `interpretation_change_authorization` Claim uses vocabulary
+`claim_transition:<upstream-claim-id>`, a single target Claim ID as its token value,
+and one qualifier, `AUTHORIZED` or
 `PROHIBITED`. Source scope, authority and temporal applicability must be admitted.
+Direction is part of the reviewed premise: permission cannot be reused in reverse.
 Absent authorization remains unresolved; it is never fabricated from silence.
 The professional UI and retained presentation consume these committed results.
+The existing tracer can stop at an explicitly requested controlling proposition
+across multiple confirmed dependencies. Every intermediate scope and admission
+is checked; unrelated branches are not traversed after sufficient premises are
+obtained. Historical presentation sections remain immutable when new governing
+evidence arrives. The existing export-status projection then exposes
+REVIEW_REQUIRED from the original analysis's retained premise fingerprints.
