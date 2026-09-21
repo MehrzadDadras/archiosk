@@ -35,3 +35,17 @@
 #attention-report summary, #go-work-plans summary { cursor: pointer; }
 #attention-report pre, #go-work-plans pre { max-height: 30rem; overflow: auto; }
 #go-work-plans:empty { display: none; }
+.go-task-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; }
+.go-task-card { padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; cursor: pointer; }
+.go-task-card:has(input:checked) { border-color: var(--machine-blue); background: var(--surface-primary); }
+.go-task-card span { display: block; margin-top: .5rem; }
+.go-task-card input[type=radio] { width: auto; margin-right: .5rem; }
+#review-next-step nav { display: flex; flex-wrap: wrap; gap: .8rem; }
+.survey-evaluation summary { cursor: pointer; }
+.go-review-home header h1 { margin-bottom: .5rem; }
+.go-review-home header p { margin: .5rem 0; }
+.go-review-home #review-entry { margin-top: 1rem; padding: 1.2rem; }
+.go-review-home #review-entry h2 { margin-top: 0; }
+.go-review-home .go-task-card { margin-top: 0; padding: .75rem; }
+.go-review-home .go-task-card span { font-size: .9em; }
+@media (max-width: 600px) { .survey-evaluation { padding: 1rem; } .survey-evaluation section { padding: 1rem; } }

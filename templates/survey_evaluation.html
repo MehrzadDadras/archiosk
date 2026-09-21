@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
-{% block title %}Survey Evaluation — ARCHIOSK{% endblock %}
-{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
+{% block title %}GO Review Workspace — ARCHIOSK{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css', v=static_version ~ '-go-workspace-2') }}">{% endblock %}
 {% block content %}
-<main class="survey-evaluation">
-<header><p>Admin · Developer Mode</p><h1>Survey Evaluation</h1>
-<p>Inspect ordinary project execution or run clearly isolated <strong class="se-state se-EVALUATION_INPUT">EVALUATION_INPUT</strong> cases. An observation grants no authority and certifies no survey.</p>
-<p>Controlled cases supply labelled premises. The earned-H operation calculates a transform from addressed correspondence evidence; it does not extract controls automatically or establish physical scale.</p>
-<nav><a href="{{ url_for('portal.developer_tools') }}">Developer Tools</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Choose another case</a></nav>{% include 'components/review_reload.html' %}</header>
-<ol class="se-sequence"><li>SITUATE</li><li>BIND</li><li>COMPARE</li><li>REASON</li><li>GOVERN</li><li>CONSUME</li><li>SURFACE</li></ol>
+<main class="survey-evaluation go-review-home">
+<header><h1>GO Review Workspace</h1>
+<p>Investigate a question, understand the result, and inspect the evidence behind it.</p>
+<nav><a href="{{ url_for('portal.survey_evaluation') }}">Choose a review task</a></nav>
+{% include 'components/review_reload.html' %}</header>
 {% if not report %}
+{% include 'components/go_review_entry.html' %}
+<details id="review-technical" {% if request.args.get('observation') or request.args.getlist('compare_run') %}open{% endif %}><summary>Technical details — runtime inspection</summary>
 {% include 'components/cross_domain_runtime.html' %}
 {% if muscle_exposure %}<section id="muscle-inspector"><h2>GO muscle inspector</h2>
 <p>{{ muscle_exposure.request.method }} {{ muscle_exposure.request.path }} · Trace {{ muscle_exposure.trace_id }}</p><p>{{ muscle_exposure.qualification }}</p>
@@ -37,14 +38,17 @@
 {% if event.user_prompt is defined %}<details><summary>Exact context sent</summary><pre>{{ event.user_prompt }}</pre><h4>System instruction</h4><pre>{{ event.system_prompt }}</pre></details>{% endif %}
 {% if event.parsed is defined and event.parsed is mapping %}{% if event.parsed.get('answer') or event.parsed.get('reply_text') %}<p>Provider proposal — not the admitted answer:</p><pre>{{ event.parsed.get('answer') or event.parsed.get('reply_text') }}</pre>{% endif %}{% endif %}
 <details><summary>Recorded technical provenance</summary><pre>{{ event|tojson(indent=2) }}</pre></details></article>{% endfor %}</details>{% else %}<p>No observed invocation yet. Enable observation and perform a real request.</p>{% endfor %}</section>
-<section><h2>Run a GO evaluation case</h2><p>Uses existing Survey, professional review and constraint owners with ordinary EvidenceItems, relationships, persistence and consumers. Controlled classification premises remain evaluation-only.</p>
+</details>
+<details id="review-examples"><summary>Evaluation examples — explore with clearly labelled premises</summary><section><h2>Run a GO evaluation case</h2><p>Uses existing Survey, professional review and constraint owners with ordinary EvidenceItems, relationships, persistence and consumers. Controlled classification premises remain evaluation-only.</p>
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label for="case">Case</label><select id="case" name="case"><optgroup label="GO continuum and constraint games">{% for key,label in cases.items() if key.startswith('review:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup><optgroup label="Professional Survey cases">{% for key,label in cases.items() if not key.startswith('control:') and not key.startswith('review:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup><optgroup label="All 34 Rule 7 controls">{% for key,label in cases.items() if key.startswith('control:') %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</optgroup></select>
 <label for="matrix">Explicit evaluation H (used by the explicit-homography case only)</label>
 <textarea id="matrix" name="matrix" rows="3" maxlength="2000">[[1,0,4],[0,1,5],[0,0,1]]</textarea>
 <p>Column-vector convention. Source and target: EUCLIDEAN_RECTIFIED, plane sheet. Other cases expose deliberate mismatch, projective level and missing-H refusal.</p>
 <button type="submit">Run isolated evaluation</button></form></section>
-<section><h2>Retained evaluations</h2>{% for run in runs %}<p><a href="{{ url_for('portal.survey_evaluation_run', run_id=run.id) }}">{{ run.title }}</a> · {{ run.actor }} · {{ run.id }}</p>{% else %}<p>No evaluation has been run.</p>{% endfor %}</section>
+</details>
+<details><summary>Technical details — evaluation history</summary><section><h2>Retained evaluations</h2>{% for run in runs %}<p><a href="{{ url_for('portal.survey_evaluation_run', run_id=run.id) }}">{{ run.title }}</a> · {{ run.actor }} · {{ run.id }}</p>{% else %}<p>No evaluation has been run.</p>{% endfor %}</section>
+</details>
 {% else %}
 <h2>{{ report.record.title }}</h2><p>Run {{ report.record.id }} · Created by {{ report.record.actor }}</p>
 <p>Executed: retained inputs → actual operators → EvidenceItems → reload → trust/review → examination and consumer output. Ask GO is invoked by its separate button below; its provider outcome is shown explicitly.</p>
@@ -73,3 +77,5 @@
 <section><h2>Evidence and relationships</h2>{% for key,label in [('sources','Sources and filenames'),('units','Pages'),('regions','Regions / objects'),('evidence','EvidenceItems'),('relationships','Reviewed relationships'),('supersessions','Predecessor / successor lineage'),('assessments','Scoped proposals')] %}<details><summary>{{ label }}</summary><pre>{{ report[key]|tojson(indent=2) }}</pre></details>{% endfor %}</section>
 <section><h2>Capability not yet implemented</h2>{% for missing in report.record.capabilities_not_implemented %}<p><span class="se-state se-UNRESOLVED">UNRESOLVED</span> {{ missing }} — CAPABILITY NOT YET IMPLEMENTED. No substitute conclusion is invented.</p>{% endfor %}</section>
 {% endif %}</main>{% endblock %}
+
+{% block extra_scripts %}{{ super() }}<script src="{{ url_for('static', filename='js/go_work_plan.js', v=static_version ~ '-go-workspace-2') }}"></script><script src="{{ url_for('static', filename='js/go_review_workspace.js', v=static_version ~ '-go-workspace-2') }}"></script>{% endblock %}

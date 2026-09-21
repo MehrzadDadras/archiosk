@@ -1,18 +1,22 @@
 ﻿{% extends 'base.html' %}
-{% block title %}Governed attention — GO{% endblock %}
-{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css', v=static_version ~ '-go-review-1') }}">{% endblock %}
+{% block title %}GO Review Workspace — ARCHIOSK{% endblock %}
+{% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css', v=static_version ~ '-go-workspace-2') }}">{% endblock %}
 {% block content %}
 <div class="survey-evaluation go-attention">
-<h1>Governed attention</h1>
-{% if evaluation_game %}<h2>{{ evaluation_game.title }}</h2><p>EVALUATION_INPUT: retained text fixtures supply explicit analytical premises. They are not physical detail drawings, verified investor facts or human professional approvals. Project authority remains unchanged.</p>{% else %}<p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'Real project data — qualification stays with each record' }}</p>{% endif %}
-<p>Attention selects what GO examines for this objective. It does not change what is true.</p>
-<nav><a href="{{ back_url }}">Back to case</a> · <a href="{{ mapping_url }}">Generic kernel mapping</a> · <a href="{{ request.url }}">Reload</a></nav>
+<h1>GO Review Workspace</h1>
+<p>{{ workspace.display_title or (evaluation_game.title if evaluation_game else 'Project review') }}</p>
+<p>{{ 'Evaluation example — not established project facts.' if evaluation_only else 'Project evidence — qualifications remain attached to each finding.' }}</p>
+<nav><a href="{{ url_for('portal.survey_evaluation') }}">Choose a review task</a> · <a href="{{ back_url }}">Back to case</a> · <a href="{{ request.url }}">Reload</a></nav>
+{% if analysis %}<section id="review-next-step"><h2>{{ review_tasks[review_task][0] if review_task else 'Your review' }}</h2>
+<p>{{ analysis.objective }}</p>
+{% if execution_runs|length == 1 %}<p><strong>Evidence scope prepared.</strong> This step identifies relevant evidence; it has not yet reached a domain decision. Choose a check below and supply its required premises.</p>{% endif %}
+<nav aria-label="Review tasks">{% for key, task in review_tasks.items() %}<a href="#{{ task[2] }}" data-open-review-section>{{ task[0] }}</a> {% endfor %}</nav></section>{% endif %}
 {% if presentation_report %}{% include 'components/attention_report.html' %}{% endif %}
 <section id="go-work-plans" aria-label="Governed work plans" data-actions='{{ work_procedure_actions|tojson }}'>
 {% if work_plans %}<details><summary>Governed work plans — {{ work_plans|length }} recorded</summary>
 {% for work_plan in work_plans|reverse %}{% include 'components/go_work_plan.html' %}{% endfor %}
 </details>{% endif %}</section>
-<details id="investigation-controls" {% if selected_proposition or not analysis %}open{% endif %}><summary>Investigate / run actions — full records and individual review controls</summary>
+<details id="investigation-controls" {% if selected_proposition or not analysis %}open{% endif %}><summary>Review inputs and run a check</summary>
 <form method="post" action="{{ attention_url }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Question / objective <input name="objective" required maxlength="2000" value="{{ analysis.objective if analysis else '' }}"></label>
@@ -64,7 +68,7 @@
 {% include 'components/requirement_matching.html' %}
 {% include 'components/role_composition.html' %}
 {% include 'components/transaction_review.html' %}
-<section><h2>Normalized information comparison</h2>
+<section id="information-comparison"><h2>Compare sources</h2>
 <p>EVALUATION_INPUT: explicitly model a number or vocabulary set from each selected source. These hypotheses do not correct the machine read or establish source facts. Blank qualifiers remain unresolved; enter [] only when explicitly modelling no qualifiers.</p>
 {% if not expired %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="information_comparison"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
 <label>Declared property key <input name="property_key" required maxlength="200" placeholder="opening-width"></label>
@@ -91,7 +95,7 @@
 {% for index in [1, 2] %}<fieldset><legend>Constraint {{ index }}</legend><label>Source reference <select name="evidence_{{ index }}">{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}">{{ item.evidence_item_id }} · {{ item.source_id }}</option>{% endfor %}</select></label><label>Hypothetical inclusive lower bound <input name="lower_{{ index }}" type="number" step="any" required></label><label>Hypothetical inclusive upper bound <input name="upper_{{ index }}" type="number" step="any" required></label></fieldset>{% endfor %}
 <label>Hypothetical baseline <input name="baseline" type="number" step="any" required></label><label>Test variation <select name="direction"><option value="increase">Increase parameter</option><option value="decrease">Decrease parameter</option></select></label><label>Reason for this model <input name="reason" required maxlength="2000"></label><button>Run hypothetical constraint probe</button></form>{% endif %}
 {% for run in constraint_reviews|reverse %}{% set result = run.governed_result %}<article><h3>EVALUATION_INPUT · {{ result.model.state }}</h3><p>{{ result.qualification }}</p><p>Actual project value: UNRESOLVED. Test baseline: {{ result.breakpoint.baseline }} · direction {{ result.breakpoint.direction }}.</p><p>Common interval: {{ result.model.common_interval or 'UNRESOLVED' }} · {{ result.model.reason }}</p><p>Probe: {{ result.breakpoint.state }} · failure threshold {{ result.breakpoint.failure_point or 'UNRESOLVED' }} · margin {{ result.breakpoint.margin_to_failure or 'UNRESOLVED' }} · first violated constraints {{ result.breakpoint.first_violated_constraints|join(', ') }}.</p><p>{{ result.breakpoint.reason }}</p><details><summary>Source references, parameters, qualifications and runtime result</summary><pre>{{ result|tojson(indent=2) }}</pre></details></article>{% endfor %}</section>
-<section><h2>Professional review</h2>
+<section id="professional-review"><h2>Professional review</h2>
 <details><summary>Record conditions and corresponding representations for coverage review</summary>
 <p>These records use the existing drawing-condition and discipline-assumption owners. Proposed records do not establish applicability; explicit human review is separate.</p>
 {% if not expired %}<form method="post" action="{{ attention_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="record_condition"><input type="hidden" name="analysis_id" value="{{ analysis.id }}">
@@ -165,4 +169,4 @@
 </details>
 </div>
 {% endblock %}
-{% block extra_scripts %}{{ super() }}<script src="{{ url_for('static', filename='js/go_work_plan.js', v=static_version ~ '-go-review-1') }}"></script>{% endblock %}
+{% block extra_scripts %}{{ super() }}<script src="{{ url_for('static', filename='js/go_work_plan.js', v=static_version ~ '-go-workspace-2') }}"></script><script src="{{ url_for('static', filename='js/go_review_workspace.js', v=static_version ~ '-go-workspace-2') }}"></script>{% endblock %}

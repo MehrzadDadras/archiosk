@@ -10,7 +10,7 @@
     selected.addEventListener('change', update);
     update();
   });
-  document.querySelectorAll('.go-attention form[method="post"]').forEach(form => {
+  document.querySelectorAll('.go-attention form[method="post"], form.go-review-form').forEach(form => {
     form.addEventListener('submit', async event => {
       if (form.dataset.planExecuting === 'yes') return;
       const inputs = new FormData(form);

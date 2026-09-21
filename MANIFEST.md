@@ -621,6 +621,16 @@ deploy/*  (nginx, gunicorn) — infra wrapping wsgi:app, not imported by Python
 
 ## Request-flow reference
 
+**GO review task entry:** `templates/components/go_review_entry.html` provides
+six task choices and an objective on the existing Survey Evaluation route.
+`routes/portal.py` dispatches only generated accessible destinations to their
+existing attention/plan handlers. Navigation metadata never becomes a premise.
+`static/js/go_review_workspace.js` opens existing action sections; it performs no
+reasoning. `tests/test_go_review_workspace.py` verifies declaration, invocation,
+result surfacing, access and read-only refresh. `tools/verify_go_workspace_ui.py`
+checks the real browser flow and responsive public copy without production identity
+creation. `/explore` uses the unchanged landing shell and Deep Ocean styling.
+
 **Governed attention and working views:** `templates/go_attention.html` reads
 `AnalysisRun.attention_scope` and objective-bound `Relationship.analytical_scope`.
 

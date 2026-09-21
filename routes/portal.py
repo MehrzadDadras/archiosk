@@ -739,13 +739,52 @@ def operational_flight_deck():
     return response
 
 
+GO_REVIEW_TASKS = {
+    'project': ('Review a project', 'Inspect the evidence and open questions for a project.', 'subject-propositions'),
+    'compare': ('Compare sources', 'Compare source-backed values and preserve conflicting or missing information.', 'information-comparison'),
+    'capital': ('Evaluate capital alignment', 'Check opportunity requirements against sourced investor capabilities.', 'requirement-matching'),
+    'composition': ('Review participant composition', 'Find which participants cover the required roles and where compatibility is unresolved.', 'role-composition'),
+    'transaction': ('Review transaction status', 'Inspect identity, maturity, current applicability and transaction history.', 'transaction-review'),
+    'professional': ('Run professional review', 'Choose a professional lens and examine coverage, continuity and missing detail.', 'professional-review'),
+}
+
+
+def _go_review_choices():
+    """Navigation projection only; destination routes retain their access checks."""
+    from services import survey_evaluation as evaluation
+    from services.project_access import can_access_project
+    store = CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
+    choices = []
+    for identifier in get_registry(current_app).list_ids():
+        workspace = store.get(identifier)
+        if (not workspace or workspace.removed_at or workspace.document_desk_state != 'active' or
+                not can_access_project(workspace, session.get('username'), is_admin()) or
+                len(store.visible_cases_for(workspace, session.get('username'))) != len(workspace.cases)):
+            continue
+        choices.append(dict(url=url_for('workspace.go_attention', project_id=identifier),
+            title=workspace.display_title or get_registry(current_app).get(identifier).filename, kind='Project'))
+    for run in evaluation.recent(current_app):
+        choices.append(dict(url=url_for('portal.evaluation_go_attention', run_id=run['id']),
+            title=run['title'], kind='Evaluation example'))
+    return choices
+
+
 @portal_bp.route('/admin/survey-evaluation', methods=['GET', 'POST'])
 @admin_required
 def survey_evaluation():
     _require_developer_tools()
     from services import survey_evaluation as evaluation
     from services import runtime_observation
+    review_choices = _go_review_choices()
     if request.method == 'POST':
+        if request.form.get('review_target'):
+            target = request.form['review_target']
+            if target not in {choice['url'] for choice in review_choices}:
+                abort(400, description='Choose an accessible project or example.')
+            # Dispatch only a generated, access-filtered route. Reuse its normal
+            # permission checks, plan protocol and executor without replaying POST.
+            endpoint, arguments = current_app.url_map.bind('').match(target, method='POST')
+            return current_app.view_functions[endpoint](**arguments)
         if request.form.get('action') == 'observe':
             session['survey_observe'] = request.form.get('enabled') == 'yes'
             return redirect(url_for('portal.survey_evaluation'))
@@ -779,6 +818,7 @@ def survey_evaluation():
         selected_ids=runtime_comparison['selected_ids'], execution_count=len(runtime_comparison['executions']))
     response = current_app.make_response(render_template('survey_evaluation.html',
         cases=evaluation.CASES, runs=evaluation.recent(current_app), report=None,
+        review_tasks=GO_REVIEW_TASKS, review_choices=review_choices,
         runtime_comparison=runtime_comparison,
         muscle_exposure=runtime_observation.muscle_exposure(selected_observation) if selected_observation else None,
         observations=[selected_observation] if selected_observation else runtime_observation.recent(current_app), live_documents=live_documents))
@@ -4382,7 +4422,9 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     if request.method == 'POST':
         from werkzeug.datastructures import MultiDict
         from services.capability_registry import REVIEW_WORK_PROCEDURES
-        form = request.form
+        # Task/target are navigation state, never governed procedure premises.
+        form = MultiDict((key, value) for key, value in request.form.items(multi=True)
+                         if key not in ('review_target', 'review_task'))
         plan_id = None
         started_plan = False
         try:
@@ -4601,7 +4643,8 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                 return jsonify(error=str(exc)), 400
             flash(str(exc), 'error')
             return redirect(attention_url, code=303)
-        return redirect(attention_url + '?analysis=' + analysis['id'], code=303)
+        return redirect(attention_url + '?analysis=' + analysis['id'] +
+            ('&task=' + request.form['review_task'] if request.form.get('review_task') in GO_REVIEW_TASKS else ''), code=303)
     runs = [run for run in workspace.analyses if run.get('attention_scope')]
     selected = request.args.get('analysis')
     analysis = next((run for run in runs if run['id'] == selected), None) if selected else next(iter(reversed(runs)), None)
@@ -4631,6 +4674,7 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     event('go_work_plans', 'CONSUMED', plan_ids=[row['plan']['plan_id'] for row in work_plans])
     from services.external_research import REFERENCE_SOURCES as public_reference_sources
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
+        review_tasks=GO_REVIEW_TASKS, review_task=request.args.get('task') if request.args.get('task') in GO_REVIEW_TASKS else None,
         review_cases=store.visible_cases_for(workspace, actor),
         expired=expired, attention_url=attention_url, mapping_url=mapping_url, back_url=back_url,
         evaluation_only=evaluation_only, temporary_edges=edges,
