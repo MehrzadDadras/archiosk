@@ -1184,33 +1184,48 @@ def inspect_continuum_participation(store, workspace, evidence_id, expectation='
 
 
 @observed
-def trace_governing_root(store, workspace, target_id, *, max_depth=12):
+def trace_governing_root(store, workspace, target_id, *, max_depth=12, target_type='evidence_item', query_date=None):
     """Follow only explicit governing dependencies, then return to the focal target.
 
     Connectivity and a terminal node do not establish governing authority. The
     existing admission/currentness/relationship owners decide whether to stop.
     """
+    if target_type not in ('evidence_item', 'claim'):
+        raise CrossModalInvestigationError('Select an evidence item or scoped proposition target.')
     if type(max_depth) is not int or not 1 <= max_depth <= 32:
         raise CrossModalInvestigationError('Root tracing requires a bounded depth of 1–32.')
     result = dict(target=target_id, trace=[], root=None, return_target=target_id,
                   state='UNRESOLVED', controlling_premise=None, canonical=False)
-    seen, current = set(), target_id
+    seen, current, focal_scope = set(), target_id, None
     for _ in range(max_depth):
         if current in seen:
             result.update(state='REFUSED', reason='Governing dependency cycle; returned to target.')
             return result
         seen.add(current)
-        evidence = store.get_evidence_item(workspace, current)
+        evidence = (store.get_claim(workspace, current) if target_type == 'claim' else store.get_evidence_item(workspace, current))
         if not evidence or evidence.get('project_id') != workspace.project_id:
             result.update(state='REFUSED', reason='Broken or out-of-project dependency; returned to target.')
             return result
-        admitted = store.admit_proposition(workspace, current)
-        result['trace'].append(dict(evidence_item_id=current, source_id=evidence.get('source_id'),
-                                    admission=admitted, relationship_id=None))
-        if admitted['state'] in ('CONTESTED', 'REFUSED') or admitted.get('currentness', {}).get('status') != 'current':
+        admitted = (store.admit_reviewed_proposition(workspace, current, query_date=query_date) if target_type == 'claim'
+                    else store.admit_proposition(workspace, current))
+        node = dict(source_id=evidence.get('source_id'), admission=admitted, relationship_id=None, object_type=target_type)
+        node['claim_id' if target_type == 'claim' else 'evidence_item_id'] = current
+        result['trace'].append(node)
+        if target_type == 'claim':
+            normalization = (evidence.get('structured_proposition') or {}).get('normalization') or {}
+            scope = (normalization.get('subject_key'), normalization.get('scope_key'))
+            focal_scope = focal_scope or scope
+            if None in scope or scope != focal_scope:
+                result['reason'] = 'SCOPE_CROSSING_DEPENDENCY: subject or applicability changed; returned to target without assuming equivalence.'
+                return result
+            available = bool(admitted['admissible'] and (admitted.get('evidence_tier') or 0) >= 2 and
+                inspect_declared_temporal_scope(evidence['structured_proposition'], query_date)['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY')
+        else:
+            available = admitted['state'] not in ('CONTESTED', 'REFUSED') and admitted.get('currentness', {}).get('status') == 'current'
+        if not available:
             result['reason'] = 'Authority/currentness is unresolved or contested; returned to target.'
             return result
-        edges = [edge for edge in store.relationships_for(workspace, 'evidence_item', current, direction='from')
+        edges = [edge for edge in store.relationships_for(workspace, target_type, current, direction='from')
                  if edge['relationship_type'] in ('derived_from', 'based_on')]
         if not edges:
             if admitted['admissible']:
@@ -1224,12 +1239,83 @@ def trace_governing_root(store, workspace, target_id, *, max_depth=12):
             return result
         edge = edges[0]
         result['trace'][-1]['relationship_id'] = edge['id']
-        if edge['to_type'] != 'evidence_item' or store.resolve_relationship_status(workspace, edge['id'])['status'] != 'confirmed':
+        if (edge['to_type'] != target_type or edge.get('analytical_scope')
+                or store.resolve_relationship_status(workspace, edge['id'])['status'] != 'confirmed'):
             result['reason'] = 'Governing relationship is not admitted for this evidence trace; returned to target.'
             return result
         current = edge['to_id']
     result.update(state='REFUSED', reason='Bounded trace exhausted; returned to target without selecting an unproven root.')
     return result
+
+
+@observed
+def inspect_interpretation_drift(store, workspace, upstream_id, target_id, *, query_date):
+    """Compare retained typed meaning through existing predicates and admission.
+
+    Wording similarity is never used as semantic proof. A change authorization
+    is a separately reviewed proposition about these exact two occurrences.
+    """
+    result = dict(state='UNRESOLVED', meaning_state='UNRESOLVED', wording_state='UNRESOLVED',
+        authorization_state='UNRESOLVED', upstream_id=upstream_id, target_id=target_id,
+        canonical=False, authority='UNCHANGED', admissions=[], authorization_evidence=[],
+        qualification='Typed meaning is limited to the recorded proposition and its qualifiers; no unrecorded prose meaning is inferred.')
+    claims = [store.get_claim(workspace, identifier) for identifier in (upstream_id, target_id)]
+    if upstream_id == target_id or any(not c or c.get('project_id') != workspace.project_id or not c.get('structured_proposition') for c in claims):
+        return dict(result, state='REFUSED', reason='Two distinct source-anchored structured propositions are required.')
+    left, right = [c['structured_proposition'] for c in claims]
+    a, b = left['normalization'], right['normalization']
+    result['wording_state'] = 'WORDING_UNCHANGED' if left['original_quote'] == right['original_quote'] else 'WORDING_CHANGED'
+    result['comparison'] = compare_normalized_information(a, b)
+    if a['subject_key'] != b['subject_key']:
+        return dict(result, reason='Subject identity is not closed; similar wording cannot bind different subjects.')
+    if a['scope_key'] != b['scope_key']:
+        return dict(result, meaning_state='SCOPE_SHIFT', reason='Applicability scope changed; equivalence and authorization remain unresolved.')
+    comparison = result['comparison']
+    if comparison['state'] == 'MATCH':
+        result['meaning_state'] = 'MEANING_PRESERVED'
+    elif comparison['state'] == 'NON_MATCH' or comparison.get('qualifier_change'):
+        result['meaning_state'] = 'MEANING_CHANGED'
+    else:
+        return dict(result, reason='Representation, units, property or viewpoint cannot be compared under the retained premises.')
+    result['qualifier_change'] = comparison.get('qualifier_change', dict(omitted=[], added=[]))
+    result['admissions'] = [store.admit_reviewed_proposition(workspace, c['id'], query_date=query_date) for c in claims]
+    result['premises'] = claims
+    edges = [e for e in store.relationships_for(workspace, 'claim', target_id, direction='from')
+        if e['to_type'] == 'claim' and e['to_id'] == upstream_id and e['relationship_type'] in ('derived_from', 'based_on')]
+    result['dependencies'] = [dict(record=e, status=store.resolve_relationship_status(workspace, e['id'])) for e in edges]
+    bound = any(not e['record'].get('analytical_scope') and e['status']['status'] == 'confirmed' for e in result['dependencies'])
+    admitted = all(review['admissible'] and (review.get('evidence_tier') or 0) >= 2 and
+        inspect_declared_temporal_scope(claim['structured_proposition'], query_date)['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY'
+        for review, claim in zip(result['admissions'], claims))
+    if not admitted or not bound:
+        return dict(result, reason='The typed comparison is conditional: reviewed source premises and an explicit governed dependency are required.')
+    if result['meaning_state'] == 'MEANING_PRESERVED':
+        return dict(result, state='MEANING_PRESERVED', authorization_state='NOT_REQUIRED_FOR_UNCHANGED_MEANING',
+            reason='The scoped typed proposition is preserved. Wording changes alone are not interpretation drift.')
+    decisions = set()
+    for claim in workspace.claims:
+        prop = claim.get('structured_proposition') or {}
+        norm = prop.get('normalization') or {}
+        if (norm.get('property_key') == 'interpretation_change_authorization' and norm.get('kind') == 'TOKEN_SET'
+                and norm.get('vocabulary') == 'claim_transition' and set(norm.get('value') or []) == {upstream_id, target_id}
+                and norm.get('subject_key') == a['subject_key'] and norm.get('scope_key') == a['scope_key']):
+            review = store.admit_reviewed_proposition(workspace, claim['id'], query_date=query_date)
+            result['authorization_evidence'].append(dict(claim=claim, admission=review))
+            tokens = set(norm.get('qualifiers') or [])
+            if (review['admissible'] and (review.get('evidence_tier') or 0) >= 2
+                    and inspect_declared_temporal_scope(prop, query_date)['state'] == 'DECLARED_INTERVAL_CONTAINS_QUERY'
+                    and tokens in ({'AUTHORIZED'}, {'PROHIBITED'})):
+                decisions.update(tokens)
+    if len(decisions) > 1:
+        return dict(result, state='CONFLICTING', authorization_state='CONFLICTING',
+            reason='Applicable reviewed authorization propositions disagree. No latest-source override was applied.')
+    if decisions == {'AUTHORIZED'}:
+        return dict(result, state='AUTHORIZED_CHANGE', authorization_state='ESTABLISHED',
+            reason='The scoped meaning changed under a separately admitted authorization for this exact transition.')
+    if decisions == {'PROHIBITED'}:
+        return dict(result, state='INTERPRETATION_DRIFT', authorization_state='PROHIBITED',
+            reason='The scoped meaning changed contrary to a positively admitted prohibition for this exact transition.')
+    return dict(result, reason='The scoped meaning changed; authorization is not established. Missing approval is not proof of prohibition.')
 
 
 class CrossModalInvestigationError(CaseWorkspaceError):

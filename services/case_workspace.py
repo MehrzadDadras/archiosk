@@ -7971,7 +7971,7 @@ class CaseWorkspaceStore:
     def run_professional_review(self, workspace, actor, analysis_id, narrative_key, focus_id,
                                 subject, representation_class, current_resolution, required_resolution,
                                 project_phase, discipline, reason, *, next_evidence_id=None, next_class=None,
-                                participation_expectation='unknown'):
+                                participation_expectation='unknown', upstream_claim_id=None, target_claim_id=None, query_date=None):
         """Run bounded review assumptions through the existing investigation owner.
 
         The reviewer classifies selected representations for this question. These
@@ -7979,7 +7979,8 @@ class CaseWorkspaceStore:
         project identity, source authority or canonical representation metadata.
         """
         from services.cross_modal_investigation import (PROFESSIONAL_NARRATIVES,
-            assess_review_resolution, expected_next_information, trace_governing_root, inspect_continuum_participation)
+            assess_review_resolution, expected_next_information, trace_governing_root, inspect_continuum_participation,
+            inspect_interpretation_drift)
         if workspace.removed_at or len(self.visible_cases_for(workspace, actor)) != len(workspace.cases):
             raise CaseWorkspaceError('Review requires an active, fully visible project.')
         attention = self._find(workspace.analyses, analysis_id)
@@ -7996,6 +7997,19 @@ class CaseWorkspaceStore:
         if representation_class not in classes or (next_evidence_id and next_class not in classes):
             raise CaseWorkspaceError('Representation classes must belong to this narrative.')
         admissions = [self.admit_proposition(workspace, identifier) for identifier in identifiers]
+        interpretation = None
+        claim_trace = None
+        if upstream_claim_id or target_claim_id:
+            propositions = {row['claim']['id']:row for row in self.inspect_subject_propositions(workspace, actor, analysis_id)}
+            if not upstream_claim_id or not target_claim_id or any(i not in propositions for i in (upstream_claim_id, target_claim_id)):
+                raise CaseWorkspaceError('Select both interpretation occurrences from this attention scope.')
+            try:
+                from datetime import date
+                date.fromisoformat(query_date)
+            except (TypeError, ValueError):
+                raise CaseWorkspaceError('Interpretation review requires an explicit applicability date.') from None
+            interpretation = inspect_interpretation_drift(self, workspace, upstream_claim_id, target_claim_id, query_date=query_date)
+            claim_trace = trace_governing_root(self, workspace, target_claim_id, target_type='claim', query_date=query_date)
         resolution = assess_review_resolution(narrative, current_resolution, required_resolution, premise_ids=[focus_id])
         sequence = expected_next_information(narrative, representation_class,
             [next_class] if next_evidence_id else [], subject=subject.strip(), project_phase=project_phase,
@@ -8029,6 +8043,15 @@ class CaseWorkspaceStore:
                 'Expected-next absence is limited to the reviewed evidence; evidence outside attention still exists.',
                 'Resolution alone establishes neither content sufficiency, applicability nor authority.'],
             remaining=['Complete perimeter/vertical condition inventory', 'INTERPRETATION DRIFT'])
+        if interpretation is not None:
+            result.update(interpretation_drift=interpretation, proposition_root_trace=claim_trace,
+                source_premises=self._work_plan_premises(workspace),
+                remaining=['Complete perimeter/vertical condition inventory'])
+            result['input_classification'].update(upstream_claim_id=upstream_claim_id, target_claim_id=target_claim_id, query_date=query_date)
+            result['evaluation_only'] |= any(propositions[i]['claim']['structured_proposition']['evaluation_only']
+                for i in (upstream_claim_id, target_claim_id))
+            if interpretation['state'] in ('UNRESOLVED', 'REFUSED', 'CONFLICTING', 'INTERPRETATION_DRIFT'):
+                result['uncertainty'].append(interpretation['reason'])
         if resolution['state'] in ('UNRESOLVED', 'INSUFFICIENT_SCALE'):
             result['state'] = resolution['state']
         profile = [dict(muscle='Scale sufficiency', owner='assess_review_resolution', result=resolution),
@@ -8037,7 +8060,15 @@ class CaseWorkspaceStore:
                    dict(muscle='CONTINUUM PARTICIPATION', owner='inspect_continuum_participation', result=continuum),
                    dict(muscle='SECTION-COVERAGE / DISCIPLINE-COVERAGE', owner='review_representation_coverage', result=coverage),
                    dict(muscle='Authority', owner='CaseWorkspaceStore.admit_proposition', result=admissions)]
-        return self.record_analysis(workspace, source_ids=sorted({a['source_id'] for a in admissions if a.get('source_id')}),
+        if interpretation is not None:
+            profile.extend([dict(muscle='INTERPRETATION DRIFT', owner='inspect_interpretation_drift', result=interpretation),
+                dict(muscle='ROOT-TRACE / RETURN', owner='trace_governing_root', result=claim_trace)])
+        source_ids = {a['source_id'] for a in admissions if a.get('source_id')}
+        if interpretation is not None:
+            scoped_admissions = (interpretation['admissions'] + [row['admission'] for row in interpretation['authorization_evidence']]
+                + [row['admission'] for row in claim_trace['trace']])
+            source_ids.update(a['source_id'] for admission in scoped_admissions for a in admission.get('admissions', []) if a.get('source_id'))
+        return self.record_analysis(workspace, source_ids=sorted(source_ids),
             objective=scope['objective'], engine_name='professional_review', engine_version=narrative.version,
             findings=[], trigger=AnalysisTrigger(ANALYSIS_TRIGGER_USER_INITIATED, triggered_by_actor=actor),
             governed_result=result, muscle_profile=profile)
@@ -8056,6 +8087,11 @@ class CaseWorkspaceStore:
             raise CaseWorkspaceError('The originating attention scope is unavailable.')
         if result['kind'] == 'professional_review':
             links = [{'object_type': 'evidence_item', 'object_id': a['evidence_item_id']} for a in result['admissions']]
+            interpretation = result.get('interpretation_drift') or {}
+            claim_ids = {interpretation.get('upstream_id'), interpretation.get('target_id')}
+            claim_ids.update(row['claim_id'] for row in (result.get('proposition_root_trace') or {}).get('trace', []))
+            claim_ids.update(row['claim']['id'] for row in interpretation.get('authorization_evidence', []))
+            links.extend(dict(object_type='claim', object_id=identifier) for identifier in sorted(claim_ids - {None}))
             title = result['narrative']['professional_lens'] + ' — ' + analysis['objective']
             artifact_type = 'professional_review'
             sections = {
@@ -8064,7 +8100,9 @@ class CaseWorkspaceStore:
                     evaluation_only=result['evaluation_only']),
                 'evidence_and_attention': dict(admissions=result['admissions'], attention=attention['attention_scope']),
                 'resolution_and_expected_next': dict(resolution=result['resolution'], expected_next=result['expected_next']),
-                'source_jumps_and_root_traces': dict(evidence_links=links, continuum=result.get('continuum'), root_trace=result.get('root_trace', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'})),
+                'source_jumps_and_root_traces': dict(evidence_links=links, continuum=result.get('continuum'),
+                    proposition_root_trace=result.get('proposition_root_trace'),
+                    root_trace=result.get('root_trace', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'})),
                 'section_and_discipline_coverage': result.get('coverage', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
                 'interpretation_changes': result.get('interpretation_drift', {'state': 'UNRESOLVED', 'reason': 'Not evaluated by this execution.'}),
                 'contradictions_and_gaps': dict(admission_conflicts=[a for a in result['admissions'] if a['state'] == 'CONTESTED'], remaining=result['remaining']),
@@ -8209,6 +8247,9 @@ class CaseWorkspaceStore:
             reasons = [result.get('qualification')] if result.get('state') in ('UNRESOLVED','PARTIAL','REFUSED','INCOMPARABLE') else []
             reasons += result.get('uncertainty', [])
             current_result = current_results.get(run['id'])
+            if not current_result and result.get('source_premises'):
+                current_result = dict(run=deepcopy(run), consumption_state='REVIEW_REQUIRED'
+                    if result['source_premises'] != self._work_plan_premises(workspace) else 'HISTORICAL_RESULT')
             if current_result and current_result['consumption_state'] == 'REVIEW_REQUIRED':
                 reasons.append('REVIEW_REQUIRED: retained result premises changed; explicit re-evaluation is required.')
             add('analyses', run['id'], dict(subject=result.get('target_subject') or result.get('subject') or scope['objective'],
@@ -13641,7 +13682,8 @@ class CaseWorkspaceStore:
             'constraint_review': {'subject', 'parameter', 'unit', 'baseline', 'direction'} |
                 {f'{key}_{index}' for index in (1, 2) for key in ('lower', 'upper', 'evidence')},
             'professional_review': {'narrative', 'focus_id', 'subject', 'representation_class', 'current_resolution',
-                'required_resolution', 'project_phase', 'discipline', 'next_evidence_id', 'next_class', 'participation_expectation'},
+                'required_resolution', 'project_phase', 'discipline', 'next_evidence_id', 'next_class', 'participation_expectation',
+                'upstream_claim_id', 'target_claim_id', 'query_date'},
             'professional_presentation': {'review_id'},
             'transaction_review': {'transaction_claim_id', 'query_date'},
         }

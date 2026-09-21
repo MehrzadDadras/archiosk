@@ -110,6 +110,11 @@
 {% for field, label in [('current_resolution','Declared current resolution'),('required_resolution','Resolution needed for this question')] %}<label>{{ label }}<select name="{{ field }}">{% for key, question in resolution_classes %}<option value="{{ key }}">{{ key }} · {{ question }}</option>{% endfor %}</select></label>{% endfor %}
 <label>Corresponding next evidence, if found <select name="next_evidence_id"><option value="">Not found in reviewed selection</option>{% for item in scope.entries if item.category == 'included' %}<option value="{{ item.evidence_item_id }}">{{ item.evidence_item_id }}</option>{% endfor %}</select></label>
 <label>Its representation class <select name="next_class">{% for value in representation_classes %}<option>{{ value }}</option>{% endfor %}</select></label>
+<details><summary>Interpretation chain and proposition root trace</summary>
+<p>Compare the meaning recorded in two source-anchored propositions. A confirmed governing dependency and scoped review are required for factual drift. Missing authorization remains unresolved.</p>
+{% for field,label in [('upstream_claim_id','Upstream intent'),('target_claim_id','Downstream target')] %}<label>{{ label }} <select name="{{ field }}"><option value="">Not selected</option>{% for row in subject_propositions %}<option value="{{ row.claim.id }}">{{ row.claim.structured_proposition.normalization.property_key }} · {{ row.claim.structured_proposition.normalization.value }} · {{ row.claim.structured_proposition.original_quote|truncate(100) }}</option>{% endfor %}</select></label>{% endfor %}
+<label>Applicability date <input type="date" name="query_date"></label>
+</details>
 <label>Source-based reason for these review assumptions <input name="reason" required maxlength="2000"></label><button>Run professional review</button></form>{% endif %}
 {% for run in governed_reviews|reverse %}{% set review = run.governed_result %}<article><h3>{{ review.narrative.professional_lens }} · {{ review.state }}</h3>
 <p>Objective: {{ review.objective }} · Subject: {{ review.subject }} · Execution {{ run.id }}</p>
@@ -117,6 +122,10 @@
 <p>Expected next: {{ review.expected_next.expected or 'UNRESOLVED' }} · {{ review.expected_next.state }} · {{ review.expected_next.reason }}</p>
 <p>TARGET {{ review.root_trace.target }} → TRACE {{ review.root_trace.trace|length }} governing steps → ROOT {{ review.root_trace.root or 'UNRESOLVED' }} → RETURN {{ review.root_trace.return_target }} → {{ review.root_trace.state }}.</p>
 <p>{{ review.root_trace.reason }}</p>
+{% if review.interpretation_drift %}<h4>Interpretation comparison · {{ review.interpretation_drift.state }}</h4>
+<p>{{ review.interpretation_drift.wording_state }} · {{ review.interpretation_drift.meaning_state }} · Authorization {{ review.interpretation_drift.authorization_state }}</p>
+<p>{{ review.interpretation_drift.reason }}</p><p>Proposition root trace: {{ review.proposition_root_trace.state }}. {{ review.proposition_root_trace.reason }}</p>
+<details><summary>Interpretation evidence and root / return chain</summary><pre>{{ review.interpretation_drift|tojson(indent=2) }}</pre><pre>{{ review.proposition_root_trace|tojson(indent=2) }}</pre></details>{% endif %}
 <h4>Continuum participation · {{ review.continuum.state }}</h4><p>{{ review.continuum.reason }}</p><p>Missing expected connections: {{ review.continuum.missing|join(', ') or 'None established' }}.</p><details><summary>Upstream, downstream and related information</summary><pre>{{ review.continuum|tojson(indent=2) }}</pre></details>
 <h4>Section and discipline coverage map</h4><p>{{ review.coverage.qualification }}</p>
 <table><thead><tr><th>Condition</th><th>Section coverage</th><th>Discipline coverage</th><th>Representations</th></tr></thead><tbody>

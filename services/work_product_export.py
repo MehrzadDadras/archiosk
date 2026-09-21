@@ -214,7 +214,8 @@ def compress_presentation_records(records, independent_pairs=()):
         values_by_identity.setdefault(identity_for(group['semantic']), set()).add(
             json.dumps(group['semantic'].get('value'), sort_keys=True))
     conflict_states = {'CONFLICTING', 'CONTESTED', 'INCONSISTENT', 'NON_MATCH', 'NON_FIT',
-                       'REDUNDANT_CONFLICTING', 'NO_COMMON_ADMISSIBLE_CONDITION', 'HARD_CONFLICT', 'CONFIGURATION_NON_FIT'}
+                       'REDUNDANT_CONFLICTING', 'NO_COMMON_ADMISSIBLE_CONDITION', 'HARD_CONFLICT', 'CONFIGURATION_NON_FIT',
+                       'INTERPRETATION_DRIFT'}
     def recorded_conflicts(value):
         if isinstance(value, dict):
             for key, child in value.items():

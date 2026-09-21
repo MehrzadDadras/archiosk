@@ -4540,7 +4540,9 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
                         form.get('discipline', ''), form.get('reason', ''),
                         next_evidence_id=form.get('next_evidence_id') or None,
                         next_class=form.get('next_class') or None,
-                        participation_expectation=form.get('participation_expectation', 'unknown'))
+                        participation_expectation=form.get('participation_expectation', 'unknown'),
+                        upstream_claim_id=form.get('upstream_claim_id') or None,
+                        target_claim_id=form.get('target_claim_id') or None, query_date=form.get('query_date') or None)
                     analysis = {'id': form['analysis_id']}
                 elif form.get('action') == 'temporary_relationship':
                     edge = store.record_temporary_relationship(workspace, actor, form.get('analysis_id'),
