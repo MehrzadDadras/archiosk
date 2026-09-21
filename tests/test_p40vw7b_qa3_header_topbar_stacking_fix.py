@@ -182,6 +182,10 @@ class HeaderProjectLinkRealBrowserGeometryTests(unittest.TestCase):
             count=1,
         )
         assert n == 1, "expected exactly one tokens.css+main.css <link> pair to inline"
+        product_css = (_REPO_ROOT / "static/css/product_ui.css").read_text(encoding="utf-8")
+        html, n = re.subn(r'<link[^>]*href="[^"]*product_ui\.css[^"]*"[^>]*>',
+                         lambda _match: f"<style>{product_css}</style>", html)
+        assert n == 1, "the current shared presentation stylesheet must be exercised"
         html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
         return html
 
@@ -315,6 +319,10 @@ class ArchiosMenuDropdownRealBrowserVisibilityTests(unittest.TestCase):
             count=1,
         )
         assert n == 1, "expected exactly one tokens.css+main.css <link> pair to inline"
+        product_css = (_REPO_ROOT / "static/css/product_ui.css").read_text(encoding="utf-8")
+        html, n = re.subn(r'<link[^>]*href="[^"]*product_ui\.css[^"]*"[^>]*>',
+                         lambda _match: f"<style>{product_css}</style>", html)
+        assert n == 1
         html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
         return html
 
@@ -327,6 +335,7 @@ class ArchiosMenuDropdownRealBrowserVisibilityTests(unittest.TestCase):
                 page.set_content(html, wait_until="load")
                 summary = page.query_selector('[data-ui-ref="menu.archiosk"] summary')
                 self.assertIsNotNone(summary)
+                page.locator('.ui-tools-menu > summary').click()
                 summary.click()
                 panel = page.query_selector('[data-ui-ref="menu.archiosk"] .workspace-menubar-panel')
                 self.assertIsNotNone(panel)

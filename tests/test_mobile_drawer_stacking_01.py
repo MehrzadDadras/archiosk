@@ -88,7 +88,8 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
     def setUpClass(cls):
         cls.html = _home_html()
         cls.css = [(_REPO / "static/css/tokens.css").read_text(encoding="utf-8"),
-                   (_REPO / "static/css/main.css").read_text(encoding="utf-8")]
+                   (_REPO / "static/css/main.css").read_text(encoding="utf-8"),
+                   (_REPO / "static/css/product_ui.css").read_text(encoding="utf-8")]
         cls.js = [(_REPO / "static/js/workspace_trays.js").read_text(encoding="utf-8"),
                   (_REPO / "static/js/app_menu.js").read_text(encoding="utf-8")]
 
@@ -134,8 +135,8 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
             page.tap("#mobile-nav-toggle")
             page.wait_for_timeout(200)
             results = {sel: self._hit(page, sel) for sel in [
-                '[data-ui-ref="menu.archiosk"] > summary',
-                '[data-ui-ref="menu.file"] > summary',
+                '.ui-primary-nav a[href="/projects"]',
+                '.ui-primary-nav a[href="/document-shop/jobs"]',
             ]}
             browser.close()
         for selector, verdict in results.items():
@@ -149,6 +150,9 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
             page = self._page(browser)
             page.tap("#mobile-nav-toggle")
             page.wait_for_timeout(200)
+            page.tap("#mobile-nav-toggle")
+            page.tap('.ui-tools-menu > summary')
+            # Legacy commands remain deliberately available through Tools.
             # timeout kept short: before the fix this hung until Playwright
             # gave up, because the element could never receive the event.
             page.tap('[data-ui-ref="menu.archiosk"] > summary', timeout=5000)
@@ -166,10 +170,14 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
             page = self._page(browser)
             page.tap("#mobile-nav-toggle")
             page.wait_for_timeout(150)
+            page.tap("#mobile-nav-toggle")
+            page.tap('.ui-tools-menu > summary')
             page.tap('[data-ui-ref="menu.archiosk"] > summary', timeout=5000)
             page.wait_for_timeout(150)
             page.tap('[data-ui-ref="menu.archiosk.developer"] > summary', timeout=5000)
             page.wait_for_timeout(150)
+            page.locator('[data-ui-ref="menu.archiosk.developer.mode-toggle"]').scroll_into_view_if_needed()
+            page.locator('[data-ui-ref="menu.archiosk.developer.mode-toggle"]').tap(trial=True)
             verdict = self._hit(page, '[data-ui-ref="menu.archiosk.developer.mode-toggle"]')
             browser.close()
         self.assertEqual(verdict, "REACHABLE")

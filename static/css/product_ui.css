@@ -94,6 +94,8 @@ body[data-ui-density="inspect"] .survey-evaluation td { padding: .45rem; }
 }
 @media (max-width: 640px) {
   body[data-ui-density] .workspace-topbar { gap: .25rem; padding-inline: .75rem; }
+  body[data-ui-density] .workspace-topbar-context { flex-basis: 100%; max-width: 100%; }
+  body[data-ui-density] .workspace-topbar-project { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
   .ui-primary-nav { display: none; }
   html.mobile-nav-open .ui-primary-nav { display: flex; flex-direction: column; align-items: stretch; gap: .5rem; position: fixed; top: 3.5rem; left: .5rem; width: min(85vw, 20rem); padding: 1rem; z-index: 1200; background: var(--surface-primary); border: 1px solid var(--border); border-radius: .5rem; }
   html.mobile-nav-open .appearance-deep-ocean .ui-primary-nav { background: var(--ocean-glass-foreground); }
