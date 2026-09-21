@@ -218,9 +218,10 @@ class DefaultAndMigrationTests(unittest.TestCase):
         body = self.source[idx: idx + 900]
         self.assertIn("stored === 'light' || stored === 'black' || stored === 'midnight-blue' || stored === 'deep-forest'", body)
 
-    def test_missing_or_invalid_falls_back_to_black_not_light(self):
+    def test_new_session_uses_deep_ocean_and_invalid_saved_choice_uses_black(self):
         idx = self.source.index("window.__resolveStoredAppearanceMode = function")
-        body = self.source[idx: idx + 900]
+        body = self.source[idx:self.source.index("};", idx)]
+        self.assertIn("if (stored === null) return 'deep-ocean';", body)
         self.assertIn("return 'black';", body)
         # The old default ('light') must not still be the final fallback.
         final_return = body.rfind("return ")
