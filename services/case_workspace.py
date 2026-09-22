@@ -5445,6 +5445,15 @@ class ProjectWorkspace:
     # Immutable Planning & Zoning snapshot indexes; bytes live in the existing
     # workspace_artifacts store. Saving is not approval/issue of a WorkProduct.
     planning_studies: list[dict] = field(default_factory=list)
+    # CLAUDE-FACET-ROUTING-01: where each facet of an investigation sits in the
+    # reviewer's ATTENTION - a third axis, never mixed with ReviewerValidation
+    # ("is this accurate?") or Disposition ("what happens to this finding?").
+    # Append-only: a re-routing supersedes, it does not overwrite.
+    facet_routings: list[dict] = field(default_factory=list)
+    # The attributed cross-boundary act invariant #9 requires. Written on BOTH
+    # sides, so the source knows what left it and the new project knows where
+    # it came from, rather than either being inferred later from a timestamp.
+    investigation_promotions: list[dict] = field(default_factory=list)
     findings: list[dict] = field(default_factory=list)
     reviewer_validations: list[dict] = field(default_factory=list)
     dispositions: list[dict] = field(default_factory=list)
