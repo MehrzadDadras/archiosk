@@ -1,0 +1,13 @@
+# CLAUDE-UI-BASELINE-2026-09-22: this record IS its artifacts.
+#
+# Git classified the generated PDF as text and warned it would rewrite LF to
+# CRLF on checkout, which would corrupt it - a baseline that cannot be opened
+# proves nothing. `-text` pins every byte, the same reasoning `.gitattributes`
+# at the repository root already applies to the NREOCRC corpus and the
+# vendored PDF.js files.
+#
+# Scoped HERE rather than added to the root file deliberately: the root
+# .gitattributes has uncommitted work against it in the shared tree, and a
+# per-directory attributes file needs no coordination to land.
+*.pdf -text
+*.jpg -text
