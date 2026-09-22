@@ -159,7 +159,26 @@
    information; those remain genuinely unbuilt (CLAUDE-P40-E3A, Section
    13's own exclusion list), nothing here claims otherwise by staying
    silent about them. #}
-{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None, conversations=None, project_conversation_count=0, study_scoped=False) %}
+{# CLAUDE-DRAFT-ASSIST-REACHABILITY-01: `draft_actions` is a PARAMETER, and it
+   has to be.
+
+   It was being read as a context global, injected by app.py's inject_globals.
+   That works in a template; it does not work inside a macro. Jinja imports a
+   macro file WITHOUT the calling context unless `with context` is written
+   explicitly, and every `{% import "_macros.html" as macros %}` in this
+   codebase is the plain form - so `{% for a in draft_actions %}` below iterated
+   an undefined name and rendered ZERO action buttons.
+
+   The effect was a draft-assist feature that could not be asked for: the pen
+   appeared, the sheet opened, the script was loaded and the route was live, but
+   there was nothing to click, so no request was ever issued and the Proposed
+   side stayed empty forever. Reproduced live 2026-09-22; `actionCount: 0` in
+   the rendered DOM against an `available_actions()` that returns eleven.
+
+   Passed rather than switching the import to `with context`: that would change
+   scoping for every macro in this 900-line file to fix one, and every other
+   macro here already takes what it needs as a parameter. #}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None, conversations=None, project_conversation_count=0, study_scoped=False, draft_actions=()) %}
 {# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the action sheet and the comparison.
 
    ONE component for both form factors. On a phone it is a bottom sheet; on a

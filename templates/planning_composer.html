@@ -57,7 +57,7 @@
 {% if run_id %}
 {% call macros.conversation_dock('Planning & Zoning', context.messages | length,
  url_for('planning_zoning.converse_study', project_id=project_id, run_id=run_id),
- 'planning:' ~ project_id ~ ':' ~ run_id, 'Tell GO what you are considering', project_id=project_id, study_scoped=True) %}
+ 'planning:' ~ project_id ~ ':' ~ run_id, 'Tell GO what you are considering', project_id=project_id, study_scoped=True, draft_actions=draft_actions) %}
 <div class="conversation-messages" aria-live="polite">
 {% for message in context.messages %}<div class="conversation-message"><strong>{{ 'You' if message.role == 'human' else 'GO' }}</strong><p>{{ message.text }}</p>{% if message.host_action %}<p>{{ message.host_action }}</p>{% endif %}</div>{% endfor %}
 </div>
