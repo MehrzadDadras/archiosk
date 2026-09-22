@@ -75,7 +75,7 @@ class _FakeResponse(io.BytesIO):
 
 
 class _FakeOpener:
-    def __init__(self, body=b"<html><body>Section 3.2.5 requires smoke control.</body></html>",
+    def __init__(self, body=b"<html><body>Ontario Building Code O. Reg. 163/24. Section 3.2.5 requires smoke control.</body></html>",
                  url=None, content_type="text/html"):
         self.body, self.url, self.content_type = body, url, content_type
         self.calls = []

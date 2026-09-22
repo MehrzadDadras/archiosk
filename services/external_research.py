@@ -37,13 +37,15 @@ WHAT THIS DELIBERATELY CANNOT DO
     promotion. Slice 1 is session-only, which makes "external material must not
     silently become project evidence" true by construction;
   - make a second call fed from the first call's output, follow redirects,
-    ingest PDFs or binaries, or expand its own scope.
+    ingest arbitrary PDFs or binaries, or expand its own scope. The explicitly
+    authorized Turnstile missions below add one bounded official PDF only.
 
 Those are the Slice 1 STOP boundary, not oversights.
 """
 from __future__ import annotations
 
 import re
+import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -51,7 +53,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 from urllib.parse import urlsplit
 
-from services.external_intelligence_airlock import _NoRedirect, _visible_text
+from services.external_intelligence_airlock import _NoRedirect, _visible_text, AirlockMissionError
 from services.llm_gateway import call_llm_json
 
 MAX_RESPONSE_BYTES = 2_000_000
@@ -72,6 +74,11 @@ class ReferenceSource:
     url: str
     publisher: str
     topics: tuple[str, ...]
+    jurisdiction: str = 'UNRESOLVED'
+    evidence_role: str = 'EXTERNAL_REFERENCE'
+    identity_terms: tuple[str, ...] = ()
+    requested_terms: tuple[str, ...] = ()
+    pdf: bool = False
 
 
 # The Slice 1 proving constraint, and explicitly NOT the permanent ceiling of
@@ -90,6 +97,8 @@ REFERENCE_SOURCES: tuple[ReferenceSource, ...] = (
             "smoke control", "smoke management", "fire separation", "egress", "occupancy",
             "sprinkler", "fire alarm", "damper", "compartmentation", "means of egress",
         ),
+        jurisdiction='Ontario, Canada', evidence_role='ONTARIO_REGULATORY_SOURCE',
+        identity_terms=('building code', '163/24'),
     ),
     ReferenceSource(
         key="nbc",
@@ -123,8 +132,72 @@ REFERENCE_SOURCES: tuple[ReferenceSource, ...] = (
 )
 
 
+RETRIEVED_SUBSTANTIVE_CONTENT = 'RETRIEVED_SUBSTANTIVE_CONTENT'
+RETRIEVED_NON_SUBSTANTIVE_SHELL = 'RETRIEVED_NON_SUBSTANTIVE_SHELL'
+RETRIEVAL_BLOCKED = 'RETRIEVAL_BLOCKED'
+CONTENT_VALIDATION_UNRESOLVED = 'CONTENT_VALIDATION_UNRESOLVED'
+
+# Explicit missions, not general keyword-selected web search. No precedent route.
+TURNSTILE_SOURCE_MISSIONS = (
+    ReferenceSource('turnstile-obc-regulation', 'Ontario Building Code adopting regulation',
+        'https://www.ontario.ca/laws/api/v2/legislation/en/doc-search/regulation/r24163',
+        'Ontario e-Laws', (), 'Ontario, Canada', 'ONTARIO_REGULATORY_SOURCE',
+        ('building code', '163/24'), ('1.',)),
+    ReferenceSource('turnstile-obc-compendium', 'Ontario 2024 Building Code Compendium',
+        'https://www.publications.gov.on.ca/store/20170501121/Free_Download_Files/301880.pdf',
+        'Government of Ontario', (), 'Ontario, Canada', 'ONTARIO_REGULATORY_SOURCE',
+        ('ontario', '2024', 'building code'), ('turnstile',), True),
+    ReferenceSource('turnstile-fire-code', 'Ontario Fire Code O. Reg. 213/07',
+        'https://www.ontario.ca/laws/api/v2/legislation/en/doc-search/regulation/070213',
+        'Ontario e-Laws', (), 'Ontario, Canada', 'ONTARIO_REGULATORY_SOURCE',
+        ('fire code', '213/07'), ('2.7.1.9.', 'turnstile')),
+    ReferenceSource('turnstile-product-3000ca', 'Turnstile Security Systems 3000CA product page (candidate only)',
+        'https://www.turnstilesecurity.com/product/3000ca-single-full-height-clear-turnstile',
+        'Turnstile Security Systems Inc.', (), 'PRODUCT_NOT_JURISDICTIONAL', 'EXTERNAL_PRODUCT_EVIDENCE',
+        ('3000ca', 'turnstile'), ('fire', 'control')),
+)
+
+
 class ExternalResearchError(RuntimeError):
     """Retrieval or screening refused. Always reported, never swallowed."""
+
+    def __init__(self, message, validation_state=RETRIEVAL_BLOCKED):
+        self.validation_state = validation_state
+        super().__init__(validation_state + ': ' + message)
+
+
+def validate_source_content(source, visible, *, identity_text=''):
+    """Content presence only. Never establishes project applicability or authority."""
+    lower = visible.casefold()
+    if len(re.findall(r'\w+', visible)) < 8 or any(s in lower for s in (
+        'enable javascript', 'javascript is required', 'needs javascript',
+        'verify you are human', 'verify that you are not a robot', 'access denied',
+        'sign in to continue', 'log in to continue', 'login required',
+        'page not found', 'service unavailable', 'accept cookies to continue',
+        'consent required', 'checking your browser')):
+        raise ExternalResearchError('No substantive requested content was returned.', RETRIEVED_NON_SUBSTANTIVE_SHELL)
+    identity = (identity_text + ' ' + visible).casefold()
+    if any(term.casefold() not in identity for term in source.identity_terms):
+        raise ExternalResearchError('Requested source identity is not established.', CONTENT_VALIDATION_UNRESOLVED)
+    if any(term.casefold() not in lower for term in source.requested_terms):
+        raise ExternalResearchError('Requested article/product content is absent.', CONTENT_VALIDATION_UNRESOLVED)
+    if source.evidence_role == 'ONTARIO_REGULATORY_SOURCE' and not re.search(r'\b\d+\s*\.|\bsection\s+\d+', lower):
+        raise ExternalResearchError('Regulatory provisions are absent.', CONTENT_VALIDATION_UNRESOLVED)
+    if source.evidence_role == 'ONTARIO_REGULATORY_SOURCE' and not re.search(
+        r'\b(shall|must|means|consists|adopted|prescribed|applies|requires|required|revoked|amended)\b', lower
+    ):
+        raise ExternalResearchError('Identifiers or navigation do not establish provision text.', CONTENT_VALIDATION_UNRESOLVED)
+    return RETRIEVED_SUBSTANTIVE_CONTENT
+
+
+def regulatory_applicability(source, jurisdiction):
+    if source.evidence_role == 'EXTERNAL_PRODUCT_EVIDENCE':
+        return 'NOT_REGULATORY_AUTHORITY'
+    if source.jurisdiction in ('', 'UNRESOLVED') or jurisdiction in ('', 'UNRESOLVED', None):
+        return 'APPLICABILITY_UNRESOLVED'
+    if jurisdiction != source.jurisdiction or source.jurisdiction != 'Ontario, Canada':
+        return 'NON_APPLICABLE_JURISDICTION'
+    return 'APPLICABILITY_UNRESOLVED'  # project edition, occupancy and scope still require proof
 
 
 @dataclass
@@ -137,6 +210,12 @@ class RetrievedReference:
     content_type: str = ""
     visible_text: str = ""  # original extraction, before prompt screening
     extraction_truncated: bool = False
+    validation_state: str = CONTENT_VALIDATION_UNRESOLVED
+    regions: tuple[dict, ...] = ()
+    jurisdiction: str = 'UNRESOLVED'
+    evidence_role: str = 'EXTERNAL_REFERENCE'
+    applicability: str = 'APPLICABILITY_UNRESOLVED'
+    source_metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -208,8 +287,9 @@ def retrieve_reference(
 ) -> RetrievedReference:
     """One bounded GET against one allow-listed source."""
     parsed = urlsplit(source.url)
-    allowed = {urlsplit(entry.url).hostname for entry in REFERENCE_SOURCES}
-    if source not in REFERENCE_SOURCES or parsed.scheme != "https" or parsed.hostname not in allowed:
+    configured = REFERENCE_SOURCES + TURNSTILE_SOURCE_MISSIONS
+    allowed = {urlsplit(entry.url).hostname for entry in configured}
+    if source not in configured or parsed.scheme != "https" or parsed.hostname not in allowed:
         raise ExternalResearchError("Only allow-listed HTTPS reference sources may be retrieved.")
 
     opener = opener or urllib.request.build_opener(_NoRedirect())
@@ -228,24 +308,74 @@ def retrieve_reference(
             if response.geturl() != source.url or final.scheme != 'https' or final.hostname not in allowed:
                 raise ExternalResearchError("Retrieval left the fixed allow-listed HTTPS route.")
             content_type = response.headers.get_content_type().lower()
-            if content_type not in ALLOWED_CONTENT_TYPES:
+            if content_type not in ALLOWED_CONTENT_TYPES and not (source.pdf and content_type == 'application/pdf'):
                 raise ExternalResearchError(f"Unsupported content type: {content_type or 'missing'}.")
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
+            limit = 20_000_000 if source.pdf else MAX_RESPONSE_BYTES
+            raw = response.read(limit + 1)
     except ExternalResearchError:
         raise
-    except (urllib.error.URLError, OSError, TimeoutError) as error:
+    except (urllib.error.URLError, OSError, TimeoutError, AirlockMissionError) as error:
         raise ExternalResearchError(f"Could not reach {source.publisher}: {error}") from error
 
-    if len(raw) > MAX_RESPONSE_BYTES:
+    if len(raw) > limit:
         raise ExternalResearchError("Response exceeded the permitted size.")
 
-    visible = _visible_text(raw.decode("utf-8", errors="replace"))
-    text = visible[:MAX_EXTRACTED_CHARS]
+    regions = []
+    metadata = {}
+    identity = ''
+    if source.pdf:
+        try:
+            import fitz
+            with fitz.open(stream=raw, filetype='pdf') as document:
+                if document.page_count > 2500:
+                    raise ValueError('PDF exceeds page bound')
+                identity = ' '.join(document[i].get_text() for i in range(min(5, len(document))))
+                for page in document:
+                    text = page.get_text()
+                    if any(term in text.casefold() for term in source.requested_terms):
+                        regions.append({'page': page.number + 1, 'text': text})
+                visible = '\n'.join(r['text'] for r in regions)
+        except Exception as exc:
+            raise ExternalResearchError('PDF text could not be validated: ' + str(exc), CONTENT_VALIDATION_UNRESOLVED) from exc
+    elif content_type == 'application/json':
+        try:
+            payload = json.loads(raw.decode('utf-8'))
+            if not isinstance(payload, dict) or not isinstance(payload.get('content'), str):
+                raise ValueError('missing content')
+            metadata = {k: payload.get(k) for k in ('volume', 'title', 'alias', 'state', 'dateFrom', 'updatedAt', 'regNmber')}
+            if source.key in ('turnstile-obc-regulation', 'turnstile-fire-code'):
+                expected_alias = 'regulation/r24163' if source.key == 'turnstile-obc-regulation' else 'regulation/070213'
+                if payload.get('alias') != expected_alias:
+                    raise ValueError('requested regulation alias mismatch')
+            identity = ' '.join(str(v) for v in metadata.values())
+            visible = _visible_text(payload['content'])
+            if len(re.findall(r'\w+', _visible_text(payload['content'], exclude_navigation=True))) < 8:
+                raise ExternalResearchError('Only navigation or controls were returned.', RETRIEVED_NON_SUBSTANTIVE_SHELL)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ExternalResearchError('Requested regulation content is absent from JSON.', CONTENT_VALIDATION_UNRESOLVED) from exc
+    else:
+        html = raw.decode("utf-8", errors="replace")
+        visible = _visible_text(html)
+        if len(re.findall(r'\w+', _visible_text(html, exclude_navigation=True))) < 8:
+            raise ExternalResearchError('Only navigation or controls were returned.', RETRIEVED_NON_SUBSTANTIVE_SHELL)
+    state = validate_source_content(source, visible, identity_text=identity)
+    # Preserve relevant windows for long regulations; exact text remains in original bytes.
+    if source.requested_terms and len(visible) > MAX_EXTRACTED_CHARS and not source.pdf:
+        for term in source.requested_terms:
+            for match in list(re.finditer(re.escape(term), visible, re.I))[:8]:
+                start=max(0,match.start()-300); end=min(len(visible),match.end()+1800)
+                regions.append({'start':start,'end':end,'text':visible[start:end]})
+        text='\n'.join(r['text'] for r in regions)[:MAX_EXTRACTED_CHARS]
+    else:
+        text = visible[:MAX_EXTRACTED_CHARS]
+    validate_source_content(source, text, identity_text=identity + ' ' + visible[:1000])
     screened, notes = screen_untrusted_text(text)
     stamp = (now or (lambda: datetime.now(timezone.utc)))().isoformat()
     return RetrievedReference(source=source, text=screened, retrieved_at=stamp, screening_notes=notes,
         raw_bytes=raw, content_type=content_type, visible_text=text,
-        extraction_truncated=len(visible) > MAX_EXTRACTED_CHARS)
+        extraction_truncated=len(visible) > MAX_EXTRACTED_CHARS, validation_state=state,
+        regions=tuple(regions), jurisdiction=source.jurisdiction, evidence_role=source.evidence_role,
+        applicability=regulatory_applicability(source, 'Ontario, Canada'), source_metadata=metadata)
 
 
 RESEARCH_CONTRACT = (

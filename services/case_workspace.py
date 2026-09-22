@@ -8053,7 +8053,9 @@ class CaseWorkspaceStore:
         try:
             retrieved = retrieve_candidate_reference(self, workspace, source_key)
         except AirlockMissionError as exc:
-            raise CaseWorkspaceError(str(exc)) from None
+            error = CaseWorkspaceError(str(exc))
+            error.validation_state = getattr(exc, 'validation_state', 'RETRIEVAL_BLOCKED')
+            raise error from None
         raw = retrieved.raw_bytes
         if not isinstance(raw, bytes) or not raw:
             raise CaseWorkspaceError('Original retrieval bytes are required before retaining candidate evidence.')
@@ -8089,6 +8091,7 @@ class CaseWorkspaceStore:
                     kind=SOURCE_KIND_PROJECT_DOCUMENT, name=retrieved.source.label, added_at=_now(),
                     file_path=str(created_path.resolve()), file_hash=digest, issuer=retrieved.source.publisher,
                     origin_type=SOURCE_ORIGIN_TYPE_EXTERNAL_CONNECTOR, origin_reference=retrieved.source.url,
+                    source_domain=SOURCE_DOMAIN_EXTERNAL_REFERENCE,
                     mime_type=retrieved.content_type, size_bytes=len(raw),
                     document_status='externally researched; unvalidated',
                     note='Retained public response. Retrieval time is not publication time or mandate currentness.',
@@ -8108,6 +8111,12 @@ class CaseWorkspaceStore:
                 label=retrieved.source.label, publisher=retrieved.source.publisher,
                 retrieved_at=retrieved.retrieved_at, response_sha256=digest,
                 screening_notes=list(retrieved.screening_notes), extraction_truncated=retrieved.extraction_truncated,
+                content_validation=getattr(retrieved, 'validation_state', 'CONTENT_VALIDATION_UNRESOLVED'),
+                jurisdiction=getattr(retrieved, 'jurisdiction', 'UNRESOLVED'),
+                evidence_role=getattr(retrieved, 'evidence_role', 'EXTERNAL_REFERENCE'),
+                applicability=getattr(retrieved, 'applicability', 'APPLICABILITY_UNRESOLVED'),
+                source_metadata=getattr(retrieved, 'source_metadata', {}),
+                source_regions=list(getattr(retrieved, 'regions', ())),
                 reused_identical_source=reused, currentness='CURRENTNESS_UNRESOLVED', authority='NOT_ESTABLISHED',
                 qualification='Candidate source retained, not a verified investor proposition. Publication date, '
                     'identity, binding, mandate and currentness require separate source-based review. '

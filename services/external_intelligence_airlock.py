@@ -116,12 +116,29 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class _TextExtractor(HTMLParser):
-    def __init__(self):
+    def __init__(self, *, exclude_navigation=False):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
+        self.ignored: list[str] = []
+        self.excluded_tags = {'script', 'style', 'nav', 'header', 'footer', 'noscript', 'template'}
+        if exclude_navigation:
+            self.excluded_tags.update({'a', 'button', 'form', 'select'})
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.excluded_tags:
+            self.ignored.append(tag)
+        elif not self.ignored and tag in {'p', 'div', 'br', 'li', 'tr', 'h1', 'h2', 'h3'}:
+            self.parts.append(' ')
+
+    def handle_endtag(self, tag):
+        if tag in self.ignored:
+            self.ignored = self.ignored[:self.ignored.index(tag)]
+        if not self.ignored:
+            self.parts.append(' ')
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if not self.ignored:
+            self.parts.append(data)
 
 
 _HARMLESS_PUNCTUATION_EQUIVALENTS = str.maketrans({
@@ -130,8 +147,8 @@ _HARMLESS_PUNCTUATION_EQUIVALENTS = str.maketrans({
 })
 
 
-def _visible_text(value: Any) -> str:
-    parser = _TextExtractor()
+def _visible_text(value: Any, *, exclude_navigation=False) -> str:
+    parser = _TextExtractor(exclude_navigation=exclude_navigation)
     parser.feed(html.unescape(str(value or "")))
     text = unicodedata.normalize("NFKC", "".join(parser.parts))
     text = text.replace("\xa0", " ")
@@ -368,20 +385,19 @@ def _canonical_snapshot(workspace: ProjectWorkspace) -> dict[str, Any]:
 
 def retrieve_candidate_reference(store, workspace, source_key):
     """Extend the existing fixed-route Airlock; retrieval is never promotion."""
-    from services.external_research import REFERENCE_SOURCES, retrieve_reference, ExternalResearchError
+    from services.external_research import REFERENCE_SOURCES, TURNSTILE_SOURCE_MISSIONS, retrieve_reference, ExternalResearchError
     policy = _evaluate_policy(store, workspace)
     if policy.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
         raise AirlockMissionError('External reference retrieval is not authorized: ' + policy.reason)
-    source = next((row for row in REFERENCE_SOURCES if row.key == source_key), None)
+    source = next((row for row in REFERENCE_SOURCES + TURNSTILE_SOURCE_MISSIONS if row.key == source_key), None)
     if source is None:
         raise AirlockMissionError('Select a configured public source; arbitrary URLs are not accepted.')
     try:
         retrieved = retrieve_reference(source)
     except ExternalResearchError as exc:
-        raise AirlockMissionError(str(exc)) from None
-    text = retrieved.visible_text.strip()
-    if len(text) < 100 or any(marker in text.lower() for marker in ('verify that you are not a robot', 'enable javascript and then reload')):
-        raise AirlockMissionError('The source did not supply usable reference content; no access challenge was bypassed.')
+        error = AirlockMissionError(str(exc))
+        error.validation_state = exc.validation_state
+        raise error from None
     return retrieved
 
 
