@@ -95,17 +95,32 @@ def readiness(workspace, source_ids) -> dict:
 def ordered_source_ids(workspace) -> list[str]:
     """Every live source in the order the reviewer added them.
 
-    `intake_order` when the records carry it, `added_at` otherwise, and the
-    stored order last - never an incidental dict order, because the whole
-    request was to keep four pages in sequence.
+    A SOURCE WITH NO intake_order SORTS FIRST, and that is not a tie-break
+    detail - it is the founding page. Verified against the live Existentialism
+    case: its four scans carry intake_order None, 1, 2, 3, because the founding
+    upload creates the case and `attach_document_shop_sources` numbers only what
+    is attached afterwards. Treating None as "unknown, put it last" produced the
+    order 2, 3, 4, 1 - the first page of the document at the end of it.
+
+    That is also what Source.intake_order's own comment means by "None ... reads
+    correctly as 'no stated order'": a record with nothing stated came before
+    the numbering existed, or before the attachments did. Either way it precedes
+    them.
+
+    Ties break on added_at and then stored position, NEVER on the filename. The
+    numbering docstring in services/ingestion.py is explicit about why: a phone
+    hands over `image.jpg` five times, so a filename carries no order and often
+    no distinction at all.
     """
     live = [s for s in (workspace.sources or []) if not s.get("removed_at")]
     return [
-        s["id"] for s in sorted(
-            live,
-            key=lambda s: (s.get("intake_order") if s.get("intake_order") is not None else 10**9,
-                           s.get("added_at") or "",
-                           ))
+        s["id"] for index, s in sorted(
+            enumerate(live),
+            key=lambda pair: (
+                pair[1].get("intake_order") if pair[1].get("intake_order") is not None else -1,
+                pair[1].get("added_at") or "",
+                pair[0],
+            ))
     ]
 
 

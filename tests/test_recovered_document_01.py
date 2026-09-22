@@ -146,6 +146,58 @@ class AllFourPagesBecomeOneDocument(_Pages):
             self.assertIn(source_id, derivative["origin_reference"])
 
 
+class TheFoundingPageComesFirst(_Pages):
+    """Caught on live data, not in this file's own fixtures.
+
+    The Existentialism case carries intake_order None, 1, 2, 3 - the founding
+    upload creates the case and only the attachments are numbered. The first
+    version of ordered_source_ids sent a missing intake_order to the BACK,
+    which put page 1 of the document at the end of it: 2, 3, 4, 1.
+
+    The original tests here never caught it because they set intake_order on
+    all four pages - a fixture agreeing with the assumption instead of with the
+    system. This one reproduces the real shape.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Re-shape to production: founding page unnumbered, attachments 1..3.
+        for record in self.workspace.sources:
+            if record["name"] == "scan-1.png":
+                record["intake_order"] = None
+            elif record["name"] == "scan-2.png":
+                record["intake_order"] = 1
+            elif record["name"] == "scan-3.png":
+                record["intake_order"] = 2
+            elif record["name"] == "scan-4.png":
+                record["intake_order"] = 3
+        self.store.save(self.workspace)
+
+    def _names(self):
+        by_id = {s["id"]: s["name"] for s in self.workspace.sources}
+        return [by_id[i] for i in recovered_document.ordered_source_ids(self.workspace)]
+
+    def test_the_unnumbered_founding_page_sorts_first(self):
+        self.assertEqual(self._names(),
+                         ["scan-1.png", "scan-2.png", "scan-3.png", "scan-4.png"])
+
+    def test_the_document_body_follows_that_order(self):
+        source_ids = recovered_document.ordered_source_ids(self.workspace)
+        document = recovered_document.build_export_document(
+            self.workspace, recovered_document.readiness(self.workspace, source_ids))
+        body = "\n".join(document.preamble)
+        positions = [body.index(f"paragraph {i}.") for i in range(1, 5)]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_identical_timestamps_do_not_scramble_the_order(self):
+        """The live case: all four share one added_at, to the second."""
+        for record in self.workspace.sources:
+            record["added_at"] = "2026-09-22T22:26:50+00:00"
+        self.store.save(self.workspace)
+        self.assertEqual(self._names(),
+                         ["scan-1.png", "scan-2.png", "scan-3.png", "scan-4.png"])
+
+
 class IncompleteRecoveryRefusesRatherThanFabricates(_Pages):
     def setUp(self):
         super().setUp()
