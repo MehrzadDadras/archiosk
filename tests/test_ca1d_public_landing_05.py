@@ -43,9 +43,20 @@ class HeroSimplificationTests(unittest.TestCase):
 
     def test_explore_page_still_carries_the_fuller_explanation(self):
         """The removed hero copy's underlying meaning is not lost from
-        the product - it still lives on /explore, unaffected."""
+        the product - it still lives on /explore, unaffected.
+
+        CLAUDE-EXPLORE-PAGE-02 rewrote that page, so the single heading this
+        once matched is gone. The SUBJECT is unchanged and is what matters:
+        somewhere in the product still explains the thing at length. Asserting
+        the four sections is a truer test of "the fuller explanation" than
+        matching one heading ever was.
+        """
         body = self.client.get("/explore").get_data(as_text=True)
-        self.assertIn("What Archiosk does", body)
+        for section in ("Governed intelligence for projects, assets, and opportunities",
+                        "One engine, different work",
+                        "From evidence to a governed result",
+                        "Built to preserve judgment, not replace it"):
+            self.assertIn(section, body)
 
     def test_css_no_longer_defines_rotator_or_value_prop_rules(self):
         """Checks actual rule syntax (selector + brace), not a bare

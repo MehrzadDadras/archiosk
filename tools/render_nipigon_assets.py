@@ -58,7 +58,16 @@ try:
 except ImportError:  # pragma: no cover - environment guard
     sys.exit("PyMuPDF is required: pip install pymupdf")
 
-DEFAULT_SOURCE = r"C:\Archiosk\Samples\5 Nipigon"
+# CLAUDE-CLEAN-CHECKOUT-01: the source directory is CONFIGURATION, not a
+# constant. This was a hard-coded absolute Windows path, which meant the
+# renderer could only ever run on one machine - a tracked generator that
+# nobody else could feed, and therefore an asset nobody else could
+# reproduce. A clean clone had the tool and no way to use it.
+#
+# The original path stays as the fallback so this keeps working unchanged
+# where it already ran; NIPIGON_SOURCE_ROOT or --source-root now let any
+# machine say where it actually keeps the five source PDFs.
+DEFAULT_SOURCE = os.environ.get("NIPIGON_SOURCE_ROOT") or r"C:\Archiosk\Samples\5 Nipigon"
 DEFAULT_OUT = os.path.join("static", "nipigon")
 
 # Only the sheets the coordination scenario actually uses. Rendering all 51

@@ -811,3 +811,154 @@ body[data-ui-density="public"] .landing-doc-section h2 { color: rgba(200, 230, 2
 body[data-ui-density="public"] .landing-doc-section p,
 body[data-ui-density="public"] .landing-doc-section li { color: rgba(228, 243, 255, .82); }
 body[data-ui-density="public"] .landing-action-primary { background: linear-gradient(120deg, rgb(152, 199, 244), rgb(194, 222, 248)); color: rgb(2, 8, 18); box-shadow: none; }
+
+/* ==========================================================================
+   CLAUDE-EXPLORE-PAGE-02 - the public Explore page.
+
+   WHITESPACE BEFORE BORDERS. The rhythm is carried by one spacing scale
+   repeated across all four sections; the only rule on the page is the hairline
+   that separates them, and the cards have no border at all. A heavier
+   treatment would make a public product page read like an internal panel.
+
+   Deep Ocean stays BLUE-LEANING here - the rgba(176, 219, 255, ...) family
+   that CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01 settled on, never the earlier
+   green/aqua direction.
+   ========================================================================== */
+
+/* The document column widens for this page so a 2x2 grid has room to breathe;
+   every other landing document keeps its 720px measure. */
+.explore-page { max-width: 940px; }
+
+.explore-hero { margin-bottom: 16px; }
+.explore-hero h1 { margin-bottom: 22px; max-width: 18ch; }
+
+/* The lede is the one paragraph allowed to be larger than body text. */
+.explore-lede {
+    font-size: clamp(1.02rem, 1.7vw, 1.22rem);
+    line-height: 1.6;
+    color: rgba(226, 240, 255, .9);
+    max-width: 62ch;
+}
+.explore-page p { max-width: 62ch; }
+
+.explore-shows {
+    list-style: none;
+    margin: 4px 0 20px;
+    padding: 0 0 0 18px;
+    border-left: 1px solid rgba(176, 219, 255, .22);
+}
+.explore-shows li {
+    margin: 4px 0;
+    color: rgba(226, 240, 255, .86);
+}
+
+.explore-emphasis {
+    margin-top: 18px;
+    color: rgba(226, 240, 255, .95);
+    font-weight: 600;
+}
+
+.explore-actions { margin-top: 32px; }
+
+/* One hairline between sections, and a lot of air. That pairing is the
+   whole visual rhythm of the page. */
+.explore-section {
+    margin-top: 72px;
+    padding-top: 56px;
+    border-top: 1px solid rgba(176, 219, 255, .14);
+}
+.explore-section-title {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(1.4rem, 2.8vw, 2rem);
+    letter-spacing: .02em;
+    text-transform: none;
+    color: rgba(230, 244, 255, .94);
+    margin: 0 0 14px;
+}
+.explore-section-intro {
+    color: rgba(226, 240, 255, .82);
+    margin-bottom: 34px;
+}
+
+/* 2x2 on desktop, one column on a phone. `auto-fit` with a min track does
+   both without a breakpoint, and `minmax(0, 1fr)` keeps long words from
+   pushing a column wider than its share. */
+.explore-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 34px 40px;
+    margin: 0 0 34px;
+}
+.explore-card { margin: 0; }
+.explore-card h3 {
+    margin: 0 0 8px;
+    font-size: .8rem;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: rgba(176, 219, 255, .82);
+}
+.explore-card p {
+    margin: 0;
+    color: rgba(226, 240, 255, .84);
+}
+
+.explore-closing {
+    margin-top: 30px;
+    color: rgba(226, 240, 255, .9);
+    font-style: italic;
+}
+
+/* The steps stay a numbered list so the order survives with styles off and
+   reads correctly to a screen reader. The number is drawn from the list
+   counter rather than typed into the markup. */
+.explore-steps {
+    list-style: none;
+    counter-reset: explore-step;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 40px;
+}
+.explore-step {
+    counter-increment: explore-step;
+    position: relative;
+    padding-left: 48px;
+}
+.explore-step::before {
+    content: counter(explore-step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: rgba(176, 219, 255, .55);
+}
+.explore-step h3 {
+    margin: 0 0 8px;
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+    color: rgba(230, 244, 255, .94);
+}
+.explore-step p {
+    margin: 0 0 8px;
+    color: rgba(226, 240, 255, .84);
+}
+
+/* Wide desktop only: the five steps sit in a row while they stay readable.
+   Below this they stack, which is the honest layout for the text length. */
+@media (min-width: 1100px) {
+    .explore-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 28px; }
+    .explore-step { padding-left: 0; padding-top: 40px; }
+    .explore-step p { max-width: none; }
+}
+
+.explore-governance p { color: rgba(226, 240, 255, .86); }
+
+@media (max-width: 640px) {
+    .explore-section { margin-top: 52px; padding-top: 40px; }
+    .explore-grid { gap: 28px; }
+}

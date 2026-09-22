@@ -60,7 +60,12 @@ class PublicLandingRouteTests(unittest.TestCase):
         resp = self.client.get("/explore")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
-        self.assertIn("What Archiosk does", body)
+        # CLAUDE-EXPLORE-PAGE-02: the headline changed, the subject of this
+        # test did not. It asks whether /explore is PUBLIC AND REACHABLE with
+        # its way back and its way in, so it asserts the current headline
+        # rather than preserving "What Archiosk does" to keep an old string
+        # green.
+        self.assertIn("Governed intelligence for projects, assets, and opportunities", body)
         self.assertIn('href="/login"', body)
         self.assertIn('href="/"', body)
 

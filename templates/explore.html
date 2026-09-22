@@ -2,71 +2,152 @@
 
 {% block title %}Explore Archiosk{% endblock %}
 
+{# CLAUDE-EXPLORE-PAGE-02: one coherent public product page.
+
+   What this replaces was a stack of seven internal capability headings -
+   GOVERNED PROJECT & ASSET INTELLIGENCE, ANALYSIS BEFORE DECISION,
+   COMPOSITION NOT JUST MATCHING - which read as an inventory of what the
+   system contains rather than as a page telling someone what it does for
+   them. Four sections now, each with one job, and whitespace carrying the
+   rhythm instead of borders.
+
+   The CTA destinations are UNCHANGED: `portal.start_trial` and
+   `portal.login`, the same two routes this page has always used and the same
+   two the landing page uses. Nothing here touches routing.
+
+   Deep Ocean stays blue-leaning. New surfaces use the rgba(176, 219, 255, ...)
+   family that CLAUDE-DEEP-OCEAN-HUE-CORRECTION-01 settled on, never the older
+   green/aqua direction. #}
 {% block landing_body %}
-<div class="landing-doc">
+<div class="landing-doc explore-page">
     <a class="landing-doc-back" href="{{ url_for('portal.index') }}" data-ui-ref="explore.back">&larr; Archiosk</a>
-    <span class="landing-doc-kicker">Explore</span>
-    <h1>What Archiosk does</h1>
 
-    <div class="landing-doc-section">
-        <h2>GOVERNED PROJECT &amp; ASSET INTELLIGENCE</h2>
-        <p>
-            Archiosk turns complex project, technical, commercial, and market information into governed intelligence. It examines documents, drawings, specifications, contracts, reports, schedules, research, and other evidence &mdash; identifying requirements, relationships, changes, conflicts, gaps, and opportunities while preserving exactly where every conclusion came from.
+    {# 1. HERO - editorial, left-aligned, deliberately not inside a card. #}
+    <header class="explore-hero" data-ui-ref="explore.hero">
+        <span class="landing-doc-kicker">Explore Archiosk</span>
+        <h1>Governed intelligence for projects, assets, and opportunities</h1>
+        <p class="explore-lede">
+            Archiosk turns complex technical, commercial, project, and market
+            information into governed intelligence.
         </p>
-    </div>
-
-    <div class="landing-doc-section">
-        <h2>ONE ENGINE, MULTIPLE WORKING ENVIRONMENTS</h2>
-        <p>Archiosk adapts the same governed evidence engine to different roles and objectives:</p>
-        <ul>
-            <li><strong>Client / Owner</strong> &mdash; reviewing proposals, requirements, risk, investment, and project performance.</li>
-            <li><strong>Design-Builder / Proponent</strong> &mdash; coordinating design, procurement, construction information, and submissions.</li>
-            <li><strong>Investment &amp; Development</strong> &mdash; matching projects, capital requirements, investors, partners, and opportunities.</li>
-            <li><strong>Asset Management</strong> &mdash; examining existing assets, interventions, operating requirements, and lifecycle decisions.</li>
+        <p>
+            It examines documents, drawings, specifications, contracts,
+            schedules, research, and other evidence to show:
+        </p>
+        <ul class="explore-shows">
+            <li>what matters,</li>
+            <li>what changed,</li>
+            <li>what conflicts,</li>
+            <li>what is missing,</li>
+            <li>and what remains unresolved.</li>
         </ul>
-        <p>The information model stays governed even when the working context changes.</p>
-    </div>
+        <p class="explore-emphasis">Every conclusion stays connected to its evidence.</p>
 
-    <div class="landing-doc-section">
-        <h2>EVIDENCE, RELATIONSHIPS &amp; CONTINUITY</h2>
-        <p>
-            Archiosk does more than retrieve information. It examines how information participates in the larger project or asset continuum &mdash; what it depends on, what depends on it, whether it conflicts with another representation, whether information is missing, and whether a drawing, requirement, investor, or proposed solution actually belongs in the configuration being evaluated.
+        <div class="landing-actions explore-actions">
+            <a class="landing-action landing-action-primary" href="{{ url_for('portal.start_trial') }}" data-ui-ref="explore.start-trial">Request Trial Access</a>
+            <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="explore.sign-in">Sign In</a>
+        </div>
+    </header>
+
+    {# 2. WORKING ENVIRONMENTS - 2x2 on desktop, one column on mobile. #}
+    <section class="explore-section" data-ui-ref="explore.environments">
+        <h2 class="explore-section-title">One engine, different work</h2>
+        <p class="explore-section-intro">
+            The same governed intelligence engine adapts to different objectives
+            without changing the evidence model underneath.
         </p>
-        <p>When evidence does not support a conclusion, Archiosk keeps the question unresolved rather than inventing the missing answer.</p>
-    </div>
 
-    <div class="landing-doc-section">
-        <h2>ANALYSIS BEFORE DECISION</h2>
-        <p>For substantial investigations, Archiosk can declare the work plan it intends to follow, focus attention on the relevant evidence, trace relationships, compare alternatives, test constraints, and expose the resulting conclusion with its supporting evidence.</p>
-        <p>The plan guides investigation. It does not become evidence or authority.</p>
-    </div>
+        <div class="explore-grid">
+            <article class="explore-card">
+                <h3>Client / Owner</h3>
+                <p>Review requirements, proposals, risk, investment, and project performance.</p>
+            </article>
+            <article class="explore-card">
+                <h3>Design-Builder / Proponent</h3>
+                <p>Coordinate design, procurement, construction information, and submissions.</p>
+            </article>
+            <article class="explore-card">
+                <h3>Investment &amp; Development</h3>
+                <p>Evaluate projects, capital requirements, investors, partners, and opportunities.</p>
+            </article>
+            <article class="explore-card">
+                <h3>Asset Management</h3>
+                <p>Examine existing assets, interventions, operating requirements, and lifecycle decisions.</p>
+            </article>
+        </div>
 
-    <div class="landing-doc-section">
-        <h2>COMPOSITION, NOT JUST MATCHING</h2>
-        <p>Many real problems cannot be solved by finding one perfect match.</p>
-        <p>Archiosk can evaluate whether several representations, disciplines, organizations, investors, or capabilities together form the minimum sufficient configuration required to satisfy the objective &mdash; while keeping unresolved compatibility, missing information, and hard conflicts visible.</p>
-    </div>
+        <p class="explore-closing">The working context changes. The governed evidence model does not.</p>
+    </section>
 
-    <div class="landing-doc-section">
-        <h2>HUMAN-SUPERVISED, NOT AUTONOMOUS</h2>
+    {# 3. WORKFLOW - five numbered steps, no accordion. #}
+    <section class="explore-section" data-ui-ref="explore.workflow">
+        <h2 class="explore-section-title">From evidence to a governed result</h2>
+
+        <ol class="explore-steps">
+            <li class="explore-step">
+                <h3>Establish the evidence</h3>
+                <p>Archiosk identifies what the source actually says and preserves where it came from.</p>
+            </li>
+            <li class="explore-step">
+                <h3>Trace relationships</h3>
+                <p>
+                    GO examines what depends on what, where information conflicts,
+                    what is missing, and how each item participates in the larger
+                    project or asset continuum.
+                </p>
+            </li>
+            <li class="explore-step">
+                <h3>Test and compare</h3>
+                <p>
+                    Archiosk can compare alternatives, examine coordination, test
+                    constraints, assess fit, and identify unresolved conditions.
+                </p>
+            </li>
+            <li class="explore-step">
+                <h3>Compose when one answer is not enough</h3>
+                <p>
+                    Some problems require several representations, disciplines,
+                    organizations, investors, or capabilities working together.
+                </p>
+                <p>
+                    Archiosk can test for the minimum sufficient configuration
+                    rather than forcing a single match.
+                </p>
+            </li>
+            <li class="explore-step">
+                <h3>Surface the result</h3>
+                <p>
+                    The user sees the conclusion first, followed by what changed,
+                    what remains unresolved, and the supporting evidence.
+                </p>
+                <p>
+                    Detailed provenance, analysis history, and technical
+                    information remain available on demand.
+                </p>
+            </li>
+        </ol>
+    </section>
+
+    {# 4. GOVERNANCE - calm, one heading, short body, the two CTAs. #}
+    <section class="explore-section explore-governance" data-ui-ref="explore.governance">
+        <h2 class="explore-section-title">Built to preserve judgment, not replace it</h2>
         <p>Archiosk investigates, organizes, compares, tests, and proposes.</p>
         <p>
-            It does not silently convert inference into authority, commit an organization to a transaction, approve a design, create a partnership, or make a consequential decision on behalf of the user.
+            It does not silently turn inference into authority, hide uncertainty,
+            or make consequential decisions on behalf of the user.
         </p>
-        <p>Human judgment remains the governing boundary.</p>
-    </div>
-
-    <div class="landing-doc-section">
-        <h2>A REPRESENTATIVE WORKFLOW</h2>
         <p>
-            Start with a project, opportunity, asset, or question. Archiosk establishes the evidence and scope, declares the investigation plan, examines the relevant relationships, identifies what matters, what changed, what conflicts, and what remains unresolved, then produces a concise governed result.
+            When evidence is incomplete, conflicting, or insufficient, Archiosk
+            keeps that condition visible rather than inventing certainty.
         </p>
-        <p>Supporting evidence, provenance, analysis history, and technical detail remain available on demand without overwhelming the primary decision view.</p>
-    </div>
+        <p class="explore-emphasis">Human judgment remains the governing boundary.</p>
 
-    <div class="landing-doc-actions">
-        <a class="landing-action landing-action-primary" href="{{ url_for('portal.start_trial') }}" data-ui-ref="explore.start-trial">Request Trial Access</a>
-        <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="explore.sign-in">Sign In</a>
-    </div>
+        <p class="explore-closing">Start with a project, opportunity, asset, or question.</p>
+
+        <div class="landing-actions explore-actions">
+            <a class="landing-action landing-action-primary" href="{{ url_for('portal.start_trial') }}" data-ui-ref="explore.start-trial-foot">Request Trial Access</a>
+            <a class="landing-action landing-action-secondary" href="{{ url_for('portal.login') }}" data-ui-ref="explore.sign-in-foot">Sign In</a>
+        </div>
+    </section>
 </div>
 {% endblock %}

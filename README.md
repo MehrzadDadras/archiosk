@@ -38,6 +38,42 @@ cp .env.example .env        # then fill in FLASK_SECRET_KEY and ANTHROPIC_API_KE
 flask --app app run --debug
 ```
 
+### Running the full gate from a clean checkout
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pip install pytest pytest-xdist pytest-timeout   # test-only, deliberately not in requirements.txt
+cp .env.example .env        # FLASK_SECRET_KEY is required; ANTHROPIC_API_KEY may stay empty
+python -m pytest -q -n 8 --dist loadfile
+```
+
+That sequence alone is enough. The suite is hermetic: it needs no API key, no
+network and no pre-existing database — `instance/` is created on demand and
+`tests/conftest.py` clears its own stores at session start. A missing
+`FLASK_SECRET_KEY` fails loudly with a configuration error rather than a
+confusing test failure.
+
+**Expected skips.** Three tests skip by design, plus the optional fixture
+below. Any other failure on a clean checkout is a real defect.
+
+### Optional fixtures
+
+Some tests depend on rendered material that is too large to track and is
+generated from source documents kept outside this repository. They are
+classified `EXTERNAL_OPTIONAL_FIXTURE`: absent, the tests **skip with a
+message naming the provisioning command**; present, they run in full and
+assert exactly what they always did.
+
+| Fixture | Size | Provision with |
+| --- | --- | --- |
+| `static/nipigon/` — 5 Nipigon rendered sheets | ~91 MB | `NIPIGON_SOURCE_ROOT=<dir> python tools/render_nipigon_assets.py` |
+
+The renderer writes `static/nipigon/manifest.json` beside the assets recording
+the tool, the source root, the render time, and each source file's SHA-256 —
+so a provisioned fixture can always state what it is a picture of and when it
+was taken.
+
 Visit `http://127.0.0.1:5000` and sign in. To see the UI populated
 without ingesting anything yourself, open any project already sitting
 in `instance/registry/` from the Projects directory.
