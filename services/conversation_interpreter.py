@@ -72,6 +72,7 @@ from services.requirement_investigation import investigate_requirement
 from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
 import services.quantitative_investigation as quant
 from services.runtime_observation import observed
+from services import project_change
 
 
 @observed
@@ -675,6 +676,28 @@ def interpret_message(
     # truthful answer about the channel.
     if _looks_like_channel_status_check(lowered):
         return _handle_channel_status_check()
+
+    # CLAUDE-PROJECT-CHANGE-LANE-01: a question about project ACTIVITY is
+    # answered from the activity ledger, and is checked here - before any
+    # evidence-shaped routing below - for the same reason the greeting and
+    # channel-status checks are.
+    #
+    # Asked live on 2026-09-22, "what is new in this project if anything has
+    # changed during this week" fell through to the ordinary turn, where
+    # gather_project_evidence admits EVERY evidence item in the project and
+    # run_conversational_turn then replaces the model's answer with that
+    # admission set. The reviewer got seven SOURCE_REFERENCE qualifications and
+    # several screens of source text, for a project whose ledger held 82 events
+    # of which none were in the last seven days. The honest answer was one
+    # sentence, and the data for it was already stored.
+    #
+    # WHY NOT LATER, as a fallback when retrieval finds nothing: because the
+    # admission override in conversational_turn.py is unconditional on intent,
+    # a change question that reaches it can only produce an evidence dump. The
+    # lane has to be chosen before that point or not at all.
+    change_window = project_change.window_for(lowered)
+    if change_window and _looks_like_project_change_question(lowered):
+        return _handle_project_change_question(workspace, change_window, store, governance_log)
 
     # CLAUDE-CA1C-CONV-FIX-02: checked FIRST, before ANY Investigation-
     # shaped routing below (needs_case, is_requirement_investigation_
@@ -1408,6 +1431,58 @@ _CONVERSATIONAL_UTTERANCE_PHRASES = (
 _CHANNEL_STATUS_CHECK_PHRASES = (
     "do you hear me", "can you hear me", "are you there", "you there",
 )
+
+
+# -- CLAUDE-PROJECT-CHANGE-LANE-01 ------------------------------------------
+
+# A change question asks what HAPPENED, not what a document says. Both halves
+# must be present: a window (project_change.window_for) and one of these verbs.
+# "what does the spec say about this week's pour" contains a window and is not
+# a change question, which is why the verb is required rather than assumed.
+_PROJECT_CHANGE_PATTERN = re.compile(
+    r"\b(?:"
+    r"what(?:'s| is| has)?\s+(?:new|changed|happened)"
+    r"|anything\s+(?:new|changed)"
+    r"|any\s+(?:changes|updates|activity|progress)"
+    r"|has\s+anything\s+changed"
+    r"|what\s+changed"
+    r"|bring\s+me\s+up\s+to\s+date"
+    r"|catch\s+me\s+up"
+    r"|(?:recent|latest)\s+(?:activity|changes|updates)"
+    r")\b"
+)
+
+
+def _looks_like_project_change_question(lowered: str) -> bool:
+    return bool(_PROJECT_CHANGE_PATTERN.search(lowered))
+
+
+def _handle_project_change_question(workspace, window, store, governance_log) -> InterpretationResult:
+    """Answer from the activity ledger. Result first, evidence only if it explains.
+
+    NO PROPOSITION IS ADMITTED HERE, and that is the point of routing early:
+    counting that an event was recorded is a statement about the ledger, not a
+    claim about what the event established. Nothing is promoted, nothing is
+    qualified as a project fact, and no source content is retrieved.
+
+    A missing governance log degrades to the workspace's own timestamps rather
+    than failing - the counts then say less, and the reply still answers the
+    question that was asked instead of changing the subject to source text.
+    """
+    events = []
+    if governance_log is not None:
+        try:
+            events = governance_log.read(workspace.project_id)
+        except Exception:  # a log that cannot be read must not lose the answer
+            events = []
+
+    change = project_change.changes_since(workspace, window, governance_events=events)
+    reply = project_change.summarise(change)
+
+    return InterpretationResult(
+        action_taken="project_change_summary",
+        reply_text=reply,
+    )
 
 
 def _looks_like_channel_status_check(lowered: str) -> bool:
