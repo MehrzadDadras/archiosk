@@ -33,6 +33,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from services.runtime_observation import observed
 
@@ -1429,6 +1430,7 @@ def investigate_cross_modal_question(
     actor: str,
     unresolvable_aspects: Optional[list[str]] = None,
     governance_log: Optional[GovernanceLog] = None,
+    capture_dir: Optional[Path] = None,
 ) -> dict:
     """
     Section 19's own vertical-slice engine: walks every real Relationship
@@ -1586,7 +1588,20 @@ def investigate_cross_modal_question(
         )
         claim_ids.append(claim["id"])
 
-    return {"investigation_step": step, "claim_ids": claim_ids}
+    # CLAUDE-FINDING-CAPTURE-01: preserve what was actually looked at, for the
+    # claims that rest on a croppable region. Runs AFTER every claim is
+    # recorded, never before and never inside the recording loop - a claim's
+    # existence must not depend on whether its illustration succeeded.
+    # `capture_dir=None` (every existing caller) skips it entirely and says so.
+    from services.finding_capture import capture_claim_region
+    captures = [capture_claim_region(store, workspace, claim_id, capture_dir,
+                                     actor=actor, governance_log=governance_log)
+                for claim_id in claim_ids]
+
+    return {"investigation_step": step, "claim_ids": claim_ids,
+            "region_captures": [c for c in captures if c["captured"]],
+            "capture_skips": [{"claim_id": c["claim_id"], "reason": c["skipped_reason"]}
+                              for c in captures if not c["captured"]]}
 
 
 # -- Optional, real, policy-gated AI-assisted synthesis (Section 13) --------

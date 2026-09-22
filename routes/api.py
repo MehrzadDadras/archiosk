@@ -823,6 +823,13 @@ def create_investigation(project_id):
             anchor_object_type=body['anchor_object_type'], anchor_object_id=body['anchor_object_id'],
             actor=session.get('username', 'system'), unresolvable_aspects=body.get('unresolvable_aspects'),
             governance_log=get_governance_log(current_app),
+            # CLAUDE-FINDING-CAPTURE-01: the real door. This is the only
+            # production caller of the investigation engine, so without a
+            # directory here the capture capability would exist and never run -
+            # the exact "built, tested, and simply not called" shape this
+            # repository has already found four times. Same path every other
+            # derivative in this project is written to.
+            capture_dir=Path(current_app.config["REGISTRY_STORE_PATH"]) / "workspace_sources" / project_id,
         )
     except CrossModalInvestigationError as exc:
         return jsonify(error="invalid_investigation", message=str(exc)), 400
@@ -831,6 +838,9 @@ def create_investigation(project_id):
     return jsonify({
         "investigation_step": result["investigation_step"],
         "claim_ids": result["claim_ids"],
+        # Observation captures, never authority for the claims they illustrate.
+        "region_captures": result["region_captures"],
+        "capture_skips": result["capture_skips"],
     }), 201
 
 
