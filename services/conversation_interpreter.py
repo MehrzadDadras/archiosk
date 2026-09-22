@@ -76,7 +76,7 @@ from services import project_change
 
 
 @observed
-def execute_document_action(store, workspace, source_id, proposal, actor):
+def execute_document_action(store, workspace, source_id, proposal, actor, governance_log=None):
     """Execute a bounded owner-requested command using existing view services.
 
     Source/project identity comes from the authenticated surface, never the model.
@@ -96,6 +96,41 @@ def execute_document_action(store, workspace, source_id, proposal, actor):
     source = store._find(workspace.sources, source_id)
     if not source or source.get('removed_at') or source.get('project_id') != workspace.project_id:
         raise CaseWorkspaceError('The selected source is unavailable.')
+
+    # CLAUDE-DOCX-FROM-RECOVERED-01: the artifact action, handled before the
+    # view transforms because it is not one - it produces a document rather
+    # than a DerivedView, and it spans EVERY source in the case rather than the
+    # one currently selected. "turn it into one word document" means all four
+    # pages; answering it with the selected page would be a different document
+    # from the one that was asked for.
+    #
+    # It runs behind the SAME gates as every branch below (owner, active desk,
+    # full case visibility, sanitized command) - an artifact is not a lesser
+    # act than a rotation.
+    if command['action_id'] == 'EXPORT_RECOVERED_DOCX':
+        from services import recovered_document
+        source_ids = recovered_document.ordered_source_ids(workspace)
+        try:
+            built = recovered_document.create(
+                store, workspace, source_ids, actor=actor,
+                sources_dir=store.binaries_path / workspace.project_id,
+                governance_log=governance_log)
+        except recovered_document.RecoveredDocumentError as exc:
+            # A refusal is an ANSWER, not an error: the reviewer asked for a
+            # document and is told exactly why there is not one yet.
+            return dict(state='REFUSED', action_id=command['action_id'],
+                        action_class='artifact', source_id=source_id,
+                        authority='UNCHANGED', answer=str(exc))
+        return dict(state='EXECUTED', action_id=command['action_id'],
+                    action_class='artifact', source_id=built['source_id'],
+                    authority='UNCHANGED',
+                    answer=('Created ' + built['name'] + ' from ' +
+                            str(len(built['built_from'])) + ' source page(s), in order, '
+                            'using their recovered text (' +
+                            str(built['passage_count']) + ' passages). The original '
+                            'uploads and their analysis are unchanged, and nothing in '
+                            'it was written by me. Open it from the sources list.'))
+
     if command['action_id'] == 'ROTATE_VIEW':
         transform = 'ROTATE_' + str(command['parameters']['degrees'])
     elif command['action_id'] == 'MIRROR_VIEW':

@@ -773,6 +773,14 @@ def _recovered(workspace, source_id: str) -> dict:
         "passage_count": len(passages),
         "character_count": sum(len(p) for p in passages),
         "preview": "\n\n".join(passages[:3])[:1200],
+        # CLAUDE-DOCX-FROM-RECOVERED-01: the SAME ordered passages the preview
+        # is cut from, in full. Additive - every existing consumer reads
+        # `preview` and is unaffected. Exposed rather than re-derived by the
+        # exporter, so there is exactly one implementation of "which text
+        # belongs to this source, and in what order", with one region-join and
+        # one sort. A second walk of evidence_items would be a second answer to
+        # that question, free to drift from this one.
+        "passages": list(passages),
         # OCR-recovered text is a READING of an image; text a document carries
         # is the document speaking. The evidence class already records which,
         # so this reports it rather than guessing from the engine's name.

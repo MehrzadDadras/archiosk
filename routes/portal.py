@@ -3566,7 +3566,8 @@ def document_shop_result(project_id):
                 from services.conversation_interpreter import execute_document_action
                 try:
                     execution = execute_document_action(store, workspace, result.get('source_id'),
-                        reply['command'], session.get('username'))
+                        reply['command'], session.get('username'),
+                        governance_log=get_governance_log(current_app))
                     reply['answer'] = execution['answer']
                 except (CaseWorkspaceError, ValueError, OSError) as exc:
                     reply['answer'] = 'The requested view could not be created: ' + str(exc)

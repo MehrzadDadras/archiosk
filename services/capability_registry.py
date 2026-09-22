@@ -73,7 +73,32 @@ ACTION_REGISTRY = {
         description='Create a fitted working view without changing source bytes or analysis.', parameters={}),
 }
 
-DOCUMENT_VIEW_ACTION_IDS = tuple(ACTION_REGISTRY)
+ACTION_REGISTRY['EXPORT_RECOVERED_DOCX'] = dict(
+    action_class='artifact', executor='recovered_document.create',
+    description=(
+        'Assemble the already-recovered text of this document case into one .docx, '
+        'in source order, using the existing export writer. Refuse and say which '
+        'pages are unread if any source has no recovered text; never write a '
+        'document with missing pages. The original uploads and their analysis are '
+        'unchanged, and the result is a new derivative source, not a finding.'),
+    parameters={})
+
+# CLAUDE-DOCX-FROM-RECOVERED-01: NAMED EXPLICITLY, not `tuple(ACTION_REGISTRY)`.
+#
+# It used to be that, evaluated at this line - which quietly meant "whatever
+# happens to be defined above", and the desk actions below (ARCHIVE_ITEMS,
+# DELETE_ITEMS, REANALYZE_ITEMS) were only excluded from Document View by the
+# accident of being registered afterwards. Moving one dict literal upward would
+# have offered a destructive action to a surface that has no confirmation flow
+# for it.
+#
+# Listing the four view-only actions plus this export makes the Document View
+# menu a decision rather than a side effect of file order, and it is why the
+# missing capability was findable at all: the menu is now a thing you read.
+DOCUMENT_VIEW_ACTION_IDS = (
+    'ALIGN_NORTH_UP', 'ROTATE_VIEW', 'MIRROR_VIEW', 'FIT_VIEW',
+    'EXPORT_RECOVERED_DOCX',
+)
 DOCUMENT_DESK_ACTION_IDS = ('ARCHIVE_ITEMS', 'DELETE_ITEMS', 'REANALYZE_ITEMS', 'COMPARE_ITEMS', 'RELOAD_STATE')
 ACTION_REGISTRY.update({
     'RELOAD_STATE': dict(action_class='view_only', executor='portal.document_shop_jobs',
