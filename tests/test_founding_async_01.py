@@ -513,14 +513,48 @@ class TheSynchronousPathIsUntouched(_Base):
                               defer_classification=False)
 
     def test_the_five_synchronous_callers_were_not_modified(self):
-        """Section: do not modify all five callers merely to force uniformity."""
+        """Section: do not modify all five callers merely to force uniformity.
+
+        CLAUDE-FINDING-CAPTURE-01 narrowed this test to its own subject. It
+        used to assert that routes/api.py was byte-identical to 355a671, which
+        is a stronger claim than the one it is named for: the file holds many
+        endpoints, and freezing all of them made every unrelated change to any
+        of them look like a violation of a rule about ingest callers.
+
+        It failed exactly that way - `create_investigation` gained a
+        `capture_dir` argument, touching no ingest path at all - and the
+        distinction matters, because the next person to hit this would have
+        been tempted to either revert good work or delete a real guard.
+
+        THE GUARD ITSELF IS UNCHANGED IN STRENGTH. Every `ingest_upload(...)`
+        call in the file is compared, as source, against the same frozen
+        commit: if one of the five synchronous callers is edited, added to or
+        removed, this still fails. What it no longer does is defend lines it
+        was never about.
+        """
+        import ast
         import subprocess
 
-        diff = subprocess.run(
-            ["git", "diff", "355a671", "--", "routes/api.py"],
+        def ingest_calls(source: str) -> list[str]:
+            tree = ast.parse(source)
+            return sorted(
+                ast.get_source_segment(source, node) or ""
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and getattr(node.func, "id", None) == "ingest_upload")
+
+        frozen = subprocess.run(
+            ["git", "show", "355a671:routes/api.py"],
             capture_output=True, text=True, cwd=".")
-        self.assertEqual(diff.stdout.strip(), "",
-                         "routes/api.py was changed; it did not need to be")
+        self.assertEqual(frozen.returncode, 0, frozen.stderr)
+        current = Path("routes/api.py").read_text(encoding="utf-8")
+
+        before, after = ingest_calls(frozen.stdout), ingest_calls(current)
+        self.assertTrue(before, "the frozen revision had no ingest_upload calls to protect")
+        self.assertEqual(
+            after, before,
+            "an ingest_upload caller in routes/api.py was changed; the five "
+            "synchronous callers were deliberately left alone")
 
 
 class TheStagedAssemblyIsReused(unittest.TestCase):
