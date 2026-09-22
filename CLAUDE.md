@@ -360,6 +360,36 @@ figures predate both parallel execution and the discovery that much of that
 spread had a diagnosable cause. A slow run is now a thing to investigate with
 two commands, not to wait out.
 
+**A suite that is green in only one tree has proven nothing about
+reproducibility.** Established 2026-09-21 by measurement. `55554b5` was
+committed, pushed, deployed, and had just passed a 10,008-test gate here - and
+could not be built on any other machine. A fresh clone of that exact commit
+failed 23 tests in one file with `ModuleNotFoundError: No module named
+'pydantic_ai'`, because the package had been hand-installed into this
+long-lived developer tree and never written into `requirements.txt`. Every
+other one of the 10,009 selected tests passed, so nothing about the failure
+looked like a dependency problem from inside this tree, and no number of
+re-runs here could ever have surfaced it. Only a clone at a different path
+could.
+
+This is the same error as "consistency is not authority", one layer down: the
+gate was internally consistent across hundreds of runs *in a single
+environment*, and that consistency is exactly what made the environment look
+like the repository. **Local green means the code works where it already
+worked.** Before treating a gate as a release signal, ask what the suite needs
+that only this machine happens to have - an undeclared package, a `.env` nobody
+tracks, an asset copied from a sibling worktree, a system binary. The
+clean-checkout procedure and its expected skips are in `README.md`; the
+verification instrument is the Product Owner's reproducibility checklist, and
+its acceptance rule is the honest one: **fresh checkout + documented bootstrap
+only -> full gate passes.**
+
+A corollary about the fix, because the checklist is explicit and it is easy to
+get backwards: a fresh-checkout failure gets CLASSIFIED before anything is
+edited, and only `TRUE_CODE_DEFECT` justifies changing production code. A
+missing declaration is resolved by declaring it, never by relaxing the test
+that noticed.
+
 **Never read the result through a pipe.** Redirect to a log file and capture
 the exit code as its own line (`... > run.log 2>&1; echo "PYTEST_EXIT=$?" >>
 run.log`). `pytest -q 2>&1 | tail -40` reports *tail's* exit status, not
