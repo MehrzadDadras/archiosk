@@ -266,17 +266,38 @@ class PortalBypassPathsClosedTests(_BaseAccessControlTestCase):
         self.assertNotIn("Carol Not On Bob Home", body)
 
     def test_global_search_excludes_inaccessible_projects(self):
-        # global_search matches against the raw uploaded filename/
-        # project_id, never display_title -- distinctive filenames here,
-        # not project_name, are what actually reach the search index.
-        bob_doc = self._ingest(owner="bob", project_name="Bob's Searchable Project", filename="searchable-bob-only.txt")
-        carol_doc = self._ingest(owner="carol", project_name="Carol's Searchable Project", filename="searchable-carol-only.txt")
+        # CLAUDE-SEARCH-NAME-MATCH-01 updated this test, and the reason is
+        # worth stating because the update STRENGTHENED it.
+        #
+        # It used to note that "global_search matches against the raw uploaded
+        # filename/project_id, never display_title". That is no longer true -
+        # search now also matches the display name, which is the name the
+        # product shows everywhere else - and a result's `title` is now that
+        # display name rather than the filename.
+        #
+        # The consequence for THIS test was not just a broken assertion. Both
+        # checks were case-sensitive substring tests against lowercase "bob"
+        # and "carol", while the display names are "Bob's ..." and
+        # "Carol's ...". The positive check failed honestly. The NEGATIVE
+        # check - the security property - would have started passing for the
+        # wrong reason: "carol" does not appear in "Carol's Searchable
+        # Project" either, so it could no longer have caught a leak.
+        #
+        # So the comparison is now case-insensitive and covers the WHOLE
+        # result, not only its title: a project id or url leaking an
+        # inaccessible project is as much a disclosure as its name.
+        self._ingest(owner="bob", project_name="Bob's Searchable Project", filename="searchable-bob-only.txt")
+        self._ingest(owner="carol", project_name="Carol's Searchable Project", filename="searchable-carol-only.txt")
 
         response = self.bob_client.get("/search?q=searchable")
         results = response.get_json()["results"]
-        titles = [r["title"] for r in results]
-        self.assertTrue(any("bob" in t for t in titles))
-        self.assertFalse(any("carol" in t for t in titles))
+        blob = " ".join(
+            str(value) for result in results for value in result.values()
+        ).lower()
+
+        self.assertIn("bob", blob, "Bob cannot find his own accessible project")
+        self.assertNotIn("carol", blob,
+                         "an inaccessible project leaked through global search")
 
     def test_admin_sees_every_project_in_listings(self):
         bob_doc = self._ingest(owner="bob", project_name="Admin Sees Bob Project")

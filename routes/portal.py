@@ -3260,21 +3260,46 @@ def _global_search_results(raw_query) -> list[dict]:
     needle = query.lower()
     registry = get_registry(current_app)
     store = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"])
-    documents = _accessible_documents(registry, store)
-    matches = [
-        d for d in documents
-        if needle in d.filename.lower() or needle in d.project_id.lower()
-    ][:20]
 
-    return [
-        {
+    # CLAUDE-SEARCH-NAME-MATCH-01: match the name the user can SEE.
+    #
+    # This matched only `filename` and `project_id`, which contradicted a
+    # decision recorded a few hundred lines above in _project_summary:
+    # "the professional-facing project identity should be its own
+    # display_title, not the accident of which document happened to be
+    # uploaded first". The directory, the gateway and every list render
+    # display_title; search did not consult it. So a project shown
+    # everywhere as "Project Smoke Detector (PSD)" could not be found by
+    # typing "smoke" - reproduced live on 2026-09-22 against the deployed
+    # build, which answered "Nothing matched" for a project visible one
+    # click away.
+    #
+    # display_name is resolved with the SAME expression and the SAME
+    # _safe_workspace helper the directory listing uses, rather than a
+    # second rule that could drift from it. ACCESS SCOPING IS UNCHANGED:
+    # the candidate set is still _accessible_documents, and a mutation
+    # test (scoping removed) confirms tests/test_project_access_control.py
+    # still fails when it is.
+    results = []
+    for document in _accessible_documents(registry, store):
+        workspace = _safe_workspace(store, document.project_id)
+        display_name = (workspace.display_title if workspace else None) or document.filename
+        if not (needle in display_name.lower()
+                or needle in document.filename.lower()
+                or needle in document.project_id.lower()):
+            continue
+        results.append({
             "kind": "Project",
-            "title": d.filename,
-            "subtitle": d.project_id,
-            "url": url_for('workspace.show_workspace', project_id=d.project_id),
-        }
-        for d in matches
-    ]
+            # The title a result carries is the one the rest of the product
+            # shows. Where no display_title has been set this is still the
+            # filename, so nothing that matched before matches differently.
+            "title": display_name,
+            "subtitle": document.project_id,
+            "url": url_for('workspace.show_workspace', project_id=document.project_id),
+        })
+        if len(results) == 20:
+            break
+    return results
 
 
 @portal_bp.route('/find')

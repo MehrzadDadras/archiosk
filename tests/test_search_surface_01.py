@@ -103,6 +103,82 @@ class TheJsonEndpointIsUnchanged(_SignedIn):
         self.assertEqual(self.client.get("/search").get_json(), {"results": []})
 
 
+class SearchFindsTheNameTheUserCanSee(unittest.TestCase):
+    """CLAUDE-SEARCH-NAME-MATCH-01.
+
+    Reproduced live on the deployed build: a project shown everywhere as
+    "Project Smoke Detector (PSD)" returned "Nothing matched" for the query
+    "smoke", because search consulted only the ingested filename and the
+    project id. _project_summary records the opposite intent a few hundred
+    lines above the search code - "the professional-facing project identity
+    should be its own display_title, not the accident of which document
+    happened to be uploaded first".
+    """
+
+    def setUp(self):
+        import app as app_module
+        from services.case_workspace import CaseWorkspaceStore
+        from services.requirements_registry import RequirementsRegistry
+        from services.bhive_parser import ParsedDocument
+
+        self.tmp = Path(tempfile.mkdtemp(prefix="search_name_match_"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.flask_app = app_module.create_app("testing")
+        self.flask_app.config["REGISTRY_STORE_PATH"] = str(self.tmp)
+
+        RequirementsRegistry(self.tmp).save(ParsedDocument(
+            project_id="psd-001",
+            filename="Owner_Program_Rev_2.pdf",
+            ingested_at="2026-01-01T00:00:00+00:00",
+        ))
+        store = CaseWorkspaceStore(self.tmp)
+        workspace = store.get_or_create("psd-001")
+        workspace.display_title = "Project Smoke Detector (PSD)"
+        store.save(workspace)
+
+        self.client = self.flask_app.test_client()
+        with self.client.session_transaction() as session:
+            session["user_id"] = 1
+            session["username"] = "admin"
+            session["role"] = "admin"
+
+    def _results(self, query):
+        return self.client.get(f"/search?q={query}").get_json()["results"]
+
+    def test_the_displayed_name_is_searchable(self):
+        """The defect, stated as the property that was missing."""
+        results = self._results("smoke")
+        self.assertEqual(len(results), 1, "the displayed project name is not searchable")
+        self.assertEqual(results[0]["title"], "Project Smoke Detector (PSD)")
+
+    def test_the_original_filename_still_matches(self):
+        """The prior behaviour is added to, never replaced."""
+        self.assertEqual(len(self._results("Owner_Program")), 1)
+
+    def test_the_project_reference_still_matches(self):
+        self.assertEqual(len(self._results("psd-001")), 1)
+
+    def test_a_result_carries_the_name_the_rest_of_the_product_shows(self):
+        result = self._results("psd-001")[0]
+        self.assertEqual(result["title"], "Project Smoke Detector (PSD)")
+        self.assertEqual(result["subtitle"], "psd-001")
+
+    def test_the_page_finds_it_too_since_both_share_one_function(self):
+        html = self.client.get("/find?q=smoke").get_data(as_text=True)
+        self.assertIn("Project Smoke Detector (PSD)", html)
+        self.assertNotIn('data-ui-ref="search.empty"', html)
+
+    def test_a_project_with_no_display_title_still_matches_by_filename(self):
+        """The fallback path: display_name IS the filename until one is set."""
+        from services.requirements_registry import RequirementsRegistry
+        from services.bhive_parser import ParsedDocument
+        RequirementsRegistry(self.tmp).save(ParsedDocument(
+            project_id="plain-002", filename="Untitled_Upload.pdf",
+            ingested_at="2026-01-02T00:00:00+00:00"))
+        results = self._results("Untitled_Upload")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "Untitled_Upload.pdf")
+
 class ThereIsStillOneSearchImplementation(unittest.TestCase):
     """No second engine, no duplicate index - asserted against the source."""
 

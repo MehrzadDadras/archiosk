@@ -11,12 +11,13 @@
    work without being reimplemented - and the page cannot show results that
    disagree with the endpoint, because it calls the same function.
 
-   It states its own coverage. The backend matches Projects by filename and
-   project id and nothing else; a search box that silently searched less than
-   the user assumed would be worse than one that says so. #}
+   It states its own coverage. The backend matches a Project's display name,
+   its original filename and its reference - and nothing else; a search box
+   that silently searched less than the user assumed would be worse than one
+   that says so. #}
 {% block content %}
 <div class="ui-project-start">
-{% call macros.page_header('Search', subtitle='Find a project by its name or reference.', subtitle_class='ui-purpose') %}
+{% call macros.page_header('Search', subtitle='Find a project by its name, its reference, or the document it started from.', subtitle_class='ui-purpose') %}
 {% endcall %}
 
 <form method="get" action="{{ url_for('portal.search_page') }}" role="search"
@@ -54,8 +55,9 @@
 {% endif %}
 
 <p class="ui-metadata" data-ui-ref="search.coverage">
-    Search covers projects you can already open, matched on project name and
-    reference. Requirements, investigations and findings are not searchable yet.
+    Search covers projects you can already open, matched on the project name,
+    its reference, and the filename of the document it started from.
+    Requirements, investigations and findings are not searchable yet.
 </p>
 </div>
 {% endblock %}
