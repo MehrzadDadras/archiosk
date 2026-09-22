@@ -121,19 +121,14 @@ class PlanningZoningDoorTests(unittest.TestCase):
         self.assertIn("123 Queen Street West", body)
 
     # -- mode and optional fields -----------------------------------------
-    def test_all_four_analysis_modes_are_offered(self):
+    def test_entry_leaves_analysis_questions_to_composer(self):
         _response, body = self._page()
-        for value, label in planning_zoning.ANALYSIS_MODES:
-            self.assertIn('value="%s"' % value, body)
-            self.assertIn(label, body)
+        self.assertNotIn('name="analysis_mode"', body)
+        self.assertIn('name="composer" value="1"', body)
 
-    def test_the_default_analysis_mode_is_zoning_plus_constraints(self):
+    def test_entry_has_one_address_by_default(self):
         _response, body = self._page()
-        checked = re.search(
-            r'<input type="radio" name="analysis_mode" value="([a-z_]+)"\s*\n?\s*checked',
-            body)
-        self.assertIsNotNone(checked, "no analysis mode is pre-selected")
-        self.assertEqual(checked.group(1), "zoning_constraints")
+        self.assertEqual(len(re.findall(r'<input[^>]*name="address"', body)), 1)
 
     def test_the_optional_selects_offer_their_documented_options(self):
         _response, body = self._page()
@@ -248,18 +243,11 @@ class PlanningZoningDoorTests(unittest.TestCase):
             self.assertNotIn(fabrication, body,
                              "%r looks like a manufactured result" % fabrication)
 
-    def test_the_result_sections_are_named_but_not_filled(self):
-        """Section 11: say what a review will contain; produce none of it."""
-        from markupsafe import escape
+    def test_entry_does_not_prepopulate_report_sections(self):
         _response, body = self._page()
-        for section in planning_zoning.RESULT_SECTIONS:
-            # ESCAPED: "Constraints & Opportunities" reaches the page as
-            # "Constraints &amp; Opportunities", and comparing raw text against
-            # rendered HTML is a test bug, not a template one.
-            self.assertIn(str(escape(section)), body)
         self.assertNotIn('data-ui-ref="planning-zoning.accepted"', body)
+        self.assertNotIn('Pre-Design Conclusion', body)
 
-    # -- gate 01 ----------------------------------------------------------
     def test_no_owner_programme_is_requested_before_gate_01(self):
         """Asserted against the form CONTROLS, not the prose.
 
@@ -283,15 +271,15 @@ class PlanningZoningDoorTests(unittest.TestCase):
             self.assertNotIn(premature, labels)
 
     # -- batch ------------------------------------------------------------
-    def test_both_modes_are_reachable(self):
+    def test_multiple_properties_are_normal_input(self):
         _response, body = self._page()
-        self.assertIn('data-ui-ref="planning-zoning.mode.single"', body)
-        self.assertIn('data-ui-ref="planning-zoning.mode.batch"', body)
+        self.assertIn('+ Add another property', body)
+        self.assertNotIn('planning-zoning.mode.batch', body)
 
-    def test_the_batch_mode_offers_a_paste_area(self):
+    def test_old_batch_link_uses_normal_property_entry(self):
         _response, body = self._page(mode="batch")
-        self.assertIn('data-ui-ref="planning-zoning.addresses"', body)
-        self.assertIn("One property per line", body)
+        self.assertIn('+ Add another property', body)
+        self.assertNotIn('name="addresses"', body)
 
     def test_single_property_is_the_default_mode(self):
         _response, body = self._page()
@@ -376,9 +364,9 @@ class PlanningZoningDoorTests(unittest.TestCase):
     def test_every_control_carries_a_label(self):
         """Mobile and screen readers both depend on this."""
         _response, body = self._page()
-        for control in ("planning-address", "planning-direction",
-                        "planning-strategy", "planning-condition",
-                        "planning-question"):
+        for control in ("planning-address", "planning-development_direction",
+                        "planning-option_strategy", "planning-existing_condition",
+                        "planning-project"):
             self.assertIn('for="%s"' % control, body)
 
     def test_the_primary_action_is_a_single_obvious_button(self):

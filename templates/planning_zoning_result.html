@@ -52,6 +52,29 @@
    Everything else visible is still the existing system: np-page-title,
    field-label, field-note, mono, btn / btn-primary / btn-ghost, form-error. #}
 <h1 class="np-page-title" data-ui-ref="planning-zoning.result.page-title">Pre-Design Planning &amp; Zoning Result</h1>
+{% if saved_study %}
+<section><h2>Saved study</h2><p>Saved {{ saved_study.saved_at }}. Evidence retrieved {{ saved_study.analysis_timestamp or 'date not recorded' }}. This is a preserved snapshot, not a current municipal check.</p>
+<a href="{{ url_for('planning_zoning.saved_studies',project_id=study_project_id) }}">Saved Planning &amp; Zoning studies</a>
+{% for format in ['pdf','docx'] %}{% if 'report.' ~ format in saved_study.artifacts %}
+<a href="{{ url_for('planning_zoning.study_artifact',project_id=study_project_id,study_id=saved_study.id,name='report.' ~ format) }}">Download saved {{ 'Word' if format=='docx' else 'PDF' }}</a>
+{% endif %}{% endfor %}
+{% if 'evidence/zoning-map.png' in saved_study.artifacts %}
+<h3>Official Zoning Evidence</h3>
+<img style="max-width:100%;width:640px" src="{{ url_for('planning_zoning.study_artifact',project_id=study_project_id,study_id=saved_study.id,name='evidence/zoning-map.png') }}" alt="Saved zoning geometry with subject parcel highlighted">
+<p>ARCHIOSK rendering of official municipal geometry. {{ saved_study.zone_labels|join('; ') }}. {{ saved_study.exception_status|join('; ') }}.</p>
+{% else %}<p>Official zoning visual unavailable in this snapshot.</p>{% endif %}
+<a href="{{ url_for('planning_zoning.study_artifact',project_id=study_project_id,study_id=saved_study.id,name='evidence/provenance.json') }}">Saved evidence provenance</a>
+</section>
+{% elif study_token %}
+<section><h2>Current analysis — not saved</h2>
+<form method="post" action="{{ url_for('planning_zoning.save_study',project_id=study_project_id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="study_token" value="{{ study_token }}">
+<label><input type="checkbox" name="formats" value="pdf"> Include PDF</label>
+<label><input type="checkbox" name="formats" value="docx"> Include Word</label>
+<button type="submit">Save Study</button>
+</form><p>Save preserves the governed analysis and its evidence; separate user contributions and follow-up are not included. The working copy is available for one hour, including across server restarts.</p></section>
+{% endif %}
 
 {# Section 14. First thing on the page, before any finding, because a reader who
    scrolls into section 4 and sees a floor space index must already know what
@@ -289,6 +312,7 @@
 <aside class="pz-aside" data-ui-ref="planning-zoning.result.aside" aria-label="Evidence and contributions">
 
 {# 9 ---- OFFICIAL VISUAL EVIDENCE ---- #}
+{% if not saved_study %}
 <section class="pz-group" data-ui-ref="planning-zoning.result.visual">
     <h2 class="field-label" data-ui-ref="planning-zoning.result.visual.title">Official visual evidence</h2>
     {% if panels %}
@@ -375,6 +399,7 @@
 </section>
 
 {# 11 ---- FOLLOW-UP AND ADMISSION ---- #}
+{% endif %}
 {% if has_contributions %}
 <section class="pz-group pz-layer pz-layer-contribution" data-ui-ref="planning-zoning.result.contributions">
     <h2 class="field-label"><span class="pz-badge pz-badge-user">USER CONTRIBUTION</span> What you added</h2>
@@ -461,35 +486,32 @@
 <nav class="pz-group" data-ui-ref="planning-zoning.result.actions" aria-label="Result actions">
     <a class="btn btn-primary" href="{{ url_for('planning_zoning.planning_zoning') }}"
        data-ui-ref="planning-zoning.result.back">Back to address</a>
-    {# CLAUDE-PLANNING-WORKSPACE-02A, sections 6-8. Word is an EDITABLE
-       DERIVATIVE and PDF a record copy; neither is the canonical record, and both
-       say so on their own first page. Each posts the address because nothing is
-       stored - the export re-reads the City's records and carries its own
-       retrieval timestamp. #}
-    {% if exportable %}
-    <form method="post" action="{{ url_for('planning_zoning.export_result') }}"
+    {# Both formats use the same read-only retained-state download route. #}
+    {% if exportable and (study_token or view.preview) %}
+    <form method="get" action="{{ url_for('planning_zoning.export_result') }}"
           data-ui-ref="planning-zoning.result.export.docx">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="format" value="docx">
-        <input type="hidden" name="scope" value="{{ 'GOVERNED_RESULT_WITH_FOLLOW_UP' if has_contributions else 'GOVERNED_RESULT_ONLY' }}">
-        <input type="hidden" name="address" value="{{ address or view.identity.address_as_given or '' }}">
+        <input type="hidden" name="scope" value="GOVERNED_RESULT_ONLY">
+        {% if study_token %}
+        <input type="hidden" name="project_id" value="{{ study_project_id }}">
+        <input type="hidden" name="study_token" value="{{ study_token }}">
+        {% endif %}
         <button type="submit" class="btn btn-ghost"
                 data-ui-ref="planning-zoning.result.export.docx-submit">Export to Word</button>
     </form>
-    <form method="post" action="{{ url_for('planning_zoning.export_result') }}"
+    <form method="get" action="{{ url_for('planning_zoning.export_result') }}"
           data-ui-ref="planning-zoning.result.export.pdf">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="format" value="pdf">
-        <input type="hidden" name="scope" value="{{ 'GOVERNED_RESULT_WITH_FOLLOW_UP' if has_contributions else 'GOVERNED_RESULT_ONLY' }}">
-        <input type="hidden" name="address" value="{{ address or view.identity.address_as_given or '' }}">
+        <input type="hidden" name="scope" value="GOVERNED_RESULT_ONLY">
+        {% if study_token %}
+        <input type="hidden" name="project_id" value="{{ study_project_id }}">
+        <input type="hidden" name="study_token" value="{{ study_token }}">
+        {% endif %}
         <button type="submit" class="btn btn-ghost"
                 data-ui-ref="planning-zoning.result.export.pdf-submit">Export to PDF</button>
     </form>
     <span class="mono field-note" data-ui-ref="planning-zoning.result.export.note">
-        {% if has_contributions %}Both exports keep the governed result, what you
-        supplied, the follow-up and the admission decision as four separate,
-        labelled blocks.{% else %}Exports carry the governed result only.{% endif %}
-        Neither file is the canonical record.
+        Exports use the retained governed result. Separate follow-up is not included.
     </span>
     {% endif %}
     {# Gate 01 holds here. Developing options further is where owner programme

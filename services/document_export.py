@@ -74,6 +74,13 @@ class ExportTable:
 
 
 @dataclass
+class ExportFigure:
+    title: str
+    png: bytes
+    caption: str
+
+
+@dataclass
 class ExportDocument:
     """A whole export, in a container-neutral shape.
 
@@ -89,6 +96,8 @@ class ExportDocument:
     # lines live here.
     preamble: list[str] = field(default_factory=list)
     tables: list[ExportTable] = field(default_factory=list)
+    figures: list[ExportFigure] = field(default_factory=list)
+    compact: bool = False
 
 
 def _safe(value) -> str:
@@ -186,6 +195,11 @@ def build_docx(document: ExportDocument) -> io.BytesIO:
             note.runs[0].font.size = Pt(9)
             note.runs[0].italic = True
 
+    for figure in document.figures:
+        from docx.shared import Inches
+        doc.add_heading(figure.title, level=2)
+        doc.add_picture(io.BytesIO(figure.png), width=Inches(6))
+        doc.add_paragraph(figure.caption)
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -229,7 +243,7 @@ def build_pdf(document: ExportDocument) -> io.BytesIO:
         flow.append(Spacer(1, 4))
 
     for index, table in enumerate(document.tables):
-        if index:
+        if index and not document.compact:
             flow.append(PageBreak())
         flow.append(Paragraph(_safe(table.title), styles["Heading2"]))
         flow.append(Spacer(1, 6))
@@ -258,6 +272,14 @@ def build_pdf(document: ExportDocument) -> io.BytesIO:
             flow.append(Spacer(1, 6))
             flow.append(Paragraph(_safe(table.note), styles["Italic"]))
 
+    for figure in document.figures:
+        from reportlab.platypus import Image
+        from html import escape
+        from reportlab.lib.utils import ImageReader
+        width, height = ImageReader(io.BytesIO(figure.png)).getSize()
+        flow.extend([PageBreak(), Paragraph(escape(figure.title), styles["Heading2"]),
+                     Image(io.BytesIO(figure.png), width=6*inch, height=6*inch*height/width),
+                     Paragraph(escape(figure.caption), styles["BodyText"])])
     if len(flow) <= 2:
         flow.append(Paragraph("Nothing to export.", styles["BodyText"]))
 

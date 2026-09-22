@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Planning & Zoning — Archiosk{% endblock %}
+{% block content %}
+<h1 class="np-page-title">Planning &amp; Zoning</h1>
+<p><a href="{{ url_for('planning_zoning.saved_studies', project_id=project_id) }}">Saved studies</a></p>
+{% if saved_study %}
+<p>Saved {{ saved_study.saved_at }} · {{ saved_study.status }}</p>
+<form method="post" action="{{ url_for('planning_zoning.continue_study', project_id=project_id, study_id=saved_study.id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit">Continue as current study</button></form>
+{% for name in ['report.pdf','report.docx'] %}{% if name in saved_study.artifacts %}
+<a class="btn" href="{{ url_for('planning_zoning.study_artifact', project_id=project_id, study_id=saved_study.id, name=name) }}">{{ 'Export Word' if name.endswith('docx') else 'Export PDF' }}</a>
+{% endif %}{% endfor %}
+{% else %}
+<div class="np-group" data-ui-ref="planning-zoning.study-actions">
+<form method="post" action="{{ url_for('planning_zoning.save_study', project_id=project_id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="study_token" value="{{ run_id }}">
+<label><input type="checkbox" name="formats" value="pdf" checked>PDF</label>
+<label><input type="checkbox" name="formats" value="docx" checked>Word</label>
+<button type="submit" class="btn btn-primary">Save Study</button></form>
+{% for fmt, label in [('pdf','PDF'),('docx','Word')] %}
+<form method="get" action="{{ url_for('planning_zoning.export_result') }}" data-ui-ref="planning-zoning.export.{{ fmt }}">
+<input type="hidden" name="project_id" value="{{ project_id }}"><input type="hidden" name="study_token" value="{{ run_id }}">
+<input type="hidden" name="format" value="{{ fmt }}"><button class="btn" type="submit" data-ui-ref="planning-zoning.result.export.{{ fmt }}-submit">Export {{ label }}</button></form>
+{% endfor %}
+</div>
+{% endif %}
+{% if context.scenario %}<section><h2>Scenario / Project Intent</h2><p>{{ context.scenario }}</p><small>User supplied</small></section>{% endif %}
+{% for site in sites %}
+<article data-property-index="{{ site.index }}">
+<h2>{{ site.view.identity.address }}</h2><p>{{ site.view.result_status }}</p>
+{% if site.view.fixture_note %}<p>{{ site.view.fixture_note }}</p>{% endif %}
+{% for section in site.report.sections %}
+{% if section.title != 'Scenario / Project Intent' and not (context.presentation.mode == 'zoning_only' and section.title == 'Site Context') %}
+<section><h3>{{ section.title }}</h3>
+<table><thead><tr>{% for h in ['Fact','Value','Source','Status','Action'] %}<th>{{ h }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in section.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></section>
+{% endif %}{% endfor %}
+{% if context.presentation.show_map %}<section><h3>Official Zoning Evidence</h3>
+{% for panel in site.panels %}{{ panel.svg | safe }}{% endfor %}
+{% if not site.panels %}<p>Zoning visual unavailable.</p>{% endif %}
+<p>ARCHIOSK rendering of official municipal geometry.</p></section>{% endif %}
+<details><summary>Evidence / audit</summary><pre>{{ site.view.evidence | tojson(indent=2) }}</pre><pre>{{ site.view.retrieval | tojson(indent=2) }}</pre></details>
+</article>
+{% endfor %}
+{% if context.proposal %}<section><h2>Proposal comparison</h2>
+{% for p in context.proposal %}<p>Property {{ p.property_index + 1 }} · {{ p.topic }} · Required {{ p.required }} {{ p.unit }} · Proposed {{ p.proposed }} {{ p.unit }}</p><p>{{ p.assessment }}</p>{% endfor %}
+</section>{% endif %}
+{% if run_id and context.pending_action and context.pending_action.kind == 'investigate' %}
+<form method="post" action="{{ url_for('planning_zoning.investigate_study', project_id=project_id, run_id=run_id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<p>{{ context.pending_action.request }}</p><button class="btn" type="submit">Investigate property {{ context.pending_action.property_index + 1 }} through planning sources</button></form>
+{% endif %}
+{% endblock %}
+{% block chat %}
+{% if run_id %}
+{% call macros.conversation_dock('Planning & Zoning', context.messages | length,
+ url_for('planning_zoning.converse_study', project_id=project_id, run_id=run_id),
+ 'planning:' ~ project_id ~ ':' ~ run_id, 'Tell GO what you are considering', project_id=project_id, study_scoped=True) %}
+<div class="conversation-messages" aria-live="polite">
+{% for message in context.messages %}<div class="conversation-message"><strong>{{ 'You' if message.role == 'human' else 'GO' }}</strong><p>{{ message.text }}</p>{% if message.host_action %}<p>{{ message.host_action }}</p>{% endif %}</div>{% endfor %}
+</div>
+{% endcall %}
+{% else %}
+<div>{% for message in context.messages %}<p><strong>{{ 'You' if message.role == 'human' else 'GO' }}</strong> {{ message.text }}</p>{% endfor %}</div>
+{% endif %}
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
+{% endblock %}

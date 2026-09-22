@@ -402,6 +402,9 @@ def run_live(address, *, reader=None, gate=None) -> dict:
         "live_version": LIVE_VERSION,
         "document": document,
         "view": view,
+        # Retain the exact host envelope for an explicit project Save Study.
+        # In-memory only; no persistence happens in the live runner.
+        "study_snapshot": dict(outcome, **result),
         "source_failures": _source_failures(outcome),
     }
 

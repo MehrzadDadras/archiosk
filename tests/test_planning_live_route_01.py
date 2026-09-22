@@ -270,7 +270,7 @@ class TheRouteHonoursTheFlag(unittest.TestCase):
     def test_with_the_flag_off_the_development_state_behaviour_is_unchanged(self):
         client = self._client(live_enabled=False)
         page = client.get("/planning-zoning").get_data(as_text=True)
-        self.assertIn("BACKEND_NOT_ROUTABLE", page)
+        self.assertIn('data-ui-ref="planning-zoning.backend-state"', page)
         self.assertIn("not yet enabled on this environment", page)
         body = self._submit(client)
         self.assertIn("Entry checked", body)
@@ -279,8 +279,8 @@ class TheRouteHonoursTheFlag(unittest.TestCase):
     def test_with_the_flag_on_the_intake_page_says_so(self):
         page = self._client(live_enabled=True).get(
             "/planning-zoning").get_data(as_text=True)
-        self.assertIn("BACKEND_READY_TO_WIRE", page)
-        self.assertIn("One property per request", page)
+        self.assertNotIn('data-ui-ref="planning-zoning.backend-state"', page)
+        self.assertIn("+ Add another property", page)
 
     def test_with_the_flag_on_a_toronto_address_renders_a_live_result(self):
         from unittest.mock import patch
