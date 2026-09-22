@@ -3242,9 +3242,20 @@ def global_search():
     - this route must never claim search coverage the backend doesn't
     actually have.
     """
-    query = (request.args.get('q') or '').strip()
+    return jsonify(results=_global_search_results(request.args.get('q')))
+
+
+def _global_search_results(raw_query) -> list[dict]:
+    """The one matching implementation, behind both presentations of search.
+
+    CLAUDE-SEARCH-SURFACE-01 extracted this unchanged from global_search so
+    the page below and the JSON endpoint above cannot drift into two different
+    answers for the same query. There is exactly one index and one match rule;
+    what differs is only whether the caller wants JSON or a rendered page.
+    """
+    query = (raw_query or '').strip()
     if not query:
-        return jsonify(results=[])
+        return []
 
     needle = query.lower()
     registry = get_registry(current_app)
@@ -3255,7 +3266,7 @@ def global_search():
         if needle in d.filename.lower() or needle in d.project_id.lower()
     ][:20]
 
-    results = [
+    return [
         {
             "kind": "Project",
             "title": d.filename,
@@ -3264,7 +3275,42 @@ def global_search():
         }
         for d in matches
     ]
-    return jsonify(results=results)
+
+
+@portal_bp.route('/find')
+@login_required
+def search_page():
+    """The user-facing Search surface, inside the ordinary application shell.
+
+    CLAUDE-SEARCH-SURFACE-01. The primary-navigation "Search" item linked
+    straight at global_search above, whose own docstring calls it the "Global
+    search overlay's backend ... exposed as JSON for the overlay instead of a
+    full-page GET". The overlay it was built for is not in this codebase - the
+    only consumer left was that nav link - so clicking Search dropped the
+    Product Owner onto a raw `{"results":[]}` document with no shell and no way
+    back. Recorded as A-05 in the 2026-09-22 UI baseline, then reproduced live.
+
+    WHY THIS IS A SEPARATE ROUTE AND NOT CONTENT NEGOTIATION ON /search.
+    Nine test files call /search and read JSON from it, and the endpoint is
+    documented as the backend for a surface that may yet be rebuilt. Deciding
+    between JSON and HTML by Accept header would have left every one of those
+    callers depending on a header nobody set deliberately - a rule that holds
+    until the first test sends a browser-shaped Accept, and then fails somewhere
+    far from here. /search is therefore untouched in behaviour, and this is an
+    ordinary page beside it.
+
+    NO SECOND SEARCH ENGINE: it calls _global_search_results, the same function
+    /search now calls. No JavaScript either - a plain GET form means browser
+    Back, reload, bookmarking and the shell's own navigation all work by
+    default rather than by being reimplemented.
+    """
+    query = (request.args.get('q') or '').strip()
+    return render_template(
+        'search.html',
+        query=query,
+        results=_global_search_results(query),
+        searched=bool(query),
+    )
 
 
 def _posted_retained_by() -> str | None:

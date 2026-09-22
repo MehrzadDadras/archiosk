@@ -135,7 +135,12 @@
                     <a href="{{ url_for('portal.projects_list') }}" {% if request.endpoint == 'portal.projects_list' %}aria-current="page"{% endif %}>Projects</a>
                     {% if is_admin and session.get('developer_mode') %}<a href="{{ url_for('portal.survey_evaluation') }}">Review</a><a href="{{ url_for('portal.survey_evaluation', task='compare') }}">Compare</a>{% endif %}
                     <a href="{{ url_for('portal.document_shop_jobs') }}">Documents</a>
-                    <a href="{{ url_for('portal.global_search') }}">Search</a>
+                    {# CLAUDE-SEARCH-SURFACE-01: points at the PAGE, not at
+                       portal.global_search - that endpoint is the JSON backend
+                       and linking the primary nav straight at it dropped the
+                       user onto a raw {"results":[]} document outside the
+                       shell (UI baseline A-05, reproduced live). #}
+                    <a href="{{ url_for('portal.search_page') }}" data-ui-ref="menu.search">Search</a>
                 </nav>
                 <details class="ui-tools-menu"><summary class="workspace-topbar-btn">Tools &amp; settings</summary><div class="ui-tools-panel">
                 <nav class="workspace-menubar" id="workspace-menubar" data-ui-ref="menu.bar" aria-label="Application menu">

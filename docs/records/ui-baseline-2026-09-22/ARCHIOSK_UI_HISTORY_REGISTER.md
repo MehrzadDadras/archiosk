@@ -244,7 +244,7 @@ element as VISIBLE, BEHIND_DISCLOSURE (inside a closed `<details>`), ZERO_BOX
 - **Known interactions:** menu-bar `<summary>` elements opened on the **second** click
   after a fresh page load in both menus tested; the first click focused without
   opening. Observed twice, cause not established.
-- **Anomalies:** see A-05 (Search nav), A-06 (id disclosure inconsistency).
+- **Anomalies:** A-05 (Search nav) **resolved 2026-09-22, see §7**; A-06 (id disclosure inconsistency) open.
 - **Change classification vs markup history:**
   - "Other ways to start or recover work" disclosure — **HIDDEN** (was three visible
     buttons) / `UNKNOWN_INTENT`
@@ -513,7 +513,8 @@ element as VISIBLE, BEHIND_DISCLOSURE (inside a closed `<details>`), ZERO_BOX
 | `/` | -> `/projects` when authenticated | capture byte-identical to `/projects` |
 | `/gateway` | -> `/projects` when authenticated | capture byte-identical to `/projects` |
 | `/login` | -> `/projects` when authenticated | observed at session start |
-| `/search` | **renders raw JSON** | screenshot 18, A-05 |
+| `/search` | JSON API, unchanged — no longer reachable from the navigation | screenshot 18, A-05 (resolved) |
+| `/find` | the Search page, added 2026-09-22 — in-shell, plain GET form | §7 |
 | `/project/<id>` | **plain-text "Not authorised."** for both projects tried | screenshot 19, A-11 |
 | `/documents/<project_id>` | styled 404 with chrome and "Back to home" | screenshot 20 |
 
@@ -530,7 +531,7 @@ record's own reading, offered to help triage, and is not a Product Owner decisio
 | **A-02** | **Help Center renders in a light theme with no app chrome**, unlike every other authenticated page. It is a standalone `<!doctype html>` that does not extend `base.html`. | screenshot 13; `templates/help/index.html` | Medium |
 | **A-03** | **Literal `?` characters used as separators** between the three Document Shop views — "My documents ? Archive ? Recently Deleted". Confirmed as U+003F in the source, not an encoding artifact of capture. | `templates/document_shop_jobs.html:21,22` | Low, visible on every visit |
 | **A-04** | **Title and heading disagree**: `<title>` is "Document Shop Jobs", `<h1>` is "My documents". Internal name in the tab, product name on the page. | screenshot 08 | Low |
-| **A-05** | **Primary-nav "Search" navigates to a JSON endpoint.** The route's own docstring calls it "the Global search overlay's backend … exposed as JSON for the overlay instead of a full-page GET" — and the menu links straight at it. A user clicking Search sees `{"results":[]}`. | `routes/portal.py:3228`; `templates/_app_menu.html:138`; screenshot 18 | **High** — a top-level nav item lands on raw JSON |
+| **A-05** | ~~**Primary-nav "Search" navigates to a JSON endpoint.**~~ **RESOLVED 2026-09-22** — see §7. The route's docstring called it "the Global search overlay's backend … exposed as JSON for the overlay instead of a full-page GET" and the menu linked straight at it, so clicking Search showed `{"results":[]}`. The overlay it was built for is not in this codebase; that nav link was its only remaining consumer. | `routes/portal.py:3228`; `templates/_app_menu.html:138`; screenshot 18 | was **High** |
 | **A-06** | **Project id disclosed two different ways**: behind a per-row triangle on `/projects`, printed raw on `/removed-projects`. | screenshots 01, 12 | Low |
 | **A-07** | **`BACKEND_READY_TO_WIRE` printed to the user** on Planning & Zoning — an internal classification constant surfaced as page copy. | `routes/planning_zoning.py:52,169`; screenshot 09 | Medium |
 | **A-08** | **`SOURCE_REFERENCE` printed seven times** in a Case Workspace conversation. This is the exact symptom `services/answer_presentation.py` was built to collapse ("the same SOURCE_REFERENCE qualification several times", its own docstring line 6) — the projection is wired into the document page but **not** into the workspace dock. | screenshot 10; `services/answer_presentation.py:6` | Medium |
@@ -577,3 +578,68 @@ with no body.
 
 *Prepared 2026-09-22 against live `https://archiosk.com`. Documentation only — no
 application code, template, stylesheet or test was changed in producing this record.*
+
+
+---
+
+## 7. Register update — A-05 resolved, 2026-09-22
+
+The first defect this baseline recorded has been fixed, and the record is
+updated rather than rewritten: the anomaly row above is struck through and kept,
+because a baseline that quietly deletes what it found cannot later be used to
+show what changed.
+
+**What was wrong.** The primary-navigation "Search" item pointed at
+`portal.global_search`, whose own docstring describes it as the backend for a
+search *overlay* — "exposed as JSON for the overlay instead of a full-page GET".
+No overlay exists in this codebase. The nav link was its only remaining consumer,
+so the one thing that endpoint was never meant to serve was the only thing still
+calling it, and the Product Owner landed on `{"results":[]}` outside the shell
+with no way back.
+
+**What changed.**
+
+| Change | Classification |
+| --- | --- |
+| `/find` — a Search page inside the ordinary shell | **ADDED** |
+| Nav "Search" now targets `portal.search_page`, with `data-ui-ref="menu.search"` | **BEHAVIOR_CHANGED** (documented intent) |
+| `_global_search_results()` — the match rule, extracted | **MOVED** (no behaviour change) |
+| `/search` JSON endpoint | **UNCHANGED** |
+
+**Why a separate route rather than content negotiation on `/search`.** Nine test
+files call `/search` and read JSON from it. Deciding between JSON and HTML by
+`Accept` header would have left all of them depending on a header nobody set
+deliberately — correct until the first test sends a browser-shaped `Accept`, and
+then failing somewhere far from the cause. `/search` is therefore untouched.
+
+**No second search engine.** The page and the endpoint call the same
+`_global_search_results()`. A test asserts the endpoint's body contains no
+matching of its own, and another asserts the template makes no network call —
+the page is a plain GET form, so browser Back, reload, bookmarking and sharing
+work by default rather than by being reimplemented.
+
+**One correction to this document's own earlier claim.** The register implied
+the substring match rule lived only in the search endpoint. It did not: the same
+rule appears four times in `routes/portal.py` and did so before this change, as
+`global_search`'s docstring always said ("the same filename/project_id substring
+match the Projects directory's own search already uses"). This change added no
+fifth occurrence and did not consolidate the existing four, which was not its
+scope.
+
+**Page record — `/find`, Search.**
+
+- **Purpose:** find a project by name or reference, without leaving the shell.
+- **Primary action:** `search.submit`.
+- **Visible controls:** `search.form`, `search.query`, `search.submit`,
+  `search.coverage`; with a query, `search.count` and `search.results` /
+  `search.result` / `search.result.open`, or `search.empty`.
+- **Conditional:** results and the empty-state message appear only after a query;
+  an empty query shows the form and claims nothing.
+- **Reference-Mode-only controls:** none.
+- **Density:** WORK, shell `work-start`, full menu bar.
+- **Responsive:** inherits the shell's 640px drawer behaviour; no rules of its own.
+- **Known interactions:** the query lives in the URL (`/find?q=…`), so Back,
+  reload and bookmarking behave normally. No JavaScript.
+- **Anomalies:** none. The page states its own coverage — projects only, matched
+  on name and reference — because a box that searched less than the user assumed
+  would be worse than one that says so.
