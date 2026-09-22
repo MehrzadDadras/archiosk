@@ -66,6 +66,11 @@ _ERROR_HTML_PATH = _REPO_ROOT / "templates" / "errors" / "error.html"
 _SECURITY_DEPARTMENT_HTML_PATH = _REPO_ROOT / "templates" / "security_department.html"
 _PROJECTS_HTML_PATH = _REPO_ROOT / "templates" / "projects.html"
 _REMOVED_PROJECTS_HTML_PATH = _REPO_ROOT / "templates" / "removed_projects.html"
+# CLAUDE-SEARCH-SURFACE-01: the Search page. This scan is an explicit
+# opt-in list rather than a glob, so a new template is invisible to the
+# registry contract until it is named here - which is how the primary-nav
+# Search link carried no data-ui-ref at all without either test noticing.
+_SEARCH_HTML_PATH = _REPO_ROOT / "templates" / "search.html"
 _APP_PY_PATH = _REPO_ROOT / "app.py"
 # CLAUDE-P40-VW9 (Governed Files Display and Project File Architecture):
 # the first confirm_*.html template to ever carry a data-ui-ref (its own
@@ -318,6 +323,7 @@ def _all_template_refs() -> set[str]:
         _INDEX_HTML_PATH, _GATEWAY_SHELL_HTML_PATH, _PROJECT_CHOOSER_HTML_PATH,
         _LOGIN_HTML_PATH, _UPLOAD_HTML_PATH, _UPLOAD_CONFIRM_HTML_PATH, _ERROR_HTML_PATH,
         _SECURITY_DEPARTMENT_HTML_PATH, _PROJECTS_HTML_PATH, _REMOVED_PROJECTS_HTML_PATH, _APP_PY_PATH,
+        _SEARCH_HTML_PATH,
         _CONFIRM_DELETE_FOLDER_HTML_PATH, _OPERATIONS_HTML_PATH,
         _LANDING_HTML_PATH, _EXPLORE_HTML_PATH, _START_TRIAL_HTML_PATH,
         _SPIN_PROTOTYPE_HTML_PATH, _RESET_PROJECT_DATA_HTML_PATH,
@@ -444,7 +450,14 @@ class RegistryConsistencyTests(unittest.TestCase):
                 # than a child of "projects-directory": that namespace belongs
                 # to the projects listing, and this is a standalone operating
                 # surface reached FROM it, not a control inside it.
-                r"drawing-understanding|document-shop|planning-zoning)\.[a-z0-9._\-]+$",
+                # CLAUDE-SEARCH-SURFACE-01 added "search" - the user-facing
+                # Search page. A top-level family for the same reason
+                # "planning-zoning" is one: it is a standalone operating
+                # surface reached FROM the projects listing, not a control
+                # inside it, so "projects-directory.search" (which already
+                # exists, and is the filter box ON that listing) would have
+                # meant two different things under one name.
+                r"drawing-understanding|document-shop|planning-zoning|search)\.[a-z0-9._\-]+$",
                 ref,
             )
 

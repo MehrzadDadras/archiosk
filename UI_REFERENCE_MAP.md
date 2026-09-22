@@ -161,6 +161,7 @@ otherwise.
 | `menu.account` | `<details>` popup | "…" (username) | Contains Sign out and Removed Projects only now — **CLAUDE-APP-MENU-01 relocated the Admin section (New Project/Security/Operations/Project Data Management) into `menu.archiosk.admin`**, out of this menu entirely; this Account menu now holds session-identity actions exclusively, not application/governance administration | Every authenticated page | active |
 | `menu.account.sign-out` (CLAUDE-APPEARANCE-SIMPLIFY-01) | `<a>` | "Sign out" | Navigates to `portal.logout` (same route/security behavior as before). Still the first item in this menu. **CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 4**: now shares the SAME `guardDeparture()` unsaved-input `confirm()` in `static/js/app_menu.js` as `menu.archiosk.exit` — one canonical safe-departure mechanism, exposed consistently from both justified menu locations, never two logout implementations with inconsistent protection | Every authenticated page | active |
 | `menu.account.admin`, `menu.account.admin.new-project`, `menu.account.admin.security`, `menu.account.admin.operations`, `menu.account.admin.project-data-management` | — | — | **Retired, CLAUDE-APP-MENU-01** — relocated to `menu.archiosk.admin`/`menu.archiosk.admin.*` (see above), same routes/gate, physical location only changed. Nothing renders these refs any more | — | retired |
+| `menu.search` (new, CLAUDE-SEARCH-SURFACE-01) | `<a>` | "Search" | Navigates to `portal.search_page` (`/find`). **Previously pointed at `portal.global_search`**, the JSON endpoint — UI baseline A-05. The ref is new because the link had none before, which is part of why the defect was invisible to the reference registry | Every authenticated page | active |
 | `menu.account.removed-projects` (new, CLAUDE-LEFT-RAIL-01) | `<a>` | "Removed Projects" | Navigates to `portal.removed_projects`. Retired from `lists.removed-projects` — see "Retired references" below. **Deliberately NOT under `menu.account.admin`** — `portal.removed_projects`/`restore_project_route` are `@login_required` only (P32-access-filtered, not admin-only); a separate ref namespace keeps that real authorization difference honest rather than implying admin-only merely by visual proximity | Every authenticated page (P32-filtered at the route level) | active |
 | `menu.status` (CLAUDE-CA1D-INSTRUMENT-RAIL-01, new) | `<a>` | "AI calls disabled" | The one quiet global machine fact proven this tranche — links to `operations.department_home` for detail. Deliberately renders NOTHING in the ordinary case (`AI_CALLS_DISABLED` unset/false); only an admin-relevant anomaly is worth ambient visibility in the top bar | **Admin only** — `is_admin`, and only when `AI_CALLS_DISABLED` is set | active |
 | `menu.file`, `menu.edit`, `menu.view`, `menu.document`, `menu.tools`, `menu.window`, `menu.help` (new, CLAUDE-APP-MENU-01) | `<details>` popup (7 distinct menus) | "File" / "Edit" / "View" / "Document" / "Tools" / "Window" / "Help" | The remaining top-level menu bar entries. "Batch" deliberately omitted from the top level per this stage's own bounded-inventive-authority judgment call — no genuine multi-document action exists on an already-registered project today (`ingest_folder_upload` is creation-time only); see the completion report's own "Inventive improvements" section | Every authenticated page | active |
@@ -1126,6 +1127,32 @@ The full administrative Project-management page (`portal.projects_list`) — dis
 | `projects-directory.empty` | `<div>` | "No projects yet." / "No projects match…" | Empty/no-results state; admin-only "Create New Project" link when genuinely empty | Every authenticated page | active |
 
 | `projects-directory.document-shop` (new, CLAUDE-BLACK-BOX-DOOR-01) | `<a class="btn">` | "Document Shop" | Navigates to `portal.document_shop_intake`. Sits inside the SAME `{% if is_admin %}` block as `projects-directory.new-project` beside it, so the two entrances are gated identically and neither renders as a dead affordance. Deliberately `btn` rather than `btn-primary`: a second real entrance, not a competing call to action. Closes the gap this directory had for anyone holding a document but not an engagement — every other control on the page asks them to declare one first | Admin only | active |
+
+## Search (`templates/search.html` — CLAUDE-SEARCH-SURFACE-01)
+
+The user-facing Search surface. Added 2026-09-22 to resolve UI baseline anomaly
+A-05: the primary-navigation "Search" item linked straight at
+`portal.global_search`, the JSON backend, so clicking it left the shell and
+rendered `{"results":[]}` with no way back. The overlay that endpoint was
+written for is not in this codebase and that nav link was its only remaining
+consumer.
+
+`/search` keeps its behaviour as the JSON endpoint; this is an ordinary page
+beside it at `/find`, calling the same `_global_search_results()`. A plain GET
+form, no JavaScript — the query lives in the URL, so browser Back, reload and
+bookmarking work by default rather than being reimplemented.
+
+| Reference | Element | Label | Current behavior | Auth notes | Status |
+|---|---|---|---|---|---|
+| `search.form` (new, CLAUDE-SEARCH-SURFACE-01) | `<form method="get">` | the search form | GETs `portal.search_page` with `?q=`. Deliberately a GET form rather than a fetch: the query in the URL is what makes Back, reload, bookmarking and sharing ordinary browser behaviour instead of features this page would have to implement | Every authenticated session | active |
+| `search.query` (new, CLAUDE-SEARCH-SURFACE-01) | `<input type="search">` | placeholder "Project name or reference" | Carries `?q=`, echoed back so a submitted query stays visible. Labelled by `aria-label` rather than a visually hidden `<label>` — this stylesheet has no `sr-only` utility and one page does not justify adding a CSS convention | Every authenticated session | active |
+| `search.submit` (new, CLAUDE-SEARCH-SURFACE-01) | `<button type="submit">` | "Search" | Submits the form | Every authenticated session | active |
+| `search.count` (new, CLAUDE-SEARCH-SURFACE-01) | `<p>` | "N results for …" | Rendered only when a query returned matches | Results are `_accessible_documents`-scoped | active |
+| `search.results` (new, CLAUDE-SEARCH-SURFACE-01) | `<ul>` | the result list | Wraps every `search.result` row | Same as above | active |
+| `search.result` (new, CLAUDE-SEARCH-SURFACE-01) | `<li>` (pattern) | one result | A matched Project | Same as above | active |
+| `search.result.open` (new, CLAUDE-SEARCH-SURFACE-01) | `<a>` (pattern) | the result title | Navigates to `workspace.show_workspace` — the `url` the backend already returns, never a link this page composes for itself | Same as above | active |
+| `search.empty` (new, CLAUDE-SEARCH-SURFACE-01) | `<p>` | "Nothing matched …" | Rendered only when a query returned no matches. An empty query renders neither this nor a count, so the page never claims a result it was not asked for | Every authenticated session | active |
+| `search.coverage` (new, CLAUDE-SEARCH-SURFACE-01) | `<p class="ui-metadata">` | what search actually covers | States that search covers projects, matched on name and reference, and that requirements/investigations/findings are not searchable yet. Present unconditionally: a box that searched less than the user assumed would be worse than one that says so, and `global_search`'s own docstring already warns this route "must never claim search coverage the backend doesn't actually have" | Every authenticated session | active |
 
 ## Removed Projects (`templates/removed_projects.html` — CLAUDE-P40-VW8-QA, Complete Root and Subfolder UI Reference Tagging)
 
