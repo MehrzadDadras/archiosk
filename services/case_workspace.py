@@ -1018,6 +1018,69 @@ KNOWN_DOCUMENT_AUTHORITY_LEVELS = (
     DOCUMENT_AUTHORITY_PROJECT_AGREEMENT,
 )
 
+# -- Currentness (CLAUDE-CURRENTNESS-VOCAB-01) ------------------------------
+# Authority says how much weight a source carries. Currentness says whether
+# it is still the one that applies. They are different questions and a
+# verification handle needs both, which is why this sits beside the authority
+# levels rather than inside them.
+#
+# THESE THREE ARE NOT NEW STATES. resolve_anchor_currentness has returned
+# exactly "current" / "stale" / "unavailable" since MM6, as bare string
+# literals compared by hand at each call site (see _resolve_mm6_endpoint_
+# status, and explain_evidence_trust's own `trust["currentness"]["status"]
+# != "current"`). Naming them changes no behaviour; it stops a fourth
+# spelling appearing in a fifth consumer, which is how a vocabulary drifts
+# in a codebase where ~105 references to this concept already exist.
+#
+# UNRESOLVED is the one addition, and it is not the resolver's: it is what
+# the PLANNING and document-examination surfaces already write when
+# currentness was never established at all (`currentness=s.get('currentness',
+# 'UNRESOLVED')`). Those surfaces answer a different question - "did anyone
+# check?" - and their honest answer has to be representable here, or a
+# verification handle would have to render an unchecked source as though it
+# had been checked and found current. That is the exact laundering the
+# certainty vocabulary elsewhere in this system exists to prevent.
+CURRENTNESS_CURRENT = "current"
+CURRENTNESS_STALE = "stale"
+CURRENTNESS_UNAVAILABLE = "unavailable"
+CURRENTNESS_UNRESOLVED = "unresolved"
+
+KNOWN_CURRENTNESS_STATES = (
+    CURRENTNESS_CURRENT,
+    CURRENTNESS_STALE,
+    CURRENTNESS_UNAVAILABLE,
+    CURRENTNESS_UNRESOLVED,
+)
+
+# Currentness that permits a finding to be relied on without re-checking the
+# source first. Deliberately a single member: "stale" and "unavailable" are
+# both actionable, and "unresolved" means nobody looked.
+CURRENTNESS_RELIABLE = (CURRENTNESS_CURRENT,)
+
+
+def normalise_currentness(value) -> str:
+    """Any producer's currentness string onto the closed vocabulary.
+
+    Planning and document examination write 'UNRESOLVED'/'UNCHANGED' in
+    upper case; the MM6 resolver writes lower case. Rather than rewrite
+    either producer - both are correct in their own idiom, and one of them
+    is Product-Owner-accepted live behaviour - this maps what arrives onto
+    the closed set.
+
+    ANYTHING UNRECOGNIZED BECOMES UNRESOLVED, never CURRENT. A vocabulary
+    that silently upgrades an unknown string to "current" would make a
+    typo look like a verified fact.
+    """
+    if not isinstance(value, str):
+        return CURRENTNESS_UNRESOLVED
+    lowered = value.strip().lower()
+    if lowered in KNOWN_CURRENTNESS_STATES:
+        return lowered
+    # 'UNCHANGED' is document_examination's own word for "this dimension was
+    # not touched by the review", which is an absence of a finding about
+    # currentness, not a finding that it is current.
+    return CURRENTNESS_UNRESOLVED
+
 # Prompt 15 #4: generic enough for future uploads/connectors/imports, not
 # just the controlled synthetic-corpus test scenario.
 SOURCE_ORIGIN_TYPE_UPLOAD = "upload"
@@ -17251,7 +17314,9 @@ class CaseWorkspaceStore:
                    if (s.get("predecessor_type"), s.get("predecessor_id")) in keys]
         pointer_stale = any(s.get("superseded_by_source_id") for s in workspace.sources
                             if (OBJECT_KIND_SOURCE, s["id"]) in keys)
-        return {"status": "unavailable" if unavailable else "stale" if lineage or pointer_stale else "current",
+        return {"status": (CURRENTNESS_UNAVAILABLE if unavailable
+                           else CURRENTNESS_STALE if lineage or pointer_stale
+                           else CURRENTNESS_CURRENT),
                 "anchors": anchors, "supersession_ids": [s["id"] for s in lineage]}
 
     def _resolve_mm6_endpoint_status(self, workspace: ProjectWorkspace, object_type: str, object_id: str) -> dict:
