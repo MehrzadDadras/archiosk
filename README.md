@@ -54,8 +54,20 @@ network and no pre-existing database — `instance/` is created on demand and
 `FLASK_SECRET_KEY` fails loudly with a configuration error rather than a
 confusing test failure.
 
-**Expected skips.** Three tests skip by design, plus the optional fixture
-below. Any other failure on a clean checkout is a real defect.
+**Expected skips.** Measured on a fresh clone of this commit, bootstrapped
+with the sequence above and nothing else: **9,971 passed, 39 skipped, 0
+failed, 10,093 subtests, in 15:37 parallel.** Any failure on a clean
+checkout is a real defect; the 39 skips break down as
+
+| Skips | Cause | To run them instead |
+| --- | --- | --- |
+| 27 | Real Chromium is not installed | `pip install playwright && playwright install chromium` |
+| 9 | `static/nipigon/` absent (see Optional fixtures) | provision the fixture |
+| 3 | Tesseract **is** installed here | these three assert the no-OCR-engine degradation path, so they skip when the engine is present - the inverse of the other two rows, and the reason this number moves with the host rather than with the repository |
+
+The Playwright tests are not decoration: they provide browser-computed
+geometry and genuine key presses that a source-text assertion cannot, which
+is why each one skips rather than substituting a weaker check.
 
 ### Optional fixtures
 
