@@ -103,3 +103,30 @@ segno==1.6.6
 # types.Part.from_bytes, types.HttpOptions - is the documented public
 # interface and is unchanged across the 1.x/2.x boundary.
 google-genai==2.20.0
+
+# CLAUDE-CLEAN-CHECKOUT-02: this pin was ALREADY REQUIRED and simply never
+# declared. `services/gateway_model.py` imports `pydantic_ai` outright at line
+# 275, `services/feasibility_compiler.py` refuses to build a runner without it,
+# and `tests/test_feasibility_egress_02.py` exercises both - all tracked, all on
+# main. The package existed only because it had been hand-installed into one
+# long-lived developer tree, so the suite passed there and nowhere else: a fresh
+# clone of this exact commit failed 23 tests in that one file with
+# `ModuleNotFoundError: No module named 'pydantic_ai'`, and every other one of
+# the 10,009 passed. That is the precise shape of a hidden local dependency.
+#
+# The SLIM distribution, not `pydantic-ai`: slim is what is actually installed
+# and proven, and it omits the bundled provider SDKs this repository does not
+# want a second copy of. The import name is `pydantic_ai` either way.
+#
+# Resolution was CHECKED, not assumed, against the load-bearing pair above:
+# `pip install --dry-run` adds genai-prices, griffelib, httpx2, httpcore2,
+# logfire-api, opentelemetry-api, pydantic-graph and truststore, and moves
+# neither anthropic 0.40.0 nor httpx 0.28.1. pydantic-ai brings its own httpx2,
+# a separate distribution, so the 2026-09-06 httpx/anthropic collision cannot
+# repeat through this edge.
+#
+# NOTE FOR DEPLOYS: a NEW pin. deploy/DEPLOYMENT.md step 7 applies - install it
+# explicitly as the venv owner before restarting. Production without it does not
+# crash; `PYDANTIC_AI_AVAILABLE` degrades to a named RuntimeError, which is
+# honest but is not the feasibility egress path working.
+pydantic-ai-slim==2.43.0
