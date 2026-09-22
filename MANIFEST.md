@@ -710,3 +710,6 @@ Every ingestion (API or form) → `services.ingestion.ingest_upload` → after t
 
 **Web UI login:**
 `GET /upload` while unauthenticated → `@login_required` (`services/auth.py`) → redirect to `/login?next=<original path>` → `POST /login` with correct credentials → `services.auth.check_credentials` (`werkzeug.security.check_password_hash`) → `log_in()` sets the session → redirect to `next` (same-site paths only) if one was given, otherwise `/gateway` → the originally-requested page (or the gateway's action card(s)). `/logout` clears the session and redirects to `/`. **`routes/api.py` shares this same session login as of CLAUDE-P27-B** (corrected — this line previously claimed the opposite).
+
+- docs/TURNSTILE_RESEARCH_REPAIR.md - bounded Turnstile retrieval owner mapping and qualification boundaries.
+- tests/test_turnstile_research_validation.py - substantive-content and no-promotion regressions.

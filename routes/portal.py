@@ -4746,6 +4746,8 @@ def _go_attention_surface(store, workspace, *, attention_url, mapping_url, back_
     work_plans = store.inspect_go_work_plans(workspace, actor, analysis['id'] if analysis else None, app=current_app)
     event('go_work_plans', 'CONSUMED', plan_ids=[row['plan']['plan_id'] for row in work_plans])
     from services.external_research import REFERENCE_SOURCES as public_reference_sources
+    from services.external_research import TURNSTILE_SOURCE_MISSIONS
+    public_reference_sources = public_reference_sources + TURNSTILE_SOURCE_MISSIONS
     return render_template('go_attention.html', workspace=workspace, analysis=analysis, runs=runs, evaluation_game=evaluation_game,
         review_tasks=GO_REVIEW_TASKS, review_task=request.args.get('task') if request.args.get('task') in GO_REVIEW_TASKS else None,
         review_cases=store.visible_cases_for(workspace, actor),
