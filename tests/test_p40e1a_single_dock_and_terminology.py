@@ -107,6 +107,67 @@ class _BaseDockTestCase(unittest.TestCase):
         return self._store().get(self.project_id).cases[0]["id"]
 
 
+class SurveyWorkbenchIsNotThePrimarySurfaceTests(_BaseDockTestCase):
+    """CLAUDE-PSDUI02A - developer instruments sit behind a disclosure.
+
+    templates/case_workspace.html opened its content block with a bare
+    `{% include "_survey_operations.html" %}`, so with Developer Mode on the
+    first thing in every workspace was two survey/kernel workbench controls,
+    above the Project Conversation. They are developer instruments, not the
+    subject of the page.
+
+    The gate, the routes and the capability are unchanged - these tests pin
+    WHERE the controls sit, never whether they exist or who may reach them.
+    """
+
+    CONTROLS = ("Inspect generic kernel mapping",
+                "Register or calculate from addressed Survey evidence")
+
+    def _workspace_html(self, developer_mode: bool) -> str:
+        client = self._client_as("p40e1a_owner", 1)
+        with client.session_transaction() as sess:
+            sess["developer_mode"] = developer_mode
+        return client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
+
+    def test_the_controls_are_inside_a_disclosure_not_bare_content(self):
+        html = self._workspace_html(True)
+        summary = html.find("Survey &amp; kernel workbench (developer)")
+        if summary == -1:
+            summary = html.find("Survey & kernel workbench (developer)")
+        self.assertNotEqual(summary, -1, "the survey workbench disclosure did not render")
+        for control in self.CONTROLS:
+            position = html.find(control)
+            self.assertNotEqual(position, -1, f"{control!r} disappeared - this task moves it, never removes it")
+            self.assertGreater(position, summary,
+                               f"{control!r} still renders ahead of its own disclosure")
+
+    def test_the_disclosure_uses_this_files_existing_pattern(self):
+        """No new UI pattern: subdisclosure renders details.add-source-details."""
+        html = self._workspace_html(True)
+        start = html.find('id="survey-operations"')
+        self.assertNotEqual(start, -1, "the disclosure lost its id")
+        opening = html.rfind("<details", 0, start + 1)
+        self.assertNotEqual(opening, -1)
+        self.assertIn("add-source-details", html[opening:start + 40])
+
+    def test_the_conversation_is_not_preceded_by_workbench_controls(self):
+        """The reported symptom, stated positionally."""
+        html = self._workspace_html(True)
+        dock = html.find('id="conversation-dock"')
+        self.assertNotEqual(dock, -1, "the conversation dock did not render")
+        for control in self.CONTROLS:
+            self.assertGreater(
+                html.find(control), html.find('id="survey-operations"'),
+                f"{control!r} is not behind the disclosure")
+
+    def test_developer_mode_semantics_are_unchanged(self):
+        """Off means absent, exactly as before - the gate was not touched."""
+        html = self._workspace_html(False)
+        self.assertNotIn("survey-operations", html)
+        for control in self.CONTROLS:
+            self.assertNotIn(control, html)
+
+
 class OneComposerPerContextTests(_BaseDockTestCase):
     def test_project_context_has_exactly_one_composer_and_one_send(self):
         # CLAUDE-P40-VW8-QA added data-ui-ref="chat.composer.send" to

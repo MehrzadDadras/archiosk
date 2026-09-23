@@ -18,7 +18,32 @@
    that template's own note. Nothing left to add here. #}
 
 {% block content %}
-{% if developer_mode %}{% include "_survey_operations.html" %}{% endif %}
+{# CLAUDE-PSDUI02A: the survey/kernel workbench sits BEHIND a disclosure.
+
+   It used to be a bare `{% include %}` here - the first thing in the content
+   block, so two workbench controls ("Inspect generic kernel mapping",
+   "Register or calculate from addressed Survey evidence") rendered above the
+   Project Conversation and read as the primary surface of every workspace
+   whenever Developer Mode was on. They are developer instruments, not the
+   subject of the page.
+
+   `macros.subdisclosure` is this file's own established disclosure - 53 uses
+   already - so nothing new is introduced, and it renders collapsed, which is
+   what demotes the controls from primary content to one summary line.
+
+   THE GATE, THE ROUTES AND THE CAPABILITY ARE UNTOUCHED. Still `developer_mode`,
+   still the same include, still the same forms and permissions: this changes
+   where the controls sit in the reading order and nothing about what they do or
+   who may do it.
+
+   No `ui_ref` deliberately: every `data-ui-ref` needs a UI_REFERENCE_MAP.md row
+   (tests/test_p40vw7a_ui_reference_map.py enforces it), and that file is
+   outside this task's permitted set. The macro makes `ui_ref` optional. #}
+{% if developer_mode %}
+{% call macros.subdisclosure('Survey & kernel workbench (developer)', html_id='survey-operations') %}
+{% include "_survey_operations.html" %}
+{% endcall %}
+{% endif %}
 {# CLAUDE-P40-E3A: the full-width top bar and the Lists hierarchy both
    live in base.html now (application-shell level) - not here. See that
    template's own notes at .workspace-topbar and [data-tree-root]. #}
