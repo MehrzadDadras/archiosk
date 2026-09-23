@@ -406,7 +406,27 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
 
     parsed = getattr(outcome, "parsed", None) or {}
     answer = (parsed.get("answer") or "").strip()
-    if not answer:
+
+    # CLAUDE-ARTIFACT-REPLY-BOUNDARY-01: the command is read BEFORE the
+    # empty-answer check, and that ordering is the whole fix.
+    #
+    # Two schema statements reach the model: SYSTEM_PROMPT ends "Answer as JSON:
+    # {"answer": "your reply"}", and typed_action_instructions is appended after
+    # it saying to include "command". A model asked to DO something reasonably
+    # returns the command and no prose - and this function then read
+    # parsed["answer"], found it empty, and returned MALFORMED_MESSAGE, throwing
+    # the command away unread.
+    #
+    # Live consequence, Document View, "combine the document into one Word
+    # document": the reviewer was told "GO answered, but not in a form I could
+    # read ... Asking again usually works" for an action that was correctly
+    # proposed and never ran. Asking again could not work, because nothing about
+    # the request was wrong. Reproduced deterministically before this change.
+    #
+    # An empty answer is still malformed when there is NO command - a reply with
+    # neither prose nor an action really is unusable.
+    command = sanitize_typed_action(parsed.get('command'), action_ids)
+    if not answer and not command:
         # A well-formed reply carrying no answer is also something that came
         # back and could not be used - not an absent service.
         return {"ok": False, "answer": MALFORMED_MESSAGE, "reason": "empty_answer"}
@@ -425,7 +445,7 @@ def ask(document, workspace, result: dict, question: str, *, app, evaluation_gua
         admitted.append("Source text (quotation only; binding and authority are not established):\n" + context["recovered_text"])
     return {"ok": True, "answer": "\n".join(admitted), "reason": "evaluation_governed_admission" if evaluation_guard else "governed_geometry_admission" if governed_geometry else "source_reference_admission",
             "proposed_answer": answer, "qualification_preserved": True,
-            "command": sanitize_typed_action(parsed.get('command'), action_ids),
+            "command": command,
             "admission": "Deterministic examination statements; provider proposal not admitted as authority"}
 
 

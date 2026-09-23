@@ -744,6 +744,15 @@ def typed_action_instructions(action_ids):
     import json
     from services.capability_registry import action_catalogue
     return ('\nAVAILABLE INTERNAL ACTIONS: ' + json.dumps(action_catalogue(action_ids)) +
+        # CLAUDE-ARTIFACT-REPLY-BOUNDARY-01: say that the answer field is still
+        # required. Without this the block reads as a SECOND schema arriving
+        # after the caller's own "Answer as JSON: {...}", and a model asked to
+        # act reasonably returns the command alone - which the Document View
+        # caller then read as a malformed reply. The caller no longer depends on
+        # this sentence to behave correctly; it is here so the two instructions
+        # stop contradicting each other at the source.
+        '\nALWAYS include the "answer" field your instructions above describe, even when you '
+        'also include a command: say in one short sentence what you are about to do. '
         '\nOnly if the current user explicitly requests an available action, include '
         '"command": {"action_id": "<available id>", "parameters": {<exact required parameters>}, '
         '"user_requested": true}. Otherwise command must be null. Interpret intent from natural '
