@@ -610,6 +610,62 @@ plausible-sounding cause reconstructed afterwards.
 Monitoring a long run's HEALTH is not the same as polling a background task for
 its RESULT. Read the outcome from the log's own `PYTEST_EXIT` line as always.
 
+### Executive Directive: Hard Scope & Cost Control Boundary - Rev. 2026-09-23
+
+**Product Owner, 2026-09-23. A standing rule, not a note about one session.**
+It hardens the watchdog above rather than replacing it: that rule says watch a
+long run, this one says abort it and stop.
+
+> **ONE TASK -> ONE SCOPE -> ONE RESULT**
+> **UNRELATED BLOCKER -> PRESERVE -> REPORT -> STOP**
+
+**1. Boundary law.** Execute only the named task. **Zero lateral
+investigation**: do not investigate, debug or refactor adjacent systems,
+configuration, environment variables, dependencies or repository code unless
+strictly necessary to complete it. **Deployment is verification only** - a
+deploy or dry-run proves the work, it is not an invitation to engineer the
+pipeline. If the deployment path, script or environment fails unexpectedly, do
+not debug or fix it. Stop.
+
+**2. Hard stop triggers.** Halt immediately and report on any of:
+
+- **Unrelated blockers** - deployment infrastructure, network/SSH transfer, file
+  truncation, unexpected deletions, repository state, performance anomalies, or
+  unrelated test suites.
+- **Time / loop thresholds** - abort any command or test exceeding **2T**, where
+  T is the established normal duration. No unmonitored overnight loops.
+- **Repeated failure** - never repeat a failed approach more than once without
+  new, verified empirical evidence.
+- **Cost escalation** - do not switch to a more expensive model, agent or
+  parallel investigation without first stating
+  `ESCALATION REASON: <why the cheaper/bounded path is insufficient>`.
+
+**3. Protocol on a blocker.** Stop at a safe checkpoint; preserve completed work
+clean; confirm production and environment safety; stop - do not spawn secondary
+tasks or attempt self-remediation. Report exactly:
+
+```
+Task Status: Complete / Partial / Aborted
+Completed Commits / Tests: <explicit list>
+Exact Blocker: <one precise sentence>
+Recommended Separate Follow-up: <next distinct ticket>
+```
+
+**Why this exists, from the session that produced it.** Two breaches in one
+tranche, both mine and both the expensive kind. A full gate ran **7h08m**
+against a ~13-minute baseline because it was launched in the background and left
+overnight - the 2T rule would have killed it at ~26 minutes with the diagnostic
+window still open. And a truncated `scp` (`Connection reset by peer`, staging
+holding 835 of 1,351 files) was met by debugging the transfer instead of
+stopping; the dry-run's **450 proposed deletions** were caught by hand, and a
+deploy would have removed 450 files from production. Both were adjacent-system
+failures inside a bounded task. Neither was the task.
+
+A corollary worth stating because it has now failed twice here: **`set -e` does
+not make a pipeline safe.** It did not abort on a rejected `git push` read
+through `tail`, and it did not abort on a failed remote `tar`. Read exit codes
+from their own line and verify transfer integrity explicitly.
+
 ### Anomaly and degradation thresholds
 
 - **Parallel (`-n 8`) anomaly threshold: 15 minutes.** Against an ~8 minute
