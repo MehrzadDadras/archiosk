@@ -139,5 +139,73 @@ class NoSandboxOrPolicyIsImposedOnTheDownload(_Workspace):
         self.assertNotIn("sandbox", page.headers.get("Content-Security-Policy", ""))
 
 
+class TheDownloadFilenameAlwaysCarriesTheExtension(_Workspace):
+    """CLAUDE-DOWNLOAD-EXTENSION-01, found in chrome://downloads.
+
+    The blocked entries were named "Existentialism 1" - no extension. A
+    Source's `name` is a DISPLAY identity and services/ingestion.py numbers
+    intake by position on purpose, so four uploaded PDFs become
+    "Existentialism 1".."Existentialism 4" while the stored files stay .pdf.
+    Content-Disposition carried the display name verbatim, and an extensionless
+    download is a file the OS cannot type.
+    """
+
+    def _named(self, display_name, stored_suffix, payload=b"PKstub"):
+        from services.case_workspace import CaseWorkspaceStore
+
+        stored = self.tmp / ("stored" + stored_suffix)
+        stored.write_bytes(payload)
+        store = CaseWorkspaceStore(self.tmp)
+        workspace = store.get_or_create("delivery")
+        source = store.add_source(
+            workspace, name=display_name, file_path=str(stored), kind="project_document")
+        return source["id"]
+
+    def _filename_of(self, source_id):
+        response = self.client.get(
+            f"/projects/delivery/workspace/sources/{source_id}/file?download=1")
+        self.assertEqual(response.status_code, 200)
+        return response.headers["Content-Disposition"]
+
+    def test_the_reported_case_now_downloads_with_an_extension(self):
+        """"Existentialism 1" over a stored .pdf."""
+        disposition = self._filename_of(self._named("Existentialism 1", ".pdf"))
+        self.assertIn("Existentialism 1.pdf", disposition.replace("%20", " "))
+
+    def test_a_generated_word_file_ends_in_docx(self):
+        disposition = self._filename_of(self._named("Recovered Existentialism", ".docx"))
+        self.assertIn("Recovered Existentialism.docx", disposition.replace("%20", " "))
+
+    def test_an_existing_extension_is_not_duplicated(self):
+        disposition = self._filename_of(self._named("Report.docx", ".docx"))
+        self.assertIn("Report.docx", disposition.replace("%20", " "))
+        self.assertNotIn(".docx.docx", disposition)
+
+    def test_a_differently_cased_extension_is_not_duplicated(self):
+        disposition = self._filename_of(self._named("REPORT.DOCX", ".docx"))
+        self.assertNotIn(".DOCX.docx", disposition)
+
+    def test_unicode_and_spacing_survive(self):
+        disposition = self._filename_of(self._named("Étude sur l'existence — 1", ".pdf"))
+        decoded = disposition.encode("latin-1", "ignore").decode("utf-8", "ignore")
+        self.assertTrue("Étude" in decoded or "%C3%89tude" in disposition,
+                        "the accented name did not survive the header")
+        self.assertTrue(disposition.endswith(".pdf") or ".pdf" in disposition)
+
+    def test_the_mimetype_and_attachment_behaviour_are_unchanged(self):
+        """The brief: fix the filename only."""
+        source_id = self._named("Existentialism 1", ".pdf")
+        response = self.client.get(
+            f"/projects/delivery/workspace/sources/{source_id}/file?download=1")
+        self.assertTrue(
+            response.headers["Content-Disposition"].lower().startswith("attachment"))
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+
+    def test_a_stored_file_with_no_extension_invents_none(self):
+        disposition = self._filename_of(self._named("Mystery", ""))
+        self.assertIn("Mystery", disposition)
+        self.assertNotIn("Mystery.", disposition)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5224,12 +5224,48 @@ def source_file(project_id, source_id):
         file_path,
         mimetype=mimetype,
         as_attachment=requested_download or force_attachment,
-        download_name=source["name"],
+        download_name=_download_filename(source.get("name") or file_path.name, file_path),
     )
     # A governed source is never a general web asset, and must not be sniffed
     # into becoming one whichever branch above chose the type.
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+def _download_filename(display_name: str, file_path: Path) -> str:
+    """The display name, guaranteed to carry the stored file's extension.
+
+    CLAUDE-DOWNLOAD-EXTENSION-01. A Source's `name` is a DISPLAY identity and
+    frequently has no extension at all: services/ingestion.py numbers intake by
+    position on purpose ("NUMBERED BY POSITION, NEVER BY FILENAME") and states
+    that it "renames nothing on disk". So four uploaded PDFs become
+    "Existentialism 1".."Existentialism 4", and this route handed that straight
+    to Content-Disposition.
+
+    The consequence was found in chrome://downloads: entries named
+    "Existentialism 1", with no extension, blocked - while ordinary .docx
+    downloads on the same unmanaged browser worked. An extensionless download
+    is a file the operating system cannot type, and a browser treats it
+    accordingly. Nothing about the bytes, the MIME type or the disposition was
+    wrong; the NAME was.
+
+    THE EXTENSION COMES FROM THE STORED FILE, never from the display name. The
+    stored path is assigned by this host at ingest; the display name is
+    editable and, as above, routinely has no suffix to trust.
+
+    Already-correct names are left exactly alone - a name ending in the stored
+    file's extension is returned unchanged, so nothing acquires a doubled
+    ".docx.docx". Unicode and spacing are preserved verbatim; Flask encodes the
+    header (RFC 5987) and that is its job, not this function's.
+    """
+    stored_suffix = file_path.suffix
+    if not stored_suffix:
+        # Nothing to add. An extensionless stored file is its own condition and
+        # this function will not invent a type for it.
+        return display_name
+    if display_name.lower().endswith(stored_suffix.lower()):
+        return display_name
+    return display_name + stored_suffix
 
 
 #: The only content types a governed source may be served as. CLOSED on
