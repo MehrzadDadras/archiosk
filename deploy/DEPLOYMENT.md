@@ -16,9 +16,21 @@ added here.
 - **Live hostname:** `archiosk.com` / `www.archiosk.com`.
 - **Application path on the server:** `/var/www/archiosk`, owned by the `archiosk`
   service account (not the SSH login account).
-- **Service:** `archiosk-go.service` (systemd) — gunicorn workers bound to
-  `127.0.0.1:8000`; nginx (`deploy/nginx.conf`, deployed separately, not part of the
-  routine sync below) reverse-proxies `443` to it.
+- **Services (all four run the SAME synced code):**
+  - `archiosk-go.service` — gunicorn workers bound to `127.0.0.1:8000`; nginx
+    (`deploy/nginx.conf`, deployed separately, not part of the routine sync below)
+    reverse-proxies `443` to it.
+  - `archiosk-perception.service` — `python -m services.perception_worker` (local OCR).
+  - `archiosk-visual.service` — `python -m services.visual_worker` (bounded model vision).
+  - `archiosk-founding.service` — `python -m services.founding_worker` (founding
+    classification).
+
+  **ALL FOUR IMPORT `services/case_workspace.py` AND CALL `store.get()`.** They load
+  the same persisted workspace JSON through the same `ProjectWorkspace(**data)`
+  constructor, so a field added to that dataclass changes what every one of them must
+  be able to parse. A deploy that restarts only the web service leaves three
+  long-running processes holding the PREVIOUS release's dataclass in memory — see
+  step 9, which exists because that happened.
 - The application directory is **not a git repository** — there is no `git pull` on
   the server. The repository's own `origin/main` on GitHub is the actual system of
   record (per `CLAUDE.md`); the server only ever receives a synced copy of one exact
@@ -550,17 +562,73 @@ already carries three hand-written `_migrate_users_*` column-adders for exactly
 this reason. Anything of that kind is outside this document — stop, and get
 explicit Product Owner authorization.
 
-## 9. Restart and verify the service
+## 9. Restart and verify ALL FOUR services — never the web service alone
+
+**CLAUDE-DEPLOY-WORKERS-01.** This step used to restart `archiosk-go.service` and
+nothing else, and the three background workers were not mentioned anywhere in this
+document. That is not a documentation gap; it is a live defect the runbook produced,
+and it has already cost a customer-visible outage. What happened, exactly:
+
+| | |
+|---|---|
+| Code synced to the server | 2026-09-23 **20:33:38** UTC |
+| `archiosk-go` restarted (step 9 as written) | 2026-09-23 **20:49:29** UTC ✅ |
+| `archiosk-perception` / `-visual` still running from | 2026-09-22 **03:12:52** UTC ❌ |
+
+The release added `facet_routings` to `ProjectWorkspace`. The restarted web tier began
+writing that field into workspace JSON immediately. The workers, still holding the
+previous release's dataclass, crashed on **every** job they claimed:
+
+```
+TypeError: ProjectWorkspace.__init__() got an unexpected keyword argument 'facet_routings'
+  perception_worker.py:53   read_source_bytes   -> store.get(workspace_id)
+  visual_classification.py:409  examine_source  -> store.get(workspace_id)
+```
+
+Each crash happened before any work, so the lease simply expired and the job was
+re-claimed ten minutes later — a crash loop that looked exactly like a long-running
+job. `attempt_count` reached `MAX_ATTEMPTS` (3) and both jobs went terminal `failed`
+with `retry ceiling of 3 reached`, having produced no evidence. The customer surface
+read "Being examined" throughout; `/developer/diagnostics` reported "No diagnostics
+captured yet" for the whole six hours.
+
+Two jobs were confirmed lost this way. The store also held **6 failed perception and
+5 failed visual jobs** in total at that moment — the other nine were not investigated
+and are NOT claimed here to share this cause, only recorded as the surrounding state.
+
+Restarting the workers on current code fixed it completely: the same bytes (identical
+source SHA-256) that had burned three attempts to `failed` then read cleanly on the
+**first attempt in 1.55 seconds**, persisting 153 evidence items.
+
+**A worker holding a stale dataclass fails silently, at a distance, hours later, and
+in a queue nobody is watching.** That is why this is one restart step and not four
+optional ones.
 
 ```bash
 ssh ubuntu@<server> "
-  sudo systemctl restart archiosk-go.service &&
-  sudo systemctl status archiosk-go.service --no-pager | head -20 &&
-  sudo journalctl -u archiosk-go.service --since '2 minutes ago' --no-pager | grep -iE 'error|traceback|exception|critical'
+  sudo systemctl restart archiosk-go.service archiosk-perception.service archiosk-visual.service archiosk-founding.service &&
+  sleep 5 &&
+  systemctl is-active archiosk-go.service archiosk-perception.service archiosk-visual.service archiosk-founding.service
+  sudo journalctl -u archiosk-go.service -u archiosk-perception.service -u archiosk-visual.service -u archiosk-founding.service --since '2 minutes ago' --no-pager | grep -iE 'error|traceback|exception|critical'
 "
 ```
 
-The grep for errors should return nothing. Then:
+`is-active` must print **`active` four times**. Restarting them in one `systemctl`
+invocation is deliberate: it is a single transaction, so a unit that fails to come
+back is not hidden behind a later unit's success. The `journalctl` line deliberately
+runs on its own rather than chained with `&&`, so that a unit which did NOT come back
+still shows you the logs explaining why — the moment you most need them is the moment
+a `&&` chain would swallow them.
+
+The grep for errors should return nothing. **`TypeError: ProjectWorkspace.__init__()
+got an unexpected keyword argument` appearing here means a worker did not pick up the
+new code — do not proceed, and do not dismiss it as noise from an unrelated queue.**
+
+If a unit is not installed on this host, `systemctl restart` fails the whole command
+rather than skipping it. That is intended: a worker this document lists and the server
+does not have is a discrepancy to resolve deliberately, not to paper over with `|| true`.
+
+Then:
 
 ```bash
 ssh ubuntu@<server> "curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://127.0.0.1:8000/health"
@@ -754,9 +822,17 @@ ssh ubuntu@<server> "
     --exclude='__pycache__/' --exclude='instance/' \
     --chown=archiosk:archiosk \
     /var/www/archiosk-backup-<previous-short-hash>/ /var/www/archiosk/ &&
-  sudo systemctl restart archiosk-go.service
+  sudo systemctl restart archiosk-go.service archiosk-perception.service archiosk-visual.service archiosk-founding.service &&
+  sleep 5 &&
+  systemctl is-active archiosk-go.service archiosk-perception.service archiosk-visual.service archiosk-founding.service
 "
 ```
+
+**All four, for the same reason as step 9, and in this direction it matters just as
+much.** A rollback moves the dataclass BACKWARD: workers left running the newer code
+would then be reading workspace JSON written by an older web tier, and any worker not
+restarted here keeps the very code the rollback is trying to withdraw. `is-active`
+must print `active` four times.
 
 Then repeat the step-7 health verification.
 
