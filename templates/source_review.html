@@ -4,7 +4,26 @@
 {% block title %}Source review — ARCHIOSK{% endblock %}
 {% block extra_head %}{{ super() }}<link rel="stylesheet" href="{{ url_for('static', filename='css/survey_evaluation.css') }}">{% endblock %}
 {% block content %}<main class="survey-evaluation">
-<header><h1>Source review: {{ report.source.name }}</h1><p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'REAL PROJECT DATA — review does not grant authority' }}</p>
+<header><h1>Source review: {{ report.source.name }}</h1>
+{# CLAUDE-DOCSRC-03 / CLAUDE-DOCUI-04. The heading is the WORK-ITEM name and is
+   renamed by intake numbering, so on its own it cannot tell a reviewer which
+   file they are looking at - "Existentialism 1" names a position in a batch,
+   not a document. The uploaded filename is shown beside it, never instead of
+   it.
+
+   A LEGACY SOURCE READS "[Not recorded]" AND NOTHING ELSE IS OFFERED. Every
+   remaining trace of its filename is lossy - `file_path` holds
+   secure_filename(original), the display name has already been renamed - so
+   any value shown here would be a guess presented as provenance, which
+   constitutional invariant #3 forbids. An honest blank is the product
+   requirement, not a placeholder awaiting a better answer.
+
+   `.get` rather than attribute access: a Source persisted before the field
+   existed is a plain dict with no such key (the CLAUDE-P40-C shape), and this
+   must read as absent rather than raise. #}
+<p>Original filename: {% if report.source.get('original_filename') %}{{ report.source.get('original_filename') }}{% else %}[Not recorded]{% endif %}</p>
+{% if not report.source.get('original_filename') %}<p>Registered before the uploaded filename was retained, or not created from an uploaded file. It is not reconstructed from the stored file name, the display name, or any log.</p>{% endif %}
+<p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'REAL PROJECT DATA — review does not grant authority' }}</p>
 <a href="{{ back_url }}">Back to kernel / case</a>{% include 'components/review_reload.html' %}</header>
 <section><h2>Objective and governed state</h2><p>Inspect capture distortion, review anchored readings, and preserve unresolved propositions.</p>
 <p>Source {{ report.source.id }} · Consumer {{ report.result.id|default('NOT_YET_EVALUATED') }} · {{ report.result.state|default('UNRESOLVED') }}</p>

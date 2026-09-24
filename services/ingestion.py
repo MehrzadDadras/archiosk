@@ -1207,6 +1207,11 @@ def attach_document_shop_sources(app, workspace, files, *, owner: str,
 
         source = store.add_source(
             workspace, name=filename, file_path=str(stored_path),
+            # CLAUDE-DOCSRC-03. `name` is the same string right now and will not
+            # stay that way: routes/portal.py renames this whole batch into work
+            # items ("Existentialism 1".."Existentialism 4") as soon as it knows
+            # how many files arrived. This is the copy that survives that.
+            original_filename=filename,
             kind=SOURCE_KIND_UNCLASSIFIED, file_hash=digest,
             intake_order=order, governance_log=governance_log,
             actor=actor or _DEFAULT_ACTOR)
@@ -1362,6 +1367,10 @@ def ingest_folder_upload(
 
         source = store.add_source(
             workspace, name=safe_name, file_path=str(stored_path),
+            # CLAUDE-DOCSRC-03: `filename`, not `safe_name`. secure_filename has
+            # already turned "Etude sur l'etre.pdf" into "Etude_sur_letre.pdf" by
+            # this line, and that substitution is not reversible.
+            original_filename=filename,
             kind=SOURCE_KIND_PROJECT_DOCUMENT,
             file_hash=hashlib.sha256(raw_bytes).hexdigest(),
             origin_type=SOURCE_ORIGIN_TYPE_UPLOAD, origin_reference=relative_path,
@@ -1501,6 +1510,7 @@ def reconcile_data_room_upload(
 
         source = store.add_source(
             workspace, name=safe_name, file_path=str(stored_path),
+            original_filename=filename,  # CLAUDE-DOCSRC-03, as above
             kind=SOURCE_KIND_PROJECT_DOCUMENT, file_hash=file_hash,
             origin_type=SOURCE_ORIGIN_TYPE_UPLOAD, origin_reference=relative_path,
             folder_id=folder_id, governance_log=governance_log, actor=actor or _DEFAULT_ACTOR,

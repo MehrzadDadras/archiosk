@@ -1500,6 +1500,31 @@ class Source:
     name: str
     added_at: str
     file_path: Optional[str] = None  # relative to the workspace's binary store, drawings only
+    # CLAUDE-DOCSRC-03: the filename the person actually uploaded, exactly as
+    # their machine spelled it - spaces, accents, punctuation and case intact.
+    #
+    # IT IS NOT `name`, AND THAT IS THE POINT. `name` is the DISPLAY identity
+    # and is deliberately renamed: CLAUDE-DOCUMENT-UPLOAD-01 renumbers a batch
+    # into work items after intake, so four uploaded files become "Project
+    # 1".."Project 4". Before this field existed that rename was the ONLY
+    # record of what arrived, and it overwrote it - the original was then
+    # unrecoverable, because `file_path` holds `secure_filename(original)`,
+    # which turns "Existentialism and Human Emotions.pdf" into
+    # "Existentialism_and_Human_Emotions.pdf" and cannot be reversed. The
+    # governance log did not carry it either (`source_registered` records
+    # source_id/kind/document_id; `source_identity_updated` records source_id).
+    #
+    # WRITTEN ONCE, AT INTAKE, BY add_source AND get_or_create. Nothing renames
+    # it - update_source_identity does not take it and must not set it - so it
+    # stays true about what arrived however often the display name changes.
+    #
+    # None is an HONEST GAP, never a reconstruction: it means either a Source
+    # registered before this field existed, or one with no uploaded file behind
+    # it at all (a Text Record, a derived preview, an evaluation specimen). It
+    # is never back-filled from `file_path`, because a sanitized derivative
+    # presented as the original would be a provenance claim that is false -
+    # governance/constitutional-invariants.md #3.
+    original_filename: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     note: Optional[str] = None
@@ -8973,6 +8998,13 @@ class CaseWorkspaceStore:
                 kind=register_document_source.get(
                     "kind", SOURCE_KIND_UNCLASSIFIED),
                 name=register_document_source["filename"],
+                # CLAUDE-DOCSRC-03. The SAME value as `name` at this instant,
+                # and deliberately stored twice rather than deduplicated:
+                # `name` is about to be renamed into a work-item label by
+                # routes/portal.py's batch numbering, and `original_filename`
+                # is what must survive that. Two fields that start equal and
+                # are then allowed to diverge is the point, not a redundancy.
+                original_filename=register_document_source["filename"],
                 added_at=register_document_source.get("ingested_at") or _now(),
                 note=(
                     f"{register_document_source.get('requirement_count', 0)} requirements, "
@@ -11084,6 +11116,7 @@ class CaseWorkspaceStore:
         name: str,
         file_path: str,
         kind: str,
+        original_filename: Optional[str] = None,
         width: Optional[int] = None,
         height: Optional[int] = None,
         document_id: Optional[str] = None,
@@ -11127,6 +11160,7 @@ class CaseWorkspaceStore:
             name=name,
             added_at=_now(),
             file_path=file_path,
+            original_filename=original_filename,
             width=width,
             height=height,
             document_id=document_id,
@@ -11230,9 +11264,16 @@ class CaseWorkspaceStore:
         "Project 1" depends on how many files arrived.
 
         IT DOES NOT TOUCH THE STORED FILE. `file_path`, `file_hash`, the bytes
-        on disk and the original filename are all untouched by this parameter,
+        on disk and `original_filename` are all untouched by this parameter,
         and a test asserts it - provenance, evidence identity and source
         traceability hang off those, never off the display name.
+
+        CLAUDE-DOCSRC-03 CORRECTION. The three sentences above used to end
+        "...and the original filename are all untouched", which was true of the
+        bytes and FALSE of the filename: no field held it, so renaming `name`
+        destroyed the only copy. `original_filename` now holds it, this method
+        deliberately takes no parameter for it, and it must never acquire one -
+        an intake fact that a later rename can edit is not an intake fact.
         """
         source = self._find(workspace.sources, source_id)
         if source is None:
