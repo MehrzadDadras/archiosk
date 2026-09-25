@@ -15,15 +15,24 @@
 
    Every sentence here describes the WORK, never the architecture. No As-Read,
    no Spin, no marks, no sheet grammar, no container state. #}
+{# MASTERUI: in the Master Workspace this page's local navigation and actions
+   are Master commands (FILE > Open My Documents, TRACE > Analysis History,
+   DOCUMENT > Review Source, and the identity line's Open Original / Examine /
+   Delete), and its conversation sits in the GO anchor - so the local copies
+   are not rendered there. RESERVED for deletion at permanent cutover. #}
+{% if not master_ui %}
 <p class="mono" data-ui-ref="document-shop.result.breadcrumb">
     <a href="{{ url_for('portal.document_shop_jobs') }}"
        data-ui-ref="document-shop.result.back-top">&larr; My documents</a>
 </p>
+{% endif %}
 
 <h1 class="np-page-title" data-ui-ref="document-shop.result.page-title">{{ result.name }}</h1>
+{% if not master_ui %}
 {% include 'components/review_reload.html' %}
 <a href="{{ url_for('portal.document_shop_analysis_history', project_id=project_id) }}">Analysis history</a>
 {% if session.get('role') == 'admin' and session.get('developer_mode') and result.source_id %}<p><a href="{{ url_for('workspace.source_review', project_id=project_id, source_id=result.source_id) }}">Review source frame, machine readings and unresolved propositions</a></p>{% endif %}
+{% endif %}
 
 {# CLAUDE-SURVEY-REFERENCE-01: the state, and only the state.
 
@@ -92,7 +101,7 @@
    Delete still goes through the confirmation page - this button posts to the
    same route the disclosure does, and that route asks before it removes
    anything. A <div>, not a <p>, because a form may not sit inside one. #}
-{% if result.source_id %}
+{% if result.source_id and not master_ui %}
 <div class="ds-doc-actions" data-ui-ref="document-shop.result.doc-actions">
     <a class="btn" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.source_id, download=1) }}"
        title="{{ result.filename }}"
@@ -349,6 +358,7 @@
 </details>
 {% endif %}
 
+{% if not master_ui %}{% block ds_conversation %}
 {# CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: the continuation.
 
    Placed BELOW the result and above the way onward, because it is a
@@ -504,8 +514,10 @@
         Everything already found above was worked out then and does not change.
     </p>
 </details>
+{% endblock %}{% endif %}
 
 {# Section 7: there is always a way onward. #}
+{% if not master_ui %}
 <p data-ui-ref="document-shop.result.next">
     <a class="btn btn-primary" href="{{ url_for('portal.document_shop_jobs') }}"
        data-ui-ref="document-shop.result.back">Back to my documents</a>
@@ -514,7 +526,11 @@
        data-ui-ref="document-shop.result.another">Upload another document</a>
     {% endif %}
 </p>
+{% endif %}
 {% endblock %}
+
+{# MASTERUI: the document's conversation, in the fixed GO anchor. #}
+{% block master_go %}{{ self.ds_conversation() }}{% endblock %}
 
 {% block extra_scripts %}
 {# CLAUDE-EXAMINATION-ACTIVITY-01: loaded only while something is running, so a

@@ -1,0 +1,247 @@
+/* MASTERUI-PREVIEW: one continuous Master Workspace.
+ *
+ * Loaded only when the Master shell is on (a page opt-in or the admin-only
+ * session preview) and scoped to body[data-master-shell="on"], so no other
+ * render changes. Tokens only - colour, type and spacing stay in tokens.css,
+ * and the accepted Deep Ocean appearance is untouched.
+ *
+ * THE RULE: one visual field. Navigator, Work, Context and GO keep fixed
+ * positions, but they read as columns of one page - one surface colour,
+ * separated by whitespace and at most a single hairline, never boxed panes.
+ */
+
+body[data-master-shell="on"] {
+    --master-hairline: 1px solid var(--border);
+}
+
+/* -- One surface -------------------------------------------------------- */
+body[data-master-shell="on"] .app-shell,
+body[data-master-shell="on"] .app-shell-body,
+body[data-master-shell="on"] .launcher-panel,
+body[data-master-shell="on"] .workspace-main-column,
+body[data-master-shell="on"] .app-main,
+body[data-master-shell="on"] .workspace-right-column,
+body[data-master-shell="on"] .chat-region,
+body[data-master-shell="on"] .workspace-topbar,
+body[data-master-shell="on"] .master-context,
+body[data-master-shell="on"] .master-go,
+body[data-master-shell="on"] .identity-bar,
+body[data-master-shell="on"] .status-bar {
+    background: var(--surface-primary);
+    box-shadow: none;
+}
+
+body[data-master-shell="on"] .launcher-panel { border-right: 0; }
+body[data-master-shell="on"] .panel-divider { background: transparent; border: 0; border-left: var(--master-hairline); }
+body[data-master-shell="on"] .workspace-right-column,
+body[data-master-shell="on"] .workspace-right-column * { border-color: transparent; }
+body[data-master-shell="on"] .chat-region { border-top: var(--master-hairline); }
+body[data-master-shell="on"] .workspace-topbar { border-bottom: 0; }
+
+/* The remaining working toolbar (document controls, Project Context) sits
+   quietly under the identity line; its Account menu is the ARCHIOSK menu's. */
+body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) { min-height: 0; padding-top: 0; padding-bottom: 0; }
+body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref="menu.account"] { display: none; }
+
+/* -- Master Menu -------------------------------------------------------- */
+.master-topbar {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4) 0;
+    font-family: var(--font-body);
+}
+.master-app-mark {
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    list-style: none;
+    padding: var(--space-1) var(--space-2) var(--space-1) 0;
+}
+.master-families {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 0;
+}
+.master-family > summary {
+    list-style: none;
+    cursor: pointer;
+    font-size: var(--text-xs);
+    letter-spacing: 0.02em;
+    padding: var(--space-1) var(--space-2);
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+.master-family > summary::-webkit-details-marker,
+.master-app > summary::-webkit-details-marker { display: none; }
+.master-family.is-current > summary { box-shadow: inset 0 -2px 0 var(--highlight-orange); }
+.master-family, .master-app { position: relative; }
+.master-family > ul, .master-app > ul {
+    position: absolute;
+    z-index: 60;
+    top: 100%;
+    left: 0;
+    min-width: 15rem;
+    margin: 0;
+    padding: var(--space-2) 0;
+    list-style: none;
+    background: var(--surface-primary);
+    border: var(--master-hairline);
+}
+.master-item > a,
+.master-item > button,
+.master-item > form > button,
+.master-item > span[aria-disabled] {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: var(--space-1) var(--space-3);
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    background: none;
+    border: 0;
+    text-decoration: none;
+    cursor: pointer;
+}
+.master-item > form { margin: 0; }
+.master-item > a:hover, .master-item > button:hover, .master-item > form > button:hover { background: var(--surface-hover); }
+.master-item.is-current > a { box-shadow: inset 2px 0 0 var(--highlight-orange); }
+.master-item.is-grey > span[aria-disabled] { color: var(--text-disabled); cursor: default; }
+.master-reason {
+    display: block;
+    padding: 0 var(--space-3) var(--space-1);
+    font-size: var(--text-2xs);
+    color: var(--text-secondary);
+}
+.master-item > button[disabled] { color: var(--text-disabled); cursor: default; }
+.master-break { display: none; }
+.master-families-toggle { display: none; }
+
+/* 768-1279px: the same 19 families in the same order, on two rows with a
+   FIXED break before CHECK - never an automatic wrap. */
+@media (max-width: 1279px) {
+    .master-families { flex-wrap: wrap; }
+    .master-break { display: block; flex-basis: 100%; height: 0; }
+}
+
+/* Phone: one Menu button opens a fixed three-column grid of all 19, in order. */
+@media (max-width: 767px) {
+    .master-families-toggle {
+        display: inline-block;
+        font: inherit;
+        font-size: var(--text-xs);
+        background: none;
+        border: var(--master-hairline);
+        padding: var(--space-1) var(--space-2);
+        color: var(--text-primary);
+    }
+    .master-families { display: none; }
+    .master-families[data-open] {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        position: absolute;
+        z-index: 70;
+        left: 0;
+        right: 0;
+        top: 100%;
+        padding: var(--space-2);
+        background: var(--surface-primary);
+        border-bottom: var(--master-hairline);
+    }
+    .master-families[data-open] .master-break { display: none; }
+    .master-topbar { position: relative; flex-wrap: wrap; }
+    .master-family > ul { position: static; min-width: 0; border: 0; }
+}
+
+/* -- Identity line ------------------------------------------------------ */
+.identity-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    padding: var(--space-2) var(--space-4) var(--space-3);
+    border-bottom: var(--master-hairline);
+}
+.identity-bar-path { margin: 0; font-size: var(--text-md); }
+.identity-bar-container { font-family: var(--font-display); font-weight: 500; color: var(--text-primary); }
+.identity-bar-code, .identity-bar-original, .identity-bar-operation, .identity-bar-empty { color: var(--text-secondary); font-size: var(--text-sm); }
+.identity-bar-original::before { content: "("; }
+.identity-bar-original::after { content: ")"; }
+.identity-bar-separator { color: var(--text-secondary); padding: 0 var(--space-1); }
+.identity-bar-source { color: var(--text-primary); }
+.identity-bar-operation { padding-left: var(--space-2); }
+.identity-bar-actions { display: flex; gap: var(--space-2); align-items: center; }
+.master-action-form { margin: 0; }
+.master-action {
+    font: inherit;
+    font-size: var(--text-sm);
+    padding: var(--space-1) var(--space-3);
+    background: none;
+    border: var(--master-hairline);
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+.master-action.is-grey { color: var(--text-disabled); cursor: default; }
+
+/* -- Context and GO anchors on pages without Eye/Toolbox or a conversation - */
+.master-context {
+    flex: 0 0 17rem;
+    padding: var(--space-4);
+    border-left: var(--master-hairline);
+    font-size: var(--text-sm);
+}
+.master-anchor-label {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+.master-facts { margin: 0; }
+.master-facts dt { color: var(--text-secondary); font-size: var(--text-xs); margin-top: var(--space-2); }
+.master-facts dd { margin: 0; color: var(--text-primary); }
+.master-empty { color: var(--text-secondary); }
+.master-go {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+    padding: var(--space-3) var(--space-4);
+    border-top: var(--master-hairline);
+    font-size: var(--text-sm);
+}
+.master-go .master-anchor-label { margin: 0; }
+
+/* -- Status line -------------------------------------------------------- */
+.status-bar { display: flex; gap: var(--space-4); padding: var(--space-1) var(--space-4); font-size: var(--text-xs); color: var(--text-secondary); }
+.status-bar:empty { padding: 0; }
+
+@media (max-width: 767px) {
+    .master-context { flex-basis: auto; border-left: 0; border-top: var(--master-hairline); }
+}
+
+/* -- Surfaces that brought their own boxes into the one field ------------ */
+/* Inspect pages (source review, kernel mapping, GO attention, survey
+   evaluation) and the project chooser's gateway card: same content, no
+   card/section boxes, one surface - hierarchy by type and spacing only. */
+body[data-master-shell="on"] .survey-evaluation,
+body[data-master-shell="on"] .survey-evaluation section,
+body[data-master-shell="on"] .gateway-card,
+body[data-master-shell="on"] .gateway-card-wide {
+    background: var(--surface-primary);
+    border: 0;
+    box-shadow: none;
+}
+body[data-master-shell="on"] .survey-evaluation section + section { border-top: var(--master-hairline); }
+
+/* -- Navigator anchor for sessions without the staff Lists column -------- */
+.master-navigator { flex: 0 0 15rem; padding: var(--space-4); font-size: var(--text-sm); }
+.master-nav-list { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+.master-nav-list li { padding: var(--space-1) 0; color: var(--text-primary); }
+.master-nav-list li[aria-current] { box-shadow: inset 2px 0 0 var(--highlight-orange); padding-left: var(--space-2); }
+@media (max-width: 767px) { .master-navigator { flex-basis: auto; } }

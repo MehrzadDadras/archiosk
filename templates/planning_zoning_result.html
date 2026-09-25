@@ -54,7 +54,7 @@
 <h1 class="np-page-title" data-ui-ref="planning-zoning.result.page-title">Pre-Design Planning &amp; Zoning Result</h1>
 {% if saved_study %}
 <section><h2>Saved study</h2><p>Saved {{ saved_study.saved_at }}. Evidence retrieved {{ saved_study.analysis_timestamp or 'date not recorded' }}. This is a preserved snapshot, not a current municipal check.</p>
-<a href="{{ url_for('planning_zoning.saved_studies',project_id=study_project_id) }}">Saved Planning &amp; Zoning studies</a>
+{% if not master_ui %}<a href="{{ url_for('planning_zoning.saved_studies',project_id=study_project_id) }}">Saved Planning &amp; Zoning studies</a>{% endif %}{# MASTERUI: MODEL > Planning Studies / Planning & Zoning Analysis #}
 {% for format in ['pdf','docx'] %}{% if 'report.' ~ format in saved_study.artifacts %}
 <a href="{{ url_for('planning_zoning.study_artifact',project_id=study_project_id,study_id=saved_study.id,name='report.' ~ format) }}">Download saved {{ 'Word' if format=='docx' else 'PDF' }}</a>
 {% endif %}{% endfor %}
@@ -484,8 +484,8 @@
 
 {# Section 13 --------------------------------------------------------- #}
 <nav class="pz-group" data-ui-ref="planning-zoning.result.actions" aria-label="Result actions">
-    <a class="btn btn-primary" href="{{ url_for('planning_zoning.planning_zoning') }}"
-       data-ui-ref="planning-zoning.result.back">Back to address</a>
+    {% if not master_ui %}<a class="btn btn-primary" href="{{ url_for('planning_zoning.planning_zoning') }}"
+       data-ui-ref="planning-zoning.result.back">Back to address</a>{% endif %}
     {# Both formats use the same read-only retained-state download route. #}
     {% if exportable and (study_token or view.preview) %}
     <form method="get" action="{{ url_for('planning_zoning.export_result') }}"

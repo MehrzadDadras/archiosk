@@ -5,18 +5,16 @@
    MAX_CHUNKED_UPLOAD_MB (config.py), and CHUNK_BYTES (static/js/chunked_upload.js).
    Restating a limit here that the code does not enforce would make this page
    the least trustworthy thing in the product.
-#}<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>File types &amp; limits &mdash; Help</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+#}{# MASTERUI: in the Master Workspace this guide renders inside the one shell;
+   otherwise inside help/_standalone.html, the same head and body.pm as before. #}
+{% extends "base.html" if master_ui else "help/_standalone.html" %}
+{% block title %}File types &amp; limits &mdash; Help{% endblock %}
+{% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
-</head>
-<body class="pm">
+{% endblock %}
+{% block content %}<div class="pm help-page">
 
 {% import "components/fish_tank_container.html" as tank %}
 {{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
@@ -146,5 +144,4 @@
     <a href="{{ url_for('help_center.index') }}">&larr; All guides</a>
 </p>
 
-</body>
-</html>
+</div>{% endblock %}

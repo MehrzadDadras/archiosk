@@ -1,0 +1,13 @@
+{# MASTERUI: the classic standalone frame every Help guide used to repeat in
+   full. A guide extends this outside the Master Workspace and base.html inside
+   it, with the same three blocks either way. #}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{% block title %}Help &mdash; Archiosk{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+{% block extra_head %}{% endblock %}
+</head>
+<body class="pm">{% block content %}{% endblock %}</body>
+</html>

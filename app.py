@@ -1038,6 +1038,8 @@ def _register_context_processors(app: Flask) -> None:
 
     from jinja2 import pass_context
 
+    from services.auth import is_admin
+
     @app.context_processor
     def inject_ui_identity():
         """MASTERUI-BLOCK1: `ui_identity()`, the one answer to "what is open".
@@ -1047,11 +1049,45 @@ def _register_context_processors(app: Flask) -> None:
         context. base.html calls it once; every identity surface then shows the
         same resolved values instead of each building its own expression.
         """
+        from flask import session
+
         @pass_context
         def ui_identity(ctx):
             return resolve_ui_identity(ctx)
 
-        return {"ui_identity": ui_identity}
+        @pass_context
+        def master_menu(ctx):
+            from flask import request, url_for
+
+            from services.auth import is_admin, user_is_document_shop_customer
+            from services.master_commands import Ctx, resolve_master_menu
+            identity = ctx.get("identity") or resolve_ui_identity(ctx)
+            return resolve_master_menu(Ctx(
+                identity=identity, endpoint=request.endpoint, args=request.args.to_dict(),
+                admin=is_admin(), developer=is_admin() and bool(session.get("developer_mode")),
+                customer=user_is_document_shop_customer(), username=session.get("username"),
+                result=ctx.get("result"), url_for=url_for, path=request.path))
+
+        return {
+            "ui_identity": ui_identity,
+            "master_menu": master_menu,
+            # MASTERUI-PREVIEW: the Product Owner's session-scoped preview of
+            # the Master UI on every page. Admin-only by construction: the flag
+            # is read only while is_admin() holds, so a stale session value can
+            # never show it to anyone else, and customers never see it.
+            "master_ui_preview": is_admin() and bool(session.get("master_ui_preview")),
+            # MASTERUI: the ONE switch every migrated surface reads. Today it is
+            # the admin preview; MASTER_UI_ALL (default off) is the permanent
+            # cutover for everyone, customers included - flipping it is the
+            # whole cutover, with no template left to change.
+            "master_ui": bool(app.config.get("MASTER_UI_ALL")) or (
+                is_admin() and bool(session.get("master_ui_preview"))),
+        }
+
+
+def _GENERATED_ORIGIN_TYPES():
+    from services.case_workspace import GENERATED_SOURCE_ORIGIN_TYPES
+    return GENERATED_SOURCE_ORIGIN_TYPES
 
 
 def resolve_ui_identity(values) -> dict:
@@ -1102,7 +1138,18 @@ def resolve_ui_identity(values) -> dict:
                  or getattr(document, "filename", None) or project_id),
         "code": getattr(workspace, "project_code", None) or None,
         "kind": "documents" if getattr(workspace, "container_state", None) == "black_box" else "project",
+        # MASTERUI-PREVIEW: what the Master Menu needs to decide applicability
+        # (Compare needs two documents; Re-analyze is the owner's). Live,
+        # original sources only - generated references are analysis outputs.
+        "source_ids": [s["id"] for s in (getattr(workspace, "sources", None) or [])
+                       if isinstance(s, dict) and s.get("id") and not s.get("removed_at")
+                       and s.get("origin_type") not in _GENERATED_ORIGIN_TYPES()],
+        "owned": bool(session.get("username")) and getattr(workspace, "owner", None) == session.get("username"),
     }
+    # The Navigator's list for this container: the same live originals, named.
+    project["sources"] = [{"id": s["id"], "name": s.get("name") or ""}
+                          for s in (getattr(workspace, "sources", None) or [])
+                          if isinstance(s, dict) and s.get("id") in project["source_ids"]][:50]
 
     source_id = None
     for key in ("selected_source", "source"):

@@ -20,7 +20,7 @@
    Project appears here. #}
 {% extends "gateway_base.html" %}
 
-{% block gateway_back_action %}
+{% block gateway_back_action %}{% if not master_ui %}{# MASTERUI: FILE / PORTFOLIO in the Master Workspace #}
 {# CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): a live report named this
    page as somewhere a user can land unintentionally (or find zero
    Projects) with no visible way back, having to hunt at the bottom of
@@ -50,7 +50,7 @@
     }
 })();
 </script>
-{% endblock %}
+{% endif %}{% endblock %}
 
 {% block gateway_title %}Open a Project &mdash; Archiosk{% endblock %}
 {% block gateway_subtitle %}<p class="gateway-subtitle">Choose the Project you want to open</p>{% endblock %}

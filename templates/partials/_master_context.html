@@ -1,0 +1,20 @@
+{# MASTERUI-PREVIEW: the Context anchor on pages that have no Eye/Toolbox
+   column. Same position as that column, same surface - so the right-hand
+   anchor never disappears when the page changes. Facts come from `identity`
+   only; the history link is the same Master command TRACE ▸ Analysis History. #}
+<aside class="master-context" data-master-shell="context" aria-label="Context">
+    <h2 class="master-anchor-label">Context</h2>
+    {% if identity.project %}
+    <dl class="master-facts">
+        <dt>{{ 'Documents' if identity.project.kind == 'documents' else 'Project' }}</dt>
+        <dd>{{ identity.project.name }}{% if identity.project.code %} · {{ identity.project.code }}{% endif %}</dd>
+        {% if identity.source %}
+        <dt>Document</dt><dd>{{ identity.source.name }}</dd>
+        <dt>Uploaded as</dt><dd>{{ identity.source.original_filename or 'Not recorded' }}</dd>
+        {% endif %}
+        <dt>Documents in it</dt><dd>{{ identity.project.source_ids | length }}</dd>
+    </dl>
+    {% else %}
+    <p class="master-empty">Open a project or document to see its context, history and evidence here.</p>
+    {% endif %}
+</aside>

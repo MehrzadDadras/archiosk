@@ -6,8 +6,8 @@
 {% block content %}
 <main class="survey-evaluation">
 <header><p>Stage 1 · Admin · Developer Mode</p><h1>Generic kernel mapping</h1><p>{{ project_title }}</p>
-<nav>{% if report.project_id or run_id %}<a href="{{ url_for('portal.evaluation_go_attention', run_id=run_id) if run_id is defined and run_id else url_for('workspace.go_attention', project_id=report.project_id) }}">Governed attention</a> ? {% endif %}<a href="{{ back_url }}">Back to case</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Projects, evaluation cases and runtime observations</a></nav>
-<p>Objective: inspect how existing records serve the generic kernel. Selecting an item changes this inspection only.</p>{% include 'components/review_reload.html' %}</header>
+{% if not master_ui %}<nav>{% if report.project_id or run_id %}<a href="{{ url_for('portal.evaluation_go_attention', run_id=run_id) if run_id is defined and run_id else url_for('workspace.go_attention', project_id=report.project_id) }}">Governed attention</a> ? {% endif %}<a href="{{ back_url }}">Back to case</a> · <a href="{{ url_for('portal.survey_evaluation') }}">Projects, evaluation cases and runtime observations</a></nav>{% endif %}{# MASTERUI: reached through the Master Menu in the Master Workspace #}
+<p>Objective: inspect how existing records serve the generic kernel. Selecting an item changes this inspection only.</p>{% if not master_ui %}{% include 'components/review_reload.html' %}{% endif %}</header>
 {% if report.state != 'AVAILABLE' %}<section><h2>{{ report.state }}</h2><p>{{ report.reason }}</p></section>{% else %}
 <section><h2>Inputs and selection</h2><p>{{ 'EVALUATION_INPUT — no canonical project authority' if report.evaluation_only else 'REAL PROJECT DATA — authority remains record-specific' }} · Workspace version {{ report.version }}</p>
 <form method="get" action="{{ mapping_url }}"><label for="kernel-item">Existing item</label><select id="kernel-item" name="item">

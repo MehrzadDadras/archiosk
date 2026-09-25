@@ -3,19 +3,17 @@
    Describes the coordination desk as it is actually built. The vector standard
    and the relationship bases below are real, recorded decisions
    (docs/DECISION_PROVENANCE_LEDGER.md DPL-0005), not aspirations.
-#}<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Spatial coordination &mdash; Help</title>
-    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='app-icon.svg') }}?v={{ static_version }}">
+#}{# MASTERUI: in the Master Workspace this guide renders inside the one shell;
+   otherwise inside help/_standalone.html, the same head and body.pm as before. #}
+{% extends "base.html" if master_ui else "help/_standalone.html" %}
+{% block title %}Spatial coordination &mdash; Help{% endblock %}
+{% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/fish_tank.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/public_footer.css') }}?v={{ static_version }}">
-</head>
-<body class="pm">
+{% endblock %}
+{% block content %}<div class="pm help-page">
 
 {% import "components/fish_tank_container.html" as tank %}
 {{ tank.scope_hud([{'label': 'Help', 'href': url_for('help_center.index')},
@@ -134,5 +132,4 @@
 {% set footer_minimal = true %}
 {% set footer_explore = true %}
 {% include "components/public_footer.html" %}
-</body>
-</html>
+</div>{% endblock %}

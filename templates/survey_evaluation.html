@@ -6,7 +6,7 @@
 <header><p class="ui-eyebrow">GO Review Workspace</p><h1>GO</h1>
 <p>Investigate a question, understand the result, and inspect the evidence behind it.</p>
 <nav><a href="{{ url_for('portal.survey_evaluation') }}">Choose a review task</a></nav>
-{% include 'components/review_reload.html' %}</header>
+{% if not master_ui %}{% include 'components/review_reload.html' %}{% endif %}</header>
 {% if not report %}
 {% include 'components/go_review_entry.html' %}
 <details id="review-technical" {% if request.args.get('observation') or request.args.getlist('compare_run') %}open{% endif %}><summary>Technical details — runtime inspection</summary>

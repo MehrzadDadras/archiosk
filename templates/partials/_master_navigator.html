@@ -1,0 +1,20 @@
+{# MASTERUI: the Navigator anchor for a session without the staff Lists
+   column (a Document Shop customer under the Master Workspace). Same place,
+   same surface; it lists the open container's documents from the governed
+   identity, and the desk views are the same FILE commands as the menu. #}
+<nav class="launcher-panel master-navigator" data-master-shell="navigator" aria-label="Navigator">
+    <h2 class="master-anchor-label">Navigator</h2>
+    <ul class="master-nav-list">
+        <li><a href="{{ url_for('portal.document_shop_jobs') }}">My documents</a></li>
+        <li><a href="{{ url_for('portal.document_shop_jobs', view='archive') }}">Archive</a></li>
+        <li><a href="{{ url_for('portal.document_shop_jobs', view='trash') }}">Recently Deleted</a></li>
+    </ul>
+    {% if identity.project %}
+    <h2 class="master-anchor-label">{{ identity.project.name }}</h2>
+    <ul class="master-nav-list">
+        {% for source in identity.project.sources %}
+        <li{% if identity.source and identity.source.id == source.id %} aria-current="true"{% endif %}>{{ source.name }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</nav>

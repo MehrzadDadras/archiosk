@@ -278,6 +278,25 @@ def toggle_developer_ui_reveal():
     return redirect(request.referrer or url_for('portal.index'))
 
 
+@portal_bp.route('/master-ui-preview/toggle', methods=['POST'])
+@admin_required
+def toggle_master_ui_preview():
+    """MASTERUI-PREVIEW: the Product Owner's session-scoped Master UI preview.
+
+    Same shape and the same authorization boundary as Developer Mode: a plain
+    reviewer-session flag behind admin_required, re-checked with is_admin() at
+    render time (app.py), so it can never reach a customer. It changes
+    presentation only - every route keeps its own gates. Returns to the page
+    it was pressed on, so the Product Owner compares the same page both ways;
+    a missing or off-site referrer falls back to Projects.
+    """
+    session['master_ui_preview'] = not session.get('master_ui_preview', False)
+    target = request.referrer or ''
+    if not target.startswith(request.host_url):
+        target = url_for('portal.projects_list')
+    return redirect(target)
+
+
 def _require_developer_tools():
     """Server-side second gate for destructive developer tooling."""
     if not is_admin() or not session.get("developer_mode"):

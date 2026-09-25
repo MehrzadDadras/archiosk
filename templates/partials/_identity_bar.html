@@ -1,25 +1,63 @@
-{# MASTERUI-BLOCK1: the Identity Bar - what is open, always in the same place.
+{# MASTERUI-PREVIEW: the Identity line - what is open and what is being done,
+   always in the same place.
 
-   Every value comes from `identity` (base.html's `ui_identity()`), so the
-   container and source are named ONE way on every page instead of by each
-   page's own expression. The uploaded filename is shown beside the work-item
-   name, never instead of it, and is never reconstructed: absent reads as not
-   recorded (constitutional invariant #3). #}
-{% if identity.project %}
-<div class="identity-bar" data-master-shell="identity" data-identity-kind="{{ identity.project.kind }}">
+   Project · code  ›  Object (uploaded filename)  ·  FAMILY ▸ Operation
+   ...................................................  [object actions]
+
+   Every value comes from `identity` (ui_identity(): the governed records) and
+   `menu.operation` (the Master command that is current). The line is ALWAYS
+   rendered - with nothing open it says so - so the anchor never moves. The
+   uploaded filename is never reconstructed: absent reads "not recorded".
+
+   The action cluster is four fixed slots taken from the same Master
+   commands as the menu (one command, one name, one behaviour): Open Original,
+   Examine / Re-analyze, Compare, Delete. Unavailable slots stay, greyed. #}
+{% set menu = menu or master_menu() %}
+{% set by_id = {} %}
+{% for family in menu.families %}{% for command in family['items'] %}{% set _ = by_id.update({command.id: command}) %}{% endfor %}{% endfor %}
+<div class="identity-bar" data-master-shell="identity"
+     data-identity-kind="{{ identity.project.kind if identity.project else 'none' }}">
     <p class="identity-bar-path">
+        {% if identity.project %}
         <span class="identity-bar-container">{{ identity.project.name }}</span>
         {%- if identity.project.code %} <span class="identity-bar-code">{{ identity.project.code }}</span>{% endif %}
-        {%- if identity.source %}
+        {% if identity.source %}
         <span class="identity-bar-separator" aria-hidden="true">›</span>
         <span class="identity-bar-source">{{ identity.source.name }}</span>
         <span class="identity-bar-original">
             {%- if identity.source.original_filename %}{{ identity.source.original_filename }}
             {%- else %}Original filename not recorded{% endif -%}
         </span>
-        {%- endif %}
+        {% endif %}
+        {% else %}
+        <span class="identity-bar-empty">No project or document open</span>
+        {% endif %}
+        {% if menu.operation %}
+        <span class="identity-bar-operation" data-master-shell="operation">
+            <span aria-hidden="true">·</span> {{ menu.operation.family }} ▸ {{ menu.operation.label }}
+        </span>
+        {% endif %}
     </p>
-    {# The object's action zone. Fixed position, filled by later blocks. #}
-    <div class="identity-bar-actions" data-master-shell="actions"></div>
+    <div class="identity-bar-actions" data-master-shell="actions">
+        {% set examine = by_id['document.examine'] %}
+        {% set primary = examine if examine.state != 'grey' or by_id['document.reanalyze'].state == 'grey' else by_id['document.reanalyze'] %}
+        {% set compare = by_id['compare.documents'] if by_id['compare.documents'].state != 'grey' or by_id['compare.analyses'].state == 'grey' else by_id['compare.analyses'] %}
+        {% for command in [by_id['document.open_original'], primary, compare, by_id['document.remove']] %}
+        {% if command.state == 'grey' %}
+        <span class="master-action is-grey" aria-disabled="true" title="{{ command.reason }}">{{ command.label }}</span>
+        {% elif command.bulk %}
+        <button type="submit" form="document-bulk" name="action" value="{{ command.bulk }}" class="master-action">{{ command.label }}</button>
+        {% elif command.post %}
+        <form method="post" action="{{ command.post }}" class="master-action-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% for name, value in command.fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+            <button type="submit" class="master-action">{{ command.label }}</button>
+        </form>
+        {% elif command.href %}
+        <a class="master-action" href="{{ command.href }}">{{ command.label }}</a>
+        {% elif command.proxy %}
+        <button type="button" class="master-action" data-reuse-control="{{ command.proxy }}">{{ command.label }}</button>
+        {% endif %}
+        {% endfor %}
+    </div>
 </div>
-{% endif %}

@@ -84,17 +84,22 @@
     </script>
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/product_ui.css', v=static_version ~ '-ui-shell-1') }}">
+    {% if (self.master_shell() | trim) == 'on' or master_ui %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/master_workspace.css') }}?v={{ static_version }}">
+    <script src="{{ url_for('static', filename='js/master_workspace.js') }}?v={{ static_version }}" defer></script>
+    {% endif %}
 </head>
-<body data-ui-density="{% block ui_density %}{{ 'inspect' if request.args.get('density') == 'inspect' else 'work' }}{% endblock %}">
+{# MASTERUI-BLOCK1 / MASTERUI-PREVIEW: the Master UI shell is built beside the
+   existing shell. A page opts in with `{% block master_shell %}on{% endblock %}`
+   (defined in <head> as the archiosk-master-shell meta), or an admin turns on
+   the session-scoped Master UI preview (app.py `master_ui_preview`, admin-only
+   by construction). Every other render is exactly as before, and neither
+   `ui_identity()` nor `master_menu()` is called for it. #}
+{% set master_shell = ((self.master_shell() | trim) == 'on') or master_ui %}
+{% set identity = ui_identity() if master_shell else none %}
+{% set menu = master_menu() if master_shell else none %}
+<body data-ui-density="{% block ui_density %}{{ 'inspect' if request.args.get('density') == 'inspect' else 'work' }}{% endblock %}"{% if master_shell %} data-master-shell="on"{% endif %}>
     <div class="blueprint-grid"></div>
-    {# MASTERUI-BLOCK1: the Master UI shell is OPT-IN per page while it is
-       built beside the existing shell. A page opts in with
-       `{% block master_shell %}on{% endblock %}`; every other page renders
-       exactly as before, and `ui_identity()` is not even called for it. The
-       block itself is defined in <head> (the archiosk-master-shell meta), so
-       the opt-in is visible in the DOM and read here via self. #}
-    {% set master_shell = (self.master_shell() | trim) == 'on' %}
-    {% set identity = ui_identity() if master_shell else none %}
 
     {# CLAUDE-DOCUMENT-SHOP-DOOR-01: a Document Shop customer is not operating
        a Project, so the Projects/CAD shell is not their environment. The live
@@ -125,8 +130,8 @@
         {% if master_shell and authenticated %}
         {% include "partials/_master_menu.html" %}
         {% include "partials/_identity_bar.html" %}
-        {% else %}
-        {% if customer_mode %}
+        {% endif %}
+        {% if customer_mode and not master_shell %}
         {# The whole of a customer's navigation. Two destinations, because two
            is all they have - their documents, and the way out. Deliberately
            not a reduced copy of the application menu: a trimmed menubar is
@@ -145,7 +150,7 @@
         {% endif %}
         {% if authenticated and not customer_mode %}
         <div class="workspace-topbar">
-            {% include "_app_menu.html" %}
+            {% if not master_shell %}{% include "_app_menu.html" %}{% endif %}
             {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
                Application Menu): the central region between the
                breadcrumb (.workspace-topbar-identity, above) and
@@ -403,7 +408,6 @@
             </div>
         </div>
         {% endif %}
-        {% endif %}{# master_shell #}
 
         {# CLAUDE-HOME-UNIFY-01: the tray switcher requires an OPEN PROJECT, not
            merely an authenticated session.
@@ -1015,6 +1019,8 @@
            when state is safely persisted" (this stage's own Section 6)
            would be manufacturing a confirmation nothing requires. #}
         <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" data-ui-ref="shell.lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
+        {% elif master_shell and customer_mode %}
+        {% include "partials/_master_navigator.html" %}
         {% else %}
         <!-- True zero state (State 0 - Unauthenticated): the authenticated
              shell (Lists panel, top bar, project/workspace controls) is not
@@ -1110,6 +1116,13 @@
             </div>
             {% block chat %}{% endblock %}
         </div>
+        {% endif %}
+        {% if master_shell and not ((project_id is defined and workspace is defined) or planning_composer_active | default(false)) %}
+        <section class="master-go" data-master-shell="go" aria-label="GO">
+            <span class="master-anchor-label">GO</span>
+            {# A page puts its own conversation here; the default points to one. #}
+            {% block master_go %}{% include "partials/_master_go.html" %}{% endblock %}
+        </section>
         {% endif %}
         </div>
 
@@ -1329,6 +1342,9 @@
                 </div>
             </aside>
         </div>
+        {% endif %}
+        {% if master_shell and not (project_id is defined and workspace is defined) %}
+        {% include "partials/_master_context.html" %}
         {% endif %}
     </div>
 

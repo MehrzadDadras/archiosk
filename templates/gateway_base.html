@@ -14,7 +14,9 @@
    visually centred") without touching the base width login/forgot/
    reset-password's own .gateway-card-compact modifier still relies on.
    ============================================================ #}
-{% extends "gateway_shell.html" %}
+{# MASTERUI: in the Master Workspace the chooser is a state of the one shell,
+   not a separate gateway application. #}
+{% extends "base.html" if master_ui else "gateway_shell.html" %}
 
 {% block title %}{% block gateway_title %}Archiosk{% endblock %}{% endblock %}
 

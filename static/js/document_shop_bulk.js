@@ -9,7 +9,8 @@
   function refresh() {
     const selected = boxes.filter(box => box.checked);
     document.getElementById('document-selected-count').textContent = selected.length + ' selected';
-    document.getElementById('document-bulk-actions').hidden = !selected.length;
+    const actions = document.getElementById('document-bulk-actions');
+    if (actions) actions.hidden = !selected.length;
     const compare = document.getElementById('document-compare');
     if (compare) compare.disabled = selected.length !== 2 || selected.some(box => box.dataset.compatible !== 'true');
     try { sessionStorage.setItem(key, JSON.stringify(selected.map(box => box.value))); } catch (_) {}
@@ -21,7 +22,9 @@
   if (command) command.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.isComposing) {
       event.preventDefault();
-      form.requestSubmit(form.querySelector('button[value="command"]'));
+      // The Ask GO button may sit outside the form (bound by form="document-bulk")
+      // when the Master Workspace hosts it in the GO anchor.
+      form.requestSubmit(document.querySelector('#document-bulk button[value="command"], button[form="document-bulk"][value="command"]'));
     }
   });
   refresh();

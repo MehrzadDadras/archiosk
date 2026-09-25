@@ -214,13 +214,19 @@ class ShellWiringTests(_Case):
         self.assertIn('<meta name="archiosk-master-shell" content="">', html)
         self.assertIn('data-ui-ref="shell.customer-topbar"', html)
 
-    def test_entitlement_hides_what_a_customer_may_never_use(self):
+    def test_role_greys_what_a_customer_may_not_use_and_removes_nothing(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI-PREVIEW, Product Owner Master UI
+        laws 6-8): this asserted that a customer's menu OMITTED staff commands.
+        The Master UI rule is the opposite - role changes applicability, never
+        presence - so those commands are now present, greyed with a reason, and
+        carry no route."""
         self.as_user("cust")
         html = self.render(OPTED_IN, project_id=self.document.project_id)
-        for absent in ("New Project", "Open Projects", "Security", "Diagnostics",
-                       "Developer Tools", "Removed Projects", "Inspect source"):
-            self.assertNotIn(absent, html)
-        self.assertIn("Upload Document", html)
+        for label in ("New Project…", "Open Project…", "Security", "Diagnostics", "Developer Tools"):
+            self.assertIn('>%s</span>' % label, html, label)
+        for route in ("/upload", "/security/", "/developer/diagnostics", "/admin/developer-tools"):
+            self.assertNotIn('href="%s"' % route, html, "a greyed command exposed its route")
+        self.assertIn("Upload Document…", html)
         self.assertIn("Open My Documents", html)
 
     def test_state_greys_in_place_with_a_reason_instead_of_removing(self):
@@ -228,21 +234,28 @@ class ShellWiringTests(_Case):
         without = self.render(OPTED_IN, project_id=self.document.project_id)
         with_source = self.render(OPTED_IN, project_id=self.document.project_id,
                                   source_id=self.attached["id"])
-        self.assertIn('<span aria-disabled="true" title="Open a document first">Open original</span>',
+        self.assertIn('<span aria-disabled="true" title="Open a document first">Open Original</span>',
                       without)
         self.assertIn("/workspace/sources/%s/file" % self.attached["id"], with_source)
-        self.assertNotIn('title="Open a document first">Open original', with_source)
-        # The menu's families do not change with context.
+        self.assertNotIn('title="Open a document first">Open Original', with_source)
+        # The menu's families do not change with context: all 19, in order.
         families = lambda h: [line.split('data-family="')[1].split('"')[0]
                               for line in h.splitlines() if 'data-family="' in line]
         self.assertEqual(families(without), families(with_source))
-        self.assertEqual(families(without), ["archiosk", "file", "view", "document", "help"])
+        self.assertEqual(families(without), [
+            "file", "edit", "view", "document", "data", "query", "model", "market",
+            "compare", "check", "create", "project", "portfolio", "deal",
+            "relationships", "trace", "tools", "window", "help"])
 
-    def test_a_refused_viewer_sees_no_identity_bar(self):
+    def test_a_refused_viewer_keeps_the_anchor_but_learns_nothing(self):
+        """SUPERSEDED DELIBERATELY: the identity line used to disappear for a
+        refused viewer. It is a fixed anchor now, so it stays - saying nothing
+        is open - and still names nothing."""
         self.as_user("stranger")
         html = self.render(OPTED_IN, project_id=self.document.project_id)
         self.assertIn('data-master-shell="menu"', html)
-        self.assertNotIn('data-master-shell="identity"', html)
+        self.assertIn('data-master-shell="identity"', html)
+        self.assertIn("No project or document open", html)
         self.assertNotIn("Castille Survey Set", html)
 
     def test_real_pages_do_not_opt_in_yet(self):

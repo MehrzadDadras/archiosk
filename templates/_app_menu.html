@@ -201,6 +201,12 @@
                                        visible to someone who already passed the gate. #}
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.diagnostics" href="{{ url_for('portal.list_diagnostics') }}">Diagnostics</a>
                                     <a class="workspace-menubar-item" id="project-data-management" data-ui-ref="menu.archiosk.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
+                                    {# MASTERUI-PREVIEW: the Product Owner's way into the Master UI
+                                       preview. Session-scoped, admin-only, returns to this page. #}
+                                    <form method="post" action="{{ url_for('portal.toggle_master_ui_preview') }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.master-ui-preview">Master UI preview</button>
+                                    </form>
                                 </div>
                             </details>
                             {# CLAUDE-DEVELOPER-MENU-01: Developer Mode is its own submenu
