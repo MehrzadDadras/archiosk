@@ -259,13 +259,32 @@ class SurveyReferenceCase(unittest.TestCase):
 
     # -- journey helpers ---------------------------------------------------
 
+    def examine(self, project_id):
+        """Ask for examination, explicitly.
+
+        CLAUDE-MASTERUI-01A: upload no longer starts OCR, visual examination or
+        founding classification by itself, so these fixtures request it the same
+        way the product's own explicit action does - through
+        document_examination, on the existing queues. Nothing about what the
+        workers then do has changed; only who asked.
+
+        Safe to call more than once, and several of these journeys do: job
+        identity is sha256(workspace + source + sha256 + version), so asking
+        again for work already queued or completed finds the same record rather
+        than creating a second one.
+        """
+        from services import document_examination as _dx
+        return _dx.examine_workspace_sources(self.store, project_id)
+
     def upload(self, data, filename, name="226104 1 Castille"):
         with patch.object(BHiveParser, "parse", _fake_parse):
             response = self.client.post("/document-shop", data={
                 "file": (io.BytesIO(data), filename), "name": name,
             }, content_type="multipart/form-data")
         self.assertEqual(response.status_code, 302, response.get_data(as_text=True)[:400])
-        return response.headers["Location"].rstrip("/").split("/")[-1]
+        project_id = response.headers["Location"].rstrip("/").split("/")[-1]
+        self.examine(project_id)
+        return project_id
 
 
     def upload_many(self, payloads, name="Batch of samples"):
@@ -277,7 +296,9 @@ class SurveyReferenceCase(unittest.TestCase):
             }, content_type="multipart/form-data")
         self.assertEqual(response.status_code, 302,
                          response.get_data(as_text=True)[:400])
-        return response.headers["Location"].rstrip("/").split("/")[-1]
+        project_id = response.headers["Location"].rstrip("/").split("/")[-1]
+        self.examine(project_id)
+        return project_id
 
     def vision_stub(self, payload):
         def stub(**kwargs):
@@ -3869,3 +3890,115 @@ class NorthGovernsUseNotOnlyWriting(unittest.TestCase):
         for forbidden in ("examine", "llm", "api_key", "requests"):
             self.assertNotIn(forbidden, source.lower(),
                              "reading a stored graph reached for a model")
+
+
+class ExplicitExamineJourney(SurveyReferenceCase):
+    """CLAUDE-MASTERUI-02. Upload -> View Original -> Examine -> Result, through
+    the real routes, with NOTHING started by the upload itself.
+
+    Deliberately does not use `self.upload`, which asks for examination as a
+    fixture convenience: here the customer's own Examine button is the only
+    thing that may start work, and the test proves nothing else did.
+    """
+
+    FILENAME = "Castille survey.jpg"
+
+    def _all_jobs(self, project_id):
+        from services import founding_classification
+        queues = (self.jobs, self.visual_jobs,
+                  founding_classification.founding_store(str(self.tmp)))
+        return [job for queue in queues for job in queue.for_workspace(project_id)]
+
+    def _upload_only(self, data):
+        with patch.object(BHiveParser, "parse", _fake_parse):
+            response = self.client.post("/document-shop", data={
+                "file": (io.BytesIO(data), self.FILENAME), "name": "226104 1 Castille",
+            }, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 302, response.get_data(as_text=True)[:400])
+        return response.headers["Location"].rstrip("/").split("/")[-1]
+
+    def _page(self, project_id):
+        response = self.client.get("/document-shop/jobs/%s" % project_id)
+        self.assertEqual(response.status_code, 200)
+        return response.get_data(as_text=True)
+
+    def test_the_whole_journey(self):
+        original = survey_jpeg()
+        project_id = self._upload_only(original)
+        source = self.workspace(project_id).sources[0]
+
+        # 1. UPLOAD STARTED NOTHING, and the page says so and offers the act.
+        self.assertEqual(self._all_jobs(project_id), [])
+        result, _d, _w = self.result_for(project_id)
+        self.assertEqual(result["state"], dx.STATE_NOT_EXAMINED)
+        self.assertTrue(result["examinable"])
+        page = self._page(project_id)
+        self.assertIn("Not yet examined", page)
+        examine_url = "/projects/%s/examine" % project_id
+        self.assertIn('action="%s"' % examine_url, page)
+        self.assertNotIn("Needs attention", page)
+
+        # 2. VIEW ORIGINAL: the unchanged bytes, before any examination.
+        response = self.client.get(
+            "/projects/%s/workspace/sources/%s/file" % (project_id, source["id"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, original)
+
+        # 3. EXAMINE, explicitly. Jobs appear, named by the uploaded filename.
+        response = self.client.post(examine_url)
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(response.headers["Location"].endswith(
+            "/document-shop/jobs/%s" % project_id))
+        jobs = self._all_jobs(project_id)
+        self.assertEqual(sorted(j["processing_version"] for j in jobs),
+                         sorted([perception_jobs.PROCESSING_VERSION,
+                                 visual_classification.VISUAL_VERSION]))
+        for job in jobs:
+            self.assertEqual(job["source_name"], self.FILENAME,
+                             "a job carries the storage name, not the uploaded one")
+            self.assertEqual(job["analysis_run_id"], "")
+            self.assertEqual(job["source_id"], source["id"])
+            self.assertEqual(job["source_sha256"], source["file_hash"])
+        self.assertNotIn(examine_url, self._page(project_id),
+                         "Examine is still offered for work already asked for")
+
+        # Asking twice is the same work, not new work.
+        self.client.post(examine_url)
+        self.assertEqual(sorted(j["job_id"] for j in self._all_jobs(project_id)),
+                         sorted(j["job_id"] for j in jobs))
+
+        # 4. OCR + VISUAL RESULT, through the unchanged workers.
+        record = self.run_worker()
+        self.assertEqual(record["state"], perception_jobs.STATE_COMPLETED)
+        result, _d, workspace = self.result_for(project_id)
+        self.assertEqual(result["state"], dx.STATE_RESULT_READY)
+        self.assertFalse(result["examinable"])
+        visual = dx.visual_reading(workspace, source["id"])
+        self.assertEqual(visual["classification"], "LIKELY_SURVEY")
+        page = self._page(project_id)
+        self.assertIn("Result ready", page)
+        self.assertNotIn(examine_url, page)
+
+        # Provenance: the source itself is untouched by examining it.
+        after = self.workspace(project_id).sources[0]
+        self.assertEqual(after["file_hash"], source["file_hash"])
+        self.assertEqual(after.get("original_filename"), self.FILENAME)
+
+    def test_only_the_owner_can_examine(self):
+        project_id = self._upload_only(survey_jpeg())
+        from werkzeug.security import generate_password_hash
+        if not User.query.filter_by(username="cust2").first():
+            other = User(username="cust2", role=ROLE_CUSTOMER)
+            other.password_hash = generate_password_hash(PW)
+            db.session.add(other)
+            db.session.commit()
+        stranger = self.app.test_client()
+        stranger.post("/login", data={"username": "cust2", "password": PW})
+        response = stranger.post("/projects/%s/examine" % project_id)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._all_jobs(project_id), [])
+
+    def test_examine_is_a_post_only_act(self):
+        project_id = self._upload_only(survey_jpeg())
+        self.assertEqual(self.client.get("/projects/%s/examine" % project_id).status_code, 405)
+        self.assertEqual(self._all_jobs(project_id), [])

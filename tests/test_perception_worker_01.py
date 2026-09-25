@@ -173,8 +173,14 @@ class WorkerIntegrationTests(unittest.TestCase):
         data = {"name": name or ("Job %s" % uuid.uuid4().hex[:8])}
         data["file"] = files
         with patch.object(BHiveParser, "parse", _fake_parse):
-            return self.client.post("/document-shop", data=data,
-                                    content_type="multipart/form-data")
+            response = self.client.post("/document-shop", data=data,
+                                        content_type="multipart/form-data")
+        # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+        if response.status_code == 302:
+            from services import document_examination as _dx
+            _dx.examine_workspace_sources(
+                self.store, response.headers["Location"].rstrip("/").split("/")[-1])
+        return response
 
     def _pid(self, response):
         return response.headers["Location"].rstrip("/").split("/")[-1]

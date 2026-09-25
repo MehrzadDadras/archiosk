@@ -22,7 +22,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 from services.bhive_parser import BHiveParser, ParsedDocument, ParserError
-from services import image_intake, perception_jobs, visual_classification
+from services import image_intake
 from services.case_workspace import (
     EVIDENCE_CLASS_EXTRACTED,
     FOLDER_ROOT_DATA_ROOM,
@@ -60,6 +60,14 @@ _WORKBOOK_FOUNDING_EXTENSIONS = frozenset({".xlsx"})
 # fall back on. These are honest placeholders, not a claim that anyone
 # was actually verified -- see services/governance.py.
 _DEFAULT_ACTOR = "anonymous"
+
+# CLAUDE-MASTERUI-02. UPLOADING A DOCUMENT DOES NOT EXAMINE IT.
+#
+# Bringing a document in and deciding what to make of it are two different acts,
+# and the second belongs to the person. Nothing in this module enqueues OCR,
+# visual examination or founding classification; the explicit Examine
+# (`document_examination.examine_document`) does, through the same queues,
+# workers and job identity the upload-time enqueues used to reach.
 _DEFAULT_ROLE = "unspecified"
 _SOURCE_REFERENCE_EXTRACTOR_VERSION = "declared_reference_v1"
 
@@ -760,16 +768,11 @@ def ingest_upload(
         # staged upload: it re-reads the whole document to find citations, which
         # is the memory cost this path exists to avoid. The founding job does the
         # reading, once.
-        from services import founding_classification
-
-        founding_classification.enqueue_for_source(
-            founding_classification.founding_store(
-                app.config["REGISTRY_STORE_PATH"]),
-            workspace_id=document.project_id,
-            source_id=founding_source["id"],
-            source_sha256=document.original_file_hash or "",
-            source_name=filename,
-            intake_order=0)
+        #
+        # CLAUDE-MASTERUI-02: and it is no longer queued HERE. The branch stays
+        # so a staged upload still skips the synchronous read below; the job
+        # itself is started by the person's explicit Examine.
+        pass
     elif founding_source is not None:
         try:
             founding_text = parser._extract(raw_bytes, filename)  # noqa: SLF001 - shared parser seam
@@ -780,69 +783,10 @@ def ingest_upload(
                 store, workspace, founding_source["id"], founding_text,
                 actor=actor or _DEFAULT_ACTOR, governance_log=governance_log,
             )
-        # CLAUDE-BLACK-BOX-IMAGE-INTAKE-01: an image has no native text, so
-        # anything readable in it must be RECOVERED - locally, by Tesseract,
-        # through the same governed adapter scanned PDFs already use. It is
-        # registered as EVIDENCE_CLASS_EXTRACTED and attributed to the OCR
-        # engine, never to the parser: a recovered string is a reading of an
-        # image, not something the document says. An absent engine, an
-        # unreadable image and a blank page are all honest outcomes here -
-        # nothing is fabricated, and the Source itself is already durably
-        # registered whatever this returns.
-        # CLAUDE-SURVEY-REFERENCE-01: the FOUNDING document of a Document Shop
-        # job is perceived, whether it is an image or a PDF.
-        #
-        # This block was `if image_founding:` alone, and the asymmetry it
-        # created is a defect rather than a policy: `attach_document_shop_sources`
-        # enqueues perception for EVERY file it takes, so a customer who
-        # uploaded two scanned surveys had the second one examined and the first
-        # one not. The first is the one the result page is about.
-        #
-        # SCOPED TO THE BLACK BOX, deliberately. A conventional Project upload is
-        # a founding RFQ/RFP document whose text layer is read in the request and
-        # which has never had a perception job; widening that here would put OCR
-        # behind every project creation in the deployment to fix a Document Shop
-        # defect. `_run_pdf_job` is the established path this reaches, unchanged.
-        perceive_founding = image_founding or (
-            container_state == CONTAINER_STATE_BLACK_BOX and ext == ".pdf")
-        if perceive_founding:
-            # CLAUDE-GO-PERCEPTION-WORKER-01: perception no longer runs here.
-            #
-            # This block used to call extract_image_text inline - orientation
-            # plus OCR, measured at ~8 seconds on a 12MP photograph, inside a
-            # Gunicorn worker on a 13-worker tier with no queue behind it. A
-            # customer double-submitted during one of those waits and took a
-            # worker with them each time. The work is identical; only its
-            # location changed.
-            #
-            # Enqueued rather than performed, so the request returns as soon as
-            # the Source is durably stored and addressable.
-            perception_jobs.PerceptionJobStore(
-                app.config["REGISTRY_STORE_PATH"]).enqueue(
-                    workspace_id=workspace.project_id,
-                    source_id=founding_source["id"],
-                    source_sha256=document.original_file_hash or "",
-                    source_name=filename,
-                    intake_order=0,
-                )
-            # CLAUDE-SURVEY-REFERENCE-01: and a VISUAL job, on its own queue.
-            #
-            # Two enqueues rather than one dispatch, because the two kinds of
-            # looking are genuinely different work with different failure
-            # modes, and because `services/perception_worker.py` is byte-pinned
-            # by a live verification and cannot be taught to dispatch. The
-            # visual worker defers until this source's OCR has settled, so the
-            # recovered text can travel with the image as context.
-            from services import visual_classification
-
-            visual_classification.enqueue_for_source(
-                visual_classification.visual_store(
-                    app.config["REGISTRY_STORE_PATH"]),
-                workspace_id=workspace.project_id,
-                source_id=founding_source["id"],
-                source_sha256=document.original_file_hash or "",
-                source_name=filename,
-                intake_order=0)
+        # CLAUDE-MASTERUI-02: uploading does not examine. The founding source's
+        # OCR and visual jobs used to be enqueued here; they are now started only
+        # by the person's explicit Examine (`document_examination.examine_document`),
+        # on the same queues, with the same job identity.
 
     # CLAUDE-BLACK-BOX-01: a Black Box locks its CONTAINER STATE here instead
     # of an engagement environment - the same "locked at the moment of
@@ -1125,7 +1069,6 @@ def attach_document_shop_sources(app, workspace, files, *, owner: str,
     from services.case_workspace import SOURCE_KIND_UNCLASSIFIED
 
     store = CaseWorkspaceStore(app.config["REGISTRY_STORE_PATH"])
-    jobs = perception_jobs.PerceptionJobStore(app.config["REGISTRY_STORE_PATH"])
     governance_log = get_governance_log(app)
     allowed = {e.lower() for e in app.config["ALLOWED_UPLOAD_EXTENSIONS"]}
     limit = app.config.get("MAX_CONTENT_LENGTH") or 0
@@ -1217,18 +1160,8 @@ def attach_document_shop_sources(app, workspace, files, *, owner: str,
             actor=actor or _DEFAULT_ACTOR)
         workspace = store.get(workspace.project_id)
 
-        jobs.enqueue(workspace_id=workspace.project_id, source_id=source["id"],
-                     source_sha256=digest, source_name=filename,
-                     intake_order=order)
-        # CLAUDE-SURVEY-REFERENCE-01: every accepted file is also queued to be
-        # LOOKED at, not only read. A source that is not a raster or a PDF
-        # terminates honestly in the visual worker rather than being filtered
-        # here, so one place decides what has a visual representation.
-        visual_classification.enqueue_for_source(
-            visual_classification.visual_store(
-                app.config["REGISTRY_STORE_PATH"]),
-            workspace_id=workspace.project_id, source_id=source["id"],
-            source_sha256=digest, source_name=filename, intake_order=order)
+        # CLAUDE-MASTERUI-02: accepting a file no longer queues its reading or
+        # looking. The person's explicit Examine does, on the same queues.
 
         results.append({"filename": filename, "status": "accepted",
                         "reason": None, "source_id": source["id"],

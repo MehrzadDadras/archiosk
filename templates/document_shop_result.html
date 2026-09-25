@@ -97,6 +97,16 @@
     <a class="btn" href="{{ url_for('workspace.source_file', project_id=project_id, source_id=result.source_id, download=1) }}"
        title="{{ result.filename }}"
        data-ui-ref="document-shop.result.download">Open file</a>
+    {# CLAUDE-MASTERUI-02: uploading does not examine. Offered only while some
+       source has never been asked for; once asked, the state takes over. #}
+    {% if result.examinable %}
+    <form method="post" class="ds-actions-form"
+          action="{{ url_for('workspace.examine_document', project_id=project_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary"
+                data-ui-ref="document-shop.result.examine">Examine</button>
+    </form>
+    {% endif %}
     <form method="post" class="ds-actions-form"
           action="{{ url_for('portal.document_shop_remove_source', project_id=project_id, source_id=result.source_id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -501,7 +511,7 @@
        data-ui-ref="document-shop.result.back">Back to my documents</a>
     {% if can_create %}
     <a class="btn" href="{{ url_for('portal.document_shop_intake') }}"
-       data-ui-ref="document-shop.result.another">Examine another document</a>
+       data-ui-ref="document-shop.result.another">Upload another document</a>
     {% endif %}
 </p>
 {% endblock %}

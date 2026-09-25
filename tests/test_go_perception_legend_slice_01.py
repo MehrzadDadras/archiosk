@@ -403,6 +403,9 @@ class TheWorker(unittest.TestCase):
                     self.app, owner="cust", operating_environment=None,
                     container_state=CONTAINER_STATE_BLACK_BOX,
                     project_name=project_name)
+                # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+                from services import document_examination as _dx
+                _dx.examine_workspace_sources(self.store, document.project_id)
         jobs = perception_jobs.PerceptionJobStore(
             self.app.config["REGISTRY_STORE_PATH"])
         with patch("services.image_intake.extract_image_positioned_text",

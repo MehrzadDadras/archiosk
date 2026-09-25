@@ -132,6 +132,9 @@ class _WiringCase(unittest.TestCase):
                             for name in tuple(self.SHEETS) + tuple(extra)]
                 attach_document_shop_sources(self.app, workspace, uploads,
                                              owner="cust")
+                # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+                from services import document_examination as _dx
+                _dx.examine_workspace_sources(self.store, document.project_id)
         self.document = document
         return document
 
@@ -586,6 +589,9 @@ class PerceptionUnaffected(_WiringCase):
                     self.app, owner="cust", operating_environment=None,
                     container_state=CONTAINER_STATE_BLACK_BOX,
                     project_name="Image Path Unchanged")
+                # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+                from services import document_examination as _dx
+                _dx.examine_workspace_sources(self.store, document.project_id)
         self.document = document
 
         lines = [{"text": token, "bbox": {"x": 0.1, "y": 0.1 + i * 0.05,

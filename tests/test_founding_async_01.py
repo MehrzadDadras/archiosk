@@ -109,6 +109,9 @@ class _Base(unittest.TestCase):
                 # identity and provenance hangs off it.
                 assembled_path=path, assembled_sha256=digest,
                 assembled_filename=filename, defer_classification=True)
+            # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+            from services import document_examination as _dx
+            _dx.examine_workspace_sources(self.store, document.project_id)
         return document, path, digest
 
 

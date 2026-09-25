@@ -245,6 +245,9 @@ class _CorpusCase(unittest.TestCase):
                     [FileStorage(stream=io.BytesIO(b"%PDF-1.4 " + name.encode()),
                                  filename=name) for name in files],
                     owner="cust")
+                # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+                from services import document_examination as _dx
+                _dx.examine_workspace_sources(self.store, document.project_id)
         self.document = document
         return document
 

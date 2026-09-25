@@ -38,6 +38,7 @@ PW = "TestCustomer!2026"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 INTAKE_HTML = (_REPO_ROOT / "templates" / "document_shop_intake.html").read_text(encoding="utf-8")
 HELP_HTML = (_REPO_ROOT / "templates" / "help" / "file_types_and_limits.html").read_text(encoding="utf-8")
+JOBS_HTML = (_REPO_ROOT / "templates" / "document_shop_jobs.html").read_text(encoding="utf-8")
 
 # Verbatim from the Product Owner's own phone upload, stored on production.
 # Real OCR noise from a photographed drawing - not a hand-written imitation.
@@ -86,6 +87,26 @@ class PageCopyTests(unittest.TestCase):
         self.assertIn("Uploading a document", HELP_HTML)
         self.assertNotIn("Naming the work is optional", HELP_HTML)
         self.assertIn("name of project", HELP_HTML.lower())
+
+    def test_the_my_documents_action_says_what_it_does_bringing_a_file_in(self):
+        """CLAUDE-DOCCTA-01A. My Documents' primary action read "Examine a
+        document", which named the wrong act: the button brings a file IN, and
+        what to make of it is a later, separate decision (CLAUDE-MASTERUI-01A
+        makes that explicit rather than automatic). A control should be named
+        for what pressing it does.
+
+        LABEL ONLY. The destination, the entitlement gate and the element's own
+        identity are asserted here precisely because they must NOT have moved -
+        `data-ui-ref="document-shop.jobs.new"` is what
+        tests/test_customer_entitlement_01.py and
+        tests/test_black_box_listing_boundary_01.py pin this control by, so a
+        rename that disturbed it would break entitlement coverage elsewhere.
+        """
+        self.assertIn(">Upload a document</a>", JOBS_HTML)
+        self.assertNotIn("Examine a document", JOBS_HTML)
+        self.assertIn('data-ui-ref="document-shop.jobs.new"', JOBS_HTML)
+        self.assertIn("url_for('portal.document_shop_intake')", JOBS_HTML)
+        self.assertIn("{% if can_create %}", JOBS_HTML)
 
 
 class NameUniquenessTests(unittest.TestCase):

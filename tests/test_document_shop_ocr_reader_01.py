@@ -260,11 +260,17 @@ class RealOcrIngestTests(unittest.TestCase):
                 ingested_at=datetime.now(timezone.utc).isoformat(),
                 parser_version="test", text_extraction_status="no_native_text")
 
+        from services.case_workspace import CaseWorkspaceStore
+        from services import document_examination as _dx
+
         with patch.object(BHiveParser, "parse", fake_parse):
-            return ingest_upload(
+            document = ingest_upload(
                 FileStorage(stream=io.BytesIO(data), filename=filename),
                 self.app, operating_environment=None,
                 container_state=CONTAINER_STATE_BLACK_BOX, owner="tester")
+        # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+        _dx.examine_workspace_sources(CaseWorkspaceStore(self.tmp), document.project_id)
+        return document
 
     def test_a_real_ocr_read_image_reports_its_text_to_the_customer(self):
         probe = image_intake.extract_image_text(_ocr_fair_png(), "scan.png")

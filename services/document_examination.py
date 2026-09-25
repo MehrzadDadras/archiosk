@@ -605,7 +605,15 @@ STATE_COULD_NOT_COMPLETE = "could_not_complete"
 STATE_QUEUED = "queued"
 STATE_PROCESSING = "processing"
 
+# CLAUDE-MASTERUI-02: uploading no longer examines, so "nothing has been asked
+# for yet" is a real state. Without it a fresh upload with no job fell through
+# to the evidence tests and read "Needs attention" - a verdict on an
+# examination that never happened. Not pending: nothing is running, so nothing
+# may poll for it.
+STATE_NOT_EXAMINED = "not_examined"
+
 STATE_LABELS = {
+    STATE_NOT_EXAMINED: "Not yet examined",
     STATE_QUEUED: "Waiting to be examined",
     STATE_PROCESSING: "Being examined",
     STATE_RESULT_READY: "Result ready",
@@ -633,6 +641,7 @@ ACTIVITY_LOOKING = "Visual analysis in progress…"
 # sources, so an examination never looks finished while part of it is not.
 _AGGREGATE_PRECEDENCE = (
     STATE_COULD_NOT_COMPLETE,
+    STATE_NOT_EXAMINED,
     STATE_QUEUED,
     STATE_PROCESSING,
     STATE_NEEDS_ATTENTION,
@@ -1239,7 +1248,37 @@ def source_state(document, workspace, source_id, *, jobs=None) -> str:
                 else STATE_READ_NOT_INTERPRETED)
     if _reached_an_interpretation(document):
         return STATE_RESULT_READY
+    if _never_examined(workspace, source_id, jobs):
+        return STATE_NOT_EXAMINED
     return STATE_NEEDS_ATTENTION
+
+
+def _never_examined(workspace, source_id, jobs) -> bool:
+    """No examination job of ANY kind has ever existed for this source.
+
+    CLAUDE-MASTERUI-02. Asked only after every evidence test has come back
+    empty, so a historical container examined before the job store existed
+    still reads from its evidence exactly as before. And only when a job store
+    was supplied: with none, "no job" is unknowable rather than true.
+    """
+    if jobs is None:
+        return False
+    from services import founding_classification
+
+    workspace_id = getattr(workspace, "project_id", "")
+    root = getattr(jobs, "root", None)
+    queues = [jobs, _visual_jobs_beside(jobs)]
+    if root is not None:
+        queues.append(founding_classification.founding_store(root.parent))
+    for queue in queues:
+        if queue is None:
+            continue
+        try:
+            if queue.latest_for_source(workspace_id, source_id) is not None:
+                return False
+        except Exception:  # noqa: BLE001 - an unreadable queue is not proof of absence
+            return False
+    return True
 
 
 def state_of(document, workspace, *, jobs=None) -> str:
@@ -1648,6 +1687,14 @@ def build_result(document, workspace, *, display_name: str, jobs=None) -> dict[s
         "fragmentary": fragmentary,
         "state": state,
         "state_label": STATE_LABELS[state],
+        # CLAUDE-MASTERUI-02: the page offers Examine exactly when some source
+        # has never been asked for. Read PER SOURCE, not off the aggregate:
+        # "Could not complete" outranks "Not yet examined" in the headline
+        # state, and a batch with one failed and one untouched document must
+        # still offer to examine the untouched one.
+        "examinable": any(
+            source_state(document, workspace, s["id"], jobs=jobs) == STATE_NOT_EXAMINED
+            for s in _live_sources(workspace)),
         "filename": filename,
         "received_at": getattr(document, "ingested_at", "") or "",
         "source_id": (source or {}).get("id"),
@@ -1822,27 +1869,113 @@ def preserved_analysis_sources(workspace):
 
 
 @observed
+def request_examination(store_path, *, workspace_id, source_id, source_sha256,
+                        source_name, analysis_run_id='', intake_order=None):
+    """Queue examination of ONE source. The explicit trigger, and the only one.
+
+    CLAUDE-MASTERUI-01A/02. Uploading a document no longer examines it - see
+    the header note in `services/ingestion.py` - so something has to ask, and
+    this is what asking looks like. It is deliberately the SAME enqueue rule
+    queue_reanalysis already ran, lifted out of its loop rather than copied
+    beside it: one place decides what kind of examination a file gets, so the
+    explicit action and a re-analysis run can never drift into disagreeing about
+    whether a .docx is read or looked at.
+
+    NOT A NEW ENGINE. Every queue, worker, job identity and evidence path is
+    exactly the one that already existed. What moved is WHO starts it.
+
+    The kind is decided by the file, not the caller: a PDF or a supported image
+    is READ (perception) and LOOKED at (visual) on their two separate queues;
+    anything else goes to founding classification, which is the path that can
+    actually make sense of it. A caller that guessed instead would be the
+    asymmetry CLAUDE-SURVEY-REFERENCE-01 already had to repair once.
+
+    Returns {source_id, reading} or {source_id, reading, looking} - the same
+    shape queue_reanalysis has always returned per source.
+    """
+    from services import perception_jobs, visual_classification, founding_classification, image_intake
+
+    values = dict(workspace_id=workspace_id, source_id=source_id,
+                  source_sha256=source_sha256, source_name=source_name,
+                  analysis_run_id=analysis_run_id)
+    if intake_order is not None:
+        values['intake_order'] = intake_order
+
+    if not (source_name.lower().endswith('.pdf') or image_intake.is_supported_image(source_name)):
+        reading = founding_classification.enqueue_for_source(
+            founding_classification.founding_store(store_path), **values)
+        return dict(source_id=source_id, reading=reading['job_id'])
+
+    reading = perception_jobs.PerceptionJobStore(store_path).enqueue(**values)
+    looking = visual_classification.enqueue_for_source(
+        perception_jobs.PerceptionJobStore(store_path, subdir='visual_jobs'), **values)
+    return dict(source_id=source_id, reading=reading['job_id'], looking=looking['job_id'])
+
+
+def examine_workspace_sources(store, workspace_id, *, analysis_run_id='',
+                              stored_names=False):
+    """Every preserved original source in one workspace, through the rule above.
+
+    The shape a fixture or an explicit UI action wants: "examine what was
+    uploaded", without each caller re-deriving which queue a file belongs on or
+    re-checking that its bytes still match their recorded hash.
+
+    CLAUDE-MASTERUI-01D. A job carries the name the person uploaded
+    (`RS501.pdf`), not the storage name (`<hex>_RS501.pdf`) - which is what the
+    upload-time enqueues this replaces always passed. `stored_names=True` is
+    queue_reanalysis keeping the storage name it has always used; the name is
+    not part of job identity either way.
+    """
+    current = store.get(workspace_id)
+    return [
+        request_examination(
+            store.store_path,
+            workspace_id=workspace_id,
+            source_id=source['id'],
+            source_sha256=source['file_hash'],
+            source_name=(Path(source['file_path']).name if stored_names
+                         else source.get('original_filename')
+                         or Path(source['file_path']).name),
+            analysis_run_id=analysis_run_id,
+            intake_order=source.get('intake_order'),
+        )
+        for source in preserved_analysis_sources(current)
+    ]
+
+
 def queue_reanalysis(app, store, workspace, actor, request_id):
     """Explicit new runs through the existing OCR and visual workers."""
     from services.case_workspace import CaseWorkspaceError, CONTAINER_STATE_BLACK_BOX
-    from services import perception_jobs, visual_classification, founding_classification, image_intake
     current = store.get(workspace.project_id)
     if not current or current.owner != actor or current.removed_at or current.container_state != CONTAINER_STATE_BLACK_BOX:
         raise CaseWorkspaceError('Only your active disposable analyses can be re-analyzed.')
-    sources = preserved_analysis_sources(current)
-    queued = []
-    for source in sources:
-        values = dict(workspace_id=current.project_id, source_id=source['id'], source_sha256=source['file_hash'],
-                      source_name=Path(source['file_path']).name, analysis_run_id=request_id)
-        if not (values['source_name'].lower().endswith('.pdf') or image_intake.is_supported_image(values['source_name'])):
-            reading = founding_classification.enqueue_for_source(founding_classification.founding_store(store.store_path), **values)
-            queued.append(dict(source_id=source['id'], reading=reading['job_id']))
-            continue
-        reading = perception_jobs.PerceptionJobStore(store.store_path).enqueue(**values)
-        looking = visual_classification.enqueue_for_source(
-            perception_jobs.PerceptionJobStore(store.store_path, subdir='visual_jobs'), **values)
-        queued.append(dict(source_id=source['id'], reading=reading['job_id'], looking=looking['job_id']))
-    return queued
+    # preserved_analysis_sources runs here too, so the hash/availability refusal
+    # still happens BEFORE anything is queued rather than part-way through.
+    preserved_analysis_sources(current)
+    return examine_workspace_sources(store, current.project_id, analysis_run_id=request_id,
+                                     stored_names=True)
+
+
+def examine_document(store, workspace, actor):
+    """The customer's explicit Examine: first examination of what they uploaded.
+
+    CLAUDE-MASTERUI-02. The same authority as re-analysis - the owner's own,
+    active, disposable analysis and nothing else - and the same machinery,
+    through `examine_workspace_sources`. The difference is deliberate and
+    small: no `analysis_run_id`, so each job is the SAME job identity the
+    upload-time trigger used to mint (pressing twice, or examining something
+    already examined, finds the existing job rather than starting new work),
+    and each job carries the filename the person uploaded.
+    """
+    from services.case_workspace import CaseWorkspaceError, CONTAINER_STATE_BLACK_BOX
+    current = store.get(workspace.project_id)
+    if (not current or current.owner != actor or current.removed_at
+            or current.container_state != CONTAINER_STATE_BLACK_BOX
+            or getattr(current, 'document_desk_state', 'active') != 'active'):
+        raise CaseWorkspaceError('Only your active documents can be examined.')
+    # Refuses a missing or altered original BEFORE anything is queued.
+    preserved_analysis_sources(current)
+    return examine_workspace_sources(store, current.project_id)
 
 
 def comparison_source(workspace):

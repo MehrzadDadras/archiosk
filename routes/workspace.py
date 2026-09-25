@@ -165,6 +165,7 @@ from services.bhive_parser import BHiveParser
 from services.chunked_upload import ChunkedUploadError, ChunkedUploadStore
 from services.investigation_snapshot import build_archive_snapshot
 from services.project_clock import open_project
+from services.rate_limit import limiter
 from services.rfi_export import RFIExportError, build_rfi_docx, build_rfi_draft_docx
 from services.work_product_export import WorkProductExportError, export_work_product
 from services.developer_ccn import (
@@ -642,6 +643,36 @@ def source_review(project_id, source_id):
     response.headers['Cache-Control'] = 'private, no-store'
     event('source_review.html', 'CONSUMED', source_id=source_id, state='PARTIAL')
     return response
+
+
+@workspace_bp.route('/projects/<project_id>/examine', methods=['POST'])
+@login_required
+@limiter.limit("30 per hour")
+def examine_document(project_id):
+    """CLAUDE-MASTERUI-02: the explicit Examine on the Document Examination Result.
+
+    Uploading brings a document in; this is the separate act of asking what to
+    make of it. The container is resolved by `_document_shop_workspace_or_404`,
+    the same three gates the result page itself applies (access, Document Shop
+    scope, not removed - all the same generic 404), so this cannot be pointed at
+    a real Project. The owner/active/disposable rule is then the service's, the
+    same one re-analysis enforces. Rate-limited like every sibling Document
+    Shop POST. The URL stays under /projects/ so existing links keep working.
+    """
+    from routes.portal import _document_shop_workspace_or_404
+    from services import document_examination as dx
+    _, store, workspace = _document_shop_workspace_or_404(project_id)
+    actor = session.get("username")
+    try:
+        queued = dx.examine_document(store, workspace, actor)
+    except CaseWorkspaceError as exc:
+        if workspace.owner != actor:
+            abort(404)
+        # The owner is told why (e.g. the stored original no longer matches).
+        flash(str(exc), 'error')
+        return redirect(url_for('portal.document_shop_result', project_id=project_id), code=303)
+    flash('Examining %d document%s.' % (len(queued), '' if len(queued) == 1 else 's'), 'success')
+    return redirect(url_for('portal.document_shop_result', project_id=project_id), code=303)
 
 
 @workspace_bp.route('/projects/<project_id>/sources/<source_id>/working-view/<view_id>')

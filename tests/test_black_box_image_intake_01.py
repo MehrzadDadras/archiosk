@@ -214,9 +214,13 @@ class ImageFoundingTests(unittest.TestCase):
 
     def _upload(self, name, data, **kwargs):
         with self.app.app_context():
-            return ingest_upload(
+            document = ingest_upload(
                 FileStorage(stream=io.BytesIO(data), filename=name),
                 self.app, owner="owner", **kwargs)
+            # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+            from services import document_examination as _dx
+            _dx.examine_workspace_sources(self.store, document.project_id)
+        return document
 
     def _black_box(self, name, data, label=None):
         return self._upload(

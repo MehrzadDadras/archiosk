@@ -124,6 +124,9 @@ class _PdfCase(unittest.TestCase):
                     self.app, workspace,
                     [FileStorage(stream=io.BytesIO(b"%PDF-1.4 fake"), filename=name)],
                     owner="cust")
+                # CLAUDE-MASTERUI-01A: upload no longer examines; this fixture asks explicitly.
+                from services import document_examination as _dx
+                _dx.examine_workspace_sources(self.store, document.project_id)
         return document
 
     def _run(self, document, pages=None, fail_on=(), page_count=None):
@@ -252,6 +255,16 @@ class TheGateIsNarrowedNotOpened(_PdfCase):
         document = self._ingest_pdf(name="schedule.docx")
         jobs = perception_jobs.PerceptionJobStore(
             self.app.config["REGISTRY_STORE_PATH"])
+        # CLAUDE-MASTERUI-02: nothing routes a .docx to perception any more -
+        # explicit examination sends it to founding classification, and the
+        # upload-time enqueue that used to is gone. This test is about the
+        # WORKER's gate (a job it cannot read ends honestly), so the job is
+        # queued directly: the gate stays proven for any perception job that
+        # still arrives, e.g. one queued before the cutover.
+        source = next(s for s in self.store.get(document.project_id).sources
+                      if s.get("original_filename") == "schedule.docx")
+        jobs.enqueue(workspace_id=document.project_id, source_id=source["id"],
+                     source_sha256=source["file_hash"], source_name="schedule.docx")
         record = perception_worker.run_one(self.app, jobs, "test-worker")
         self.assertEqual(record["state"], "needs_attention")
         self.assertIn("no perception path", record.get("failure_reason") or "")
