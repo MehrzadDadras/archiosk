@@ -23,6 +23,7 @@ from pathlib import Path
 
 from services.bhive_parser import ParsedDocument
 from services.requirements_registry import RequirementsRegistry
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class GlobalSearchTests(unittest.TestCase):
@@ -127,27 +128,15 @@ class HeaderAndBrandTests(unittest.TestCase):
         self.assertNotIn("Beehive", body)
 
     def test_brand_lockup_reads_archiosk_only(self):
-        # CLAUDE-P40-E2B1/VW7A/BRAND1's own history is preserved in git,
-        # not repeated here - CLAUDE-APP-MENU-01 (Product Owner, explicit:
-        # "Archiosk is not a separate logo... same font/size/weight/
-        # alignment/interaction as the neighboring menu items") retires
-        # the icon+enlarged-wordmark single-link treatment this test used
-        # to check. This test's own actual subject survives unchanged
-        # through that retirement, though: the visible identity text
-        # reads "Archiosk" only, nothing appended - now the plain
-        # <summary> label of the first application-menu entry
-        # (data-ui-ref="menu.archiosk"), styled identically to its File/
-        # Edit/View/... neighbors via the shared .workspace-topbar-btn
-        # class, not a distinct rule of its own (see
-        # test_p40brand1_brand_mark.py's own HeaderMarkupTests for the
-        # full structural proof of that).
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk -> the Master
+        ARCHIOSK application menu. Its visible identity text is the brand name
+        only, nothing appended (Master family casing)."""
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk"', body)
-        idx = body.index('data-ui-ref="menu.archiosk"')
+        idx = body.index('<details class="master-app">')
         summary_start = body.index("<summary", idx)
         summary_tag_close = body.index(">", summary_start)
         summary_close = body.index("</summary>", summary_tag_close)
-        self.assertEqual(body[summary_tag_close + 1:summary_close].strip(), "Archiosk")
+        self.assertEqual(body[summary_tag_close + 1:summary_close].strip(), "ARCHIOSK")
 
     def test_search_toggle_and_nav_toggle_are_gone(self):
         # CLAUDE-P40-E2B1, Section F: "Remove superseded Home, search,
@@ -282,30 +271,12 @@ class ProjectsTreeTests(unittest.TestCase):
         self.assertNotIn("side-rail-recent", body)
 
     def test_new_project_appears_exactly_once_in_launcher_panel(self):
-        """CLAUDE-HOME-UNIFY-01 - scoped to the panel this test is named for.
-
-        It counted ">+ New Project<" across the WHOLE page while asserting a
-        fact about the launcher panel. That held only because it ran against
-        "/", which used to render index.html. Now that "/" is the Projects
-        directory, the page carries two legitimately different controls: the
-        launcher panel's global one, and the directory's own header action
-        (CLAUDE-PROJECTS-NEW-ACTION-01, which the unifying directive explicitly
-        keeps). Both predate this change on /projects; only the page counted
-        changed.
-
-        Scoped to the panel so it asserts what it claims. The whole-page
-        duplicate is a real observation and is recorded in this stage's
-        checkpoint entry, not silently absorbed here.
-        """
-        # CLAUDE-HOME-UNIFY-01: back to its original form, and passing for a
-        # better reason than before. The unified home briefly carried TWO
-        # "+ New Project" controls - Archiosk > Admin's copy and the Projects
-        # directory's own header action. Retiring the Admin copy (which
-        # menu.file.new-project already covered on every page) restored the
-        # exact-once property this test was written for, rather than the test
-        # being loosened to accept the duplicate.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): still exactly one New Project
+        on the page - FILE > New Project... - and no page-local "+ New Project"
+        duplicate beside it."""
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        self.assertEqual(body.count(">+ New Project<"), 1)
+        self.assertEqual(body.count('data-command="file.new_project"'), 1)
+        self.assertEqual(body.count(">+ New Project<"), 0)
 
     def test_projects_directory_header_no_longer_has_its_own_new_project_button(self):
         body = self.client.get("/projects").get_data(as_text=True)

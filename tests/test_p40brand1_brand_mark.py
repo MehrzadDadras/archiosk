@@ -233,21 +233,26 @@ class HeaderRenderingTests(unittest.TestCase):
             self.assertNotIn('class="workspace-topbar-brand"', body, url)
 
     def test_archiosk_menu_renders_with_plain_text_label(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk -> the Master
+        Menu's ARCHIOSK application menu. Its label is still the plain brand name
+        and nothing else - no mark, no image - in the Master family casing."""
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.archiosk"')
-        block = body[idx:body.index("</details>", idx)]
-        self.assertIn(">Archiosk</summary>", block)
+        idx = body.index('<details class="master-app">')
+        block = body[idx:body.index("</summary>", idx) + len("</summary>")]
+        self.assertIn(">ARCHIOSK</summary>", block)
+        self.assertNotIn("<img", block)
+        self.assertNotIn("<svg", block)
 
     def test_home_navigation_still_renders_and_links_home(self):
-        # CLAUDE-MENU-HOME-RESTORE-01 supersedes CLAUDE-MENU-HOME-TARGET-01: Home shows the LANDING PAGE (portal.home). The /projects destination this used to pin was a Claude-chosen substitute recorded as "Product Owner, explicit" in 329f5cd; the Product Owner has since stated it was never the intent. Updated, not weakened - the invariant was always "the destination cannot move as a side effect", and it still pins one. The Projects Directory is asserted separately by menu.file.all-projects.
-        # (superseding the CLAUDE-MENU-HOME-TARGET-01 note that stood here)
-        # test above. Still asserted as a REAL rendered href rather than a
-        # url_for string, so a broken endpoint name fails here.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk.home -> the
+        ARCHIOSK menu's Home item; same pinned landing-page destination
+        (CLAUDE-MENU-HOME-RESTORE-01), asserted as a real rendered href."""
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.archiosk.home"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn('href="/home"', tag)
-
+        start = body.index('<details class="master-app">')
+        app_menu = body[start:body.index("</ul>", start)]
+        tag = re.search(r'<a [^>]*aria-label="Archiosk Home"[^>]*>', app_menu)
+        self.assertIsNotNone(tag)
+        self.assertIn('href="/home"', tag.group(0))
 
 class BrandCssTests(unittest.TestCase):
     def setUp(self):

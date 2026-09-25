@@ -3,7 +3,11 @@
    Reads only flags base.html's context already carries; it introduces no new
    state. Admin-gated items keep the gate the existing top bar uses. #}
 <div class="status-bar" role="status" data-master-shell="status">
-    {% if developer_mode %}<span class="status-bar-item" data-status="developer-mode">Developer Mode</span>{% endif %}
-    {% if verification_session %}<span class="status-bar-item" data-status="verification">Live verification session</span>{% endif %}
-    {% if is_admin and ai_calls_disabled %}<span class="status-bar-item" data-status="ai-disabled">AI calls disabled</span>{% endif %}
+    {# The real Developer Mode and live-verification badges (with their Exit /
+       End actions), moved verbatim from the retired classic menu. "AI calls
+       disabled" stays on the working toolbar, where it always was. #}
+    {% include "partials/_menu_badges.html" %}
+    {# The developer request-trace link the retired "Reload view" component
+       carried (survey-observation sessions only). #}
+    {% if g.survey_observation is defined %}<a class="status-bar-item" href="{{ url_for('portal.survey_evaluation', observation=g.survey_observation.id) }}">Runtime trace for this request</a>{% endif %}
 </div>

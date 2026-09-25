@@ -141,12 +141,7 @@
     </button>
 </form>
 
-{% if not master_ui %}
-<p>
-    <a href="{{ url_for('portal.document_shop_jobs') }}"
-       data-ui-ref="document-shop.jobs-link">See documents you have already brought in</a>
-</p>
-{% endif %}
+
 {% endblock %}
 
 {% block extra_scripts %}

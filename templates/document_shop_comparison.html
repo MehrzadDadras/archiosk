@@ -23,6 +23,6 @@
 {% for source in comparison.sources %}<input type="hidden" name="project_id" value="{{ source.project_id }}">{% endfor %}
 {% for name in ['view_a','view_b'] %}{% set index = loop.index0 %}<label>{{ comparison.sources[index].name }} view <select name="{{ name }}"><option value="">Original</option>{% for view in comparison.available_views[index] %}<option value="{{ view.id }}" {% if view.id == comparison.selected_views[index] %}selected{% endif %}>{{ view.label }} · {{ view.id }}</option>{% endfor %}</select></label>{% endfor %}
 <button>Compare selected representations</button></form></details></section>
-{% if not master_ui %}<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">Back to My documents</a>{% endif %}
+
 </div>
 {% endblock %}

@@ -49,7 +49,7 @@ class Ctx:
     """Everything a command's rule may read. Built once per render."""
 
     def __init__(self, *, identity, endpoint, args, admin, developer, customer,
-                 username, result=None, url_for=None, path=""):
+                 username, result=None, url_for=None, path="", can_publish=False):
         identity = identity or {}
         self.project = identity.get("project")
         self.source = identity.get("source")
@@ -63,6 +63,9 @@ class Ctx:
         self.result = result if isinstance(result, dict) else None
         self.url_for = url_for
         self.path = path
+        # The workspace route's own eligibility answer (an Owner project still in
+        # pre-publication) - the same flag the classic File > Publish RFP used.
+        self.can_publish = bool(can_publish)
 
     # -- small predicates ---------------------------------------------------
     @property
@@ -204,10 +207,15 @@ COMMANDS = [
     # FILE -------------------------------------------------------------------
     Command("file.new_project", "FILE", "New Project…", href=U("portal.upload"),
             needs=_need(staff, admin), current=lambda c: c.on("portal.upload")),
-    Command("file.upload", "FILE", "Upload Document…", href=U("portal.document_shop_intake"),
+    Command("file.upload", "FILE", "Document Upload…", href=U("portal.document_shop_intake"),
             needs=lambda c: None if (c.admin or c.customer) else "Not permitted for this account",
             current=lambda c: c.on("portal.document_shop_intake")),
-    Command("file.open_project", "FILE", "Open Project…", href=U("portal.choose_project"),
+    Command("file.open_project", "FILE", "Open Project…",
+            # With a project open: the chooser scoped to its environment, with it
+            # marked current - the classic File > Open Project's scoping, kept.
+            href=lambda c: (c.url_for("portal.choose_project", current=c.pid,
+                                      environment=(c.project or {}).get("environment"))
+                            if c.kind == "project" else c.url_for("portal.choose_project")),
             needs=staff, current=lambda c: c.on("portal.choose_project")),
     Command("file.my_documents", "FILE", "Open My Documents", href=U("portal.document_shop_jobs"),
             current=lambda c: c.on("portal.document_shop_jobs") and desk_view(c) == "active"),
@@ -242,9 +250,11 @@ COMMANDS = [
     Command("view.zoom_in", "VIEW", "Zoom In", proxy="doc-zoom-in", needs=viewer),
     Command("view.zoom_out", "VIEW", "Zoom Out", proxy="doc-zoom-out", needs=viewer),
     Command("view.fit_width", "VIEW", "Fit Width", proxy="doc-fit-width", needs=viewer),
-    # Density is a SETTING, not an operation: it never claims "current".
-    Command("view.work_density", "VIEW", "Work Density", href=lambda c: c.density_url("work")),
-    Command("view.inspect_density", "VIEW", "Inspect Density", href=lambda c: c.density_url("inspect")),
+    # Density is a SETTING, not an operation: it never claims "current". Set in
+    # the browser (master_workspace.js) from the page's own URL, so the server
+    # never echoes request parameters back into the page.
+    Command("view.work_density", "VIEW", "Work Density", action="set-density-work"),
+    Command("view.inspect_density", "VIEW", "Inspect Density", action="set-density-inspect"),
     Command("view.full_screen", "VIEW", "Full Screen", action="toggle-fullscreen"),
     soon("view.rulers", "VIEW", "Show Rulers"),
     # DOCUMENT ---------------------------------------------------------------
@@ -343,7 +353,10 @@ COMMANDS = [
     Command("project.access", "PROJECT", "Access Passes",
             href=U("project_manage.manage_access", project_id=lambda c: c.pid),
             needs=project_kind, current=lambda c: c.on("project_manage.manage_access")),
-    Command("project.data", "PROJECT", "Project Data Management", href=U("portal.reset_project_data"),
+    Command("project.data", "PROJECT", "Project Data Management",
+            # Carries the open project forward, as the classic menu did, so the
+            # page identifies which project's evidence Add/Archive acts on.
+            href=lambda c: c.url_for("portal.reset_project_data", project_id=c.pid if c.kind == "project" else None),
             needs=admin, current=lambda c: c.on("portal.reset_project_data")),
     soon("project.members", "PROJECT", "Members"),
     # PORTFOLIO --------------------------------------------------------------
@@ -354,7 +367,8 @@ COMMANDS = [
     soon("portfolio.analytics", "PORTFOLIO", "Portfolio Analytics"),
     # DEAL -------------------------------------------------------------------
     Command("deal.publish", "DEAL", "Publish Procurement Package…", action="open-publish-panel",
-            needs=_need(project_kind, admin)),
+            needs=_need(project_kind, admin, lambda c: None if c.can_publish
+                        else "Only an Owner project not yet published")),
     soon("deal.pipeline", "DEAL", "Deal Pipeline"),
     # RELATIONSHIPS ----------------------------------------------------------
     Command("relationships.drawing", "RELATIONSHIPS", "Drawing Understanding",

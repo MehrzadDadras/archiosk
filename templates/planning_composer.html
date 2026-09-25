@@ -3,7 +3,7 @@
 {% block title %}Planning & Zoning — Archiosk{% endblock %}
 {% block content %}
 <h1 class="np-page-title">Planning &amp; Zoning</h1>
-{% if not master_ui %}<p><a href="{{ url_for('planning_zoning.saved_studies', project_id=project_id) }}">Saved studies</a></p>{% endif %}{# MASTERUI: MODEL > Planning Studies / Planning & Zoning Analysis #}
+{# MASTERUI: MODEL > Planning Studies / Planning & Zoning Analysis #}
 {% if saved_study %}
 <p>Saved {{ saved_study.saved_at }} · {{ saved_study.status }}</p>
 <form method="post" action="{{ url_for('planning_zoning.continue_study', project_id=project_id, study_id=saved_study.id) }}">

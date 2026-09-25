@@ -65,7 +65,11 @@ class ProjectHomeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('id="project-overview"', body)
         self.assertIn("Ask a question, or describe what you want to work on", body)
-        self.assertNotIn("workspace-topbar-sep", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): "no breadcrumb separator on
+        # Project Home" -> the identity line names Project Home's own operation,
+        # the project conversation, not a case or Overview.
+        self.assertIn("VIEW ▸ Project Conversation", body)
+        self.assertNotIn("PROJECT ▸ Overview", body)
 
         overview_response = self.client.get(f"/projects/{self.project_id}/workspace?view=overview")
         overview_body = overview_response.get_data(as_text=True)
@@ -91,8 +95,7 @@ class ProjectHomeTests(unittest.TestCase):
         # (base.html's own "elif directory_view == 'overview'" branch), so
         # the separator DOES render for it too - it's no longer exclusive
         # to an active Investigation/Document.
-        self.assertIn("workspace-topbar-sep", overview_body)
-        self.assertIn(">Overview<", overview_body)
+        self.assertIn("PROJECT ▸ Overview", overview_body)
 
     def test_explicit_case_param_still_reaches_deep_case_view(self):
         self.client.post(
@@ -104,7 +107,9 @@ class ProjectHomeTests(unittest.TestCase):
         response = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
         body = response.get_data(as_text=True)
 
-        self.assertIn("workspace-topbar-sep", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the breadcrumb separator ->
+        # the identity line naming the operation (an open investigation).
+        self.assertIn("CHECK ▸ Investigations", body)
         self.assertIn("Structural Drawing Review", body)
         self.assertNotIn("Ask a question, or describe what you want to work on", body)
 
@@ -254,7 +259,9 @@ class ProjectHomeTests(unittest.TestCase):
         )
         body = response.get_data(as_text=True)
 
-        self.assertIn("workspace-topbar-sep", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): breadcrumb separator -> the
+        # identity line naming the new investigation's operation.
+        self.assertIn("CHECK ▸ Investigations", body)
         self.assertIn("Analyze this drawing for datum inconsistencies", body)
         workspace = self._store().get(self.project_id)
         self.assertEqual(len(workspace.cases), 1)

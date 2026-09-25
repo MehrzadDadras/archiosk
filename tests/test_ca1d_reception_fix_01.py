@@ -41,6 +41,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -308,24 +309,20 @@ class ProjectGatewayBackActionTests(_BaseReceptionFixTestCase):
     "Project Gateway" label it duplicated.
     """
     def test_back_action_present_near_the_top_before_the_project_gateway_label(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser's own Back action is retired with the gateway shell; the chooser is a state of the one workspace, so the way back is always the Master Menu, rendered before the chooser content."""
         client = self._client_as("rf_owner", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.chooser.back-top"', body)
-        back_index = body.index('data-ui-ref="gateway.chooser.back-top"')
+        back_index = body.index('data-command="portfolio.all"')
         label_index = body.index("Project Gateway")
-        self.assertLess(back_index, label_index, "Back action must render before the 'Project Gateway' label, not after")
+        self.assertLess(back_index, label_index, "the way back must render before the 'Project Gateway' label")
 
     def test_back_action_has_a_safe_non_js_fallback_destination(self):
-        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
-        # /gateway - that route now only redirects to / (see
-        # routes/portal.py's gateway() docstring), so the back link
-        # points directly at the real destination instead of bouncing
-        # through a pointless extra hop.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser's own Back action is retired with the gateway shell; the chooser is a state of the one workspace, so the way back is always the Master Menu, rendered before the chooser content. A plain, non-JS link to the projects directory."""
         client = self._client_as("rf_owner", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        idx = body.index('id="gateway-back-link"')
-        tag = body[body.rindex("<a", 0, idx):idx + 30]
-        self.assertIn('href="/"', tag)
+        state, inner = master_command(body, "portfolio.all")
+        self.assertEqual(state, "active")
+        self.assertIn('<a href="/projects"', inner)
 
     def test_redundant_bottom_back_to_gateway_link_is_gone(self):
         client = self._client_as("rf_owner", 1)
@@ -346,10 +343,11 @@ class ProjectGatewayBackActionTests(_BaseReceptionFixTestCase):
         self.assertNotIn('data-ui-ref="gateway.chooser.back-top"', body)
 
     def test_back_action_present_on_zero_projects_state_too(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser's own Back action is retired with the gateway shell; the chooser is a state of the one workspace, so the way back is always the Master Menu, rendered before the chooser content."""
         client = self._client_as("rf_owner", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
         self.assertIn("No projects yet.", body)
-        self.assertIn('data-ui-ref="gateway.chooser.back-top"', body)
+        self.assertEqual(master_command(body, "portfolio.all")[0], "active")
 
     def test_new_project_action_present_on_zero_projects_state_for_admin(self):
         client = self._client_as("rf_owner", 1, role="admin")

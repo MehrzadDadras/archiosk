@@ -44,6 +44,7 @@ from werkzeug.security import generate_password_hash
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.environment_capabilities import CLIENT_OWNER, DESIGN_BUILDER_PROPONENT
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -124,10 +125,12 @@ class GatewayNeutralEntryTests(_BaseGatewayLabelsTestCase):
         self._ingest(owner="gl_admin", project_name="Fixture Project", environment=CLIENT_OWNER)
         client = self._client_as("gl_admin", 1)
         body = client.get("/", follow_redirects=True).get_data(as_text=True)
-        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's own New
+        # Project button -> FILE > New Project..., exactly one, active.
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
         self.assertIn('data-ui-ref="projects-directory.list"', body)
         # Exactly one of each - not one per stakeholder category.
-        self.assertEqual(body.count('data-ui-ref="projects-directory.new-project"'), 1)
+        self.assertEqual(body.count('data-command="file.new_project"'), 1)
         self.assertEqual(body.count('data-ui-ref="projects-directory.list"'), 1)
 
     def test_new_project_hidden_from_non_admin_but_open_existing_still_shown(self):

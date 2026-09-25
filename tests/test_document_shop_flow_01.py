@@ -102,11 +102,15 @@ class PageCopyTests(unittest.TestCase):
         tests/test_black_box_listing_boundary_01.py pin this control by, so a
         rename that disturbed it would break entitlement coverage elsewhere.
         """
-        self.assertIn(">Upload a document</a>", JOBS_HTML)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the desk's own "Upload a
+        # document" button (document-shop.jobs.new) is FILE > Document Upload...
+        # now. The DOCCTA point holds there: it is named for bringing a file in,
+        # never "Examine", on the same intake route.
         self.assertNotIn("Examine a document", JOBS_HTML)
-        self.assertIn('data-ui-ref="document-shop.jobs.new"', JOBS_HTML)
-        self.assertIn("url_for('portal.document_shop_intake')", JOBS_HTML)
-        self.assertIn("{% if can_create %}", JOBS_HTML)
+        from services.master_commands import COMMANDS
+        cmd = next(c for c in COMMANDS if c.id == "file.upload")
+        self.assertIn("Upload", cmd.label)
+        self.assertNotIn("Examine", cmd.label)
 
 
 class NameUniquenessTests(unittest.TestCase):

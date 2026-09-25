@@ -27,7 +27,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BASE = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
 MACROS = (ROOT / "templates" / "_macros.html").read_text(encoding="utf-8")
-APP_MENU = (ROOT / "templates" / "_app_menu.html").read_text(encoding="utf-8")
+# MASTERUI cutover: View > Lists/Display/Eye/Toolbox moved VERBATIM into a partial the
+# Master Menu includes; read it with the (reserved) classic menu so the check is unchanged.
+APP_MENU = ((ROOT / "templates" / "_app_menu.html").read_text(encoding="utf-8")
+            + (ROOT / "templates" / "partials" / "_menu_view_panels.html").read_text(encoding="utf-8"))
 CSS = re.sub(r"/\*.*?\*/", "", (ROOT / "static" / "css" / "main.css").read_text(encoding="utf-8"), flags=re.S)
 
 

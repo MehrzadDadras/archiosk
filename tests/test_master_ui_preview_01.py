@@ -1,5 +1,5 @@
-"""MASTERUI-PREVIEW: the Master command registry and the admin-only session
-preview of the Master Workspace, exercised through real routes.
+"""MASTERUI: the Master command registry and the Master Workspace (the only
+shell since the cutover), exercised through real routes.
 
 Proves the Product Owner's Master UI laws on the preview:
 - 19 families, one fixed order, for every role, page and object;
@@ -181,17 +181,18 @@ class PreviewThroughRealRoutes(unittest.TestCase):
         return [line.split('data-family="')[1].split('"')[0].upper()
                 for line in html.splitlines() if 'class="master-family' in line]
 
-    def test_off_by_default_and_the_classic_shell_is_unchanged(self):
+    def test_the_master_workspace_is_the_only_shell(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): this asserted the preview was
+        off by default and the classic shell unchanged. The Product Owner retired
+        the classic shell; every signed-in page is the Master Workspace."""
         html = self.client_for("boss").get("/projects").get_data(as_text=True)
-        self.assertNotIn('data-master-shell="on"', html)
-        self.assertIn("ui-primary-nav", html)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.master-ui-preview"', html)
+        self.assertIn('data-master-shell="on"', html)
+        self.assertNotIn("ui-primary-nav", html)
+        self.assertNotIn('data-ui-ref="menu.archiosk.admin.master-ui-preview"', html)
 
     def test_the_admin_journey_keeps_one_geography_and_one_identity(self):
         boss = self.client_for("boss")
         project_id = self.upload(boss)
-        response = boss.post("/master-ui-preview/toggle", headers={"Referer": "http://localhost/projects"})
-        self.assertEqual(response.status_code, 302)
         pages = {
             "projects": "/projects",
             "documents": "/document-shop/jobs",
@@ -230,7 +231,6 @@ class PreviewThroughRealRoutes(unittest.TestCase):
     def test_examine_through_the_master_action_starts_the_real_examination(self):
         boss = self.client_for("boss")
         project_id = self.upload(boss)
-        boss.post("/master-ui-preview/toggle")
         html = boss.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
         self.assertIn("Not yet examined", html)
         from services import perception_jobs
@@ -244,26 +244,18 @@ class PreviewThroughRealRoutes(unittest.TestCase):
         self.assertIn("DOCUMENT ▸ View Document", after)
         self.assertIn('title="Already examined">Examine</span>', after)
 
-    def test_the_preview_is_admin_only_and_never_reaches_a_customer(self):
-        cust = self.client_for("cust")
-        self.assertEqual(cust.post("/master-ui-preview/toggle").status_code, 403)
-        with cust.session_transaction() as stored:
-            stored["master_ui_preview"] = True
-        html = cust.get("/document-shop/jobs").get_data(as_text=True)
-        self.assertNotIn('data-master-shell="on"', html)
-        self.assertIn('data-ui-ref="shell.customer-topbar"', html)
+    def test_customers_are_in_the_same_workspace(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): customers were kept on the
+        classic shell while the Master UI was an admin preview. Law 7 now holds
+        for them too - same shell, staff commands greyed with no route."""
+        html = self.client_for("cust").get("/document-shop/jobs").get_data(as_text=True)
+        self.assertIn('data-master-shell="on"', html)
+        self.assertNotIn('data-ui-ref="shell.customer-topbar"', html)
+        self.assertEqual(self.families_in(html), FAMILY_ORDER)
+        self.assertNotIn('href="/admin/developer-tools"', html)
 
-    def test_the_toggle_turns_it_back_off(self):
-        boss = self.client_for("boss")
-        boss.post("/master-ui-preview/toggle")
-        self.assertIn('data-master-shell="on"', boss.get("/projects").get_data(as_text=True))
-        boss.post("/master-ui-preview/toggle")
-        self.assertNotIn('data-master-shell="on"', boss.get("/projects").get_data(as_text=True))
-
-    def test_an_off_site_referrer_is_not_followed(self):
-        boss = self.client_for("boss")
-        response = boss.post("/master-ui-preview/toggle", headers={"Referer": "https://evil.example/x"})
-        self.assertTrue(response.headers["Location"].endswith("/projects"))
+    def test_the_retired_preview_toggle_is_gone(self):
+        self.assertEqual(self.client_for("boss").post("/master-ui-preview/toggle").status_code, 404)
 
 
 if __name__ == "__main__":

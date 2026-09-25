@@ -191,7 +191,9 @@ def test_reload_is_read_only(env):
     paths = list(root.glob('*.json'))
     before = {str(p): p.read_bytes() for p in paths}
     response = client.get('/document-shop/jobs')
-    assert b'document-shop.jobs.reload' in response.data
+    # SUPERSEDED DELIBERATELY (MASTERUI cutover): the desk's own Reload link is
+    # retired (browser reload is the reload); the GET itself stays read-only.
+    assert response.status_code == 200
     assert response.cache_control.no_store
     assert {str(p): p.read_bytes() for p in paths} == before
 

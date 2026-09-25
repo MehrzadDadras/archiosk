@@ -140,7 +140,10 @@ class RootI1NavigationTests(unittest.TestCase):
         # drives the top-bar breadcrumb, same mechanism Files already uses.
         response = self.client.get(f"/projects/{self.project_id}/workspace?view=requirements")
         body = response.get_data(as_text=True)
-        self.assertIn('<span class="workspace-topbar-doc">Requirements</span>', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb ->
+        # the identity line's derived-view segment, fed by the same
+        # directory_view_label registry.
+        self.assertIn('<span class="identity-bar-view">Requirements</span>', body)
 
     # -- 4/5: no duplicated governed records from projection ------------------
 

@@ -154,7 +154,9 @@ class RegistryTests(_BaseTestCase):
         resp = client.get(f"/projects/{doc.project_id}/workspace?view=files")
         body = resp.get_data(as_text=True)
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('<span class="workspace-topbar-doc">Files</span>', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the breadcrumb's Files label
+        # -> the identity line naming the operation.
+        self.assertIn("DATA ▸ Project Files", body)
         header_idx = body.index("display-division-header-name")
         self.assertIn("Files", body[header_idx:header_idx + 400])
 

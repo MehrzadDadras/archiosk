@@ -36,6 +36,7 @@ import unittest
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _ICON_SVG = _REPO_ROOT / "static" / "app-icon.svg"
@@ -73,8 +74,12 @@ class HomeDestinationTests(unittest.TestCase):
         self.assertIn("landing-app-icon", body)
 
     def test_the_menu_item_points_there(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk.home -> the
+        ARCHIOSK menu's Home item; same destination, still not /projects."""
         body = self._client().get("/projects").get_data(as_text=True)
-        tag = re.search(r'<a[^>]*data-ui-ref="menu\.archiosk\.home"[^>]*>', body)
+        start = body.index('<details class="master-app">')
+        app_menu = body[start:body.index("</ul>", start)]
+        tag = re.search(r'<a [^>]*aria-label="Archiosk Home"[^>]*>', app_menu)
         self.assertIsNotNone(tag, "the Home item did not render")
         self.assertIn('href="/home"', tag.group(0))
         self.assertNotIn('href="/projects"', tag.group(0))
@@ -93,11 +98,13 @@ class HomeDestinationTests(unittest.TestCase):
         self.assertIn("/projects", response.headers["Location"])
 
     def test_the_projects_directory_is_still_reachable(self):
-        """Home moving must not cost the directory its entry point."""
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.all-projects ->
+        PORTFOLIO > All Projects. Home moving must not cost the directory its
+        entry point."""
         body = self._client().get("/projects").get_data(as_text=True)
-        tag = re.search(r'<a[^>]*data-ui-ref="menu\.file\.all-projects"[^>]*>', body)
-        self.assertIsNotNone(tag, "All Projects disappeared")
-        self.assertIn('href="/projects"', tag.group(0))
+        state, inner = master_command(body, "portfolio.all")
+        self.assertIsNotNone(state, "All Projects disappeared")
+        self.assertIn('href="/projects"', inner)
 
     def test_home_does_not_redirect_at_all(self):
         """A loop here would be invisible in a 200-only assertion."""

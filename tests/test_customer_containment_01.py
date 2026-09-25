@@ -35,6 +35,7 @@ from models import ROLE_ADMIN, ROLE_CUSTOMER
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CONTAINER_STATE_BLACK_BOX, CaseWorkspaceStore
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -259,8 +260,14 @@ class TheCustomerShellOffersNoProjectDoor(_CustomerCase):
         response = self._customer().get(
             "/document-shop/jobs/%s" % self.owned.project_id)
         body = response.get_data(as_text=True)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover, law 8): the customer is in the
+        # one Master Workspace; the Project door (PORTFOLIO > All Projects) is
+        # present but GREY with no route - still no way in.
         self.assertNotIn('data-ui-ref="menu.file.all-projects"', body)
-        self.assertIn('data-ui-ref="shell.customer-topbar"', body)
+        state, inner = master_command(body, "portfolio.all")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("href=", inner)
+        self.assertNotIn('href="/projects"', body)
 
 
 class TheConversationSurvivesBeingAskedTwice(_CustomerCase):

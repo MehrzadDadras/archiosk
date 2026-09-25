@@ -1,0 +1,18 @@
+{# MASTERUI: moved VERBATIM from templates/_app_menu.html so the Master Menu and the
+   (reserved) classic menu render the SAME control - same ids, same data-ui-refs,
+   same scripts. #}
+                            <details class="workspace-appearance-menu workspace-menubar-submenu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
+                                <summary class="workspace-menubar-item">Appearance</summary>
+                                <div class="workspace-appearance-options" role="group" aria-label="Appearance">
+                                    <div class="appearance-global-options" role="radiogroup" aria-label="Appearance">
+                                        {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest'), ('deep-ocean', 'Deep Ocean', 'deep-ocean')] %}
+                                        <label class="appearance-global-option">
+                                            <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
+                                                   data-appearance-all-mode="{{ mode_value }}"
+                                                   data-ui-ref="menu.appearance.{{ ref_suffix }}">
+                                            {{ mode_label }}
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </details>

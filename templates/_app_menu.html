@@ -1,3 +1,6 @@
+{# RESERVED (MASTERUI cutover): the classic application menu bar is no longer rendered - the
+   Master Workspace replaced it. Kept for reference; its working controls live in
+   templates/partials/_menu_*.html. Delete when nothing reads it. #}
 {# ============================================================
    CLAUDE-APP-MENU-01, extracted into its own partial by
    CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01 (Disposition 2/3): the
@@ -30,45 +33,7 @@
                    wordmark. The wordmark stands alone now; the only surviving graphic is
                    the app icon, which exists because a tab and a home screen must show
                    something. See tools/render_app_icon.py. #}
-                {% if developer_ui_reveal and template_identity %}
-                <span class="developer-template-identity" data-ui-ref="developer.template.identity" aria-label="{{ template_identity.template_id }} {{ template_identity.name }}">
-                    <form method="post" action="{{ url_for('portal.developer_home_context') }}" class="developer-template-identity-form">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="object_type" value="template_surface">
-                        <input type="hidden" name="object_id" value="{{ template_identity.template_id }}">
-                        <input type="hidden" name="label" value="{{ template_identity.template_id }} · {{ template_identity.name }}">
-                        <button type="submit" class="developer-template-identity-button">{{ template_identity.template_id }} · {{ template_identity.name }}</button>
-                    </form>
-                </span>
-                {% endif %}
-                {# Section 2/3/4: the canonical GO/system working indicator -
-                   three vertically-arranged dots, downward-progressing
-                   opacity pulse (top -> middle -> bottom, repeating) while
-                   genuine background work is active. Hidden by default
-                   (Section 3/7: "idle/quiet = no active work" - nothing
-                   rendered, not merely dim, so the identity corner stays
-                   genuinely quiet at rest). Driven by the ALREADY-EXISTING
-                   truthful signal this app has for "GO is working" -
-                   static/js/case_workspace.js's own classic, un-
-                   intercepted Composer form-submit handler, the same one
-                   that already sets #dock-composer-execution-status's
-                   text - never a second, parallel activity mechanism, and
-                   never a client-side timer (Section 4: "not arbitrary
-                   timers"). Because this is a full-page-reload
-                   architecture with no background-job infrastructure
-                   (confirmed repository-wide), the indicator is
-                   necessarily self-clearing the exact same way that
-                   status span already is: the next page load starts
-                   hidden again, with no persisted "still working" state
-                   to ever go stale. No click handler (Section 7: "do not
-                   invent a new activity dashboard merely for this
-                   prompt" - no truthful high-level work-status surface
-                   exists yet for a click to open). #}
-                <span class="workspace-app-activity" id="workspace-app-activity" data-ui-ref="menu.archiosk.activity" role="status" title="GO idle" aria-label="GO idle" hidden>
-                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
-                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
-                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
-                </span>
+                {% include "partials/_menu_activity.html" %}
                 {# CLAUDE-P40-BRAND1: the mark sits directly before the
                    wordmark inside this SAME link (never a second,
                    adjacent element) so there is exactly one tab stop and
@@ -201,12 +166,6 @@
                                        visible to someone who already passed the gate. #}
                                     <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.diagnostics" href="{{ url_for('portal.list_diagnostics') }}">Diagnostics</a>
                                     <a class="workspace-menubar-item" id="project-data-management" data-ui-ref="menu.archiosk.admin.project-data-management" href="{{ url_for('portal.reset_project_data', project_id=(project_id if project_id is defined else None)) }}">Project Data Management</a>
-                                    {# MASTERUI-PREVIEW: the Product Owner's way into the Master UI
-                                       preview. Session-scoped, admin-only, returns to this page. #}
-                                    <form method="post" action="{{ url_for('portal.toggle_master_ui_preview') }}">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.admin.master-ui-preview">Master UI preview</button>
-                                    </form>
                                 </div>
                             </details>
                             {# CLAUDE-DEVELOPER-MENU-01: Developer Mode is its own submenu
@@ -229,25 +188,7 @@
                                encodes the menu path, and leaving "admin." on a control
                                that no longer lives under Admin would make the reference
                                map describe a layout that does not exist. #}
-                            <details class="workspace-menubar-submenu" data-ui-ref="menu.archiosk.developer">
-                                <summary class="workspace-menubar-item">Developer Mode</summary>
-                                <div class="workspace-menubar-subpanel" role="group" aria-label="Developer Mode">
-                                    {# The label states current state, matching Publish RFP/
-                                       Remove Project's own "the button says what happens
-                                       next" idiom. #}
-                                    <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}">
-                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.mode-toggle">{% if developer_mode %}Exit Developer Mode{% else %}Enter Developer Mode{% endif %}</button>
-                                    </form>
-                                    {% if developer_mode %}
-                                    <form method="post" action="{{ url_for('portal.toggle_developer_ui_reveal') }}">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.ui-reveal-toggle">{% if developer_ui_reveal %}Hide Template IDs{% else %}Reveal Template IDs{% endif %}</button>
-                                    </form>
-                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.tools" href="{{ url_for('portal.developer_tools', project_id=(project_id if project_id is defined else None)) }}">Developer Tools</a>
-                                    <a class="workspace-menubar-item" data-ui-ref="menu.archiosk.developer.cognitive-gym" href="{{ url_for('portal.cognitive_gym_dashboard') }}">Cognitive Gym</a>
-                                    {% endif %}
-                                </div>
-                            </details>
+                            {% include "partials/_menu_developer.html" %}
                             {% endif %}
                             {# Appearance: reviewer/device presentation state only
                                (localStorage - see the radio inputs below), never
@@ -257,47 +198,8 @@
                                .workspace-topbar-controls location (same ids,
                                same radio inputs, same static/js/case_workspace.js
                                wiring - a physical move, not a reimplementation). #}
-                            <details class="workspace-appearance-menu workspace-menubar-submenu" id="workspace-appearance-menu" data-ui-ref="menu.appearance">
-                                <summary class="workspace-menubar-item">Appearance</summary>
-                                <div class="workspace-appearance-options" role="group" aria-label="Appearance">
-                                    <div class="appearance-global-options" role="radiogroup" aria-label="Appearance">
-                                        {% for mode_value, mode_label, ref_suffix in [('light', 'Titanium', 'light'), ('black', 'Black', 'dark'), ('midnight-blue', 'Midnight Blue', 'tinted'), ('deep-forest', 'Deep Forest', 'deep-forest'), ('deep-ocean', 'Deep Ocean', 'deep-ocean')] %}
-                                        <label class="appearance-global-option">
-                                            <input type="radio" name="appearance-all" id="appearance-all-{{ ref_suffix }}"
-                                                   data-appearance-all-mode="{{ mode_value }}"
-                                                   data-ui-ref="menu.appearance.{{ ref_suffix }}">
-                                            {{ mode_label }}
-                                        </label>
-                                        {% endfor %}
-                                    </div>
-                                </div>
-                            </details>
-                            {% if project_id is defined and workspace is defined %}
-                            {# Display Layout genuinely needs an open Workspace
-                               (it drives THIS project's own Display grid) -
-                               stays project-gated, unlike Appearance above.
-                               Relocated verbatim - same ids, same steppers,
-                               same static/js/case_workspace.js wiring. #}
-                            <details class="workspace-layout-menu workspace-menubar-submenu" id="workspace-layout-menu" data-ui-ref="menu.display-layout">
-                                <summary class="workspace-menubar-item">Display Layout</summary>
-                                <div class="workspace-layout-options" role="group" aria-label="Display Layout">
-                                    <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
-                                        <span class="workspace-layout-quantity-label">Vertical divisions</span>
-                                        <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" data-ui-ref="menu.display-layout.vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
-                                        <span class="workspace-layout-quantity-value" id="display-vertical-value" aria-live="polite">1</span>
-                                        <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" data-ui-ref="menu.display-layout.vertical-increment" aria-label="Increase vertical divisions">+</button>
-                                    </div>
-                                    <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
-                                        <span class="workspace-layout-quantity-label">Horizontal divisions</span>
-                                        <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" data-ui-ref="menu.display-layout.horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
-                                        <span class="workspace-layout-quantity-value" id="display-horizontal-value" aria-live="polite">1</span>
-                                        <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" data-ui-ref="menu.display-layout.horizontal-increment" aria-label="Increase horizontal divisions">+</button>
-                                    </div>
-                                    <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
-                                    <button type="button" class="workspace-layout-apply" id="display-layout-apply" data-ui-ref="menu.display-layout.apply">Apply</button>
-                                </div>
-                            </details>
-                            {% endif %}
+                            {% include "partials/_menu_appearance.html" %}
+                            {% include "partials/_menu_display_layout.html" %}
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             {# Exit: this is a browser application, not a native
                                desktop one - there is no process to terminate.
@@ -553,22 +455,7 @@
                                already wires (never a second implementation); View is simply
                                where you ask for a panel rather than where one is imposed.
                                A tray this page does not have removes its own button. #}
-                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.lists"
-                                    data-tray-focus-btn="lists" data-tray-label="Lists" aria-pressed="false">Lists</button>
-                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.display"
-                                    data-tray-focus-btn="display" data-tray-label="Display" aria-pressed="false">Display</button>
-                            {# Eye and Toolbox exist only inside an open Workspace. Gated
-                               server-side rather than leaning on workspace_trays.js to
-                               remove them client-side: a control should not be rendered
-                               at all where it has nothing to act on, and a JS-dependent
-                               removal is a dead control for anyone whose script has not
-                               run yet. #}
-                            {% if project_id is defined and workspace is defined %}
-                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.eye"
-                                    data-tray-focus-btn="eye" data-tray-label="Eye" aria-pressed="false">Eye (drawing)</button>
-                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.toolbox"
-                                    data-tray-focus-btn="toolbox" data-tray-label="Toolbox" aria-pressed="false">Toolbox</button>
-                            {% endif %}
+                            {% include "partials/_menu_view_panels.html" %}
                             <hr class="workspace-menubar-separator" aria-hidden="true">
                             <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.fullscreen" data-action="toggle-fullscreen" aria-pressed="false">Fullscreen</button>
                         </div>
@@ -810,80 +697,8 @@
                    data-action="open-keyboard-shortcuts" (scrolls to and
                    reveals this same element - never a second dialog
                    framework). #}
-                <div class="workspace-menubar-shortcuts-panel" id="app-menu-keyboard-shortcuts" data-ui-ref="menu.help.shortcuts-panel" role="region" aria-label="Keyboard Shortcuts" tabindex="-1" hidden>
-                    <h2>Keyboard Shortcuts</h2>
-                    <dl>
-                        <dt>Escape</dt><dd>Close the open menu</dd>
-                        <dt>&larr; / &rarr;</dt><dd>Move between open Document tabs (when a tab has focus)</dd>
-                        <dt>Home / End</dt><dd>Jump to the first / last open Document tab</dd>
-                        <dt>Enter / Space</dt><dd>Activate the focused Document tab</dd>
-                    </dl>
-                </div>
-                {% if developer_mode %}
-                {# CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one
-                   persistent, unmistakable indicator this stage exists
-                   to provide - "When I am developing ARCHIOSK, I should
-                   always know that I am in Developer Mode" (Product
-                   Owner's own words). Deliberately OUTSIDE the
-                   `project_id is defined` guard below (unlike
-                   .workspace-side-indicator, which only ever appears
-                   inside an open Project) - this is a reviewer-wide
-                   session state, not a project-scoped one, so it must
-                   render on every authenticated page, project open or
-                   not (Projects directory, Establish a Project, etc.),
-                   matching this stage's own explicit "must not imply...
-                   any project authority" requirement: it is not part of
-                   the project-context breadcrumb at all. Plain <span>,
-                   no click handler - same "operational boundary
-                   indicator, not decoration, not a casual mode-switch
-                   button" idiom CLAUDE-RFP-BOUNDARY-01 already
-                   established for the side-indicator (the actual
-                   mode-switch is the Archiosk > Admin menu item above,
-                   same discipline as that indicator's own precedent). #}
-                {# CLAUDE-DEVELOPER-MENU-01: the badge now carries its own exit.
-
-                   This REVERSES the "plain <span>, no click handler" decision
-                   recorded immediately above, on the Product Owner's explicit
-                   instruction. The prior reasoning is preserved rather than
-                   deleted because it was not wrong: an operational boundary
-                   indicator should not read as decoration or invite a casual
-                   mode-switch.
-
-                   What changed is the evidence. The Product Owner could not
-                   find the way IN (it was two disclosures deep under "Admin"),
-                   and a mode you can see you are in but cannot leave from where
-                   you see it has the same defect pointing the other way. The
-                   indicator stays an indicator - the badge text is still a
-                   role="status" span with no handler - and the exit is a
-                   separate, explicitly labelled control beside it.
-
-                   Still a form POST, never a link: a GET would put a session
-                   state change into browser history and make it reachable by
-                   typing a URL, which is the discipline the toggle route
-                   already enforces by being POST-only. #}
-                <span class="workspace-developer-mode-badge" data-ui-ref="menu.developer-mode-badge" role="status" title="Developer Mode is active - toggle from Archiosk &gt; Developer Mode" aria-label="Developer Mode is active">
-                    <span class="workspace-developer-mode-badge-text">DEVELOPER MODE</span>
-                    <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}" class="workspace-developer-mode-exit-form">
-                        <button type="submit" class="workspace-developer-mode-exit" data-ui-ref="menu.developer-mode-badge.exit" title="Exit Developer Mode" aria-label="Exit Developer Mode">&times;</button>
-                    </form>
-                </span>
-                {% endif %}
-                {% if verification_session %}
-                {# CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: same
-                   "persistent, unmistakable indicator, not decoration"
-                   idiom as the Developer Mode badge immediately above -
-                   this session's own real product authority (an
-                   ephemeral, admin-role identity created solely for
-                   bounded live-browser proof work) must never be
-                   confusable with a real admin's own session. Also
-                   outside the project_id guard, for the same reason. #}
-                <span class="workspace-verification-session-badge" data-ui-ref="menu.verification-session-badge" title="Temporary live-verification identity - no real project authority" aria-label="Temporary live-verification identity active">
-                    Live Verification Session
-                    <form method="post" action="{{ url_for('portal.verification_access_end') }}" style="display:inline;">
-                        <button type="submit" data-ui-ref="menu.verification-session-end">End</button>
-                    </form>
-                </span>
-                {% endif %}
+                {% include "partials/_menu_shortcuts_panel.html" %}
+                {% include "partials/_menu_badges.html" %}
                 {% if project_id is defined and workspace is defined %}
                 <span class="workspace-topbar-context" data-ui-ref="menu.context">
                     {# CLAUDE-P40-VW7B, Section 5: "[ARCHIOSK mark] Archiosk
@@ -930,42 +745,6 @@
                     <span class="workspace-topbar-doc">{{ directory_view_label }}</span>
                     {% endif %}
                 </span>
-                {% if origin_message_id %}
-                {# CLAUDE-GO-NAVIGATION-CONTEXT-GAMES-01: bounded, reversible
-                   pilot testing whether purpose-aware return can be composed
-                   from existing primitives - see governance/specified-
-                   unbuilt/navigation-context-operational-map.md ("Active
-                   pilot") and routes/workspace.py's own origin_message_id
-                   comment. A quiet, restrained link (reuses
-                   .workspace-topbar-status's own "no border/background at
-                   rest, underline on hover" idiom - Section 23/32's own
-                   "quiet surface" principle: this is not a persistent
-                   breadcrumb trail, only appears when a real excursion
-                   origin exists) back to the SAME already-rendered
-                   #message-<id> anchor (templates/case_workspace.html's own
-                   existing conversation-message id, unchanged) - pure
-                   client-side fragment scroll, no new route, no server-side
-                   existence check (a stale/foreign id just fails to scroll,
-                   the same honest silent-degradation this app's hotlinks
-                   already exhibit when a cited Source no longer resolves). #}
-                <a class="workspace-topbar-status" data-ui-ref="menu.context.return-to-conversation" href="#message-{{ origin_message_id }}">&larr; Return to conversation</a>
-                {% endif %}
-                {% if operating_environment %}
-                {# CLAUDE-RFP-BOUNDARY-01, Section 11: a restrained,
-                   persistent workspace-side indicator - "particularly
-                   useful in Admin mode... an operational boundary
-                   indicator, not decoration... not a casual mode-switch
-                   button" - so this is a plain <span>, no click handler,
-                   no href. State-aware per this session's own Icon
-                   Intelligence pass: the accessible label/tooltip
-                   (side_indicator_tooltip, routes/workspace.py) explains
-                   what the side actually means, never just the bare
-                   label text repeated. Legacy/unclassified projects
-                   (operating_environment is None) show nothing here -
-                   the same "None means not established, never guessed"
-                   honesty environment_capabilities.py's own module
-                   docstring already establishes for the field itself. #}
-                <span class="workspace-side-indicator workspace-side-indicator-{{ operating_environment }}" data-ui-ref="menu.context.side-indicator" title="{{ side_indicator_tooltip }}" aria-label="{{ side_indicator_tooltip }}">{{ operating_environment_label }}{% if lifecycle_stage_label %} · {{ lifecycle_stage_label }}{% endif %}</span>
-                {% endif %}
+                {% include "partials/_menu_context_extras.html" %}
                 {% endif %}
             </div>

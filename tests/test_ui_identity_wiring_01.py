@@ -205,14 +205,14 @@ class ShellWiringTests(_Case):
                  html.index('id="page-body"'), html.index('data-master-shell="status"')]
         self.assertEqual(order, sorted(order))
 
-    def test_a_page_that_does_not_opt_in_is_unchanged_and_never_resolves(self):
+    def test_every_signed_in_page_is_the_master_workspace(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): this asserted a page that did
+        not opt in stayed classic. The Master Workspace is now the only shell, so a
+        page renders it without opting in, and the retired customer top bar is gone."""
         self.as_user("cust")
-        with patch.object(app_module, "resolve_ui_identity",
-                          side_effect=AssertionError("resolved for a page that did not opt in")):
-            html = self.render(NOT_OPTED_IN, project_id=self.document.project_id)
-        self.assertNotIn("data-master-shell", html)
-        self.assertIn('<meta name="archiosk-master-shell" content="">', html)
-        self.assertIn('data-ui-ref="shell.customer-topbar"', html)
+        html = self.render(NOT_OPTED_IN, project_id=self.document.project_id)
+        self.assertIn('data-master-shell="menu"', html)
+        self.assertNotIn('data-ui-ref="shell.customer-topbar"', html)
 
     def test_role_greys_what_a_customer_may_not_use_and_removes_nothing(self):
         """SUPERSEDED DELIBERATELY (MASTERUI-PREVIEW, Product Owner Master UI
@@ -226,7 +226,7 @@ class ShellWiringTests(_Case):
             self.assertIn('>%s</span>' % label, html, label)
         for route in ("/upload", "/security/", "/developer/diagnostics", "/admin/developer-tools"):
             self.assertNotIn('href="%s"' % route, html, "a greyed command exposed its route")
-        self.assertIn("Upload Document…", html)
+        self.assertIn("Document Upload…", html)
         self.assertIn("Open My Documents", html)
 
     def test_state_greys_in_place_with_a_reason_instead_of_removing(self):
@@ -258,14 +258,16 @@ class ShellWiringTests(_Case):
         self.assertIn("No project or document open", html)
         self.assertNotIn("Castille Survey Set", html)
 
-    def test_real_pages_do_not_opt_in_yet(self):
+    def test_real_pages_render_the_master_workspace(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): real pages used to render
+        the classic shell until the opt-in; they are the Master Workspace now."""
         client = self.app.test_client()
         client.post("/login", data={"username": "cust", "password": PW})
         for url in ("/document-shop/jobs", "/document-shop/jobs/%s" % self.document.project_id):
             with self.subTest(url=url):
                 response = client.get(url)
                 self.assertEqual(response.status_code, 200)
-                self.assertNotIn("data-master-shell", response.get_data(as_text=True))
+                self.assertIn('data-master-shell="on"', response.get_data(as_text=True))
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@
 <p class="ui-eyebrow">GO Review Workspace</p><h1>Review result</h1>
 {% if not evaluation_only %}<p class="ui-metadata">{{ workspace.display_title or 'Project review' }}</p>{% endif %}
 <p>{{ 'Evaluation example — not established project facts.' if evaluation_only else 'Project evidence — qualifications remain attached to each finding.' }}</p>
-{% if not master_ui %}<nav><a href="{{ url_for('portal.survey_evaluation') }}">Choose a review task</a> · <a href="{{ back_url }}">Back to case</a> · <a href="{{ request.url }}">Reload</a></nav>{% endif %}{# MASTERUI: reached through the Master Menu in the Master Workspace #}
+{# MASTERUI: reached through the Master Menu in the Master Workspace #}
 
 <section id="go-work-plans" aria-label="Governed work plans" data-actions='{{ work_procedure_actions|tojson }}'>
 {% if work_plans %}<details><summary>Governed work plans — {{ work_plans|length }} recorded</summary>

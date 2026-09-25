@@ -256,6 +256,13 @@ class RealBrowserFolderMenuTests(_BaseTestCase):
             body_html, count=1,
         )
         assert n == 1
+        # MASTERUI cutover: the Master Workspace's own stylesheet is part of the
+        # real page's layout - inline it too, or the page is laid out without
+        # the shell it actually ships with.
+        master_css = (Path(__file__).resolve().parent.parent / "static" / "css" / "master_workspace.css").read_text(encoding="utf-8")
+        html, n = re.subn(r'<link[^>]*href="[^"]*master_workspace\.css[^"]*"[^>]*>',
+                          lambda _m: f"<style>{master_css}</style>", html, count=1)
+        # (A panel-only page renders without the shell, so it has none to inline.)
         html, n2 = re.subn(
             r'<script[^>]+src="[^"]*files_folder_menus\.js[^"]*"[^>]*></script>',
             lambda _m: f"<script>{self.folder_menus_js}</script>", html, count=1,

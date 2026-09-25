@@ -12,18 +12,12 @@
 <div class="ui-project-start">
 <p class="ui-eyebrow">Your working environment</p>
 {% call macros.page_header('All Projects', subtitle='Open a project, review what needs attention, or start new work.', subtitle_class='ui-purpose') %}
-{% if not master_ui %}{% if is_admin %}<a class="btn btn-primary" href="{{ url_for('portal.upload', environment=(accessible_environments[0] if accessible_environments | length == 1 else None)) }}" data-ui-ref="projects-directory.new-project">+ New Project</a>{% endif %}{% endif %}
+
 {% endcall %}
 {# MASTERUI: FILE > New Project / Upload Document, MODEL > Planning and
    PORTFOLIO > Removed Projects are these, in the Master Workspace; the GO
-   composer sits in the GO anchor. RESERVED for deletion at cutover. #}
-{% if not master_ui %}
-<details><summary>Other ways to start or recover work</summary><div class="ui-secondary-actions">
-{% if is_admin %}<a class="btn" href="{{ url_for('portal.document_shop_intake') }}" data-ui-ref="projects-directory.document-shop">Document Upload</a>{% endif %}
-<a class="btn" href="{{ url_for('planning_zoning.planning_zoning') }}" data-ui-ref="projects-directory.planning-zoning">Planning &amp; Zoning</a>
-<a class="btn btn-ghost" href="{{ url_for('portal.removed_projects') }}" data-ui-ref="projects-directory.removed-link">Removed Projects</a>
-</div></details>
-{% endif %}
+   composer sits in the GO anchor. Removed at the Master UI cutover. #}
+
 
 
 {# CLAUDE-HOME-UNIFY-01: the orientation Composer, MOVED here from
@@ -50,18 +44,7 @@
 {# attach=False for the same reason New Project's is - _classify_gateway_
    orientation takes (message, projects, can_create_project) and no image.
    See upload.html's own note for what unlocks it. #}
-{% if not master_ui %}{% block projects_go %}
-<details class="ui-help-composer"{% if master_ui %} open{% endif %}><summary>Ask GO to help you find your next step</summary>
-{{ macros.composer_shell(
-    prefix="index-orientation",
-    ui_prefix="index.orientation",
-    action=url_for('portal.gateway_orientation'),
-    send_label="Send",
-    placeholder="Open a project, or ask what you can do here",
-    aria_label="Ask Archiosk",
-    attach=False) }}
-</details>
-{% endblock %}{% endif %}
+
 
 {# CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives here now.
 
@@ -231,4 +214,15 @@
 {% endblock %}
 
 {# MASTERUI: the orientation composer, in the fixed GO anchor. #}
-{% block master_go %}{{ self.projects_go() }}{% endblock %}
+{% block master_go %}
+<details class="ui-help-composer" open><summary>Ask GO to help you find your next step</summary>
+{{ macros.composer_shell(
+    prefix="index-orientation",
+    ui_prefix="index.orientation",
+    action=url_for('portal.gateway_orientation'),
+    send_label="Send",
+    placeholder="Open a project, or ask what you can do here",
+    aria_label="Ask Archiosk",
+    attach=False) }}
+</details>
+{% endblock %}

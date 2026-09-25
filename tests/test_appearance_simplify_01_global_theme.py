@@ -374,10 +374,11 @@ class DeepOceanGlassTreatmentTests(unittest.TestCase):
 
 class SignOutRelocationTests(_BaseTestCase):
     def test_sign_out_present_exactly_once(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the Account menu is retired; the one Sign out lives in the ARCHIOSK application menu."""
         client = self._client_as("appsimp_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(body.count('data-ui-ref="menu.account.sign-out"'), 1)
         self.assertEqual(body.count(">Sign out<"), 1)
+        self.assertEqual(body.count('href="/logout"'), 1)
 
     def test_sign_out_route_and_placement_unchanged(self):
         client = self._client_as("appsimp_owner", 1)
@@ -385,35 +386,27 @@ class SignOutRelocationTests(_BaseTestCase):
         self.assertIn('href="/logout"', body)
 
     def test_sign_out_appears_before_the_admin_label(self):
-        # CLAUDE-APP-MENU-01: Admin no longer lives in the Account menu
-        # at all (relocated to menu.archiosk.admin, in the Archiosk menu
-        # far earlier in document order than the Account menu on the
-        # right) - the two are no longer siblings, so a document-order
-        # comparison between them is no longer meaningful. What still
-        # holds, and is asserted here: Sign out is the first item inside
-        # the Account menu itself, and Admin is genuinely gone from it.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the Account menu is retired; the one Sign out lives in the ARCHIOSK application menu. No admin submenu sits beside it (admin items are TOOLS/PROJECT commands)."""
         client = self._client_as("appsimp_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        account_start = body.index('data-ui-ref="menu.account"')
-        account_panel = body[account_start:body.index("</details>", account_start)]
-        sign_out_pos = account_panel.index('data-ui-ref="menu.account.sign-out"')
-        self.assertNotIn('data-ui-ref="menu.account.admin"', account_panel)
-        self.assertIn('data-ui-ref="menu.archiosk.admin"', body)
-        self.assertGreaterEqual(sign_out_pos, 0)
+        start = body.index('<details class="master-app">')
+        app_menu = body[start:body.index("</ul>", start)]
+        self.assertIn('<a href="/logout">Sign out</a>', app_menu)
+        self.assertNotIn('data-ui-ref="menu.account.admin"', body)
+        self.assertNotIn('data-ui-ref="menu.archiosk.admin"', app_menu)
 
     def test_sign_out_present_for_a_non_admin_reviewer_too(self):
-        # Sign out must never become admin-only merely by sitting near
-        # the Admin section - it is a plain account action for every
-        # authenticated reviewer.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the Account menu is retired; the one Sign out lives in the ARCHIOSK application menu."""
         from models import User, db
         with self.flask_app.app_context():
             db.session.add(User(username="appsimp_reader", password_hash=generate_password_hash("x"), role="read_only"))
             db.session.commit()
         client = self._client_as("appsimp_reader", 2, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.account.sign-out"', body)
+        start = body.index('<details class="master-app">')
+        app_menu = body[start:body.index("</ul>", start)]
+        self.assertIn('<a href="/logout">Sign out</a>', app_menu)
         self.assertNotIn('data-ui-ref="menu.account.admin"', body)
-
 
 if __name__ == "__main__":
     unittest.main()

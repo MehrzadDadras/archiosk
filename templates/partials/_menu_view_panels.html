@@ -1,0 +1,20 @@
+{# MASTERUI: moved VERBATIM from templates/_app_menu.html's View menu - the region
+   controls (data-tray-focus-btn, wired by static/js/workspace_trays.js). The
+   user opens or focuses Lists / Display / Eye / Toolbox here; context never
+   rearranges them. #}
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.lists"
+                                    data-tray-focus-btn="lists" data-tray-label="Lists" aria-pressed="false">Lists</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.display"
+                                    data-tray-focus-btn="display" data-tray-label="Display" aria-pressed="false">Display</button>
+                            {# Eye and Toolbox exist only inside an open Workspace. Gated
+                               server-side rather than leaning on workspace_trays.js to
+                               remove them client-side: a control should not be rendered
+                               at all where it has nothing to act on, and a JS-dependent
+                               removal is a dead control for anyone whose script has not
+                               run yet. #}
+                            {% if project_id is defined and workspace is defined %}
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.eye"
+                                    data-tray-focus-btn="eye" data-tray-label="Eye" aria-pressed="false">Eye (drawing)</button>
+                            <button type="button" class="workspace-menubar-item" data-ui-ref="menu.view.panel.toolbox"
+                                    data-tray-focus-btn="toolbox" data-tray-label="Toolbox" aria-pressed="false">Toolbox</button>
+                            {% endif %}

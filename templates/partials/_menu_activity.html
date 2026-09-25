@@ -1,0 +1,42 @@
+{# MASTERUI: moved VERBATIM from templates/_app_menu.html's identity region - the
+   developer template-identity chip and the GO activity indicator (driven by
+   static/js/case_workspace.js by id), rendered by the Master Menu. #}
+                {% if developer_ui_reveal and template_identity %}
+                <span class="developer-template-identity" data-ui-ref="developer.template.identity" aria-label="{{ template_identity.template_id }} {{ template_identity.name }}">
+                    <form method="post" action="{{ url_for('portal.developer_home_context') }}" class="developer-template-identity-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="object_type" value="template_surface">
+                        <input type="hidden" name="object_id" value="{{ template_identity.template_id }}">
+                        <input type="hidden" name="label" value="{{ template_identity.template_id }} · {{ template_identity.name }}">
+                        <button type="submit" class="developer-template-identity-button">{{ template_identity.template_id }} · {{ template_identity.name }}</button>
+                    </form>
+                </span>
+                {% endif %}
+                {# Section 2/3/4: the canonical GO/system working indicator -
+                   three vertically-arranged dots, downward-progressing
+                   opacity pulse (top -> middle -> bottom, repeating) while
+                   genuine background work is active. Hidden by default
+                   (Section 3/7: "idle/quiet = no active work" - nothing
+                   rendered, not merely dim, so the identity corner stays
+                   genuinely quiet at rest). Driven by the ALREADY-EXISTING
+                   truthful signal this app has for "GO is working" -
+                   static/js/case_workspace.js's own classic, un-
+                   intercepted Composer form-submit handler, the same one
+                   that already sets #dock-composer-execution-status's
+                   text - never a second, parallel activity mechanism, and
+                   never a client-side timer (Section 4: "not arbitrary
+                   timers"). Because this is a full-page-reload
+                   architecture with no background-job infrastructure
+                   (confirmed repository-wide), the indicator is
+                   necessarily self-clearing the exact same way that
+                   status span already is: the next page load starts
+                   hidden again, with no persisted "still working" state
+                   to ever go stale. No click handler (Section 7: "do not
+                   invent a new activity dashboard merely for this
+                   prompt" - no truthful high-level work-status surface
+                   exists yet for a click to open). #}
+                <span class="workspace-app-activity" id="workspace-app-activity" data-ui-ref="menu.archiosk.activity" role="status" title="GO idle" aria-label="GO idle" hidden>
+                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
+                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
+                    <i class="workspace-app-activity-dot" aria-hidden="true"></i>
+                </span>

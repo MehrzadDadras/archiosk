@@ -529,7 +529,9 @@ class RegressionGuardTests(_BaseTestCase):
         doc = self._ingest("LTH1 Regression Project", "spec.pdf")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk -> the Master
+        # Menu's ARCHIOSK application menu.
+        self.assertIn('<summary class="master-app-mark">ARCHIOSK</summary>', body)
 
     def test_document_navigation_still_a_real_link_not_client_routing(self):
         doc = self._ingest("LTH1 Regression Project 2", "spec.pdf")

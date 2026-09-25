@@ -8,7 +8,7 @@
 {# MASTERUI: in the Master Workspace the machine identifiers (engine, job,
    source id, hash) are Inspect depth - shown under VIEW > Inspect Density,
    not by default. The classic page is unchanged. #}
-{% if not master_ui or request.args.get('density') == 'inspect' %}
+{% if request.args.get('density') == 'inspect' %}
 <p>{{ row.created_at }} · Engine {{ row.processing_version }} · Run {{ row.analysis_run_id or 'Initial analysis' }}</p>
 <p>Source {{ row.source_id }} · SHA256 {{ row.source_sha256 }}</p>
 <p>Job {{ row.job_id }} · Evidence {{ row.evidence_refs|join(', ') or 'None recorded' }}</p>
@@ -18,8 +18,5 @@
 {% for reading in row.readings %}<details><summary>Inspect reading {{ reading.id }} ? {{ reading.evidence_class }}</summary><pre>{{ reading.content }}</pre></details>{% endfor %}
 {% if row.failure_reason %}<p>{{ row.failure_reason }}</p>{% endif %}
 </section>{% else %}<p>No worker runs recorded.</p>{% endfor %}
-{% if not master_ui %}
-<a class="btn" href="{{ url_for('portal.document_shop_result', project_id=project_id) }}">Back to analysis</a>
-<a class="btn" href="{{ url_for('portal.document_shop_jobs') }}">My documents</a>
-{% endif %}
+
 {% endblock %}

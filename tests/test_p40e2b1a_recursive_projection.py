@@ -172,9 +172,14 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         # (Lists leaf + State 3's own resolved-environment project list)
         # plus once in the menu chooser.
         dashboard_body = client.get("/", follow_redirects=True).get_data(as_text=True)
-        self.assertEqual(dashboard_body.count("A Second Distinct Project"), 3)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover, all three counts): the File >
+        # Open Project inline list and the breadcrumb (visible text + aria-label)
+        # are retired, and the identity line names the open project once.
+        # Enumerated, not assumed - dashboard: Lists leaf + directory card.
+        self.assertEqual(dashboard_body.count("A Second Distinct Project"), 2)
         other_project_open_body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 2)
+        # A different project's page: the Lists leaf only.
+        self.assertEqual(other_project_open_body.count("A Second Distinct Project"), 1)
 
         own_page = client.get(f"/projects/{other.project_id}/workspace").get_data(as_text=True)
         # On its own page it legitimately appears five times now
@@ -197,7 +202,9 @@ class NoDuplicatedChildHierarchyTests(_BaseTestCase):
         # What must never happen is an occurrence inside Display itself
         # (a duplicated card/heading, Section 4's own rule) - that check
         # is unaffected and still the real point of this test.
-        self.assertEqual(own_page.count("A Second Distinct Project"), 6)
+        # Its own page: identity line, context bar, Lists disclosure label, Lists
+        # self link - and still never inside Display (below).
+        self.assertEqual(own_page.count("A Second Distinct Project"), 4)
         display_start = own_page.index('class="workspace-pane-display"')
         display_html = own_page[display_start:]
         self.assertNotIn("A Second Distinct Project", display_html)

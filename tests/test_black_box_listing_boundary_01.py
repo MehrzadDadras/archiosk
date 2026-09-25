@@ -189,7 +189,10 @@ class ListingBoundaryTests(unittest.TestCase):
         """
         body = self._client().get("/document-shop/jobs").get_data(as_text=True)
         start = body.index('data-ui-ref="document-shop.jobs.page-title"')
-        end = body.index('data-ui-ref="document-shop.jobs.new"')
+        # MASTERUI cutover: the page-local "Upload a document" (jobs.new) that
+        # ended the listing is FILE > Upload Document now; the listing ends with
+        # the page's own work area.
+        end = body.index("</main>", start)
         listing = body[start:end]
         self.assertNotIn(self.project.project_id, listing)
         self.assertNotIn("Conventional Project", listing)
@@ -198,7 +201,10 @@ class ListingBoundaryTests(unittest.TestCase):
         """D2 owns full presentation. This asserts the LISTING invents none."""
         body = self._client().get("/document-shop/jobs").get_data(as_text=True)
         start = body.index('data-ui-ref="document-shop.jobs.page-title"')
-        end = body.index('data-ui-ref="document-shop.jobs.new"')
+        # MASTERUI cutover: the page-local "Upload a document" (jobs.new) that
+        # ended the listing is FILE > Upload Document now; the listing ends with
+        # the page's own work area.
+        end = body.index("</main>", start)
         listing = body[start:end]
         for absent in ("Operating Environment", "Owner /", "Proponent",
                        "procurement", "lifecycle"):

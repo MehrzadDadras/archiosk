@@ -400,6 +400,13 @@ class RealBrowserBehaviorTests(_BaseTestCase):
             body_html, count=1,
         )
         assert n == 1
+        # MASTERUI cutover: the Master Workspace's own stylesheet is part of the
+        # real page's layout now - inline it too, or the page is laid out without
+        # the shell it actually ships with.
+        master_css = (Path(__file__).resolve().parent.parent / "static" / "css" / "master_workspace.css").read_text(encoding="utf-8")
+        html, n = re.subn(r'<link[^>]*href="[^"]*master_workspace\.css[^"]*"[^>]*>',
+                          lambda _m: f"<style>{master_css}</style>", html, count=1)
+        assert n == 1, "the Master Workspace stylesheet must be exercised"
         html = re.sub(r'<script[^>]+src="[^"]*document_tabs\.js[^"]*"[^>]*></script>',
                        lambda _m: f"<script>{self.document_tabs_js}</script>", html, count=1)
         html = re.sub(r'<script[^>]+src="[^"]*investigation_attention\.js[^"]*"[^>]*></script>',

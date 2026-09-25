@@ -1,0 +1,29 @@
+{# MASTERUI: moved VERBATIM from templates/_app_menu.html so the Master Menu and the
+   (reserved) classic menu render the SAME control - same ids, same data-ui-refs,
+   same scripts. #}
+                            {% if project_id is defined and workspace is defined %}
+                            {# Display Layout genuinely needs an open Workspace
+                               (it drives THIS project's own Display grid) -
+                               stays project-gated, unlike Appearance above.
+                               Relocated verbatim - same ids, same steppers,
+                               same static/js/case_workspace.js wiring. #}
+                            <details class="workspace-layout-menu workspace-menubar-submenu" id="workspace-layout-menu" data-ui-ref="menu.display-layout">
+                                <summary class="workspace-menubar-item">Display Layout</summary>
+                                <div class="workspace-layout-options" role="group" aria-label="Display Layout">
+                                    <div class="workspace-layout-quantity" role="group" aria-label="Vertical divisions">
+                                        <span class="workspace-layout-quantity-label">Vertical divisions</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-vertical-decrement" data-ui-ref="menu.display-layout.vertical-decrement" aria-label="Decrease vertical divisions">&minus;</button>
+                                        <span class="workspace-layout-quantity-value" id="display-vertical-value" aria-live="polite">1</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-vertical-increment" data-ui-ref="menu.display-layout.vertical-increment" aria-label="Increase vertical divisions">+</button>
+                                    </div>
+                                    <div class="workspace-layout-quantity" role="group" aria-label="Horizontal divisions">
+                                        <span class="workspace-layout-quantity-label">Horizontal divisions</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-horizontal-decrement" data-ui-ref="menu.display-layout.horizontal-decrement" aria-label="Decrease horizontal divisions">&minus;</button>
+                                        <span class="workspace-layout-quantity-value" id="display-horizontal-value" aria-live="polite">1</span>
+                                        <button type="button" class="workspace-layout-stepper" id="display-horizontal-increment" data-ui-ref="menu.display-layout.horizontal-increment" aria-label="Increase horizontal divisions">+</button>
+                                    </div>
+                                    <p class="workspace-layout-limit-note">Maximum 6 Displays total (Vertical &times; Horizontal).</p>
+                                    <button type="button" class="workspace-layout-apply" id="display-layout-apply" data-ui-ref="menu.display-layout.apply">Apply</button>
+                                </div>
+                            </details>
+                            {% endif %}

@@ -49,6 +49,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _DISTINCTIVE_PROJECT_NAME = "Riverside Terminal VW5 Confidential Workspace"
 
@@ -333,9 +334,12 @@ class GatewayShellIsolationTests(_BaseTestCase):
         # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
         # deep-ocean background (landing-page) alongside gateway-shell -
         # unrelated to the shell-isolation property this test guards.
-        self.assertIn('class="gateway-shell landing-page"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser is no longer the
+        # standalone gateway shell; it is a state of the one Master Workspace,
+        # keeping its own wide card content.
+        self.assertNotIn('class="gateway-shell landing-page"', body)
+        self.assertIn('data-master-shell="on"', body)
         self.assertIn("gateway-card-wide", body)
-        self.assertIn('class="gateway-page"', body)
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +371,13 @@ class GatewayFunctionalChoicesTests(_BaseTestCase):
         body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
-        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
-        self.assertIn('href="/upload?environment=client_owner"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's own
+        # environment-preset "+ New Project" button was page-local duplicate
+        # chrome; the one New Project is FILE > New Project... on the canonical
+        # route, whose required environment radio + confirmation is unchanged.
+        state, inner = master_command(body, "file.new_project")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/upload"', inner)
 
     def test_non_admin_does_not_see_create_project_action(self):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
@@ -432,7 +441,11 @@ class NonWorkspaceFunctionAccessTests(_BaseTestCase):
         client = self._client_as("vw5_reviewer", 2, role="read_only")
         body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn('href="/security/"', body)
-        self.assertNotIn(">Security<", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover, law 8): not absent but GREY,
+        # with no route - the non-admin can never reach Security from here.
+        state, inner = master_command(body, "tools.security")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("href=", inner)
 
     def test_non_admin_still_gets_403_hitting_security_directly(self):
         # Server-side enforcement is the real protection - hiding the

@@ -35,6 +35,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _JS_PATH = _REPO_ROOT / "static" / "js" / "case_workspace.js"
@@ -149,18 +150,26 @@ class HierarchyTests(_BaseTestCase):
         client = self._client_as("vw7b_admin", 4, role="admin")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         lists = self._lists_html(body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): -> PROJECT > Project Data
+        # Management, active, at top level (see the count below).
+        self.assertEqual(master_command(body, "project.data")[0], "active")
         self.assertNotIn('data-ui-ref="lists.project.tools.data-management"', lists)
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
         # Still exactly one html_id="project-data-management" anchor -
         # relocated, not duplicated.
-        self.assertEqual(body.count('id="project-data-management"'), 1)
+        # MASTERUI cutover: the menu link's id -> exactly one Master command.
+        self.assertEqual(body.count('data-command="project.data"'), 1)
 
     def test_reset_project_data_still_admin_only(self):
         client = self._client_as("vw7b_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
-        self.assertNotIn("Project Data Management", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover, law 8): named but GREY with no
+        # route - still unreachable for a non-admin.
+        state, inner = master_command(body, "project.data")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("href=", inner)
+        self.assertNotIn('href="/admin/reset-project-data', body)
 
     def test_rfi_leaf_carries_active_state_when_owning_investigation_is_open(self):
         # A real create_rfi_draft() call needs a reviewed Finding plus an

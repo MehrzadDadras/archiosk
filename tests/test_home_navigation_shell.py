@@ -19,6 +19,7 @@ from pathlib import Path
 
 from services.bhive_parser import ParsedDocument
 from services.requirements_registry import RequirementsRegistry
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class HomeNavigationShellTests(unittest.TestCase):
@@ -123,7 +124,11 @@ class HomeNavigationShellTests(unittest.TestCase):
         # the duplication this test was written to catch.
         self.assertEqual(client.get("/").headers["Location"], "/projects")
         directory_body = client.get("/projects").get_data(as_text=True)
-        self.assertEqual(directory_body.count("rfp.md"), 3)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the File > Open Project
+        # inline chooser is retired (FILE > Open Project... opens the chooser
+        # page), so the legitimate listings are two - the Lists rail and the
+        # directory itself. A third would be the duplication this guards.
+        self.assertEqual(directory_body.count("rfp.md"), 2)
         # And Home really is that same page, not a look-alike.
         self.assertIn('data-ui-ref="projects-directory.list"', body)
 
@@ -153,14 +158,17 @@ class HomeNavigationShellTests(unittest.TestCase):
         body = response.get_data(as_text=True)
 
         self.assertIn(">Projects<", body)
-        self.assertIn("+ New Project", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's own "+ New
+        # Project" button -> FILE > New Project..., a real destination.
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
         # No global nav links were fabricated for destinations that only
         # exist nested inside a specific project's Case Workspace.
-        self.assertNotIn(">Sources<", body)
-        self.assertNotIn(">Cases<", body)
-        self.assertNotIn(">Investigations<", body)
-        self.assertNotIn(">Requirements<", body)
-        self.assertNotIn(">RFIs<", body)
+        # MASTERUI cutover: CHECK > Investigations and DATA > Requirements are
+        # Master commands, GREYED here with no route (law 8). What this guards is
+        # unchanged: no LINK is fabricated to a project-only destination.
+        import re as _re
+        for label in ("Sources", "Cases", "Investigations", "Requirements", "RFIs"):
+            self.assertIsNone(_re.search(r"<a [^>]*>\s*%s\s*</a>" % label, body), label)
 
     def test_nav_rail_shows_current_project_context_inside_workspace(self):
         project_id = "home-nav-context-project"

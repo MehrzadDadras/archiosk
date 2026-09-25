@@ -46,13 +46,36 @@ _APP_MENU_JS_PATH = _REPO_ROOT / "static" / "js" / "app_menu.js"
 _MAIN_CSS_PATH = _REPO_ROOT / "static" / "css" / "main.css"
 
 
+# MASTERUI cutover: the classic menu bar is retired; these read the Master Menu.
+_MENU_PARTIALS_DIR = _REPO_ROOT / "templates" / "partials"
+
+
+def _app_menu_expanded():
+    """_app_menu.html with its partial includes expanded inline.
+
+    MASTERUI cutover: working controls moved VERBATIM out of _app_menu.html
+    into templates/partials/_menu_*.html (which the Master Menu includes).
+    Expanding them here keeps every static check reading exactly the markup it
+    read before - the protection is unchanged."""
+    text = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+    return re.sub(r'\{% include "partials/(_menu_[a-z_]+\.html)" %\}',
+                  lambda m: (_MENU_PARTIALS_DIR / m.group(1)).read_text(encoding="utf-8"), text)
+
+
+def _master_command(body, command_id):
+    """(state, inner_html) of one rendered Master command, or (None, None)."""
+    m = re.search(r'<li class="master-item is-(active|grey|current)" data-command="%s">(.*?)</li>'
+                  % re.escape(command_id), body, re.S)
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
 # ---------------------------------------------------------------------------
 # Static structure: menu grammar, order, and command-reuse wiring.
 # ---------------------------------------------------------------------------
 
 class MenuGrammarTests(unittest.TestCase):
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
 
     def test_top_level_menu_order(self):
         # Product Owner's own required grammar: Archiosk | File | Edit |
@@ -99,7 +122,7 @@ class CommandReuseTests(unittest.TestCase):
     extraction)."""
 
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
         self.base_html = _BASE_HTML_PATH.read_text(encoding="utf-8")
 
     def test_every_reuse_control_target_id_exists_in_the_template(self):
@@ -140,7 +163,9 @@ class CommandReuseTests(unittest.TestCase):
 
 class KeyboardShortcutsPanelTests(unittest.TestCase):
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        # MASTERUI cutover: the panel moved VERBATIM into a partial the Master
+        # Menu includes; the protection is unchanged.
+        self.html = (_MENU_PARTIALS_DIR / "_menu_shortcuts_panel.html").read_text(encoding="utf-8")
 
     def test_panel_lists_only_shortcuts_that_are_genuinely_wired(self):
         idx = self.html.index('id="app-menu-keyboard-shortcuts"')
@@ -304,7 +329,7 @@ class IdentityMarkAndActivityIndicatorTests(unittest.TestCase):
     """
 
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
         self.js = _APP_MENU_JS_PATH.read_text(encoding="utf-8")
 
@@ -425,11 +450,13 @@ class _BaseTestCase(unittest.TestCase):
 
 class MenuRendersEverywhereTests(_BaseTestCase):
     def test_menu_bar_renders_on_a_project_less_page(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): classic menu.bar refs -> the
+        19-family Master Menu on a project-less page."""
         client = self._client_as("menu_owner", 1)
         body = client.get("/projects").get_data(as_text=True)
-        for ref in ("menu.bar", "menu.archiosk", "menu.file", "menu.edit",
-                    "menu.view", "menu.document", "menu.tools", "menu.window", "menu.help"):
-            self.assertIn(f'data-ui-ref="{ref}"', body, ref)
+        self.assertIn('data-master-shell="menu"', body)
+        for family in ("file", "edit", "view", "document", "tools", "window", "help"):
+            self.assertIn('data-family="%s"' % family, body, family)
 
     def test_appearance_renders_on_a_project_less_page_display_layout_does_not(self):
         client = self._client_as("menu_owner", 1)
@@ -450,12 +477,13 @@ class MenuRendersEverywhereTests(_BaseTestCase):
         self.assertIn("hidden", body[idx - 20:idx + 200])
 
     def test_menu_bar_renders_inside_an_open_project_too(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.bar -> Master Menu; the
+        Display Layout control (moved verbatim) still renders inside a project."""
         doc = self._ingest(owner="menu_owner", project_name="North Bayview Menu Test")
         client = self._client_as("menu_owner", 1)
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.bar"', body)
+        self.assertIn('data-master-shell="menu"', body)
         self.assertIn('data-ui-ref="menu.display-layout"', body)
-
 
 class AboutRouteTests(_BaseTestCase):
     def test_about_route_returns_real_static_facts(self):
@@ -466,50 +494,69 @@ class AboutRouteTests(_BaseTestCase):
         self.assertIn("Flat-JSON registry", body)
 
     def test_about_link_in_menu_points_at_the_real_route(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk.about -> the
+        ARCHIOSK application menu's About item."""
         client = self._client_as("menu_owner", 1)
         body = client.get("/projects").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.archiosk.about"')
-        tag = body[idx:idx + 60]
-        self.assertIn('href="/about"', tag)
-
+        start = body.index('class="master-app"')
+        app_menu = body[start:body.index("</ul>", start)]
+        self.assertIn('<a href="/about">About</a>', app_menu)
 
 class AdminMenuTests(_BaseTestCase):
     def test_admin_submenu_present_for_admin(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): Archiosk > Admin -> the same
+        destinations as active Master commands (FILE, TOOLS, PROJECT)."""
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk.admin"', body)
-        self.assertIn('data-ui-ref="menu.file.new-project"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
+        for command, href in (("file.new_project", 'href="/upload"'), ("tools.security", 'href="/security/"'),
+                              ("tools.operations", 'href="/operations/"'),
+                              ("project.data", 'href="/admin/reset-project-data"')):
+            state, inner = _master_command(body, command)
+            self.assertEqual(state, "active", command)
+            self.assertIn(href, inner, command)
 
     def test_admin_submenu_absent_for_non_admin(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): absent -> present but GREY
+        with no route (law 8: role greys, never removes; nothing is exposed)."""
         client = self._client_as("menu_reviewer", 2, role="read_only")
         body = client.get("/projects").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.archiosk.admin"', body)
-
+        for command in ("tools.security", "tools.operations", "project.data", "file.new_project"):
+            state, inner = _master_command(body, command)
+            self.assertEqual(state, "grey", command)
+            self.assertNotIn("href=", inner, command)
+        for route in ('href="/security/"', 'href="/operations/"', 'href="/admin/reset-project-data"', 'href="/upload"'):
+            self.assertNotIn(route, body)
 
 class PublishMenuCommandTests(_BaseTestCase):
     """Section 12/16: Publish RFP only ever appears for an Owner project
     still in PRE_PUBLICATION - never a second publication implementation,
     never surfaced in a Proponent workspace or a published Owner one."""
 
+    def _publish(self, body):
+        return _master_command(body, "deal.publish")
+
     def test_publish_absent_without_an_open_project(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover, all Publish tests): absent ->
+        DEAL > Publish Procurement Package greyed with no action; present -> active,
+        opening the same Toolbox publish panel."""
         client = self._client_as("menu_owner", 1)
-        body = client.get("/projects").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
+        state, inner = self._publish(client.get("/projects").get_data(as_text=True))
+        self.assertEqual(state, "grey")
+        self.assertNotIn("data-action", inner)
 
     def test_publish_present_for_owner_pre_publication_project(self):
         doc = self._ingest(owner="menu_owner", project_name="Owner Pre-Pub Menu Test", operating_environment=CLIENT_OWNER)
         client = self._client_as("menu_owner", 1)
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.publish-rfp"', body)
+        state, inner = self._publish(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertEqual(state, "active")
+        self.assertIn('data-action="open-publish-panel"', inner)
 
     def test_publish_absent_for_proponent_project(self):
         doc = self._ingest(owner="menu_owner", project_name="Proponent Menu Test", operating_environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("menu_owner", 1)
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
+        state, inner = self._publish(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertEqual(state, "grey")
+        self.assertNotIn("data-action", inner)
 
     def test_publish_absent_once_owner_project_is_published(self):
         doc = self._ingest(owner="menu_owner", project_name="Owner Published Menu Test", operating_environment=CLIENT_OWNER)
@@ -518,51 +565,53 @@ class PublishMenuCommandTests(_BaseTestCase):
         source_id = workspace.sources[0]["id"]
         store.publish_procurement_package(workspace, [source_id], source_id, actor="menu_owner")
         client = self._client_as("menu_owner", 1)
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
+        state, inner = self._publish(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertEqual(state, "grey")
+        self.assertNotIn("data-action", inner)
 
     def test_publish_absent_for_non_admin_actor_on_an_otherwise_eligible_project(self):
-        # CLAUDE-FILE-PUBLISH-RFP-01: a real non-admin (read_only) actor on
-        # a project that IS an eligible Owner pre-publication project (the
-        # only other gate this command checks) must not see an
-        # enabled-looking command that dead-ends on click - the Toolbox
-        # panel it scrolls to is itself is_admin-gated and won't exist in
-        # this actor's DOM at all. Reuses the same menu_reviewer/read_only
-        # actor this file's own _BaseTestCase.setUp already creates.
         doc = self._ingest(owner="menu_owner", project_name="Owner Pre-Pub Non-Admin Menu Test", operating_environment=CLIENT_OWNER)
         client = self._client_as("menu_reviewer", 2, role="read_only")
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn('data-ui-ref="menu.file.publish-rfp"', body)
+        state, inner = self._publish(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertEqual(state, "grey")
+        self.assertNotIn("data-action", inner)
 
 
 class DocumentAndExportMenuTests(_BaseTestCase):
     def test_document_menu_shows_placeholder_with_no_selection(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.document.none placeholder
+        -> DOCUMENT > Document Context greyed with its reason, no action."""
         doc = self._ingest(owner="menu_owner", project_name="Doc Menu Placeholder Test")
         client = self._client_as("menu_owner", 1)
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.document.none"', body)
-        self.assertNotIn('data-ui-ref="menu.document.context"', body)
+        state, inner = _master_command(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True),
+                                       "document.context")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("data-action", inner)
 
     def test_document_menu_shows_context_command_with_a_selection(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.document.context -> the
+        active DOCUMENT > Document Context command, same data-action."""
         doc = self._ingest(owner="menu_owner", project_name="Doc Menu Selected Test")
         store = self._store()
         source_id = store.get(doc.project_id).sources[0]["id"]
         client = self._client_as("menu_owner", 1)
         body = client.get(f"/projects/{doc.project_id}/workspace?source={source_id}").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.document.context"', body)
-        self.assertNotIn('data-ui-ref="menu.document.none"', body)
+        state, inner = _master_command(body, "document.context")
+        self.assertEqual(state, "active")
+        self.assertIn('data-action="open-document-context"', inner)
 
     def test_export_placeholder_without_a_project_real_export_within_one(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.export.* -> FILE >
+        Export RFI greyed without a project, the real export route within one."""
         client = self._client_as("menu_owner", 1)
-        body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.export.none"', body)
-        self.assertNotIn('data-ui-ref="menu.file.export.rfi"', body)
-
+        state, inner = _master_command(client.get("/projects").get_data(as_text=True), "file.export_rfi")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("href=", inner)
         doc = self._ingest(owner="menu_owner", project_name="Export Menu Test")
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.export.rfi"', body)
-        self.assertNotIn('data-ui-ref="menu.file.export.none"', body)
-
+        state, inner = _master_command(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True),
+                                       "file.export_rfi")
+        self.assertEqual(state, "active")
+        self.assertIn(f'href="/projects/{doc.project_id}/workspace/rfi-export"', inner)
 
 class FileMenuNewOpenProjectTests(_BaseTestCase):
     """CLAUDE-FILE-MENU-CANONICAL-COMMANDS-01: File > New Project / Open
@@ -571,97 +620,100 @@ class FileMenuNewOpenProjectTests(_BaseTestCase):
     and must be truthfully permission-aware."""
 
     def test_new_project_present_and_targets_upload_for_admin(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.new-project -> FILE >
+        New Project..., active, same /upload route."""
         client = self._client_as("menu_owner", 1, role="admin")
-        body = client.get("/projects").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.file.new-project"')
-        tag = body[idx - 10:idx + 80]
-        self.assertIn('href="/upload"', tag)
-        self.assertNotIn('data-ui-ref="menu.file.new-project.none"', body)
+        state, inner = _master_command(client.get("/projects").get_data(as_text=True), "file.new_project")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/upload"', inner)
 
     def test_new_project_disabled_for_non_admin(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.new-project.none ->
+        FILE > New Project... greyed "Admin only" with no route."""
         client = self._client_as("menu_reviewer", 2, role="read_only")
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.new-project.none"', body)
-        self.assertNotIn('data-ui-ref="menu.file.new-project"', body)
+        state, inner = _master_command(body, "file.new_project")
+        self.assertEqual(state, "grey")
+        self.assertIn("Admin only", inner)
+        self.assertNotIn('href="/upload"', body)
 
     def test_open_project_is_a_direct_chooser_not_a_link_to_the_full_vestibule(self):
-        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
-        # ref itself is now a <details> submenu, not a plain <a href> to
-        # portal.choose_project - project_chooser.html/choose_project()
-        # are unchanged and stay reachable elsewhere (menu.context.
-        # switch-project), just no longer what File > Open Project opens.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the inline File > Open Project
+        submenu -> FILE > Open Project... (the chooser, now a state of the one shell)
+        plus the Navigator, which lists each project as a direct workspace link."""
         doc = self._ingest(owner="menu_owner", project_name="Open Project Direct Test")
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get("/projects").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.file.open-project"')
-        tag = body[idx - 70:idx + 60]
-        self.assertIn("<details", tag)
-        self.assertNotIn("/projects/choose", body[idx:idx + 400])
-        self.assertIn('data-ui-ref="menu.file.open-project.item"', body)
-        self.assertIn(f'href="/projects/{doc.project_id}/workspace"', body)
+        state, inner = _master_command(body, "file.open_project")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/projects/choose"', inner)
+        navigator = body[body.index('id="launcher-panel"'):]
+        self.assertIn(f'href="/projects/{doc.project_id}/workspace', navigator)
 
     def test_open_project_rows_open_immediately_no_radio_or_second_button(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the menu's own rows are
+        retired; the Master Menu item is ONE direct command, not a radio form."""
         self._ingest(owner="menu_owner", project_name="Open Project No Radio Test")
         client = self._client_as("menu_owner", 1, role="admin")
-        body = client.get("/projects").get_data(as_text=True)
-        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
-        panel = body[panel_idx:body.index("</details>", panel_idx)]
-        self.assertNotIn('type="radio"', panel)
-        self.assertNotIn("Open Project</button>", panel)
+        state, inner = _master_command(client.get("/projects").get_data(as_text=True), "file.open_project")
+        self.assertEqual(state, "active")
+        self.assertNotIn('type="radio"', inner)
+        self.assertNotIn("<button", inner)
 
     def test_open_project_scoped_to_current_projects_environment_when_one_is_open(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the scoping is kept - FILE >
+        Open Project... opens the chooser filtered to the open project's environment,
+        which lists that environment's projects and not the other's."""
         owner_doc = self._ingest(owner="menu_owner", project_name="Owner Scope Test", operating_environment=CLIENT_OWNER)
         proponent_doc = self._ingest(owner="menu_owner", project_name="Proponent Scope Test", operating_environment=DESIGN_BUILDER_PROPONENT)
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get(f"/projects/{owner_doc.project_id}/workspace").get_data(as_text=True)
-        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
-        panel = body[panel_idx:body.index("</details>", panel_idx)]
-        self.assertIn(f'href="/projects/{owner_doc.project_id}/workspace"', panel)
-        self.assertNotIn(f'href="/projects/{proponent_doc.project_id}/workspace"', panel)
+        state, inner = _master_command(body, "file.open_project")
+        self.assertEqual(state, "active")
+        href = re.search(r'href="([^"]+)"', inner).group(1).replace("&amp;", "&")
+        self.assertIn(f"current={owner_doc.project_id}", href)
+        self.assertIn("environment=" + CLIENT_OWNER, href)
+        chooser = client.get(href).get_data(as_text=True)
+        listing = chooser[chooser.index('data-ui-ref="gateway.chooser"'):]
+        self.assertIn(owner_doc.project_id, listing)
+        self.assertNotIn(proponent_doc.project_id, listing)
 
     def test_open_project_empty_state_is_truthful_and_offers_new_project_to_admin(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the menu's empty state -> the
+        chooser's own; an admin with no projects is still offered New Project."""
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.open-project.empty"', body)
-        self.assertIn('data-ui-ref="menu.file.open-project.new-project"', body)
+        self.assertEqual(_master_command(body, "file.new_project")[0], "active")
+        chooser = client.get("/projects/choose").get_data(as_text=True)
+        self.assertIn('href="/upload"', chooser)
 
     def test_open_project_empty_state_offers_no_new_project_link_to_non_admin(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): no New Project route is
+        exposed to a non-admin anywhere in the menu (greyed, no href)."""
         client = self._client_as("menu_reviewer", 2, role="read_only")
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.open-project.empty"', body)
-        self.assertNotIn('data-ui-ref="menu.file.open-project.new-project"', body)
+        self.assertEqual(_master_command(body, "file.new_project")[0], "grey")
+        self.assertNotIn('href="/upload"', body)
 
     def test_new_project_and_open_project_never_duplicate_a_second_implementation(self):
-        # Same routes as the pre-existing Archiosk > Admin > New Project
-        # and the breadcrumb's own Switch Project link - never a
-        # second, parallel project-creation/project-open code path.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): one Master command each, on the
+        same pre-existing routes (/upload, /projects/choose) - no parallel path."""
         client = self._client_as("menu_owner", 1, role="admin")
         body = client.get("/projects").get_data(as_text=True)
-        new_project_idx = body.index('data-ui-ref="menu.file.new-project"')
-        admin_new_project_idx = body.index('data-ui-ref="menu.file.new-project"')
-        self.assertIn('href="/upload"', body[new_project_idx - 10:new_project_idx + 80])
-        self.assertIn('href="/upload"', body[admin_new_project_idx - 10:admin_new_project_idx + 80])
+        self.assertEqual(body.count('data-command="file.new_project"'), 1)
+        self.assertEqual(body.count('data-command="file.open_project"'), 1)
+        self.assertIn('href="/upload"', _master_command(body, "file.new_project")[1])
+        self.assertIn('href="/projects/choose"', _master_command(body, "file.open_project")[1])
 
     def test_open_project_search_hidden_below_six_choices_present_above(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the menu-embedded search is
+        retired with the inline list; the chooser FILE > Open Project opens has its
+        own search, which finds an accessible project by name."""
         client = self._client_as("menu_owner", 1, role="admin")
-        for i in range(5):
+        for i in range(6):
             self._ingest(owner="menu_owner", project_name=f"Search Threshold {i}")
-        body = client.get("/projects").get_data(as_text=True)
-        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
-        panel = body[panel_idx:body.index("</details>", panel_idx)]
-        self.assertIn('data-ui-ref="menu.file.open-project.search"', panel)
-        search_idx = panel.index('data-ui-ref="menu.file.open-project.search"')
-        search_tag = panel[search_idx:panel.index(">", search_idx)]
-        self.assertIn("hidden", search_tag)
-
-        self._ingest(owner="menu_owner", project_name="Search Threshold 6")
-        body = client.get("/projects").get_data(as_text=True)
-        panel_idx = body.index('data-ui-ref="menu.file.open-project"')
-        panel = body[panel_idx:body.index("</details>", panel_idx)]
-        search_idx = panel.index('data-ui-ref="menu.file.open-project.search"')
-        search_tag = panel[search_idx:panel.index(">", search_idx)]
-        self.assertNotIn("hidden", search_tag)
-
+        chooser = client.get("/projects/choose?q=Threshold 5").get_data(as_text=True)
+        self.assertIn("Search Threshold 5", chooser)
 
 class OpenProjectMenuFilterJsTests(unittest.TestCase):
     """CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum G: the
@@ -833,51 +885,46 @@ class AllProjectsMenuEntryTests(_BaseTestCase):
         return client.get("/projects").get_data(as_text=True)
 
     def test_the_file_menu_offers_all_projects(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.all-projects ->
+        PORTFOLIO > All Projects."""
         body = self._menu_body("admin")
-        self.assertIn('data-ui-ref="menu.file.all-projects"', body)
+        self.assertIn(_master_command(body, "portfolio.all")[0], ("active", "current"))
 
     def test_it_points_at_the_projects_directory(self):
-        """Asserted against the anchor TAG. `/projects` appears elsewhere in the
-        document, so a bare substring check over the body would pass even if
-        this control pointed somewhere else."""
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): asserted against the
+        command's own anchor, as before."""
         body = self._menu_body("admin")
-        tag = re.search(r'<a[^>]*data-ui-ref="menu\.file\.all-projects"[^>]*>', body)
-        self.assertIsNotNone(tag, "the All Projects entry did not render")
-        self.assertIn('href="/projects"', tag.group(0))
+        state, inner = _master_command(body, "portfolio.all")
+        self.assertIsNotNone(state, "the All Projects entry did not render")
+        self.assertIn('href="/projects"', inner)
 
     def test_it_is_NOT_admin_gated(self):
-        """Deliberately unlike `menu.file.new-project` beside it.
-
-        portal.projects_list is @login_required and already access-filtered per
-        reviewer, so a read_only user reaching their own projects here is shown
-        nothing the directory would not show them anyway. Gating it would remove
-        a reviewer's only menu route to their own project list.
-        """
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): PORTFOLIO > All Projects is
+        active (not greyed) for a read_only reviewer too - same reasoning."""
         body = self._menu_body("read_only")
-        self.assertIn('data-ui-ref="menu.file.all-projects"', body)
+        state, inner = _master_command(body, "portfolio.all")
+        self.assertIn(state, ("active", "current"))
+        self.assertIn('href="/projects"', inner)
 
     def test_new_project_beside_it_REMAINS_admin_gated(self):
-        # The two live together; this guards against a future edit widening the
-        # wrong one by copying its neighbour.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): still admin-gated - greyed,
+        with no route, for a read_only reviewer."""
         body = self._menu_body("read_only")
-        self.assertNotIn('data-ui-ref="menu.file.new-project"', body)
+        self.assertEqual(_master_command(body, "file.new_project")[0], "grey")
+        self.assertNotIn('href="/upload"', body)
 
     def test_it_sits_above_the_separator_with_open_project(self):
-        """Grouping is the point, not decoration: All Projects and Open Project
-        both answer "which project am I working on", while everything past the
-        rule acts on the Document already open."""
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): grouping is now by family -
+        the project-choosing commands come before the ones acting on a document."""
         body = self._menu_body("admin")
-        all_projects = body.index('data-ui-ref="menu.file.all-projects"')
-        add_document = body.index('data-ui-ref="menu.file.add-document')
-        self.assertLess(all_projects, add_document)
-
-
+        self.assertLess(body.index('data-command="file.open_project"'), body.index('data-command="document.open_original"'))
+        self.assertLess(body.index('data-command="portfolio.all"'), body.index('data-command="trace.history"'))
 
 class HomeLabelTests(unittest.TestCase):
     """CLAUDE-MENU-HOME-LABEL-01 - visible text shortened, accessible name kept."""
 
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
 
     def _home_tag(self):
         idx = self.html.index('data-ui-ref="menu.archiosk.home"')
@@ -931,7 +978,7 @@ class DocumentMenuTests(unittest.TestCase):
     """
 
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
 
     def test_the_empty_state_names_the_action_not_only_the_state(self):
         idx = self.html.index('data-ui-ref="menu.document.none"')
@@ -1004,7 +1051,7 @@ class ToolsMenuStubTests(unittest.TestCase):
              "sheet-diff", "extract-sheet-index", "export-redlines")
 
     def setUp(self):
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
 
     def _tag(self, ref):
         idx = self.html.index('data-ui-ref="menu.tools.%s"' % ref)
@@ -1083,7 +1130,7 @@ class MenuShortcutSlotTests(unittest.TestCase):
 
     def setUp(self):
         self.css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
-        self.html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        self.html = _app_menu_expanded()
 
     def test_the_slot_styles_exist(self):
         self.assertIn(".menu-item-icon {", self.css)

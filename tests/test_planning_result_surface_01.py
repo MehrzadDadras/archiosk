@@ -34,6 +34,7 @@ from werkzeug.security import generate_password_hash
 from services import go_pdz_contract as contract
 from services import go_pdz_validator as validator
 from services import planning_result_view as view
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class TheFixtureIsARealContractDocument(unittest.TestCase):
@@ -276,7 +277,9 @@ class TheResultPageRenders(unittest.TestCase):
 
     def test_back_to_address_is_available_and_develop_further_is_disabled(self):
         _response, body = self._page()
-        self.assertIn('data-ui-ref="planning-zoning.result.back"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the page-local "Back to
+        # address" -> MODEL > Planning & Zoning Analysis, active, same route.
+        self.assertIn('href="/planning-zoning"', master_command(body, "model.planning")[1])
         control = re.search(
             r'<button[^>]*data-ui-ref="planning-zoning\.result\.develop-further"[^>]*>',
             body)

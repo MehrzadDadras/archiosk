@@ -684,24 +684,17 @@ class Vw4DisplayLayoutReadabilityTests(unittest.TestCase):
         self.assertIn("var(--text-disabled)", rule.group(1))
 
     def test_display_layout_menu_lives_inside_menu_surface_scope(self):
-        # The Display Layout <details> is a descendant of .workspace-
-        # topbar in base.html, so it automatically inherits whichever
-        # mode Menu is set to - confirmed structurally here.
-        #
-        # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
-        # Display Layout markup itself moved into the shared
-        # templates/_app_menu.html partial ({% include %}d by base.html
-        # inside .workspace-topbar, before #workspace-user-menu) - the
-        # nesting proof now spans both files: the include site is still
-        # between topbar-start and #workspace-user-menu in base.html's
-        # own source, and the id itself lives inside the included file.
-        html = _BASE_HTML_PATH.read_text(encoding="utf-8")
-        app_menu_html = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
-        topbar_start = html.index('<div class="workspace-topbar">')
-        topbar_end = html.index('id="workspace-user-menu"', topbar_start)
-        self.assertIn('{% include "_app_menu.html" %}', html[topbar_start:topbar_end])
-        self.assertIn('id="workspace-layout-menu"', app_menu_html)
-
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic menu's include
+        site -> the Master Menu. The Display Layout control (moved VERBATIM into
+        partials/_menu_display_layout.html) is included INSIDE the Master Menu's
+        own .workspace-topbar, so it still inherits the Menu surface's appearance
+        mode structurally."""
+        partials = _REPO_ROOT / "templates" / "partials"
+        master = (partials / "_master_menu.html").read_text(encoding="utf-8")
+        topbar_start = master.index('class="workspace-topbar master-topbar"')
+        topbar_end = master.rindex("</div>")
+        self.assertIn('{% include "partials/_menu_display_layout.html" %}', master[topbar_start:topbar_end])
+        self.assertIn('id="workspace-layout-menu"', (partials / "_menu_display_layout.html").read_text(encoding="utf-8"))
 
 # ---------------------------------------------------------------------------
 # VW5 Sign-in / Gateway shell boundaries unchanged by this stage
@@ -737,7 +730,10 @@ class Vw5ShellBoundaryUnaffectedTests(_BaseTestCase):
         # CLAUDE-CA1D-GATEWAY-VISUAL-CONTINUITY-01 added the shared
         # deep-ocean background (landing-page) alongside gateway-shell -
         # unrelated to the appearance-matrix work this test guards.
-        self.assertIn('class="gateway-shell landing-page"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser is a state of the
+        # one Master Workspace, not the gateway shell - and still no matrix.
+        self.assertNotIn('class="gateway-shell landing-page"', body)
+        self.assertIn('data-master-shell="on"', body)
 
     def test_auth_shell_and_gateway_shell_templates_untouched_by_this_stage(self):
         auth_shell = _AUTH_SHELL_HTML_PATH.read_text(encoding="utf-8")

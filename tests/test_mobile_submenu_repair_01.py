@@ -35,11 +35,16 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _CSS = (Path(__file__).resolve().parent.parent / "static" / "css" / "main.css").read_text(
     encoding="utf-8")
 _MENU = (Path(__file__).resolve().parent.parent / "templates" / "_app_menu.html").read_text(
     encoding="utf-8")
+# MASTERUI cutover: the menu that renders is the Master Menu, whose nested
+# submenus are the classic ones moved VERBATIM into partials.
+_MASTER_MENU = read_expanded(Path(__file__).resolve().parent.parent / "templates" / "partials" / "_master_menu.html")
+_MASTER_CSS = (Path(__file__).resolve().parent.parent / "static" / "css" / "master_workspace.css").read_text(encoding="utf-8")
 
 _PHONE_BREAKPOINT = 640
 _DRAWER_MAX = 320          # width: min(86vw, 320px)
@@ -177,8 +182,10 @@ class EveryNestedMenuBenefits(unittest.TestCase):
     """Fixed for the construct, not for one menu."""
 
     def test_both_nested_submenus_use_the_repaired_classes(self):
-        submenus = re.findall(r'<details class="workspace-menubar-submenu" data-ui-ref="([^"]+)"', _MENU)
-        self.assertIn("menu.archiosk.admin", submenus)
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the Admin submenu is retired
+        (its items are Master commands); the nested submenus that remain in the
+        Master Menu still use the repaired submenu class."""
+        submenus = re.findall(r'<details class="workspace-menubar-submenu" data-ui-ref="([^"]+)"', _MASTER_MENU)
         self.assertIn("menu.archiosk.developer", submenus)
 
     # Every class a nested submenu uses for its panel. Appearance and Display
@@ -187,19 +194,18 @@ class EveryNestedMenuBenefits(unittest.TestCase):
                       "workspace-layout-options")
 
     def test_every_nested_submenu_has_a_panel_the_flatten_reaches(self):
-        # This is the assertion that found the real second defect. Counting the
-        # exact string `class="workspace-menubar-subpanel"` said 3 of 4; being
-        # class-aware said 4 of 6, and the missing two were Appearance and
-        # Display Layout - absolutely positioned, no mobile reset, and NOT
-        # covered by a flatten written for the shared class alone.
-        opens = len(re.findall(r'<details[^>]*class="[^"]*\bworkspace-menubar-submenu\b', _MENU))
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the same class-aware count,
+        over the Master Menu - every nested submenu it embeds uses a panel class,
+        and the Master stylesheet's phone flatten covers every one of them."""
+        opens = len(re.findall(r'<details[^>]*class="[^"]*\bworkspace-menubar-submenu\b', _MASTER_MENU))
         panels = sum(
-            len(re.findall(r'<div[^>]*class="[^"]*\b%s\b' % cls, _MENU))
+            len(re.findall(r'<div[^>]*class="[^"]*\b%s\b' % cls, _MASTER_MENU))
             for cls in self._PANEL_CLASSES)
         self.assertEqual(opens, panels,
-                         "a nested submenu uses a panel class the mobile flatten "
-                         "does not cover - add it to the rule and to _PANEL_CLASSES")
-        self.assertGreaterEqual(opens, 6)
+                         "a nested submenu uses a panel class the phone flatten does not cover")
+        self.assertGreaterEqual(opens, 3)
+        for cls in self._PANEL_CLASSES:
+            self.assertIn(".master-topbar .%s" % cls, _MASTER_CSS, cls)
 
     def test_the_flatten_covers_every_panel_class(self):
         rule_block = PHONE[PHONE.index("html.mobile-nav-open .workspace-menubar-subpanel"):]

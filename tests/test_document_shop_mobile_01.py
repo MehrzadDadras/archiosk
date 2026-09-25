@@ -208,10 +208,17 @@ class CustomerTopBarMobileTests(unittest.TestCase):
                          "navigation must never be hidden to fit")
 
     def test_all_three_destinations_survive(self):
-        """Hiding one to make room would be the wrong fix, so pin them."""
-        for ref in ("shell.customer.home", "shell.customer.documents",
-                    "shell.customer.signout"):
-            self.assertIn('data-ui-ref="%s"' % ref, BASE_HTML)
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the customer top bar is
+        retired; its three destinations survive as Master commands every page
+        renders - Home and Sign out in the ARCHIOSK menu, My documents as FILE >
+        Open My Documents. Hiding one would still be the wrong fix, so pin them."""
+        partials = Path(__file__).resolve().parent.parent / "templates" / "partials"
+        master = (partials / "_master_menu.html").read_text(encoding="utf-8")
+        self.assertIn("url_for('portal.home')", master)
+        self.assertIn("url_for('portal.logout')", master)
+        from services.master_commands import COMMANDS
+        self.assertIn("file.my_documents", {c.id for c in COMMANDS})
+        self.assertIn('{% include "partials/_master_menu.html" %}', BASE_HTML)
 
     def test_the_project_shell_is_untouched_by_the_mobile_rule(self):
         """Scoped to the customer bar - admin/read_only navigation is a

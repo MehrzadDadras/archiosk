@@ -128,7 +128,10 @@ class StableSurfaceExtensionPointTests(_BaseTestCase):
         self.assertEqual(resp.status_code, 200)
         # Breadcrumb (templates/base.html) - now driven by the shared
         # directory_view_label, not a hardcoded 'Overview' literal.
-        self.assertIn(f'<span class="workspace-topbar-doc">{self._SYNTHETIC_LABEL}</span>', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb's
+        # view label -> the identity line's derived-view segment, still fed by
+        # the same registry, so a newly registered kind is named with no code.
+        self.assertIn(f'<span class="identity-bar-view">{self._SYNTHETIC_LABEL}</span>', body)
         # Display division-0 header (templates/case_workspace.html) -
         # same shared label, same generalization, independently confirmed.
         header_idx = body.index('display-division-header-name')

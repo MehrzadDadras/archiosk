@@ -42,6 +42,7 @@ _APP_MENU_HTML_PATH = _REPO_ROOT / "templates" / "_app_menu.html"
 
 sys.path.insert(0, str(_REPO_ROOT / "tools"))
 import derive_theme_palettes as dtp  # noqa: E402
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 def _parse_tokens(css: str) -> dict[str, str]:
@@ -255,7 +256,8 @@ class AppearanceMatrixLabelTests(unittest.TestCase):
         # CLAUDE-UI-ACTION-REDUNDANCY-REVIEW-01, Disposition 2/3: the
         # Appearance mode tuple/radio-group moved out of base.html's own
         # source into the shared templates/_app_menu.html partial.
-        self.source = _APP_MENU_HTML_PATH.read_text(encoding="utf-8")
+        # MASTERUI cutover: Appearance moved VERBATIM into a partial.
+        self.source = read_expanded(_APP_MENU_HTML_PATH)
 
     def test_five_labels_present(self):
         # CLAUDE-POSTCAMEL-P02-ST1: Light relabeled Titanium. Labels

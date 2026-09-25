@@ -27,6 +27,7 @@ from werkzeug.security import generate_password_hash
 
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.environment_capabilities import CLIENT_OWNER
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class _BaseTestCase(unittest.TestCase):
@@ -255,10 +256,11 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         doc = self._ingest("Project Alpha")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.file.new-project"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.new-project /
+        # menu.archiosk.admin.* -> FILE / TOOLS / PROJECT Master commands, active;
+        # the routes and the carried-forward project below are unchanged.
+        for command in ("file.new_project", "tools.security", "tools.operations", "project.data"):
+            self.assertEqual(master_command(body, command)[0], "active", command)
         self.assertIn('href="/upload"', body)
         self.assertIn('href="/security/"', body)
         self.assertIn('href="/operations/"', body)
@@ -292,7 +294,12 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         store.grant_project_access(ws, "lr_reader", actor="lr_owner", actor_role="admin")
         client = self._client(username="lr_reader", user_id=2, role="read_only")
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.account.removed-projects
+        # -> PORTFOLIO > Removed Projects, ACTIVE (not greyed) for this read-only
+        # reviewer - the route is @login_required only, as before.
+        state, inner = master_command(body, "portfolio.removed")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/removed-projects"', inner)
 
     def test_new_project_entry_points_are_all_the_same_canonical_route(self):
         # Section 5's ORIGINAL "no duplicate New Project entry point" premise is
@@ -311,7 +318,9 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
         self.assertEqual(body.count('href="/upload"'), 1)
-        self.assertIn('data-ui-ref="menu.file.new-project"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the one entry point is FILE >
+        # New Project..., the canonical /upload route.
+        self.assertIn('href="/upload"', master_command(body, "file.new_project")[1])
         self.assertNotIn('data-ui-ref="menu.archiosk.admin.new-project"', body)
 
     def test_admin_functions_also_absent_from_portfolio_rail(self):
@@ -324,7 +333,9 @@ class AdminSurfaceRelocationTests(_BaseTestCase):
         body = client.get("/projects").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.security"', body)
-        self.assertIn('data-ui-ref="menu.file.new-project"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.new-project ->
+        # FILE > New Project..., active for this admin.
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
 
 
 if __name__ == "__main__":

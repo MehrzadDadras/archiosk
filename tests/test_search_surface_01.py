@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from app import create_app
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class _SignedIn(unittest.TestCase):
@@ -40,8 +41,13 @@ class TheNavNeverPointsAtTheJsonEndpoint(_SignedIn):
         self.assertNotIn('href="/search"', html)
 
     def test_the_search_nav_item_carries_its_reference_id(self):
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the primary nav's Search
+        # (menu.search) -> QUERY > Search, active, on the HTML page (/find), never
+        # the JSON endpoint.
         _, html = self._html("/projects")
-        self.assertIn('data-ui-ref="menu.search"', html)
+        state, inner = master_command(html, "query.search")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/find"', inner)
 
 
 class TheSearchPageStaysInTheShell(_SignedIn):

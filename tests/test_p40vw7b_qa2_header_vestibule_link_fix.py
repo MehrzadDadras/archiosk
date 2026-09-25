@@ -52,6 +52,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
 import services.case_workspace as cw
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
@@ -167,26 +168,27 @@ class HeaderLinkCorrectnessTests(_BaseTestCase):
     including with Document controls visible (the exact scenario the
     real-browser report occurred in)."""
 
+    def _open_project(self, body):
+        state, inner = master_command(body, "file.open_project")
+        self.assertEqual(state, "active")
+        return inner
+
     def test_link_target_includes_current_param_with_document_open(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb Switch Project link -> FILE > Open Project..., the one control that opens the same Vestibule."""
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         source = self._first_source(doc.project_id)
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace?source={source['id']}").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn(f'href="/projects/choose?current={doc.project_id}"', tag)
+        self.assertIn(f'href="/projects/choose?current={doc.project_id}', self._open_project(body))
 
     def test_document_controls_region_visible_alongside_the_link(self):
-        # Confirms the exact real-browser scenario is reproduced
-        # server-side: a Document open, #workspace-document-controls
-        # present in the DOM (not [hidden] server-side - JS reveals it
-        # once mount() succeeds, which CLAUDE-P40-VW7B-QA1 fixed).
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb Switch Project link -> FILE > Open Project..., the one control that opens the same Vestibule."""
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         source = self._first_source(doc.project_id)
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace?source={source['id']}").get_data(as_text=True)
         self.assertIn('id="workspace-document-controls"', body)
-        self.assertIn('data-ui-ref="menu.context.switch-project"', body)
+        self._open_project(body)
 
     def test_no_click_handler_anywhere_targets_the_topbar(self):
         # Regression guard - no JS file may attach a click interceptor
@@ -217,40 +219,32 @@ class HeaderLinkCorrectnessTests(_BaseTestCase):
             self.assertNotIn("workspace-topbar", js, js_path.name)
 
     def test_link_still_single_tab_stop_no_duplicate_control(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb Switch Project link -> FILE > Open Project..., the one control that opens the same Vestibule."""
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        element = body[body.rindex("<a", 0, idx):body.index("</a>", idx) + 4]
-        self.assertEqual(element.count("<a "), 1)
+        inner = self._open_project(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertEqual(inner.count("<a "), 1)
 
     def test_brand_mark_retains_its_own_destination_unaffected(self):
-        # CLAUDE-APP-MENU-01 retired menu.brand (the icon+wordmark
-        # single-link treatment) - the same href/aria-label survive
-        # unchanged as menu.archiosk.home, now the first item inside the
-        # Archiosk menu panel rather than the clickable summary itself.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk.home -> the
+        ARCHIOSK application menu's Home item. Same pinned destination (the
+        landing page, CLAUDE-MENU-HOME-RESTORE-01) and accessible name."""
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.archiosk.home"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        # CLAUDE-MENU-HOME-TARGET-01: the destination moved to the Projects
-        # Directory. What this test protects is that the relocated item is
-        # still a real link with its accessible name intact, which it is.
-        # CLAUDE-MENU-HOME-RESTORE-01 supersedes CLAUDE-MENU-HOME-TARGET-01: Home shows the LANDING PAGE (portal.home). The /projects destination this used to pin was a Claude-chosen substitute recorded as "Product Owner, explicit" in 329f5cd; the Product Owner has since stated it was never the intent. Updated, not weakened - the invariant was always "the destination cannot move as a side effect", and it still pins one. The Projects Directory is asserted separately by menu.file.all-projects.
-        self.assertIn('href="/home"', tag)
-        self.assertIn('aria-label="Archiosk Home"', tag)
+        start = body.index('class="master-app"')
+        app_menu = body[start:body.index("</ul>", start)]
+        tag = re.search(r'<a [^>]*aria-label="Archiosk Home"[^>]*>', app_menu)
+        self.assertIsNotNone(tag)
+        self.assertIn('href="/home"', tag.group(0))
 
     def test_keyboard_focus_and_accessible_name_intact(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb Switch Project link -> FILE > Open Project..., the one control that opens the same Vestibule."""
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn("Switch Project", tag)
-        # A real <a href> is natively keyboard-focusable/activatable -
-        # no tabindex="-1" or role override suppressing that.
-        self.assertNotIn('tabindex="-1"', tag)
+        inner = self._open_project(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertIn("Open Project", inner)
+        self.assertNotIn('tabindex="-1"', inner)
 
     def test_focus_visible_outline_still_present(self):
         css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
@@ -272,21 +266,14 @@ class VestibuleAndRestorationUnaffectedTests(_BaseTestCase):
         self.assertIn("A Different Project", body)
 
     def test_returning_to_the_project_still_restores_independent_state(self):
-        # Project-scoped localStorage keys (DTAB1/LTH1/EYE1/attention)
-        # are entirely client-side and untouched by a CSS change -
-        # spot-checked here via the key-shape source assertions already
-        # established in tests/test_p40vw7b_vestibule_and_attention.py's
-        # own PerProjectRestorationGroundingTests; re-confirmed here
-        # that the header link itself carries no such state of its own
-        # to lose.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb Switch Project link -> FILE > Open Project..., the one control that opens the same Vestibule. The link still carries no state of its own to lose."""
         doc = self._ingest("Nipigon Ramp", "Nipigan Starter.pdf")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertNotIn("localStorage", tag)
-        self.assertNotIn("onclick", tag)
-
+        state, inner = master_command(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True),
+                                      "file.open_project")
+        self.assertEqual(state, "active")
+        self.assertNotIn("localStorage", inner)
+        self.assertNotIn("onclick", inner)
 
 if __name__ == "__main__":
     unittest.main()

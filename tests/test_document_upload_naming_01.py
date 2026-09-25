@@ -73,16 +73,15 @@ class ThePublicLabelSaysUpload(unittest.TestCase):
         self.assertNotIn("Document Shop", _markup(INTAKE_HTML))
 
     def test_a_the_navigation_entries_pointing_here_say_document_upload(self):
-        for html, name in ((PROJECTS_HTML, "projects.html"),
-                           (MENU_HTML, "_app_menu.html")):
-            markup = _markup(html)
-            anchor = [line for line in markup.splitlines()
-                      if "portal.document_shop_intake" in line]
-            self.assertTrue(anchor, name)
-            for line in anchor:
-                with self.subTest(template=name):
-                    self.assertIn("Document Upload", line)
-                    self.assertNotIn(">Document Shop", line)
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the navigation entries into
+        the intake were the directory's button and the classic File menu; both are
+        retired. The one entry is the Master command FILE > Document Upload..., and
+        it still says Document Upload, never Document Shop."""
+        from services.master_commands import COMMANDS
+        entry = [c for c in COMMANDS if c.id == "file.upload"]
+        self.assertEqual(len(entry), 1)
+        self.assertIn("Document Upload", entry[0].label)
+        self.assertNotIn("Document Shop", entry[0].label)
 
     def test_the_help_copy_reads_naturally_after_the_rename(self):
         markup = _markup(HELP_HTML)

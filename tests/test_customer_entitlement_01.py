@@ -39,6 +39,7 @@ from services.case_workspace import (
 )
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -224,8 +225,11 @@ class CustomerJourneyTests(unittest.TestCase):
         jobs = client.get("/document-shop/jobs")
         self.assertEqual(jobs.status_code, 200)
         self.assertIn(project_id, jobs.get_data(as_text=True))
-        self.assertIn('data-ui-ref="document-shop.jobs.new"',
-                      jobs.get_data(as_text=True))
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the desk's own "Upload a
+        # document" -> FILE > Document Upload..., active for this entitled customer.
+        state, inner = master_command(jobs.get_data(as_text=True), "file.upload")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/document-shop"', inner)
 
         page = client.get("/projects/%s/workspace" % project_id).get_data(as_text=True)
         token = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)

@@ -24,6 +24,7 @@ from models import ROLE_ADMIN, ROLE_CUSTOMER, User, db
 from services import document_examination as dx
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 PW = "TestCustomer!2026"
 
@@ -42,6 +43,12 @@ def _fake_parse(_parser, raw_bytes, filename):
         ingested_at=datetime.now(timezone.utc).isoformat(), parser_version="test",
         text_extraction_status="extracted" if text.strip() else "no_native_text",
     )
+
+
+def _work_region(body):
+    """MASTERUI cutover: the page's own work area (<main>), without the Master
+    Menu - whose staff commands a customer now sees GREYED with no route."""
+    return body[body.index("<main"):body.index("</main>")]
 
 
 class DocumentShopResultTests(unittest.TestCase):
@@ -94,25 +101,42 @@ class DocumentShopResultTests(unittest.TestCase):
         self.assertNotIn("document-shop", r.headers["Location"])
 
     def test_customer_gets_navigation_of_their_own(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the customer top bar
+        (shell.customer.documents / .signout) -> FILE > Open My Documents, active,
+        and the ARCHIOSK menu's one Sign out."""
         self._login()
         body = self.client.get("/document-shop/jobs").get_data(as_text=True)
-        self.assertIn('data-ui-ref="shell.customer.documents"', body)
-        self.assertIn('data-ui-ref="shell.customer.signout"', body)
+        state, inner = master_command(body, "file.my_documents")
+        self.assertIn(state, ("active", "current"))
+        self.assertIn('href="/document-shop/jobs"', inner)
+        self.assertIn('<a href="/logout">Sign out</a>', body)
 
-    # -- B. the Projects/CAD shell is not wrapped around a customer ----------
     def test_customer_is_not_given_the_project_application_menu(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover, law 8): the customer is in the
+        same Master Workspace, so Project commands are PRESENT but GREY with no
+        route - never usable, never linked. Their work area stays free of them."""
         self._login()
         body = self.client.get("/document-shop/jobs").get_data(as_text=True)
-        for leak in ('data-ui-ref="menu.bar"', "New Project", "Add Document",
-                     "Split View", "Undo Annotation", "Removed Projects"):
-            self.assertNotIn(leak, body, "Project/CAD chrome shown to a customer: %r" % leak)
+        self.assertNotIn('data-ui-ref="menu.bar"', body)
+        for command in ("file.new_project", "portfolio.removed", "window.split", "edit.undo"):
+            state, inner = master_command(body, command)
+            self.assertEqual(state, "grey", command)
+            self.assertNotIn("href=", inner, command)
+            self.assertNotIn("data-reuse-control", inner, command)
+        for route in ('href="/upload"', 'href="/removed-projects"'):
+            self.assertNotIn(route, body)
+        work = _work_region(body)
+        for leak in ("New Project", "Add Document", "Split View", "Undo Annotation", "Removed Projects"):
+            self.assertNotIn(leak, work, "Project/CAD chrome in a customer's work area: %r" % leak)
 
     def test_admin_keeps_the_application_menu(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.bar -> the Master Menu,
+        with the Project commands active for an admin."""
         self._login("boss")
         body = self.client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.bar"', body)
+        self.assertIn('data-master-shell="menu"', body)
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
 
-    # -- C. accepted formats state the truth --------------------------------
     def test_intake_no_longer_claims_images_are_unsupported(self):
         self._login()
         body = self.client.get("/document-shop").get_data(as_text=True)
@@ -152,19 +176,28 @@ class DocumentShopResultTests(unittest.TestCase):
         self.assertNotIn("understanding", r.headers["Location"])
 
     def test_result_page_is_not_the_analyst_bench(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): scoped to the work area - the
+        Master Menu may name CHECK > Spin, greyed with no route (law 8)."""
         self._login()
         loc = self._upload().headers["Location"]
         body = self.client.get(loc).get_data(as_text=True)
+        work = _work_region(body)
         for term in ("As-Read", "Spin", "mark(s) recognised", "Vectorisation",
                      "View segmentation", "drawing grammar", "Sheet not established"):
-            self.assertNotIn(term, body, "internal vocabulary shown to a customer: %r" % term)
+            self.assertNotIn(term, work, "internal vocabulary shown to a customer: %r" % term)
+        state, inner = master_command(body, "check.spin")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("href=", inner)
 
     def test_result_page_always_offers_a_way_back(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the page-local "Back to my
+        documents" -> FILE > Open My Documents, always active in the Master Menu."""
         self._login()
         loc = self._upload().headers["Location"]
         body = self.client.get(loc).get_data(as_text=True)
-        self.assertIn('data-ui-ref="document-shop.result.back"', body)
-        self.assertIn("/document-shop/jobs", body)
+        state, inner = master_command(body, "file.my_documents")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/document-shop/jobs"', inner)
 
     def test_result_names_what_was_established_and_what_was_not(self):
         self._login()

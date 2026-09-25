@@ -1,0 +1,68 @@
+{# MASTERUI: moved VERBATIM from templates/_app_menu.html so the Master Menu and the
+   (reserved) classic menu render the SAME control - same ids, same data-ui-refs,
+   same scripts. #}
+                {% if developer_mode %}
+                {# CLAUDE-DEVELOPER-MODE-COCKPIT-01, Addendum E: the one
+                   persistent, unmistakable indicator this stage exists
+                   to provide - "When I am developing ARCHIOSK, I should
+                   always know that I am in Developer Mode" (Product
+                   Owner's own words). Deliberately OUTSIDE the
+                   `project_id is defined` guard below (unlike
+                   .workspace-side-indicator, which only ever appears
+                   inside an open Project) - this is a reviewer-wide
+                   session state, not a project-scoped one, so it must
+                   render on every authenticated page, project open or
+                   not (Projects directory, Establish a Project, etc.),
+                   matching this stage's own explicit "must not imply...
+                   any project authority" requirement: it is not part of
+                   the project-context breadcrumb at all. Plain <span>,
+                   no click handler - same "operational boundary
+                   indicator, not decoration, not a casual mode-switch
+                   button" idiom CLAUDE-RFP-BOUNDARY-01 already
+                   established for the side-indicator (the actual
+                   mode-switch is the Archiosk > Admin menu item above,
+                   same discipline as that indicator's own precedent). #}
+                {# CLAUDE-DEVELOPER-MENU-01: the badge now carries its own exit.
+
+                   This REVERSES the "plain <span>, no click handler" decision
+                   recorded immediately above, on the Product Owner's explicit
+                   instruction. The prior reasoning is preserved rather than
+                   deleted because it was not wrong: an operational boundary
+                   indicator should not read as decoration or invite a casual
+                   mode-switch.
+
+                   What changed is the evidence. The Product Owner could not
+                   find the way IN (it was two disclosures deep under "Admin"),
+                   and a mode you can see you are in but cannot leave from where
+                   you see it has the same defect pointing the other way. The
+                   indicator stays an indicator - the badge text is still a
+                   role="status" span with no handler - and the exit is a
+                   separate, explicitly labelled control beside it.
+
+                   Still a form POST, never a link: a GET would put a session
+                   state change into browser history and make it reachable by
+                   typing a URL, which is the discipline the toggle route
+                   already enforces by being POST-only. #}
+                <span class="workspace-developer-mode-badge" data-ui-ref="menu.developer-mode-badge" role="status" title="Developer Mode is active - toggle from Archiosk &gt; Developer Mode" aria-label="Developer Mode is active">
+                    <span class="workspace-developer-mode-badge-text">DEVELOPER MODE</span>
+                    <form method="post" action="{{ url_for('portal.toggle_developer_mode') }}" class="workspace-developer-mode-exit-form">
+                        <button type="submit" class="workspace-developer-mode-exit" data-ui-ref="menu.developer-mode-badge.exit" title="Exit Developer Mode" aria-label="Exit Developer Mode">&times;</button>
+                    </form>
+                </span>
+                {% endif %}
+                {% if verification_session %}
+                {# CLAUDE-LIVE-VERIFICATION-ACCOUNT-MECHANISM-01: same
+                   "persistent, unmistakable indicator, not decoration"
+                   idiom as the Developer Mode badge immediately above -
+                   this session's own real product authority (an
+                   ephemeral, admin-role identity created solely for
+                   bounded live-browser proof work) must never be
+                   confusable with a real admin's own session. Also
+                   outside the project_id guard, for the same reason. #}
+                <span class="workspace-verification-session-badge" data-ui-ref="menu.verification-session-badge" title="Temporary live-verification identity - no real project authority" aria-label="Temporary live-verification identity active">
+                    Live Verification Session
+                    <form method="post" action="{{ url_for('portal.verification_access_end') }}" style="display:inline;">
+                        <button type="submit" data-ui-ref="menu.verification-session-end">End</button>
+                    </form>
+                </span>
+                {% endif %}

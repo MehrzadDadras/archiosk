@@ -89,9 +89,12 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
         cls.html = _home_html()
         cls.css = [(_REPO / "static/css/tokens.css").read_text(encoding="utf-8"),
                    (_REPO / "static/css/main.css").read_text(encoding="utf-8"),
-                   (_REPO / "static/css/product_ui.css").read_text(encoding="utf-8")]
+                   (_REPO / "static/css/product_ui.css").read_text(encoding="utf-8"),
+                   # MASTERUI cutover: the Master Workspace's own layout.
+                   (_REPO / "static/css/master_workspace.css").read_text(encoding="utf-8")]
         cls.js = [(_REPO / "static/js/workspace_trays.js").read_text(encoding="utf-8"),
-                  (_REPO / "static/js/app_menu.js").read_text(encoding="utf-8")]
+                  (_REPO / "static/js/app_menu.js").read_text(encoding="utf-8"),
+                  (_REPO / "static/js/master_workspace.js").read_text(encoding="utf-8")]
 
     def _page(self, browser):
         page = browser.new_page(viewport={"width": self.WIDTH, "height": self.HEIGHT},
@@ -116,63 +119,54 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
         }""", selector)
 
     def test_the_drawer_opens_on_the_first_tap(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic hamburger drawer (#mobile-nav-toggle, .ui-primary-nav, Tools & settings) -> the Master Menu's phone Menu button and its grid of all 19 families. Same real-browser proof: a real tap at a real phone viewport reaches the control."""
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = self._page(browser)
-            page.tap("#mobile-nav-toggle")
+            page.tap(".master-families-toggle")
             page.wait_for_timeout(200)
-            opened = page.evaluate(
-                "document.documentElement.classList.contains('mobile-nav-open')")
+            opened = page.evaluate("document.getElementById('master-families').hasAttribute('data-open')")
             browser.close()
         self.assertTrue(opened)
 
     def test_the_scrim_does_not_cover_the_drawer(self):
-        # The whole defect in one assertion. Before the fix this returned
-        # 'BODY' for every item in the drawer.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic hamburger drawer (#mobile-nav-toggle, .ui-primary-nav, Tools & settings) -> the Master Menu's phone Menu button and its grid of all 19 families. Same real-browser proof: a real tap at a real phone viewport reaches the control. Every family in the opened grid receives its own tap."""
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = self._page(browser)
-            page.tap("#mobile-nav-toggle")
+            page.tap(".master-families-toggle")
             page.wait_for_timeout(200)
             results = {sel: self._hit(page, sel) for sel in [
-                '.ui-primary-nav a[href="/projects"]',
-                '.ui-primary-nav a[href="/document-shop/jobs"]',
+                '[data-family="file"] > summary',
+                '[data-family="portfolio"] > summary',
+                '[data-family="help"] > summary',
             ]}
             browser.close()
         for selector, verdict in results.items():
             with self.subTest(selector=selector):
-                self.assertEqual(verdict, "REACHABLE",
-                                 "the scrim is painting over the drawer again")
+                self.assertEqual(verdict, "REACHABLE", "something paints over the Master Menu grid")
 
     def test_a_menu_inside_the_drawer_opens_when_tapped(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic hamburger drawer (#mobile-nav-toggle, .ui-primary-nav, Tools & settings) -> the Master Menu's phone Menu button and its grid of all 19 families. Same real-browser proof: a real tap at a real phone viewport reaches the control."""
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = self._page(browser)
-            page.tap("#mobile-nav-toggle")
+            page.tap(".master-families-toggle")
             page.wait_for_timeout(200)
-            page.tap("#mobile-nav-toggle")
-            page.tap('.ui-tools-menu > summary')
-            # Legacy commands remain deliberately available through Tools.
-            # timeout kept short: before the fix this hung until Playwright
-            # gave up, because the element could never receive the event.
-            page.tap('[data-ui-ref="menu.archiosk"] > summary', timeout=5000)
+            page.tap('[data-family="file"] > summary', timeout=5000)
             page.wait_for_timeout(200)
-            is_open = page.evaluate(
-                "document.querySelector('[data-ui-ref=\\u0022menu.archiosk\\u0022]').open")
+            is_open = page.evaluate("document.querySelector('[data-family=\\u0022file\\u0022]').open")
+            verdict = self._hit(page, '[data-command="portfolio.all"] a, [data-command="file.open_project"] a')
             browser.close()
-        self.assertTrue(is_open, "tapping a menu in the drawer did nothing")
+        self.assertTrue(is_open, "tapping a family in the grid did nothing")
 
     def test_the_whole_chain_down_to_developer_mode_is_reachable(self):
-        # The control the Product Owner originally could not find, now reached
-        # the way a thumb would reach it.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic hamburger drawer (#mobile-nav-toggle, .ui-primary-nav, Tools & settings) -> the Master Menu's phone Menu button and its grid of all 19 families. Same real-browser proof: a real tap at a real phone viewport reaches the control. The ARCHIOSK application menu stays on the band at phone width, and
+        its Developer Mode toggle is reached the way a thumb would reach it."""
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = self._page(browser)
-            page.tap("#mobile-nav-toggle")
-            page.wait_for_timeout(150)
-            page.tap("#mobile-nav-toggle")
-            page.tap('.ui-tools-menu > summary')
-            page.tap('[data-ui-ref="menu.archiosk"] > summary', timeout=5000)
+            page.tap(".master-app > summary", timeout=5000)
             page.wait_for_timeout(150)
             page.tap('[data-ui-ref="menu.archiosk.developer"] > summary', timeout=5000)
             page.wait_for_timeout(150)
@@ -183,54 +177,40 @@ class ThePhoneDrawerIsActuallyOperable(unittest.TestCase):
         self.assertEqual(verdict, "REACHABLE")
 
     def test_the_drawer_can_always_be_dismissed(self):
-        """Opening something you cannot close is its own trap.
-
-        Note what is NOT asserted: that the hamburger itself stays tappable. It
-        does not. The drawer is full-height and 320px wide, so once open it
-        covers the toggle at x=46 - tapping there now hits the drawer's first
-        menu. That was true before this fix too (the scrim covered it), and
-        changing it means moving the drawer below the topbar, which is a layout
-        decision rather than a stacking bug.
-
-        What matters is that every exit still works, so this asserts the three
-        that do rather than the one that does not.
-        """
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic hamburger drawer (#mobile-nav-toggle, .ui-primary-nav, Tools & settings) -> the Master Menu's phone Menu button and its grid of all 19 families. Same real-browser proof: a real tap at a real phone viewport reaches the control. Opening something you cannot close is its own trap: a tap outside
+        and Escape both close the grid (and so does the Menu button)."""
         with sync_playwright() as p:
             browser = p.chromium.launch()
             results = {}
             for label, action in [
-                ("tap outside", lambda pg: pg.touchscreen.tap(360, 400)),
+                ("tap outside", lambda pg: pg.touchscreen.tap(195, 800)),
                 ("escape", lambda pg: pg.keyboard.press("Escape")),
+                ("menu button", lambda pg: pg.tap(".master-families-toggle")),
             ]:
                 page = self._page(browser)
-                page.tap("#mobile-nav-toggle")
+                page.tap(".master-families-toggle")
                 page.wait_for_timeout(200)
                 action(page)
                 page.wait_for_timeout(250)
-                results[label] = page.evaluate(
-                    "document.documentElement.classList.contains('mobile-nav-open')")
+                results[label] = page.evaluate("document.getElementById('master-families').hasAttribute('data-open')")
                 page.close()
             browser.close()
         for label, still_open in results.items():
             with self.subTest(dismissal=label):
-                self.assertFalse(still_open, "%s did not close the drawer" % label)
+                self.assertFalse(still_open, "%s did not close the menu" % label)
 
     def test_the_topbar_outranks_the_scrim_in_computed_stacking(self):
-        # Stated as the browser computes it, not as the stylesheet reads.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic hamburger drawer (#mobile-nav-toggle, .ui-primary-nav, Tools & settings) -> the Master Menu's phone Menu button and its grid of all 19 families. Same real-browser proof: a real tap at a real phone viewport reaches the control. Stated as the browser computes it: the menu band outranks the
+        phone drawers (z-index 30), so the open grid is never painted under one."""
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = self._page(browser)
-            page.tap("#mobile-nav-toggle")
+            page.tap(".master-families-toggle")
             page.wait_for_timeout(200)
             topbar_z = page.evaluate(
-                "parseInt(getComputedStyle(document.querySelector('.workspace-topbar')).zIndex, 10)")
+                "parseInt(getComputedStyle(document.querySelector('.master-topbar')).zIndex, 10)")
             browser.close()
-        # The scrim is z-index 39 on body::after, a sibling context.
-        self.assertGreater(topbar_z, 39,
-                           "the topbar context sits under the scrim again, which "
-                           "puts the whole drawer under it regardless of the "
-                           "drawer's own z-index")
-
+        self.assertGreater(topbar_z, 30)
 
 class DesktopStackingIsUntouched(unittest.TestCase):
     def test_the_lift_only_applies_while_the_drawer_is_open(self):

@@ -54,6 +54,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
@@ -154,9 +155,11 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         self.assertIn(other.project_id, body)
         self.assertNotIn('data-ui-ref="lists.new-project"', body)
         self.assertNotIn('data-ui-ref="lists.removed-projects"', body)
-        # CLAUDE-APP-MENU-01: relocated again into the Archiosk menu.
-        self.assertIn('data-ui-ref="menu.file.new-project"', body)
-        self.assertIn('data-ui-ref="menu.account.removed-projects"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.file.new-project /
+        # menu.account.removed-projects -> FILE > New Project and PORTFOLIO >
+        # Removed Projects, both active for this admin.
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
+        self.assertEqual(master_command(body, "portfolio.removed")[0], "active")
 
     def test_opened_project_lists_still_shows_its_own_family(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): Overview/Investigations/RFIs/
@@ -191,8 +194,11 @@ class OpenedProjectPortfolioRemovalTests(_BaseTestCase):
         doc = self._ingest("VW7B Project D")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk.admin.* ->
+        # TOOLS > Security and PROJECT > Project Data Management, active.
+        self.assertIn('href="/security/"', master_command(body, "tools.security")[1])
+        # (carries the open project forward, as the classic item did)
+        self.assertIn(f'href="/admin/reset-project-data?project_id={doc.project_id}"', master_command(body, "project.data")[1])
 
     def test_removed_project_tombstone_does_not_crash_and_falls_back_to_portfolio(self):
         doc = self._ingest("VW7B Project E")
@@ -301,12 +307,16 @@ class VestibuleTests(_BaseTestCase):
         self.assertIn('data-ui-ref="gateway.chooser.removed-projects"', body)
 
     def test_vestibule_is_selection_only_no_documents_or_findings_content(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): "no launcher panel" -> the
+        chooser is a state of the one workspace, so the Navigator anchor stays
+        (fixed geography); it is still selection-only - no findings, no
+        conversation content."""
         doc = self._ingest("VW7B Vestibule Selection Only")
         client = self._client()
         body = client.get(f"/projects/choose?current={doc.project_id}").get_data(as_text=True)
-        self.assertNotIn("id=\"launcher-panel\"", body)
-        self.assertNotIn("Finding", body)
-        self.assertNotIn("conv-", body)
+        work = body[body.index('data-ui-ref="gateway.chooser"'):]
+        self.assertNotIn("Finding", work)
+        self.assertNotIn("conv-", work)
 
     def test_current_project_badge_is_real_text_not_color_only(self):
         css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
@@ -318,29 +328,32 @@ class VestibuleTests(_BaseTestCase):
 
 
 class HeaderSwitchProjectTests(_BaseTestCase):
+    def _open_project(self, body):
+        state, inner = master_command(body, "file.open_project")
+        self.assertEqual(state, "active")
+        return inner
+
     def test_header_project_name_links_to_vestibule_with_current_param(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover, this class): the retired
+        breadcrumb's Switch Project link -> FILE > Open Project..., which opens the
+        same Vestibule with the same ?current= parameter."""
         doc = self._ingest("VW7B Header Project")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn(f'href="/projects/choose?current={doc.project_id}"', tag)
+        inner = self._open_project(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertIn(f'href="/projects/choose?current={doc.project_id}', inner)
 
     def test_header_link_has_accessible_purpose_beyond_bare_name(self):
         doc = self._ingest("VW7B Header Project 2")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        tag = body[body.rindex("<a", 0, idx):body.index(">", idx) + 1]
-        self.assertIn("Switch Project", tag)
+        inner = self._open_project(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertIn("Open Project", inner)
+        self.assertNotIn("VW7B Header Project 2", inner)
 
     def test_header_link_is_a_single_control_no_duplicate_tab_stop(self):
         doc = self._ingest("VW7B Header Project 3")
         client = self._client()
-        body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        element = body[body.rindex("<a", 0, idx):body.index("</a>", idx) + 4]
-        self.assertEqual(element.count("<a "), 1)
+        inner = self._open_project(client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True))
+        self.assertEqual(inner.count("<a "), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -633,14 +646,15 @@ class IsolationTests(_BaseTestCase):
         self.assertNotIn("VW7B Isolation Stranger Vis", body)
 
     def test_no_uuid_or_secret_exposed_in_visible_labels(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the breadcrumb's visible text
+        -> the identity line's, which must name the project, never its raw id."""
         doc = self._ingest("VW7B Isolation No UUID")
         client = self._client()
         body = client.get(f"/projects/{doc.project_id}/workspace").get_data(as_text=True)
-        idx = body.index('data-ui-ref="menu.context.switch-project"')
-        tag = body[body.rindex("<a", 0, idx):body.index("</a>", idx)]
-        # Visible text must be the display name, not the raw project_id.
-        visible_text = tag[tag.index(">") + 1:]
-        self.assertNotIn(doc.project_id, visible_text)
+        start = body.index('class="identity-bar-path"')
+        path = body[start:body.index("</p>", start)]
+        self.assertIn("VW7B Isolation No UUID", path)
+        self.assertNotIn(doc.project_id, re.sub(r"<[^>]+>", "", path))
 
     def test_attention_positions_do_not_expose_cross_project_leakage(self):
         # The strip is populated purely from #workspace-visible-cases-

@@ -1066,7 +1066,8 @@ def _register_context_processors(app: Flask) -> None:
                 identity=identity, endpoint=request.endpoint, args=request.args.to_dict(),
                 admin=is_admin(), developer=is_admin() and bool(session.get("developer_mode")),
                 customer=user_is_document_shop_customer(), username=session.get("username"),
-                result=ctx.get("result"), url_for=url_for, path=request.path))
+                result=ctx.get("result"), url_for=url_for, path=request.path,
+                can_publish=bool(ctx.get("can_publish_procurement_package"))))
 
         return {
             "ui_identity": ui_identity,
@@ -1075,13 +1076,9 @@ def _register_context_processors(app: Flask) -> None:
             # the Master UI on every page. Admin-only by construction: the flag
             # is read only while is_admin() holds, so a stale session value can
             # never show it to anyone else, and customers never see it.
-            "master_ui_preview": is_admin() and bool(session.get("master_ui_preview")),
-            # MASTERUI: the ONE switch every migrated surface reads. Today it is
-            # the admin preview; MASTER_UI_ALL (default off) is the permanent
-            # cutover for everyone, customers included - flipping it is the
-            # whole cutover, with no template left to change.
-            "master_ui": bool(app.config.get("MASTER_UI_ALL")) or (
-                is_admin() and bool(session.get("master_ui_preview"))),
+            # MASTERUI cutover: the Master Workspace is the only shell, for
+            # everyone. The classic shell and the admin preview are retired.
+            "master_ui": True,
         }
 
 
@@ -1138,6 +1135,9 @@ def resolve_ui_identity(values) -> dict:
                  or getattr(document, "filename", None) or project_id),
         "code": getattr(workspace, "project_code", None) or None,
         "kind": "documents" if getattr(workspace, "container_state", None) == "black_box" else "project",
+        # The locked operating environment (Client/Owner, Design-Builder) - what
+        # FILE > Open Project scopes the chooser to, as the classic menu did.
+        "environment": getattr(workspace, "operating_environment", None) or None,
         # MASTERUI-PREVIEW: what the Master Menu needs to decide applicability
         # (Compare needs two documents; Re-analyze is the owner's). Live,
         # original sources only - generated references are analysis outputs.

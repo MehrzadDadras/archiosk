@@ -1436,7 +1436,7 @@
         </p>
         {% endif %}
         {% endif %}
-        {% if not master_ui %}<a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Back to Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+        {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
     </section>
 
 {% elif selected_work_product %}
@@ -1615,7 +1615,7 @@
         <p class="pane-note">Exported {{ selected_work_product.exports|length }} time(s); latest: {{ selected_work_product.exports[-1].format }} at {{ selected_work_product.exports[-1].exported_at }}.</p>
         {% endif %}
 
-        {% if not master_ui %}<a class="btn btn-ghost workspace-link" href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Back to Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+        {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
     </section>
 
 {% elif directory_view == 'overview' %}
@@ -1635,7 +1635,7 @@
            from the outer page is the honest way to leave it. #}
         {% if not panel_only %}
         <p class="project-home-back">
-            {% if not master_ui %}<a href="{{ url_for('portal.projects_list') }}">&larr; Projects</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+            {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
         </p>
         {% endif %}
 
@@ -2175,7 +2175,7 @@
     <div class="project-home requirements-surface" data-ui-ref="display.requirements">
         {% if not panel_only %}
         <p class="project-home-back">
-            {% if not master_ui %}<a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+            {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
         </p>
         {% endif %}
         <h1 class="new-case-form-heading">Requirements</h1>
@@ -2524,7 +2524,7 @@
     <div class="project-home files-surface" data-ui-ref="display.files">
         {% if not panel_only %}
         <p class="project-home-back">
-            {% if not master_ui %}<a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+            {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
         </p>
         {% endif %}
         <h1 class="new-case-form-heading">Files</h1>
@@ -2847,7 +2847,7 @@
     <div class="project-home spin-surface" data-ui-ref="display.spin">
         {% if not panel_only %}
         <p class="project-home-back">
-            {% if not master_ui %}<a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+            {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
         </p>
         {% endif %}
         <h1 class="new-case-form-heading">Spin</h1>
@@ -3056,7 +3056,7 @@
     <div class="project-home new-case-form-panel">
         {% if not panel_only %}
         <p class="project-home-back">
-            {% if not master_ui %}<a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+            {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
         </p>
         {% endif %}
         <h1 class="new-case-form-heading">New Investigation</h1>
@@ -3094,7 +3094,7 @@
     <div class="project-home new-case-form-panel">
         {% if not panel_only %}
         <p class="project-home-back">
-            {% if not master_ui %}<a href="{{ url_for('workspace.show_workspace', project_id=project_id, view='overview') }}">&larr; Overview</a>{% endif %}{# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
+            {# MASTERUI: PROJECT > Overview / PORTFOLIO > All Projects #}
         </p>
         {% endif %}
         <h1 class="new-case-form-heading">Continue from Archive</h1>

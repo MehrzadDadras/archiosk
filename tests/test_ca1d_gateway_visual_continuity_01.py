@@ -21,6 +21,7 @@ from __future__ import annotations
 import unittest
 
 from werkzeug.security import generate_password_hash
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class _BaseGatewayVisualTestCase(unittest.TestCase):
@@ -73,41 +74,53 @@ class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
     project_chooser.html never had that content even before this stage."""
 
     def test_gateway_page_loads_landing_css(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser no longer renders the
+        separate gateway shell (landing.css, ocean canvas, no blueprint grid); it is
+        a state of the one Master Workspace. What still holds: it is the Master
+        shell, and it never loads the landing page's own script."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn("css/landing.css", body)
+        self.assertIn('data-master-shell="on"', body)
+        self.assertNotIn("css/landing.css", body)
 
     def test_gateway_page_has_the_ocean_background_markup(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser no longer renders the
+        separate gateway shell (landing.css, ocean canvas, no blueprint grid); it is
+        a state of the one Master Workspace. What still holds: it is the Master
+        shell, and it never loads the landing page's own script."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn('class="gateway-shell landing-page"', body)
-        self.assertIn('id="landing-field-canvas"', body)
+        self.assertNotIn('class="gateway-shell', body)
+        self.assertIn('data-master-shell="menu"', body)
 
     def test_gateway_page_no_longer_has_the_old_blueprint_grid(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser no longer renders the
+        separate gateway shell (landing.css, ocean canvas, no blueprint grid); it is
+        a state of the one Master Workspace. What still holds: it is the Master
+        shell, and it never loads the landing page's own script."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertNotIn("blueprint-grid", body)
+        self.assertEqual(body.count('class="blueprint-grid"'), 1, "the one workspace background, once")
 
     def test_gateway_page_loads_ocean_field_js_not_the_full_landing_js(self):
-        """Same reasoning as the sign-in family: the authenticated
-        Gateway shell must reuse only the shared background script,
-        never landing.js itself (spoken welcome greeting, voice input,
-        knowledge field -- none of which belong here)."""
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser no longer renders the
+        separate gateway shell (landing.css, ocean canvas, no blueprint grid); it is
+        a state of the one Master Workspace. What still holds: it is the Master
+        shell, and it never loads the landing page's own script."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn("js/ocean_field.js", body)
         self.assertNotIn("js/landing.js", body)
 
     def test_project_chooser_shares_the_same_treatment(self):
-        """The shared gateway_shell.html means /projects/choose gets
-        this consistently too - now the only route this whole family
-        of markup checks (see the class's own docstring)."""
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser no longer renders the
+        separate gateway shell (landing.css, ocean canvas, no blueprint grid); it is
+        a state of the one Master Workspace. What still holds: it is the Master
+        shell, and it never loads the landing page's own script."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn("css/landing.css", body)
-        self.assertIn('id="landing-field-canvas"', body)
-        self.assertIn("js/ocean_field.js", body)
-        self.assertNotIn("blueprint-grid", body)
+        self.assertIn('data-master-shell="identity"', body)
+        self.assertNotIn("js/landing.js", body)
+        self.assertNotIn('class="gateway-shell', body)
 
     def test_gateway_neutral_entry_actions_still_present(self):
         """A pure visual-continuity correction must not touch the
@@ -152,16 +165,20 @@ class GatewayShellVisualContinuityTests(_BaseGatewayVisualTestCase):
         body = client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("Client / Owner Projects", body)
         self.assertNotIn("Design-Builder / Proponent Projects", body)
-        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's own
+        # "+ New Project" button -> FILE > New Project..., active for this admin.
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
         self.assertIn('data-ui-ref="projects-directory.list"', body)
 
     def test_account_menu_still_present_and_functional_markup(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the gateway Account menu ->
+        the ARCHIOSK application menu, whose Sign out is the one sign-out."""
         client = self._client_as("gv_admin", 1)
         body = client.get("/projects/choose").get_data(as_text=True)
-        self.assertIn('data-ui-ref="gateway.account"', body)
-        self.assertIn('id="workspace-user-menu"', body)
-        self.assertIn("Sign out", body)
-
+        start = body.index('class="master-app"')
+        app_menu = body[start:body.index("</ul>", start)]
+        self.assertIn('<a href="/logout">Sign out</a>', app_menu)
+        self.assertNotIn('data-ui-ref="gateway.account"', body)
 
 class GatewayShellReThemeCssTests(unittest.TestCase):
     def setUp(self):

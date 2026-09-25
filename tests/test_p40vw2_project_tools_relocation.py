@@ -76,6 +76,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _BASE_HTML_PATH = Path(__file__).resolve().parent.parent / "templates" / "base.html"
 _CASE_WORKSPACE_HTML_PATH = Path(__file__).resolve().parent.parent / "templates" / "case_workspace.html"
@@ -247,7 +248,10 @@ class NoDuplicationTests(_BaseTestCase):
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
         for html_id in ("project-sources-add-document", "project-removed-items"):
             self.assertEqual(body.count(f'id="{html_id}"'), 0, html_id)
-        self.assertEqual(body.count('id="project-data-management"'), 1)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the menu link's
+        # id="project-data-management" -> exactly one PROJECT > Project Data
+        # Management Master command.
+        self.assertEqual(body.count('data-command="project.data"'), 1)
 
     def test_add_document_form_action_appears_exactly_once_on_project_data_management(self):
         # CLAUDE-PROJECT-SURFACE-CONSOLIDATION-01: the form itself moved
@@ -288,7 +292,12 @@ class AuthorizationTests(_BaseTestCase):
     def test_granted_non_admin_reviewer_does_not_see_project_data_management(self):
         client = self._client_as("vw2_granted_reviewer", 3, role="read_only")
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertNotIn("Project Data Management", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover, law 8): named but GREY with no
+        # route - the granted non-admin still cannot reach it.
+        state, inner = master_command(body, "project.data")
+        self.assertEqual(state, "grey")
+        self.assertNotIn("href=", inner)
+        self.assertNotIn('href="/admin/reset-project-data', body)
 
     def test_admin_sees_project_data_management(self):
         client = self._client_as("vw2_admin", 4, role="admin")

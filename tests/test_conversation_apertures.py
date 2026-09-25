@@ -154,7 +154,13 @@ class ConversationApertureRouteTests(unittest.TestCase):
         )
         case = self.store.get(self.project_id).cases[0]
         resp = self.client.get(f"/projects/{self.project_id}/workspace?case={case['id']}")
-        self.assertNotIn("Project Conversation", resp.get_data(as_text=True))
+        body = resp.get_data(as_text=True)
+        # MASTERUI cutover: VIEW > Project Conversation is a Master command (a
+        # way TO the project conversation), so the check excludes the menu band;
+        # the page itself must still not show the project conversation.
+        menu_start = body.index('data-master-shell="menu"')
+        page = body[:menu_start] + body[body.index('data-master-shell="identity"'):]
+        self.assertNotIn("Project Conversation", page)
 
     def test_posting_inside_an_open_case_still_lands_on_the_case_not_the_project(self):
         self.client.post(

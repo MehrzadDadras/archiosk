@@ -12,9 +12,8 @@
    on a site", so the absent capability is stated as absent rather than quietly
    dropped - somebody asked for it, and silence would read as an oversight
    rather than an answer.
-#}{# MASTERUI: in the Master Workspace this guide renders inside the one shell;
-   otherwise inside help/_standalone.html, the same head and body.pm as before. #}
-{% extends "base.html" if master_ui else "help/_standalone.html" %}
+#}{# MASTERUI: this guide renders inside the one Master Workspace shell. #}
+{% extends "base.html" %}
 {% block title %}What is Reconciliation? &mdash; Help{% endblock %}
 {% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">

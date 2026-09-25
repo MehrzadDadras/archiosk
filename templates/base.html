@@ -89,12 +89,10 @@
     <script src="{{ url_for('static', filename='js/master_workspace.js') }}?v={{ static_version }}" defer></script>
     {% endif %}
 </head>
-{# MASTERUI-BLOCK1 / MASTERUI-PREVIEW: the Master UI shell is built beside the
-   existing shell. A page opts in with `{% block master_shell %}on{% endblock %}`
-   (defined in <head> as the archiosk-master-shell meta), or an admin turns on
-   the session-scoped Master UI preview (app.py `master_ui_preview`, admin-only
-   by construction). Every other render is exactly as before, and neither
-   `ui_identity()` nor `master_menu()` is called for it. #}
+{# MASTERUI: the Master Workspace is the one shell for every signed-in page
+   (`master_ui`, app.py). The classic menu bar, customer top bar and Account
+   menu are retired; their working controls live on as partials the Master
+   Menu includes. The master_shell block stays as a page's explicit opt-in. #}
 {% set master_shell = ((self.master_shell() | trim) == 'on') or master_ui %}
 {% set identity = ui_identity() if master_shell else none %}
 {% set menu = master_menu() if master_shell else none %}
@@ -131,26 +129,8 @@
         {% include "partials/_master_menu.html" %}
         {% include "partials/_identity_bar.html" %}
         {% endif %}
-        {% if customer_mode and not master_shell %}
-        {# The whole of a customer's navigation. Two destinations, because two
-           is all they have - their documents, and the way out. Deliberately
-           not a reduced copy of the application menu: a trimmed menubar is
-           still a menubar, and the next person to add an item would put the
-           Project controls back. #}
-        <div class="workspace-topbar customer-topbar" data-ui-ref="shell.customer-topbar">
-            <a class="customer-topbar-brand" href="{{ url_for('portal.document_shop_jobs') }}"
-               data-ui-ref="shell.customer.home">Archiosk Document Shop</a>
-            <span class="customer-topbar-links">
-                <a href="{{ url_for('portal.document_shop_jobs') }}"
-                   data-ui-ref="shell.customer.documents">My documents</a>
-                <a href="{{ url_for('portal.logout') }}"
-                   data-ui-ref="shell.customer.signout">Sign out</a>
-            </span>
-        </div>
-        {% endif %}
         {% if authenticated and not customer_mode %}
         <div class="workspace-topbar">
-            {% if not master_shell %}{% include "_app_menu.html" %}{% endif %}
             {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
                Application Menu): the central region between the
                breadcrumb (.workspace-topbar-identity, above) and
@@ -336,75 +316,6 @@
                 <a class="workspace-topbar-status" data-ui-ref="menu.status" href="{{ url_for('operations.department_home') }}" title="AI calls are disabled (AI_CALLS_DISABLED) &mdash; see Operations for detail">AI calls disabled</a>
                 {% endif %}
 
-                {# ---------------- User three-dot menu (CLAUDE-P40-E3A, Section 3) -------
-                   Username + Sign out (its child) live here now, not the
-                   Lists panel's own identity block. CLAUDE-LEFT-RAIL-01
-                   supersedes this comment's own "Security stays in Lists per
-                   the explicit instruction not to move it" - the Product
-                   Owner has since clarified the opposite: PROJECTS is a pure
-                   active-project switcher, and creation/governance/recovery/
-                   system administration belong here instead, reusing this
-                   SAME existing surface rather than a new mechanism. #}
-                <details class="workspace-user-menu" id="workspace-user-menu" data-ui-ref="menu.account">
-                    <summary class="workspace-topbar-btn workspace-user-summary" aria-label="Account menu">
-                        {% if current_username %}<span class="workspace-user-name">{{ current_username }}</span>{% endif %}
-                        <span aria-hidden="true">&hellip;</span>
-                    </summary>
-                    <div class="workspace-user-options" role="group" aria-label="Account">
-                        {# CLAUDE-APPEARANCE-SIMPLIFY-01: Sign out is an account/
-                           session action, not an Admin one - Product Owner
-                           live-browser correction. Moved here, first in this
-                           menu (directly under the username, before the
-                           "Admin" label below) so it reads unambiguously as
-                           an account action rather than the last item after
-                           a list of governance links; "Admin should remain
-                           focused on governance/administrative functions."
-                           Same route/security behavior as before
-                           (portal.logout, unchanged) - a placement change
-                           only, never duplicated. #}
-                        <a class="workspace-overflow-item" data-ui-ref="menu.account.sign-out" href="{{ url_for('portal.logout') }}">Sign out</a>
-                        {# CLAUDE-APP-MENU-01: Admin (New Project/Security/
-                           Operations/Project Data Management) relocated again,
-                           this time from here into Archiosk -> Admin
-                           (menu.archiosk.admin.*) - same routes, same
-                           is_admin gate, unchanged, per this stage's own
-                           explicit "consolidate Admin under Archiosk"
-                           instruction. This Account menu now holds only
-                           session-identity actions (Sign out, Removed
-                           Projects, UI Reference Mode), not application/
-                           governance administration - see menu.archiosk.admin
-                           in the new menu bar above for the relocated set. #}
-                        {# CLAUDE-LEFT-RAIL-01: NOT admin-gated, deliberately -
-                           routes/portal.py's own removed_projects/
-                           restore_project_route are @login_required only
-                           (P32-access-filtered, not admin-only) - reusing
-                           existing authorization behavior means this stays
-                           reachable by any authenticated user with access to
-                           the removed Project, not narrowed to admins merely
-                           because it now lives next to Admin-only items -
-                           hence its own separate ref namespace (menu.account.*,
-                           not menu.account.admin.*), reflecting that real
-                           authorization difference honestly. #}
-                        <a class="workspace-overflow-item" data-ui-ref="menu.account.removed-projects" href="{{ url_for('portal.removed_projects') }}">Removed Projects</a>
-                        {# CLAUDE-P40-VW7A: a developer/QA-facing toggle, not a
-                           product-owner-facing feature - same localStorage +
-                           html-level-class pattern as the risk-layer/history-
-                           full toggles (case_workspace.js), applied reviewer-
-                           wide (base.html's own inline script below) since
-                           [data-ui-ref] elements exist on every authenticated
-                           page's Menu bar, not only inside an open Workspace.
-                           When on, every [data-ui-ref] element gets a small
-                           attr(data-ui-ref) badge via CSS - see main.css's own
-                           .ui-reference-mode-active rule - so a reviewer (or
-                           this stage's own browser verification) can read
-                           off a control's stable reference id directly from
-                           the rendered page. #}
-                        <label class="workspace-overflow-item workspace-overflow-checkbox">
-                            <input type="checkbox" id="ui-reference-mode-toggle">
-                            UI Reference Mode
-                        </label>
-                    </div>
-                </details>
             </div>
         </div>
         {% endif %}

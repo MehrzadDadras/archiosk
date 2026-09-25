@@ -37,6 +37,7 @@ from services.bhive_parser import BHiveParser, ParsedDocument
 from services.case_workspace import CaseWorkspaceStore
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BASE_HTML_PATH = _REPO_ROOT / "templates" / "base.html"
@@ -332,6 +333,10 @@ def _all_template_refs() -> set[str]:
         _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH, _DOCUMENT_SHOP_DELETE_JOB_HTML_PATH,
         _DOCUMENT_SHOP_CONFIRM_REMOVE_HTML_PATH,
         _PLANNING_ZONING_HTML_PATH, _PLANNING_ZONING_RESULT_HTML_PATH,
+        # MASTERUI cutover: working controls moved VERBATIM out of
+        # _app_menu.html/base.html into these partials, which the Master
+        # Menu renders; their references live here now.
+        *sorted((_REPO_ROOT / "templates" / "partials").glob("*.html")),
     ):
         text = path.read_text(encoding="utf-8")
         refs |= set(_DATA_REF_RE.findall(text))
@@ -557,14 +562,15 @@ class RootFamilyReferencePresenceTests(_BaseTestCase):
             self.assertIn(f'data-ui-ref="{ref}"', body, ref)
 
     def test_menu_refs_present_on_every_authenticated_page(self):
-        # CLAUDE-APP-MENU-01: menu.brand (icon+wordmark single link) is
-        # retired - menu.bar/menu.archiosk (the application menu bar and
-        # its first entry) are the current equivalents.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.bar / menu.archiosk /
+        menu.account -> the Master Menu (all 19 families) and its ARCHIOSK
+        application menu, which holds the one Sign out."""
         client = self._client_as("vw7a_owner", 1)
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.bar"', body)
-        self.assertIn('data-ui-ref="menu.archiosk"', body)
-        self.assertIn('data-ui-ref="menu.account"', body)
+        self.assertIn('data-master-shell="menu"', body)
+        self.assertEqual(body.count('class="master-family'), 19)
+        self.assertIn('<details class="master-app">', body)
+        self.assertIn('<a href="/logout">Sign out</a>', body)
 
     def test_document_and_investigation_leaf_refs_present(self):
         client = self._client_as("vw7a_owner", 1)
@@ -639,10 +645,11 @@ class AuthorizationAwareReferenceTests(_BaseTestCase):
         self.assertNotIn('data-ui-ref="lists.security"', body)
         self.assertNotIn('data-ui-ref="lists.system-data-management"', body)
         self.assertNotIn('data-ui-ref="menu.account.admin.new-project"', body)
-        self.assertIn('data-ui-ref="menu.file.new-project"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.security"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', body)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.project-data-management"', body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the one place is now the
+        # Master Menu - FILE > New Project, TOOLS > Security / Operations and
+        # PROJECT > Project Data Management, active for an admin.
+        for command in ("file.new_project", "tools.security", "tools.operations", "project.data"):
+            self.assertEqual(master_command(body, command)[0], "active", command)
 
     def test_remove_project_ref_owner_or_admin_only(self):
         # CLAUDE-GO-DNA-01 (Panel Zoning): Remove Project moved from Lists'
@@ -724,7 +731,8 @@ class SignInGatewayIsolationTests(_BaseTestCase):
                 ref.startswith(("display.", "toolbox.", "chat.")),
                 f"the home page leaked an active-project-workspace reference: {ref}",
             )
-        self.assertIn("data-ui-ref=\"menu.bar\"", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.bar -> the Master Menu.
+        self.assertIn('data-master-shell="menu"', body)
         self.assertIn("data-ui-ref=\"lists.projects\"", body)
         self.assertNotIn("data-ui-ref=\"menu.display-layout\"", body)
         # The "open an existing project" affordance is the directory's own

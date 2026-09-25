@@ -390,9 +390,17 @@ class ConversationRouteTests(unittest.TestCase):
         pid = self._job()
         self._ask(pid, "Explain")
         body = self.client.get("/document-shop/jobs/%s" % pid).get_data(as_text=True)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover, law 8): the Master Menu band
+        # names CHECK > Spin greyed with no route; the surface itself (everything
+        # outside that band) must still carry no internal vocabulary.
+        menu_start = body.index('data-master-shell="menu"')
+        surface = body[:menu_start] + body[body.index('data-master-shell="identity"'):]
         for term in ("As-Read", "Spin", "container_state", "project_conversation",
                      "ConversationMessage", "llm_gateway", "Anthropic"):
-            self.assertNotIn(term, body)
+            self.assertNotIn(term, surface)
+        spin = body[body.index('data-command="check.spin"'):]
+        self.assertIn('aria-disabled="true"', spin[:200])
+        self.assertNotIn("href=", spin[:spin.index("</li>")])
 
     def test_an_image_job_can_be_asked_about_without_sending_the_image(self):
         self._login()

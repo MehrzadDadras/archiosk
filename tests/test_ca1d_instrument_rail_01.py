@@ -38,6 +38,7 @@ from werkzeug.security import generate_password_hash
 from services.bhive_parser import BHiveParser, ParsedDocument
 from services.environment_capabilities import CLIENT_OWNER
 from services.ingestion import ingest_upload
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 def _fake_file(content: bytes, filename: str) -> FileStorage:
@@ -129,11 +130,17 @@ class OperationsPageAccessTests(_BaseInstrumentRailTestCase):
         # into the new Archiosk application menu - menu.archiosk.admin.
         # operations, not the retired menu.account.admin.operations.
         admin_body = self._admin_client().get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk.admin.operations"', admin_body)
-        self.assertIn('href="/operations/"', admin_body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): -> TOOLS > Operations,
+        # active for an admin, greyed with no route for a reader (law 8).
+        state, inner = master_command(admin_body, "tools.operations")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/operations/"', inner)
 
         reader_body = self._reader_client().get("/projects").get_data(as_text=True)
         self.assertNotIn('data-ui-ref="menu.archiosk.admin.operations"', reader_body)
+        state, inner = master_command(reader_body, "tools.operations")
+        self.assertEqual(state, "grey")
+        self.assertNotIn('href="/operations/"', reader_body)
 
 
 class TopBarStatusLineTests(_BaseInstrumentRailTestCase):

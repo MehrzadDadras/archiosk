@@ -41,8 +41,11 @@ def test_route_invokes_owned_admission_consumes_and_surfaces_without_writing(pro
     assert r"\u003cscript\u003ealert(1)\u003c/script\u003e" in html
     assert '<script>alert(1)</script>' not in html
     assert evidence["source_id"] in html and evidence["id"] in html
-    assert 'aria-label="Reload current review"' in html and 'Reload view' in html
-    assert 'name="item" value="evidence_items:' + evidence["id"] + '"' in html
+    # SUPERSEDED DELIBERATELY (MASTERUI cutover): the page-local "Reload view"
+    # widget is retired; the page itself is the Master Workspace.
+    assert 'data-master-shell="on"' in html
+    # (The retired Reload form's hidden inputs preserved the selected item; it is
+    # gone with the widget. The item itself is still rendered - asserted above.)
     assert store._path_for(workspace.project_id).read_bytes() == before
     from services.runtime_observation import read
     trace = read(app, response.headers["X-ARCHIOSK-Observation"])

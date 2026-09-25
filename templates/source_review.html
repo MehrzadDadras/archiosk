@@ -24,7 +24,7 @@
 <p>Original filename: {% if report.source.get('original_filename') %}{{ report.source.get('original_filename') }}{% else %}[Not recorded]{% endif %}</p>
 {% if not report.source.get('original_filename') %}<p>Registered before the uploaded filename was retained, or not created from an uploaded file. It is not reconstructed from the stored file name, the display name, or any log.</p>{% endif %}
 <p>{{ 'EVALUATION_INPUT — no project authority' if evaluation_only else 'REAL PROJECT DATA — review does not grant authority' }}</p>
-{% if not master_ui %}<a href="{{ back_url }}">Back to kernel / case</a>{% include 'components/review_reload.html' %}{% endif %}{# MASTERUI: reached through the Master Menu in the Master Workspace #}</header>
+{# MASTERUI: reached through the Master Menu in the Master Workspace #}</header>
 <section><h2>Objective and governed state</h2><p>Inspect capture distortion, review anchored readings, and preserve unresolved propositions.</p>
 <p>Source {{ report.source.id }} · Consumer {{ report.result.id|default('NOT_YET_EVALUATED') }} · {{ report.result.state|default('UNRESOLVED') }}</p>
 {% if report.review.stale or report.review.pending %}<p role="status"><strong>RE-EVALUATION REQUIRED.</strong> Review premises changed. The retained consumer result below is historical and must not be used as a current conclusion.</p>{% endif %}

@@ -55,6 +55,7 @@ from services.case_workspace import (
     SOURCE_ORIGIN_TYPE_DERIVED_REFERENCE,
     CaseWorkspaceStore,
 )
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 PW = "TestCustomer!2026"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -3024,20 +3025,19 @@ class TDocumentShopLayout(SurveyReferenceCase):
         self.assertEqual(established["File type"], "an image (JPEG)")
 
     def test_open_file_and_delete_sit_with_the_facts(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the result page's own action
+        row -> the identity line's fixed object actions (Open Original, Delete
+        Document), which sit above the facts they act on, as before."""
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         self.run_worker()
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
-
-        self.assertIn('data-ui-ref="document-shop.result.doc-actions"', body)
-        self.assertIn('data-ui-ref="document-shop.result.download">Open file</a>', body)
-        self.assertIn('data-ui-ref="document-shop.result.delete-primary"', body)
-
-        # Above the findings, not below them.
-        actions = body.index('data-ui-ref="document-shop.result.doc-actions"')
-        self.assertLess(body.index('data-ui-ref="document-shop.result.established"'),
-                        actions, "the actions come before the facts they act on")
-        for later in ("document-shop.result.reference-title",
-                      "document-shop.conversation.title"):
+        actions = body.index('data-master-shell="actions"')
+        cluster = body[actions:body.index("</div>", actions)]
+        self.assertIn(">Open Original</a>", cluster)
+        self.assertIn(">Delete Document…</button>", cluster)
+        self.assertLess(actions, body.index('data-ui-ref="document-shop.result.established"'),
+                        "the actions come before the facts they act on")
+        for later in ("document-shop.result.reference-title", "document-shop.conversation.title"):
             self.assertGreater(body.index('data-ui-ref="%s"' % later), actions,
                                "%s now sits above the actions" % later)
 
@@ -3099,21 +3099,18 @@ class TDocumentShopLayout(SurveyReferenceCase):
                              "a set of one is offered as a set to manage")
 
     def test_the_download_route_is_unchanged(self):
-        """Moved, not reimplemented: the same governed source-file route."""
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): Open file -> the identity
+        line's Open Original. Moved, not reimplemented: the same governed
+        source-file route, and it serves the file."""
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         self.run_worker()
         workspace = self.workspace(project_id)
         source_id = workspace.sources[0]["id"]
-
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
-        row = body[body.index('data-ui-ref="document-shop.result.doc-actions"'):]
-        href = re.search(r'href="([^"]+)"', row).group(1).replace("&amp;", "&")
-
+        row = body[body.index('data-master-shell="actions"'):]
+        href = re.search(r'<a class="master-action" href="([^"]+)">Open Original', row).group(1).replace("&amp;", "&")
         self.assertIn("/sources/%s/file" % source_id, href,
-                      "Open file no longer points at this document's own source")
-        # Follow the link the page actually renders, rather than one this test
-        # builds - the point is that the button reaches the governed route, and
-        # a hand-built URL proves only that the test can guess a prefix.
+                      "Open Original no longer points at this document's own source")
         served = self.client.get(href)
         self.assertEqual(served.status_code, 200)
 
@@ -3275,11 +3272,13 @@ class VQuietPage(SurveyReferenceCase):
         self.assertIn("File type", labels)
         # "Document" is the interpreted classification and is explicitly kept.
         self.assertIn("Document", labels)
-        for ref in ("document-shop.result.doc-actions",
-                    "document-shop.result.download",
-                    "document-shop.result.delete-primary",
-                    "document-shop.conversation.title"):
-            self.assertIn('data-ui-ref="%s"' % ref, body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the page's own action row ->
+        # the identity line's Open Original / Delete Document; the conversation
+        # (now in the GO anchor) is kept.
+        cluster = body[body.index('data-master-shell="actions"'):]
+        self.assertIn(">Open Original</a>", cluster)
+        self.assertIn("Delete Document", cluster)
+        self.assertIn('data-ui-ref="document-shop.conversation.title"', body)
 
     def test_the_checksum_is_removed_from_the_page_not_from_the_record(self):
         _body, project_id = self._body()

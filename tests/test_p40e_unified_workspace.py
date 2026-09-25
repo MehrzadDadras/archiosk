@@ -177,7 +177,10 @@ class WorkspaceHeadingRenameTests(_BaseWorkspaceTestCase):
         # CLAUDE-P40-E2B: the page_header <h1> was replaced by the new
         # top bar's own Project/Investigation breadcrumb - the identity
         # renamed here is now carried by that, not a heading tag.
-        self.assertIn("workspace-topbar-context", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the breadcrumb ->
+        # the identity line, naming the open investigation's operation.
+        self.assertIn('class="identity-bar-path"', body)
+        self.assertIn("CHECK ▸ Investigations", body)
         self.assertNotIn("Case Workspace", body)
 
 

@@ -29,9 +29,17 @@
             {%- else %}Original filename not recorded{% endif -%}
         </span>
         {% endif %}
+        {# The Display's registered view (Files, Requirements, ... - the
+           STABLE_DIRECTORY_KINDS extension point) is the derived view of the
+           project, named here as the retired breadcrumb named it. #}
+        {% if directory_view_label is defined and directory_view_label %}
+        <span class="identity-bar-separator" aria-hidden="true">›</span>
+        <span class="identity-bar-view">{{ directory_view_label }}</span>
+        {% endif %}
         {% else %}
         <span class="identity-bar-empty">No project or document open</span>
         {% endif %}
+        {% if project_id is defined and workspace is defined %}{% include "partials/_menu_context_extras.html" %}{% endif %}
         {% if menu.operation %}
         <span class="identity-bar-operation" data-master-shell="operation">
             <span aria-hidden="true">·</span> {{ menu.operation.family }} ▸ {{ menu.operation.label }}

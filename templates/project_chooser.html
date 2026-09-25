@@ -20,37 +20,7 @@
    Project appears here. #}
 {% extends "gateway_base.html" %}
 
-{% block gateway_back_action %}{% if not master_ui %}{# MASTERUI: FILE / PORTFOLIO in the Master Workspace #}
-{# CLAUDE-CA1D-RECEPTION-FIX-01 (addendum): a live report named this
-   page as somewhere a user can land unintentionally (or find zero
-   Projects) with no visible way back, having to hunt at the bottom of
-   the page. href is a real, safe fallback (works with no JS and no
-   useful history - lands on Gateway, never a dead end); the script
-   below upgrades a real in-app "came from somewhere" visit to actual
-   browser-history back, without ever using history.back() when there's
-   nothing meaningful to return to (a bare direct visit/new tab has no
-   document.referrer at all). #}
-<div class="gateway-back-action">
-    {# CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: was
-       portal.gateway - that route now only redirects to portal.index
-       (see routes/portal.py's gateway() docstring), so this points
-       directly at the real consolidated destination instead of
-       bouncing through a pointless extra hop. #}
-    <a href="{{ url_for('portal.index') }}" class="btn btn-ghost" id="gateway-back-link" data-ui-ref="gateway.chooser.back-top">&larr; Back</a>
-</div>
-<script nonce="{{ csp_nonce }}">
-(function () {
-    var link = document.getElementById('gateway-back-link');
-    if (!link) return;
-    if (document.referrer && window.history.length > 1) {
-        link.addEventListener('click', function (e) {
-            e.preventDefault();
-            window.history.back();
-        });
-    }
-})();
-</script>
-{% endif %}{% endblock %}
+{% block gateway_back_action %}{% endblock %}
 
 {% block gateway_title %}Open a Project &mdash; Archiosk{% endblock %}
 {% block gateway_subtitle %}<p class="gateway-subtitle">Choose the Project you want to open</p>{% endblock %}

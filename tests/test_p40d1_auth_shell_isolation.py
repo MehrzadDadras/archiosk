@@ -247,9 +247,13 @@ class AuthenticatedShellStillRendersNormallyTests(_BaseAuthShellTestCase):
         resp = client.get("/projects/choose")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_data(as_text=True)
-        self.assertIn("gateway-shell", body)
-        self.assertNotIn("app-shell", body)
-        self.assertNotIn("launcher-panel", body)
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the chooser is no longer the
+        # standalone gateway shell - it is a state of the one Master Workspace
+        # (app-shell, Navigator). The sign-in isolation this file guards (auth
+        # pages render no application chrome) is asserted by its other tests.
+        self.assertNotIn('class="gateway-shell', body)
+        self.assertIn('data-master-shell="on"', body)
+        self.assertIn("app-shell", body)
 
     def test_authenticated_workspace_page_still_shows_the_real_app_shell(self):
         # The actual thing this class's own docstring means to protect -

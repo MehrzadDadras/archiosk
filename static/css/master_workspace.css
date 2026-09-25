@@ -41,14 +41,13 @@ body[data-master-shell="on"] .workspace-topbar { border-bottom: 0; }
 /* The remaining working toolbar (document controls, Project Context) sits
    quietly under the identity line; its Account menu is the ARCHIOSK menu's. */
 body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) { min-height: 0; padding-top: 0; padding-bottom: 0; }
-body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref="menu.account"] { display: none; }
 
 /* -- Master Menu -------------------------------------------------------- */
 .master-topbar {
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
-    padding: var(--space-2) var(--space-4) 0;
+    padding: var(--space-1) var(--space-4) 0;
     font-family: var(--font-body);
 }
 .master-app-mark {
@@ -70,7 +69,7 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
     cursor: pointer;
     font-size: var(--text-xs);
     letter-spacing: 0.02em;
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1) var(--space-3);
     white-space: nowrap;
     color: var(--text-primary);
 }
@@ -85,7 +84,7 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
     left: 0;
     min-width: 15rem;
     margin: 0;
-    padding: var(--space-2) 0;
+    padding: var(--space-1) 0;
     list-style: none;
     background: var(--surface-primary);
     border: var(--master-hairline);
@@ -97,7 +96,8 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
     display: block;
     width: 100%;
     text-align: left;
-    padding: var(--space-1) var(--space-3);
+    padding: var(--space-1) var(--space-4);
+    line-height: 1.35;
     font: inherit;
     font-size: var(--text-sm);
     color: var(--text-primary);
@@ -112,7 +112,8 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
 .master-item.is-grey > span[aria-disabled] { color: var(--text-disabled); cursor: default; }
 .master-reason {
     display: block;
-    padding: 0 var(--space-3) var(--space-1);
+    padding: 0 var(--space-4) var(--space-1);
+    margin-top: calc(-1 * var(--space-1));
     font-size: var(--text-2xs);
     color: var(--text-secondary);
 }
@@ -152,7 +153,11 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
         border-bottom: var(--master-hairline);
     }
     .master-families[data-open] .master-break { display: none; }
-    .master-topbar { position: relative; flex-wrap: wrap; }
+    /* main.css gives every .workspace-topbar overflow-x:hidden at phone width
+       (to stop horizontal page scroll); that also clips vertically, which hid
+       the opened grid below the band. The band wraps and never exceeds the
+       viewport, so it can safely show what hangs below it. */
+    body[data-master-shell="on"] .master-topbar { position: relative; flex-wrap: wrap; overflow: visible; }
     .master-family > ul { position: static; min-width: 0; border: 0; }
 }
 
@@ -162,8 +167,8 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
-    gap: var(--space-2) var(--space-4);
-    padding: var(--space-2) var(--space-4) var(--space-3);
+    gap: var(--space-1) var(--space-4);
+    padding: var(--space-1) var(--space-4) var(--space-2);
     border-bottom: var(--master-hairline);
 }
 .identity-bar-path { margin: 0; font-size: var(--text-md); }
@@ -179,7 +184,7 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
 .master-action {
     font: inherit;
     font-size: var(--text-sm);
-    padding: var(--space-1) var(--space-3);
+    padding: var(--space-1) var(--space-4);
     background: none;
     border: var(--master-hairline);
     color: var(--text-primary);
@@ -191,7 +196,7 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
 /* -- Context and GO anchors on pages without Eye/Toolbox or a conversation - */
 .master-context {
     flex: 0 0 17rem;
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     border-left: var(--master-hairline);
     font-size: var(--text-sm);
 }
@@ -211,7 +216,7 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) [data-ui-ref=
     display: flex;
     gap: var(--space-3);
     align-items: baseline;
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-4);
     border-top: var(--master-hairline);
     font-size: var(--text-sm);
 }
@@ -245,3 +250,87 @@ body[data-master-shell="on"] .survey-evaluation section + section { border-top: 
 .master-nav-list li { padding: var(--space-1) 0; color: var(--text-primary); }
 .master-nav-list li[aria-current] { box-shadow: inset 2px 0 0 var(--highlight-orange); padding-left: var(--space-2); }
 @media (max-width: 767px) { .master-navigator { flex-basis: auto; } }
+
+/* -- Density (MASTERUI cutover) ------------------------------------------
+ * Same structure, less wasted height. The identity line now names the
+ * object, so page headings step down one size and group by type and
+ * alignment rather than by large empty bands. Readable sizes are kept:
+ * body text stays at --text-base / --text-sm.
+ */
+body[data-master-shell="on"] { --ui-section-gap: 1.25rem; }
+body[data-master-shell="on"][data-ui-density="inspect"] { --ui-section-gap: 0.85rem; }
+
+body[data-master-shell="on"] main { padding-left: var(--space-10); padding-right: var(--space-10); }
+body[data-master-shell="on"] .flash-stack { padding-top: var(--space-4); gap: var(--space-3); }
+body[data-master-shell="on"] .workspace-topbar { min-height: 0; }
+
+body[data-master-shell="on"] [data-ui-shell] h1,
+body[data-master-shell="on"] .np-page-title {
+    font-size: clamp(1.35rem, 2.1vw, 1.8rem);
+    line-height: 1.2;
+    margin: var(--space-4) 0 var(--space-4);
+}
+body[data-master-shell="on"] [data-ui-shell] h2 { margin: var(--space-8) 0 var(--space-3); }
+body[data-master-shell="on"] [data-ui-shell] h3 { margin: var(--space-6) 0 var(--space-2); }
+body[data-master-shell="on"] [data-ui-shell] p { margin-top: 0; margin-bottom: var(--space-4); }
+body[data-master-shell="on"] [data-ui-shell] ul,
+body[data-master-shell="on"] [data-ui-shell] ol,
+body[data-master-shell="on"] [data-ui-shell] dl { margin-top: 0; margin-bottom: var(--space-5); }
+body[data-master-shell="on"] [data-ui-shell] dd + dt { margin-top: var(--space-3); }
+
+body[data-master-shell="on"] .dash-head { gap: var(--space-8); margin-bottom: var(--space-8); }
+body[data-master-shell="on"] .project-card { padding: var(--space-6) 0; }
+body[data-master-shell="on"] .ui-project-start { padding: var(--space-8) var(--space-10); }
+body[data-master-shell="on"] .ui-project-start .projects-controls { margin: var(--space-8) 0; }
+body[data-master-shell="on"] .ui-project-start > details { margin: var(--space-5) 0; }
+body[data-master-shell="on"] .accordion-section { margin-top: var(--space-3); padding-top: var(--space-3); }
+
+body[data-master-shell="on"] .survey-evaluation { padding: var(--space-8) var(--space-10); }
+body[data-master-shell="on"] .survey-evaluation header { margin-bottom: var(--space-8); }
+body[data-master-shell="on"] .survey-evaluation article { padding: var(--space-5) 0; }
+body[data-master-shell="on"] .survey-evaluation label { margin-top: var(--space-5); }
+
+@media (max-width: 767px) {
+    body[data-master-shell="on"] main { padding-left: var(--space-5); padding-right: var(--space-5); }
+    body[data-master-shell="on"] .ui-project-start,
+    body[data-master-shell="on"] .survey-evaluation { padding: var(--space-6) var(--space-5); }
+}
+
+/* Signed-in account, first in the ARCHIOSK menu. */
+.master-user .workspace-user-name { display: block; padding: var(--space-1) var(--space-4); font-size: var(--text-xs); color: var(--text-secondary); }
+.identity-bar-view { color: var(--text-primary); }
+
+/* Phone: the nested submenus the Master Menu embeds (Appearance, Developer
+   Mode, Display Layout - moved verbatim from the classic menu) keep their
+   absolutely-positioned panels from main.css; flatten them into the grid so
+   they open in place instead of off-screen - the classic drawer's own repair,
+   applied to the Master Menu. */
+@media (max-width: 767px) {
+    .master-topbar .workspace-menubar-subpanel,
+    .master-topbar .workspace-appearance-options,
+    .master-topbar .workspace-layout-options {
+        position: static;
+        min-width: 0;
+        max-width: 100%;
+        box-shadow: none;
+    }
+}
+
+/* Classic controls embedded in Master families (region toggles, Developer
+   Mode, Appearance, Display Layout) read as Master items. */
+.master-embedded .workspace-menubar-item,
+.master-embedded > label,
+.master-embedded summary.workspace-menubar-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: var(--space-1) var(--space-4);
+    line-height: 1.35;
+    background: none;
+    border: 0;
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+}
+.master-embedded .workspace-menubar-item:hover { background: var(--surface-hover); }

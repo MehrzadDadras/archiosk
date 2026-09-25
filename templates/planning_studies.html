@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Saved Planning &amp; Zoning studies</h1>
-{% if not master_ui %}<p><a href="{{ url_for('planning_zoning.planning_zoning', project_id=project_id or '') }}">Current analysis</a></p>{% endif %}{# MASTERUI: MODEL > Planning Studies / Planning & Zoning Analysis #}
+{# MASTERUI: MODEL > Planning Studies / Planning & Zoning Analysis #}
 <form method="get">
 <label for="study-project">Project</label>
 <select id="study-project" name="project_id" required>

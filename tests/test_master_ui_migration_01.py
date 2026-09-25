@@ -1,10 +1,9 @@
 """MASTERUI: every surface family migrated into the one Master Workspace.
 
-With the Master Workspace on (the admin preview, or MASTER_UI_ALL for
-everyone), each surface renders the 19-family Master Menu, the identity line
+Since the cutover the Master Workspace is the only shell. Each surface renders the 19-family Master Menu, the identity line
 and the Navigator / Work / Context / GO anchors, and its superseded page-local
 commands are ABSENT - not merely hidden - because a Master command now owns
-them. With it off, the classic surfaces are unchanged (their own tests).
+them. The classic shell and its duplicate chrome are gone.
 
 Hermetic: the parser is stubbed, no provider is reached.
 """
@@ -72,8 +71,6 @@ class _Case(unittest.TestCase):
     def client_for(self, username, master=True):
         client = self.app.test_client()
         client.post("/login", data={"username": username, "password": PW})
-        if master and username == "boss":
-            client.post("/master-ui-preview/toggle")
         return client
 
     def upload(self, client, name="Castille survey"):
@@ -190,9 +187,6 @@ class PlanningInspectHelpFamilies(_Case):
         html = self.page(self.client_for("boss"), "/help")
         self.assertIn("HELP ▸ Help Centre", html)
         self.assertNotIn('<body class="pm">', html)
-        classic = self.client_for("boss", master=False).get("/help").get_data(as_text=True)
-        self.assertIn('<body class="pm">', classic)
-        self.assertNotIn("data-master-shell", classic)
 
     def test_developer_tools(self):
         boss = self.client_for("boss")
@@ -203,8 +197,7 @@ class PlanningInspectHelpFamilies(_Case):
 
 
 class CustomerConvergence(_Case):
-    def test_customers_get_the_same_workspace_under_the_cutover_switch(self):
-        self.app.config["MASTER_UI_ALL"] = True
+    def test_customers_get_the_same_workspace(self):
         cust = self.client_for("cust")
         project_id = self.upload(cust)
         for url in ("/document-shop/jobs", "/document-shop/jobs/%s" % project_id):
@@ -216,11 +209,6 @@ class CustomerConvergence(_Case):
                 self.assertIn('>New Project…</span>', html)
                 self.assertNotIn('href="/admin/developer-tools"', html)
         self.assertIn("Castille survey", self.page(cust, "/document-shop/jobs/%s" % project_id))
-
-    def test_without_the_switch_customers_keep_the_classic_shell(self):
-        html = self.client_for("cust").get("/document-shop/jobs").get_data(as_text=True)
-        self.assertIn('data-ui-ref="shell.customer-topbar"', html)
-        self.assertNotIn("data-master-shell", html)
 
 
 class RegistryConvergence(unittest.TestCase):

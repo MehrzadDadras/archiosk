@@ -31,9 +31,14 @@ from unittest.mock import patch
 
 from werkzeug.datastructures import FileStorage
 from werkzeug.security import generate_password_hash
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
-_MENU = (Path(__file__).resolve().parent.parent / "templates" / "_app_menu.html").read_text(
-    encoding="utf-8")
+# MASTERUI cutover: the Developer Mode submenu and badge moved VERBATIM into
+# partials the Master Menu (and its status line) include. These checks read
+# what is rendered now - the Master Menu with those partials expanded.
+_PARTIALS = Path(__file__).resolve().parent.parent / "templates" / "partials"
+_MENU = (read_expanded(_PARTIALS / "_master_menu.html") + "\n"
+         + read_expanded(_PARTIALS / "_status_bar.html"))
 
 
 class _MenuCase(unittest.TestCase):
@@ -72,12 +77,15 @@ class ItIsNamedWhereItCanBeSeen(_MenuCase):
         self.assertIn("Developer Mode", summary)
 
     def test_it_is_a_sibling_of_admin_not_buried_inside_it(self):
-        # One visible step from the Archiosk menu, not two.
-        admin_at = _MENU.index('data-ui-ref="menu.archiosk.admin"')
-        admin_closes = _MENU.index("</details>", admin_at)
-        developer_at = _MENU.index('data-ui-ref="menu.archiosk.developer"')
-        self.assertGreater(developer_at, admin_closes,
-                           "Developer Mode is still nested inside the Admin submenu")
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the Admin submenu is retired
+        (its items are TOOLS/PROJECT commands). Same intent - one visible step:
+        Developer Mode sits directly in the ARCHIOSK application menu, not inside
+        another submenu."""
+        app_start = _MENU.index('<details class="master-app">')
+        app_end = _MENU.index('<nav class="master-families"', app_start)
+        app_menu = _MENU[app_start:app_end]
+        self.assertIn('data-ui-ref="menu.archiosk.developer"', app_menu)
+        self.assertNotIn('data-ui-ref="menu.archiosk.admin"', app_menu)
 
     def test_the_toggle_lives_in_the_new_submenu(self):
         body = self._home(self._client("menu_admin", "admin", 1))
@@ -113,14 +121,18 @@ class TheOldLocationIsGoneNotDuplicated(_MenuCase):
                 self.assertNotIn(stale, _MENU)
 
     def test_the_admin_submenu_still_holds_its_own_items(self):
-        # Moving Developer Mode out must not have taken anything with it.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the Admin submenu's items ->
+        TOOLS > Security / Operations / Diagnostics and PROJECT > Project Data
+        Management. Same intent: moving Developer Mode took nothing with it -
+        every one is still there, active, on its own route, for an admin."""
         body = self._home(self._client("menu_admin", "admin", 1))
-        for kept in ["menu.archiosk.admin.security", "menu.archiosk.admin.operations",
-                     "menu.archiosk.admin.diagnostics",
-                     "menu.archiosk.admin.project-data-management"]:
-            with self.subTest(ref=kept):
-                self.assertIn(kept, body)
-
+        for command, route in [("tools.security", 'href="/security/"'), ("tools.operations", 'href="/operations/"'),
+                               ("tools.diagnostics", 'href="/developer/diagnostics"'),
+                               ("project.data", 'href="/admin/reset-project-data"')]:
+            with self.subTest(command=command):
+                state, inner = master_command(body, command)
+                self.assertEqual(state, "active")
+                self.assertIn(route, inner)
 
 class AuthorizationIsUnchanged(_MenuCase):
     """This moved a name. It must not have moved a boundary."""

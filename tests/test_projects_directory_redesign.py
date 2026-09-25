@@ -21,6 +21,7 @@ from pathlib import Path
 
 from services.bhive_parser import ConsistencyFlag, ParsedDocument
 from services.requirements_registry import RequirementsRegistry
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class ProjectsDirectoryRedesignTests(unittest.TestCase):
@@ -74,11 +75,11 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         self.assertIn("Beta_Spec.docx", body)
 
     def test_ingest_document_action_removed_from_directory_heading(self):
-        response = self.client.get("/projects")
-        body = response.get_data(as_text=True)
-
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): creation is FILE > New
+        Project..., and the directory still never offers "Ingest a new document"."""
+        body = self.client.get("/projects").get_data(as_text=True)
         self.assertNotIn("Ingest a new document", body)
-        self.assertIn(">+ New Project<", body)
+        self.assertEqual(master_command(body, "file.new_project")[0], "active")
 
     def test_dates_rendered_human_readable_not_raw_iso(self):
         response = self.client.get("/projects")
@@ -146,18 +147,15 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         self.assertNotIn("project-card-secondary", body)
 
     def test_header_offers_new_project_to_an_admin_on_a_NON_empty_directory(self):
-        """CLAUDE-PROJECTS-NEW-ACTION-01 - the gap this closed.
-
-        Creation used to be reachable from this page ONLY in its empty state
-        (the test below). The moment an admin had one project, the directory
-        offered no way to make another, and the landing page's own
-        `+ New Project` is a page away. The header action is persistent.
-        """
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's own header
+        "+ New Project" -> FILE > New Project..., persistently active for an admin
+        on a NON-empty directory (the gap this originally closed stays closed)."""
         body = self.client.get("/projects").get_data(as_text=True)
         self.assertNotIn("No projects yet.", body,
                          "fixture must be a NON-empty directory for this to mean anything")
-        self.assertIn('data-ui-ref="projects-directory.new-project"', body)
-        self.assertIn("+ New Project", body)
+        state, inner = master_command(body, "file.new_project")
+        self.assertEqual(state, "active")
+        self.assertIn("New Project", inner)
 
     def test_new_project_header_action_is_hidden_from_a_non_admin(self):
         """Consistent with every other creation entry point.
@@ -175,17 +173,12 @@ class ProjectsDirectoryRedesignTests(unittest.TestCase):
         self.assertNotIn('data-ui-ref="projects-directory.new-project"', body)
 
     def test_the_header_action_points_at_project_creation_not_ingestion(self):
-        """Asserted against the anchor TAG, not the whole page.
-
-        `href="/upload"` appears elsewhere in this document, so a bare
-        assertIn over the body would pass even if this control pointed
-        somewhere else entirely.
-        """
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): asserted against the command's
+        own anchor, as before - FILE > New Project... points at /upload."""
         body = self.client.get("/projects").get_data(as_text=True)
-        tag = re.search(
-            r'<a[^>]*data-ui-ref="projects-directory\.new-project"[^>]*>', body)
-        self.assertIsNotNone(tag, "the header action did not render")
-        self.assertIn('href="/upload"', tag.group(0))
+        state, inner = master_command(body, "file.new_project")
+        self.assertIsNotNone(state, "the New Project command did not render")
+        self.assertIn('href="/upload"', inner)
 
     def test_empty_state_with_no_projects_offers_new_project_not_ingestion(self):
         empty_dir = Path(tempfile.mkdtemp(prefix="beehive_test_projects_empty_"))

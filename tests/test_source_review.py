@@ -48,7 +48,10 @@ def test_real_route_correction_explicit_consumption_revert_and_reload(project):
     for _ in range(2):
         response=client.get(url)
         assert response.status_code==200
-        assert b'Reload view' in response.data and b'Before: DATED 1056' in response.data
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the page-local "Reload view"
+        # widget is retired (browser reload is the reload); a plain GET still
+        # re-renders the same review, read-only.
+        assert b'Before: DATED 1056' in response.data
     assert store._path_for('project').read_bytes()==before
     client.post(url,data=dict(action='revert',correction_id=correction['id']))
     assert dx.source_review_state(store.get('project'),source['id'])['stale']

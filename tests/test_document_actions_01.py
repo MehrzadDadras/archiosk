@@ -76,12 +76,16 @@ class DocumentActionsTests(unittest.TestCase):
         self.assertIn('data-ui-ref="display.document.download"', body)
         self.assertIn('data-ui-ref="display.document.replace"', body)
         self.assertIn('data-ui-ref="display.document.remove"', body)
-        self.assertIn('data-ui-ref="menu.document.download"', body)
-        self.assertIn('data-ui-ref="menu.document.replace"', body)
-        self.assertIn('data-ui-ref="menu.document.remove"', body)
-        self.assertEqual(body.count(f'href="{download}"'), 2)
-        self.assertEqual(body.count(f'href="{self.replace_url}"'), 2)
-        self.assertEqual(body.count(f'action="{self.remove_url}"'), 3)  # action bar, menu, canonical Toolbox
+        # SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic Document menu
+        # (menu.document.*) -> the Master DOCUMENT family plus the identity line's
+        # fixed object actions. The invariant is unchanged: every entry uses the
+        # SAME canonical route - no second implementation. Enumerated, not assumed:
+        for command in ('data-command="document.open_original"', 'data-command="document.replace"',
+                        'data-command="document.remove"'):
+            self.assertIn(command, body)
+        self.assertEqual(body.count(f'href="{download}"'), 3)          # menu, identity line, action bar
+        self.assertEqual(body.count(f'href="{self.replace_url}"'), 2)  # menu, action bar
+        self.assertEqual(body.count(f'action="{self.remove_url}"'), 4)  # menu, identity line, action bar, Toolbox
 
     def test_replace_selection_is_read_only_and_names_selected_document(self):
         path = self.tmp / f"{self.project_id}.workspace.json"

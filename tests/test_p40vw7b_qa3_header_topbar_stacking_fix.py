@@ -186,40 +186,42 @@ class HeaderProjectLinkRealBrowserGeometryTests(unittest.TestCase):
         html, n = re.subn(r'<link[^>]*href="[^"]*product_ui\.css[^"]*"[^>]*>',
                          lambda _match: f"<style>{product_css}</style>", html)
         assert n == 1, "the current shared presentation stylesheet must be exercised"
+        html = re.sub(r'<link[^>]*href="[^"]*master_workspace\.css[^"]*"[^>]*>',
+                      lambda _match: "<style>" + (_REPO_ROOT / "static/css/master_workspace.css").read_text(encoding="utf-8") + "</style>",
+                      html)
         html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
         return html
 
     def _assert_project_link_receives_its_own_click(self, width: int) -> None:
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the retired breadcrumb's
+        Project-name link -> the Master Menu control that reaches the same
+        chooser (FILE; on a phone, the Menu button that reveals the families).
+        The protection is the same real-browser one: that control is the element
+        that actually receives the click, with a Document open, at this width -
+        and the project stays named on the identity line."""
         html = self._standalone_document_with_document_open()
+        selector = ".master-families-toggle" if width < 768 else '[data-family="file"] > summary'
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
                 page = browser.new_page(viewport={"width": width, "height": 900})
                 page.set_content(html, wait_until="load")
-
-                anchor = page.query_selector(".workspace-topbar-project")
-                self.assertIsNotNone(anchor, "the Project-name anchor must exist in the real rendered DOM")
-                box = anchor.bounding_box()
+                name = page.query_selector(".identity-bar-container")
+                self.assertIsNotNone(name)
+                self.assertTrue(name.is_visible(), "the project name must stay visible on the identity line")
+                target = page.query_selector(selector)
+                self.assertIsNotNone(target, selector)
+                box = target.bounding_box()
                 self.assertIsNotNone(box)
                 cx = box["x"] + box["width"] / 2
                 cy = box["y"] + box["height"] / 2
-                hit_class = page.evaluate(
-                    "([x, y]) => { const el = document.elementFromPoint(x, y); "
-                    "return el ? el.className : null; }",
-                    [cx, cy],
+                hits_target = page.evaluate(
+                    "([x, y, sel]) => { const el = document.elementFromPoint(x, y); "
+                    "return !!(el && el.closest(sel)); }",
+                    [cx, cy, selector],
                 )
-                self.assertIn(
-                    "workspace-topbar-project", hit_class or "",
-                    f"at width={width}px, document.elementFromPoint at the visible "
-                    f"Project-name text returned {hit_class!r}, not the link itself "
-                    "- this is exactly the class of overlap QA2's source-text-only "
-                    "coverage could not catch.",
-                )
-                # Playwright's own click() refuses to click an element that is
-                # obscured by something else at the point it would click -
-                # the strongest available proxy for "a real user's click
-                # actually lands here" without a live server to navigate.
-                anchor.click(timeout=5000)
+                self.assertTrue(hits_target, f"at width={width}px the Master Menu control {selector!r} is obscured")
+                target.click(timeout=5000)
             finally:
                 browser.close()
 
@@ -323,61 +325,58 @@ class ArchiosMenuDropdownRealBrowserVisibilityTests(unittest.TestCase):
         html, n = re.subn(r'<link[^>]*href="[^"]*product_ui\.css[^"]*"[^>]*>',
                          lambda _match: f"<style>{product_css}</style>", html)
         assert n == 1
+        html = re.sub(r'<link[^>]*href="[^"]*master_workspace\.css[^"]*"[^>]*>',
+                      lambda _match: "<style>" + (_REPO_ROOT / "static/css/master_workspace.css").read_text(encoding="utf-8") + "</style>",
+                      html)
         html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
         return html
 
     def test_archiosk_menu_panel_is_genuinely_hit_testable_when_open(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the classic Archiosk menu ->
+        the Master ARCHIOSK application menu. Same real-browser proof: once
+        opened, its panel receives hits and its About item is really clickable."""
         html = self._standalone_projects_page()
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
                 page = browser.new_page(viewport={"width": 1400, "height": 900})
                 page.set_content(html, wait_until="load")
-                summary = page.query_selector('[data-ui-ref="menu.archiosk"] summary')
+                summary = page.query_selector(".master-app > summary")
                 self.assertIsNotNone(summary)
-                page.locator('.ui-tools-menu > summary').click()
                 summary.click()
-                panel = page.query_selector('[data-ui-ref="menu.archiosk"] .workspace-menubar-panel')
+                panel = page.query_selector(".master-app > ul")
                 self.assertIsNotNone(panel)
                 hit_finds_panel = page.evaluate(
                     "(el) => { const r = el.getBoundingClientRect(); "
                     "const cx = r.x + r.width / 2; const cy = r.y + Math.min(10, r.height / 2); "
                     "const hit = document.elementFromPoint(cx, cy); "
-                    "return !!(hit && hit.closest('.workspace-menubar-panel')); }",
+                    "return !!(hit && hit.closest('.master-app > ul')); }",
                     panel,
                 )
-                self.assertTrue(hit_finds_panel, "the open Archiosk menu panel must genuinely receive hits, not just exist in the DOM")
-                home_link = page.query_selector('[data-ui-ref="menu.archiosk.home"]')
-                self.assertIsNotNone(home_link)
-                self.assertTrue(home_link.is_visible())
-                # A real .click() (Playwright refuses to click an obscured
-                # element) is the strongest available proof.
-                home_link.click(timeout=5000)
+                self.assertTrue(hit_finds_panel, "the open ARCHIOSK menu panel must genuinely receive hits")
+                about = page.query_selector('.master-app a[href="/about"]')
+                self.assertIsNotNone(about)
+                self.assertTrue(about.is_visible())
+                about.click(timeout=5000)
             finally:
                 browser.close()
 
     def test_topbar_identity_no_longer_clips_its_own_dropdown_children(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): .workspace-topbar-identity ->
+        the Master Menu band, which must not clip its own dropdowns either."""
         html = self._standalone_projects_page()
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
                 page = browser.new_page(viewport={"width": 1400, "height": 900})
                 page.set_content(html, wait_until="load")
-                overflow = page.evaluate(
-                    "() => getComputedStyle(document.querySelector('.workspace-topbar-identity')).overflow"
-                )
-                self.assertEqual(overflow, "visible")
-                # The breadcrumb's own independent truncation must still hold.
-                context_overflow = page.evaluate(
-                    "() => { const el = document.querySelector('.workspace-topbar-context'); "
-                    "return el ? getComputedStyle(el).overflow : 'no-element-outside-a-workspace'; }"
-                )
-                self.assertIn(context_overflow, ("hidden", "no-element-outside-a-workspace"))
+                for selector in (".master-topbar", ".master-families", ".master-family"):
+                    overflow = page.evaluate(
+                        "(sel) => getComputedStyle(document.querySelector(sel)).overflow", selector)
+                    self.assertEqual(overflow, "visible", selector)
             finally:
                 browser.close()
 
-
-@unittest.skipUnless(_BROWSER_AVAILABLE, _SKIP_REASON)
 class ArchiosMenuIdentityActivityRealBrowserTests(unittest.TestCase):
     """CLAUDE-ARCHIOSK-IDENTITY-ACTIVITY-INDICATOR-01: real-browser proof
     that the top-left activity indicator is driven by the ACTUAL
@@ -449,6 +448,9 @@ class ArchiosMenuIdentityActivityRealBrowserTests(unittest.TestCase):
         assert n_js == 1, "expected exactly one case_workspace.js <script src> tag to inline"
         # Strip every OTHER external <script src> (no live server to fetch
         # them from, and they're not needed for this test's own evidence).
+        html = re.sub(r'<link[^>]*href="[^"]*master_workspace\.css[^"]*"[^>]*>',
+                      lambda _match: "<style>" + (_REPO_ROOT / "static/css/master_workspace.css").read_text(encoding="utf-8") + "</style>",
+                      html)
         html = re.sub(r'<script[^>]+src="[^"]*"[^>]*></script>', "", html)
         return html
 

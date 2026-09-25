@@ -8,9 +8,8 @@
    reached through specific surfaces, not something that happens to every upload.
    Saying "upload a drawing and Archiosk builds a model" would be a lie of
    emphasis even though every clause in it is individually true.
-#}{# MASTERUI: in the Master Workspace this guide renders inside the one shell;
-   otherwise inside help/_standalone.html, the same head and body.pm as before. #}
-{% extends "base.html" if master_ui else "help/_standalone.html" %}
+#}{# MASTERUI: this guide renders inside the one Master Workspace shell. #}
+{% extends "base.html" %}
 {% block title %}Drawing ingestion &amp; baselines &mdash; Help{% endblock %}
 {% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">

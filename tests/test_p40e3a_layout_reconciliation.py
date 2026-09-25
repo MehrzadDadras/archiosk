@@ -103,17 +103,14 @@ class _BaseTestCase(unittest.TestCase):
 
 class TopBarContractTests(_BaseTestCase):
     def test_identity_breadcrumb_and_user_menu_present(self):
-        # CLAUDE-APP-MENU-01: .workspace-topbar-brand itself retired from
-        # this authenticated topbar (see test_p40brand1_brand_mark.py's
-        # own HeaderMarkupTests docstring) - the application menu bar
-        # (data-ui-ref="menu.archiosk") is its replacement identity
-        # anchor here.
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.archiosk / breadcrumb /
+        Account menu -> the Master Menu, the identity line, and the ARCHIOSK
+        menu's signed-in account and Sign out."""
         client = self._client_as("e3a_owner", 1)
         body = client.get(f"/projects/{self.project_id}/workspace").get_data(as_text=True)
-        self.assertIn('data-ui-ref="menu.archiosk"', body)
-        self.assertIn('class="workspace-topbar-context"', body)
-        self.assertIn('id="workspace-user-menu"', body)
-        self.assertIn("e3a_owner", body)
+        self.assertIn('data-master-shell="menu"', body)
+        self.assertIn('class="identity-bar-path"', body)
+        self.assertIn('<span class="workspace-user-name">e3a_owner</span>', body)
         self.assertIn(f'href="{"/logout"}"', body)
 
     def test_display_layout_only_within_a_workspace_appearance_everywhere(self):
@@ -189,6 +186,10 @@ class TopBarContractTests(_BaseTestCase):
         # a second implementation - same narrowing precedent as above.
         body_without_real_controls = re.sub(r'<button[^>]*data-reuse-control="doc-annotate-undo"[^>]*>[^<]*</button>', "", body_without_real_controls)
         body_without_real_controls = re.sub(r'<button[^>]*data-reuse-control="doc-annotate-redo"[^>]*>[^<]*</button>', "", body_without_real_controls)
+        # MASTERUI cutover: a GREYED Master command is not a control (no action,
+        # no route) - e.g. EDIT > Undo with no document open. Strip those too; any
+        # real non-functional control still fails below.
+        body_without_real_controls = re.sub(r'<li class="master-item is-grey"[^>]*>.*?</li>', "", body_without_real_controls, flags=re.S)
         for token in ("Undo", "Redo", "drawing-tool", "paint-bucket", "color-palette", "chat-tag"):
             self.assertNotIn(token, body_without_real_controls, token)
 

@@ -125,7 +125,9 @@ def test_reanalysis_new_jobs_same_source_prior_jobs_retained_and_reload_readonly
     assert {str(p): p.read_bytes() for p in root.rglob('*.json')} == before
     assert store.get(w.project_id).sources[0] == source
     assert source['file_hash'] == hashlib.sha256(__import__('pathlib').Path(source['file_path']).read_bytes()).hexdigest()
-    assert request_id.encode() in client.get(f'/document-shop/jobs/{w.project_id}/analysis-history').data
+    # MASTERUI cutover: machine identifiers (run, job, engine, hash) are Inspect
+    # depth on the history page - VIEW > Inspect Density shows them.
+    assert request_id.encode() in client.get(f'/document-shop/jobs/{w.project_id}/analysis-history?density=inspect').data
 
 
 def test_compare_real_pixels_read_only_and_qualification(env):

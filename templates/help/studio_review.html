@@ -9,9 +9,8 @@
    ordinary job. That is the same reasoning help_status_for already applies in
    collapsing seven checks into four statuses: internal distinctions have to
    earn their visibility.
-#}{# MASTERUI: in the Master Workspace this guide renders inside the one shell;
-   otherwise inside help/_standalone.html, the same head and body.pm as before. #}
-{% extends "base.html" if master_ui else "help/_standalone.html" %}
+#}{# MASTERUI: this guide renders inside the one Master Workspace shell. #}
+{% extends "base.html" %}
 {% block title %}{{ clip.title }} &mdash; Help Clip Studio{% endblock %}
 {% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">

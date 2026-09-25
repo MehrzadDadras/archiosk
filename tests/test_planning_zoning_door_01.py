@@ -32,6 +32,7 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 from routes import planning_zoning
+from tests.master_ui_helpers import master_command, read_expanded, expand_partials
 
 
 class PlanningZoningDoorTests(unittest.TestCase):
@@ -335,18 +336,22 @@ class PlanningZoningDoorTests(unittest.TestCase):
 
     # -- navigation and mobile --------------------------------------------
     def test_the_dashboard_offers_the_entrance(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's Planning &
+        Zoning button -> MODEL > Planning & Zoning Analysis, active, same route."""
         client = self._client("boss")
         body = client.get("/projects").get_data(as_text=True)
-        self.assertIn('data-ui-ref="projects-directory.planning-zoning"', body)
-        self.assertIn("/planning-zoning", body)
+        state, inner = master_command(body, "model.planning")
+        self.assertEqual(state, "active")
+        self.assertIn('href="/planning-zoning"', inner)
 
     def test_existing_dashboard_entrances_are_unaffected(self):
+        """SUPERSEDED DELIBERATELY (MASTERUI cutover): the directory's own entrance
+        buttons -> FILE > New Project / Upload Document and PORTFOLIO > Removed
+        Projects, all still active for this admin."""
         client = self._client("boss")
         body = client.get("/projects").get_data(as_text=True)
-        for ref in ("projects-directory.new-project",
-                    "projects-directory.document-shop",
-                    "projects-directory.removed-link"):
-            self.assertIn('data-ui-ref="%s"' % ref, body)
+        for command in ("file.new_project", "file.upload", "portfolio.removed"):
+            self.assertEqual(master_command(body, command)[0], "active", command)
 
     def test_it_uses_the_existing_shell_and_introduces_no_new_stylesheet(self):
         _response, body = self._page()
