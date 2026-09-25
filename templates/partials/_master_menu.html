@@ -72,9 +72,14 @@
                 <li class="master-item is-grey"><span aria-disabled="true" title="Available inside a project">Display Layout</span><span class="master-reason">Available inside a project</span></li>
                 {% endif %}
                 {% endif %}
+                {% if family.name == 'HELP' %}
+                {# The Keyboard Shortcuts panel opens here, attached under the
+                   HELP command that reveals it - same partial, same id, same
+                   app_menu.js action; never a detached block. #}
+                <li class="master-embedded master-shortcuts">{% include "partials/_menu_shortcuts_panel.html" %}</li>
+                {% endif %}
             </ul>
         </details>
         {% endfor %}
     </nav>
-    {% include "partials/_menu_shortcuts_panel.html" %}
 </div>
