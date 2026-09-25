@@ -1,0 +1,25 @@
+{# MASTERUI-BLOCK1: the Identity Bar - what is open, always in the same place.
+
+   Every value comes from `identity` (base.html's `ui_identity()`), so the
+   container and source are named ONE way on every page instead of by each
+   page's own expression. The uploaded filename is shown beside the work-item
+   name, never instead of it, and is never reconstructed: absent reads as not
+   recorded (constitutional invariant #3). #}
+{% if identity.project %}
+<div class="identity-bar" data-master-shell="identity" data-identity-kind="{{ identity.project.kind }}">
+    <p class="identity-bar-path">
+        <span class="identity-bar-container">{{ identity.project.name }}</span>
+        {%- if identity.project.code %} <span class="identity-bar-code">{{ identity.project.code }}</span>{% endif %}
+        {%- if identity.source %}
+        <span class="identity-bar-separator" aria-hidden="true">›</span>
+        <span class="identity-bar-source">{{ identity.source.name }}</span>
+        <span class="identity-bar-original">
+            {%- if identity.source.original_filename %}{{ identity.source.original_filename }}
+            {%- else %}Original filename not recorded{% endif -%}
+        </span>
+        {%- endif %}
+    </p>
+    {# The object's action zone. Fixed position, filled by later blocks. #}
+    <div class="identity-bar-actions" data-master-shell="actions"></div>
+</div>
+{% endif %}

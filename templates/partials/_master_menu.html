@@ -1,0 +1,92 @@
+{# MASTERUI-BLOCK1: the Master Menu - one menu, same families in the same
+   order on every page that opts in.
+
+   TWO RULES, and they are different on purpose:
+   - ENTITLEMENT HIDES. A command this person may never use is absent (a
+     customer is not offered a control that would refuse them).
+   - STATE GREYS. A command they may use, but not right now, stays in its
+     place, disabled, with the reason - so nothing moves when context changes.
+
+   Links only, to routes that already exist. Commands that act (Examine,
+   Re-analyze, GO) arrive with the command registry, not here.
+   Expects `identity` from base.html's `ui_identity()`. #}
+{% set p = identity.project %}
+{% set s = identity.source %}
+{% macro item(label, href=none, reason=none) -%}
+<li class="master-menu-item">
+    {%- if href and not reason -%}<a href="{{ href }}">{{ label }}</a>
+    {%- else -%}<span aria-disabled="true" title="{{ reason }}">{{ label }}</span>
+    <span class="master-menu-reason">{{ reason }}</span>{%- endif -%}
+</li>
+{%- endmacro %}
+<nav class="master-menu" aria-label="Main menu" data-master-shell="menu">
+    <details class="master-menu-family" data-family="archiosk">
+        <summary>ARCHIOSK</summary>
+        <ul>
+            {{ item("About", url_for('portal.about')) }}
+            {% if is_admin %}
+            {{ item("Security", url_for('security.department_home')) }}
+            {{ item("Operations", url_for('operations.department_home')) }}
+            {{ item("Diagnostics", url_for('portal.list_diagnostics')) }}
+            {{ item("Developer Tools", url_for('portal.developer_tools'),
+                    none if developer_mode else "Enter Developer Mode first") }}
+            {% endif %}
+            {% if not customer_mode %}{{ item("Removed Projects", url_for('portal.removed_projects')) }}{% endif %}
+            {{ item("Sign out", url_for('portal.logout')) }}
+        </ul>
+    </details>
+    <details class="master-menu-family" data-family="file">
+        <summary>File</summary>
+        <ul>
+            {% if not customer_mode %}
+            {{ item("New Project…", url_for('portal.upload'), none if is_admin else "Admin only") }}
+            {% endif %}
+            {% if customer_mode or is_admin %}
+            {{ item("Upload Document…", url_for('portal.document_shop_intake')) }}
+            {% endif %}
+            {% if not customer_mode %}{{ item("Open Projects", url_for('portal.projects_list')) }}{% endif %}
+            {{ item("Open My Documents", url_for('portal.document_shop_jobs')) }}
+            {% if not customer_mode %}{{ item("Search", url_for('portal.search_page')) }}{% endif %}
+        </ul>
+    </details>
+    <details class="master-menu-family" data-family="view">
+        <summary>View</summary>
+        <ul>
+            {% if p and p.kind == 'documents' %}
+            {{ item("Overview", url_for('portal.document_shop_result', project_id=p.id)) }}
+            {% elif p %}
+            {{ item("Overview", url_for('workspace.show_workspace', project_id=p.id, view='overview')) }}
+            {% else %}
+            {{ item("Overview", reason="Open a project or document first") }}
+            {% endif %}
+        </ul>
+    </details>
+    <details class="master-menu-family" data-family="document">
+        <summary>Document</summary>
+        <ul>
+            {% if p and s %}
+            {{ item("Open original", url_for('workspace.source_file', project_id=p.id, source_id=s.id, download=1)) }}
+            {% else %}
+            {{ item("Open original", reason="Open a document first") }}
+            {% endif %}
+            {% if p and p.kind == 'documents' %}
+            {{ item("Analysis history", url_for('portal.document_shop_analysis_history', project_id=p.id)) }}
+            {% else %}
+            {{ item("Analysis history", reason="Open a document first") }}
+            {% endif %}
+            {% if developer_mode %}
+            {% if p and s %}
+            {{ item("Inspect source", url_for('workspace.source_review', project_id=p.id, source_id=s.id)) }}
+            {% else %}
+            {{ item("Inspect source", reason="Open a document first") }}
+            {% endif %}
+            {% endif %}
+        </ul>
+    </details>
+    <details class="master-menu-family" data-family="help">
+        <summary>Help</summary>
+        <ul>
+            {{ item("Help Centre", url_for('help_center.index')) }}
+        </ul>
+    </details>
+</nav>

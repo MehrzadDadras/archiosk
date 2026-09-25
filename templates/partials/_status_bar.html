@@ -1,0 +1,9 @@
+{# MASTERUI-BLOCK1: the Status Bar - standing machine facts, in one place.
+
+   Reads only flags base.html's context already carries; it introduces no new
+   state. Admin-gated items keep the gate the existing top bar uses. #}
+<div class="status-bar" role="status" data-master-shell="status">
+    {% if developer_mode %}<span class="status-bar-item" data-status="developer-mode">Developer Mode</span>{% endif %}
+    {% if verification_session %}<span class="status-bar-item" data-status="verification">Live verification session</span>{% endif %}
+    {% if is_admin and ai_calls_disabled %}<span class="status-bar-item" data-status="ai-disabled">AI calls disabled</span>{% endif %}
+</div>

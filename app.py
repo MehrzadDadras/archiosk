@@ -1036,6 +1036,102 @@ def _register_context_processors(app: Flask) -> None:
             "current_username": session.get("username") if authenticated else None,
         }
 
+    from jinja2 import pass_context
+
+    @app.context_processor
+    def inject_ui_identity():
+        """MASTERUI-BLOCK1: `ui_identity()`, the one answer to "what is open".
+
+        A context processor cannot see what a route passed to render_template,
+        so this injects a CALLABLE that reads the rendering template's own
+        context. base.html calls it once; every identity surface then shows the
+        same resolved values instead of each building its own expression.
+        """
+        @pass_context
+        def ui_identity(ctx):
+            return resolve_ui_identity(ctx)
+
+        return {"ui_identity": ui_identity}
+
+
+def resolve_ui_identity(values) -> dict:
+    """Resolve the open container and source from a page's own context values.
+
+    MASTERUI-BLOCK1. READ-ONLY: nothing is written, and names come from the
+    governed records rather than from whatever dict a page happened to build -
+    a source is looked up by id in the workspace, so its display name and its
+    uploaded `original_filename` are the stored ones.
+
+    Access is re-checked with `can_access_project`, the same rule every route
+    loader uses. A page that could render without passing that check (a
+    token-gated page, an error page) therefore resolves to NO identity rather
+    than naming a project to someone who cannot open it.
+
+    Returns {"project": None|{...}, "source": None|{...}}.
+    """
+    from flask import current_app, session
+
+    from services.auth import is_admin
+    from services.case_workspace import CaseWorkspaceStore
+    from services.ingestion import get_registry
+    from services.project_access import can_access_project
+
+    empty = {"project": None, "source": None}
+    workspace = values.get("workspace")
+    document = values.get("document")
+    project_id = (values.get("project_id")
+                  or getattr(workspace, "project_id", None)
+                  or getattr(document, "project_id", None))
+    if not isinstance(project_id, str) or not project_id:
+        return empty
+    try:
+        if getattr(workspace, "project_id", None) != project_id:
+            workspace = CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]).get(project_id)
+        if workspace is None:
+            return empty
+        if not can_access_project(workspace, session.get("username"), is_admin()):
+            return empty
+        if getattr(document, "project_id", None) != project_id:
+            document = get_registry(current_app).get(project_id)
+    except Exception:  # noqa: BLE001 - identity is presentation; a failed read shows none, never an error page
+        return empty
+
+    project = {
+        "id": project_id,
+        "name": ((getattr(workspace, "display_title", None) or "").strip()
+                 or getattr(document, "filename", None) or project_id),
+        "code": getattr(workspace, "project_code", None) or None,
+        "kind": "documents" if getattr(workspace, "container_state", None) == "black_box" else "project",
+    }
+
+    source_id = None
+    for key in ("selected_source", "source"):
+        candidate = values.get(key)
+        if isinstance(candidate, dict) and candidate.get("id"):
+            source_id = candidate["id"]
+            break
+    if source_id is None:
+        report = values.get("report")
+        result = values.get("result")
+        if isinstance(report, dict) and isinstance(report.get("source"), dict):
+            source_id = report["source"].get("id")
+        elif isinstance(result, dict) and result.get("source_id"):
+            source_id = result["source_id"]
+        elif isinstance(values.get("source_id"), str):
+            source_id = values.get("source_id")
+    record = next((s for s in (getattr(workspace, "sources", None) or [])
+                   if isinstance(s, dict) and s.get("id") == source_id), None) if source_id else None
+    source = None
+    if record is not None:
+        source = {
+            "id": record["id"],
+            "name": record.get("name") or "",
+            # Never reconstructed: absent means "not recorded" (constitutional
+            # invariant #3), exactly as Document Review already treats it.
+            "original_filename": record.get("original_filename") or None,
+        }
+    return {"project": project, "source": source}
+
 
 def _register_template_filters(app: Flask) -> None:
     from services.formatting import humanize_timestamp, source_kind_label

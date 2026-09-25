@@ -19,6 +19,8 @@
     <meta name="apple-mobile-web-app-title" content="ARCHIOSK">
     <script src="{{ url_for('static', filename='js/pwa.js') }}?v={{ static_version }}" defer></script>
     <title>{% block title %}Archiosk{% endblock %}</title>
+    {# MASTERUI-BLOCK1: a page's opt-in to the Master UI shell ("on"); empty otherwise. #}
+    <meta name="archiosk-master-shell" content="{% block master_shell %}{% endblock %}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {# CLAUDE-ICON-UNIFY-01: the browser tab now shows the SAME mark as the
        page. This pointed at static/favicon.svg, a genuinely different file
@@ -85,6 +87,14 @@
 </head>
 <body data-ui-density="{% block ui_density %}{{ 'inspect' if request.args.get('density') == 'inspect' else 'work' }}{% endblock %}">
     <div class="blueprint-grid"></div>
+    {# MASTERUI-BLOCK1: the Master UI shell is OPT-IN per page while it is
+       built beside the existing shell. A page opts in with
+       `{% block master_shell %}on{% endblock %}`; every other page renders
+       exactly as before, and `ui_identity()` is not even called for it. The
+       block itself is defined in <head> (the archiosk-master-shell meta), so
+       the opt-in is visible in the DOM and read here via self. #}
+    {% set master_shell = (self.master_shell() | trim) == 'on' %}
+    {% set identity = ui_identity() if master_shell else none %}
 
     {# CLAUDE-DOCUMENT-SHOP-DOOR-01: a Document Shop customer is not operating
        a Project, so the Projects/CAD shell is not their environment. The live
@@ -112,6 +122,10 @@
            7): the panel-dividing lines themselves are the collapse controls
            now (see .panel-divider below) - removing the redundant buttons
            this replaces. #}
+        {% if master_shell and authenticated %}
+        {% include "partials/_master_menu.html" %}
+        {% include "partials/_identity_bar.html" %}
+        {% else %}
         {% if customer_mode %}
         {# The whole of a customer's navigation. Two destinations, because two
            is all they have - their documents, and the way out. Deliberately
@@ -389,6 +403,7 @@
             </div>
         </div>
         {% endif %}
+        {% endif %}{# master_shell #}
 
         {# CLAUDE-HOME-UNIFY-01: the tray switcher requires an OPEN PROJECT, not
            merely an authenticated session.
@@ -1048,6 +1063,7 @@
                 {% endwith %}
                 {% block content %}{% endblock %}
             </main>
+            {% if master_shell and authenticated %}{% include "partials/_status_bar.html" %}{% endif %}
         </div>
 
         {% if (project_id is defined and workspace is defined) or planning_composer_active | default(false) %}
