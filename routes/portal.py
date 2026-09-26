@@ -1623,6 +1623,12 @@ def _gateway_navigation_target(message: str, projects: list[dict], can_create_pr
     return None
 
 
+def _sandbox_bind(project_id: str) -> None:
+    """MORPHOSIS SLICE 1: see routes/sandbox.bind_created_project."""
+    from routes.sandbox import bind_created_project
+    bind_created_project(project_id)
+
+
 def gopilot_turn_labels(scope_kind: str, text: str, *, context: dict | None = None,
                         developer_scope: bool = False, residual=None):
     """GOPILOT CORE: the ONE labelling path for every canonical Composer turn.
@@ -4117,6 +4123,9 @@ def upload():
                 "; ".join(f"{r['relative_path']} - {r['reason']}" for r in skipped),
                 "error",
             )
+        # MORPHOSIS SLICE 1: a project created FOR a Sandbox is bound to it here;
+        # the destination below is unchanged.
+        _sandbox_bind(document.project_id)
         return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
     file_storage = posted_files[0]
@@ -4171,6 +4180,9 @@ def upload():
             request.form.get('entry_choice'), _posted_retained_by(),
         )
 
+        # MORPHOSIS SLICE 1: a project created FOR a Sandbox is bound to it here;
+        # the destination below is unchanged.
+        _sandbox_bind(document.project_id)
         return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
     operating_environment = _resolved_operating_environment()
@@ -4184,7 +4196,8 @@ def upload():
         retained_by=_posted_retained_by(),
         source_domain=source_domain,
     )
-    return redirect(url_for('portal.upload_confirm', staging_id=staging_id))
+    return redirect(url_for('portal.upload_confirm', staging_id=staging_id,
+                            sandbox=request.form.get('sandbox_resume') or None))
 
 
 @portal_bp.route('/upload/folder', methods=['POST'])
@@ -4277,6 +4290,9 @@ def upload_folder():
             "error",
         )
 
+    # MORPHOSIS SLICE 1: a project created FOR a Sandbox is bound to it here;
+    # the destination below is unchanged.
+    _sandbox_bind(document.project_id)
     return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
 
@@ -4394,6 +4410,9 @@ def upload_confirm(staging_id):
     )
 
     store.discard(staging_id)
+    # MORPHOSIS SLICE 1: a project created FOR a Sandbox is bound to it here;
+    # the destination below is unchanged.
+    _sandbox_bind(document.project_id)
     return redirect(url_for('workspace.preparing_project_briefing', project_id=document.project_id))
 
 

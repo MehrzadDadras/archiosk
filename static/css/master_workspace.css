@@ -378,3 +378,32 @@ body[data-master-shell="on"] .survey-evaluation label { margin-top: var(--space-
     background-color: var(--ocean-glass-foreground);
     box-shadow: var(--ocean-glow);
 }
+
+/* MORPHOSIS SLICE 1 - the Sandbox (templates/sandbox.html). A quiet centre:
+   one prompt when empty, one organized card once Gopilot has replied. Tokens
+   only - no raw colours - so every appearance repaints it. */
+.sandbox { max-width: 760px; margin: 0 auto; padding: var(--space-6, 32px) var(--space-4) var(--space-4); font-family: var(--font-body); }
+.sandbox-start { text-align: center; padding-top: 12vh; }
+.sandbox-prompt { font-family: var(--font-display); font-size: var(--text-2xl); color: var(--text-primary); margin: 0 0 var(--space-2); font-weight: 500; }
+.sandbox-support { font-size: var(--text-md); color: var(--text-secondary); margin: 0 0 var(--space-4); }
+.sandbox-note { font-size: var(--text-sm); color: var(--text-secondary); max-width: 60ch; margin: var(--space-2) auto 0; line-height: 1.5; }
+.sandbox-card { border: var(--master-hairline); background: var(--surface-secondary); padding: var(--space-4); }
+.sandbox-card .sandbox-note { margin-left: 0; }
+.sandbox-kicker { font-size: var(--text-xs); color: var(--text-secondary); letter-spacing: .06em; margin: 0 0 var(--space-2); }
+.sandbox-heading { font-size: var(--text-sm); color: var(--text-secondary); margin: 0; font-weight: 600; }
+.sandbox-objective { font-size: var(--text-lg); color: var(--text-primary); margin: var(--space-1) 0 var(--space-4); line-height: 1.4; }
+.sandbox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+.sandbox-list h3, .sandbox-external h3, .sandbox-landing h3 { font-size: var(--text-sm); color: var(--text-primary); margin: 0 0 var(--space-1); font-weight: 600; }
+.sandbox-list ul { margin: 0; padding-left: 1.1em; color: var(--text-primary); font-size: var(--text-base); line-height: 1.45; }
+.sandbox-external, .sandbox-landing { border-top: var(--master-hairline); margin-top: var(--space-4); padding-top: var(--space-3); color: var(--text-primary); font-size: var(--text-base); line-height: 1.5; }
+.sandbox-landing-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.sandbox-landing-actions button { min-height: 40px; padding: 0 var(--space-3); border: var(--master-hairline); background: var(--surface-primary); color: var(--text-primary); font: inherit; cursor: pointer; }
+.sandbox-landing-actions .sandbox-primary { background: var(--surface-selected); color: var(--text-primary);
+    border-color: var(--text-primary); font-weight: 600; }   /* never inverted: --surface-* tokens are translucent */
+.sandbox-thread { list-style: none; margin: 0; padding: 0 var(--space-3); }
+.sandbox-thread li { padding: var(--space-2) 0; border-bottom: var(--master-hairline); }
+.sandbox-thread-who { font-size: var(--text-xs); color: var(--text-secondary); margin: 0; }
+.sandbox-thread-text { margin: 0 0 var(--space-1); color: var(--text-primary); }
+.sandbox-landing-choices { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.sandbox-select-label { font-size: var(--text-sm); color: var(--text-secondary); align-self: center; }
+.sandbox-landing-actions select { min-height: 40px; max-width: 100%; background: var(--surface-primary); color: var(--text-primary); border: var(--master-hairline); font: inherit; }

@@ -34,6 +34,7 @@ CANONICAL_COMPOSER_ENDPOINTS = {
     "portal.document_shop_result", "portal.document_shop_bulk",
     "workspace.quick_start", "workspace.post_message",
     "planning_zoning.converse_study",
+    "sandbox.turn",   # MORPHOSIS SLICE 1
 }
 
 SAME_WORDS = "Draft an RFI for the stair"

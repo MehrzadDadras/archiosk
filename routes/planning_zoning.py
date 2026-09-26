@@ -57,12 +57,26 @@ def _study_workspace(project_id):
 
 
 def _study_projects():
+    """The projects this person may put a study in: the access-scoped list, each
+    labelled by the PROJECT record's own identity - never a source filename.
+
+    Label = the governed name (ProjectWorkspace.display_title), then the project
+    code, in the Context rail's established "Name · CODE" form. Project codes are
+    unique and never reused, so two projects with the same name stay
+    distinguishable. A project with no display title falls back to its code, then
+    its id. The submitted value is always the project id."""
     from services.ingestion import get_registry
     from services.case_workspace import CaseWorkspaceStore
-    from routes.portal import _accessible_documents
+    from routes.portal import _accessible_documents, _safe_workspace
     store=CaseWorkspaceStore(current_app.config['REGISTRY_STORE_PATH'])
-    return [{'id':d.project_id,'label':getattr(d,'project_name',None) or getattr(d,'filename',None) or d.project_id}
-            for d in _accessible_documents(get_registry(current_app),store)]
+    projects=[]
+    for d in _accessible_documents(get_registry(current_app),store):
+        workspace=_safe_workspace(store, d.project_id)
+        name=((getattr(workspace,'display_title',None) or '').strip()) if workspace else ''
+        code=(getattr(workspace,'project_code',None) or '').strip() if workspace else ''
+        label=' · '.join(part for part in (name, code) if part) or d.project_id
+        projects.append({'id':d.project_id,'label':label})
+    return projects
 
 
 @planning_bp.route('/planning-zoning/studies')
@@ -476,7 +490,20 @@ def planning_zoning():
     return render_template(
         "planning_entry.html",
         **_context(mode=mode if mode in MODES else MODE_SINGLE,
-                   planning_projects=_study_projects(), project_id=request.args.get('project_id', '')))
+                   planning_projects=_study_projects(), project_id=request.args.get('project_id', ''),
+                   sandbox_origin=_sandbox_origin(request.args.get('sandbox'))))
+
+
+def _sandbox_origin(sandbox_id):
+    """MORPHOSIS SLICE 1: the signed-in user's OWN Sandbox this study starts
+    from, as lineage - or None. Another user's id, or an unknown one, is None:
+    lineage is never borrowed."""
+    if not sandbox_id:
+        return None
+    from services import sandbox as sb
+    record = sb.SandboxStore(current_app.config["REGISTRY_STORE_PATH"]).get(
+        session.get('username'), sandbox_id)
+    return sb.lineage(record) if record and record.get("turns") else None
 
 
 @planning_bp.route("/planning-zoning/result", methods=["GET"])
@@ -717,7 +744,17 @@ def analyze_property():
             'development_direction': _selected('development_direction', DEVELOPMENT_DIRECTIONS, DEFAULT_DEVELOPMENT_DIRECTION),
             'option_strategy': _selected('option_strategy', OPTION_STRATEGIES, DEFAULT_OPTION_STRATEGY),
             'existing_condition': _selected('existing_condition', EXISTING_CONDITIONS, DEFAULT_EXISTING_CONDITION)})
+        # MORPHOSIS SLICE 1: a study started from a Sandbox carries where it came
+        # from. The Sandbox's turns are NOT copied in as evidence - only lineage.
+        origin = _sandbox_origin(request.form.get('sandbox_origin'))
+        if origin:
+            result['workspace_context']['origin'] = origin
         key = _working_studies().put(project_id, session.get('username'), result)
+        if origin:
+            from services import sandbox as sb
+            sb.SandboxStore(current_app.config["REGISTRY_STORE_PATH"]).mark_promoted(
+                session.get('username'), origin['sandbox_id'],
+                {"landing": sb.LANDING_PLANNING_STUDY, "project_id": project_id, "run_id": key})
         return redirect(url_for('planning_zoning.working_study', project_id=project_id, run_id=key))
     mode = request.form.get("mode")
     mode = mode if mode in MODES else MODE_SINGLE

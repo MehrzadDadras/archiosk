@@ -5,6 +5,13 @@
 {# MASTERUI: MODEL > Planning Studies / Planning & Zoning Analysis #}
 <form method="post" action="{{ url_for('planning_zoning.analyze_property') }}" data-ui-ref="planning-zoning.form">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="composer" value="1">
+{% if sandbox_origin %}
+{# MORPHOSIS SLICE 1: this study starts from the person's Sandbox. The origin
+   travels with it as lineage; the Sandbox's content is not evidence. Live
+   property research runs only when this form is submitted. #}
+<input type="hidden" name="sandbox_origin" value="{{ sandbox_origin.sandbox_id }}">
+<p class="field-hint planning-sandbox-origin">Started from your Sandbox: {{ sandbox_origin.objective }}</p>
+{% endif %}
 <div id="planning-properties">
 <label class="field-label" for="planning-address">Property address</label>
 <input class="text-input text-input-wide" id="planning-address" name="address" required autocomplete="street-address" data-ui-ref="planning-zoning.address" placeholder="{{ address_placeholder }}">

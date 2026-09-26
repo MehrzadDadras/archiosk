@@ -1,0 +1,113 @@
+{# MORPHOSIS SLICE 1 - FILE > New Sandbox (routes/sandbox.py, services/sandbox.py).
+
+   A clean start: the Master shell, the identity/status anchors, the ONE canonical
+   Composer (resolve_go_scope gives it Sandbox scope) and a quiet centre. The route
+   passes clean_surface=True, so base.html renders no project tree, thumbnails,
+   navigator or context rail - nothing is inherited from a project or a Source.
+
+   Everything here is PROVISIONAL. Gopilot organizes the idea and recommends a
+   landing; nothing governed exists until the person accepts one. The landing
+   decision is an ordinary form in the content, never inside go_thread, which
+   stays display-only. #}
+{% extends "base.html" %}
+{% block title %}Sandbox &mdash; Archiosk{% endblock %}
+
+{% block content %}
+<section class="sandbox" data-ui-ref="sandbox.surface">
+    {% if not latest %}
+    <div class="sandbox-start" data-ui-ref="sandbox.start">
+        <h1 class="sandbox-prompt">What are you working on?</h1>
+        <p class="sandbox-support">Tell Gopilot what you want to accomplish.</p>
+        <p class="sandbox-note">A Sandbox is provisional. Nothing here becomes project evidence,
+            a finding or a record unless you accept a landing.</p>
+    </div>
+    {% else %}
+    {% set reply = latest.reply %}{% set org = reply.organization %}
+    <article class="sandbox-card" id="sandbox-latest" data-ui-ref="sandbox.organized">
+        <p class="sandbox-kicker">Gopilot &middot; provisional</p>
+        <h2 class="sandbox-heading">Your objective</h2>
+        <p class="sandbox-objective">{{ org.objective }}</p>
+
+        <div class="sandbox-grid">
+            {% for key, title in (('known_facts', 'What you have told me'), ('unknowns', 'Not yet known'),
+                                  ('constraints', 'Constraints'), ('next_questions', 'Next questions')) %}
+            {% if org[key] %}
+            <section class="sandbox-list sandbox-list-{{ key|replace('_', '-') }}" data-ui-ref="sandbox.organized.list">
+                <h3>{{ title }}</h3>
+                <ul>{% for item in org[key] %}<li>{{ item }}</li>{% endfor %}</ul>
+            </section>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if reply.external.appropriate %}
+        <section class="sandbox-external" data-ui-ref="sandbox.external">
+            <h3>Check the outside world</h3>
+            <p>{{ reply.external.why }}</p>
+        </section>
+        {% endif %}
+
+        {% if reply.landing %}
+        <section class="sandbox-landing" data-ui-ref="sandbox.landing">
+            <h3>Recommended landing: {{ reply.landing.label }}</h3>
+            <p><strong>Why:</strong> {{ reply.landing.why }}</p>
+            {# A Planning Study lives in a project - the planning owner requires one - so
+               the landing asks which project, explicitly. No project-less study, no
+               automatic project. #}
+            <div class="sandbox-landing-choices">
+                <form method="post" action="{{ url_for('sandbox.landing') }}" class="sandbox-landing-actions"
+                      data-ui-ref="sandbox.landing.existing-project">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="sandbox_id" value="{{ sandbox.id }}">
+                    <input type="hidden" name="choice" value="existing_project">
+                    {% if projects %}
+                    <label class="sandbox-select-label" for="sandbox-project">Use Existing Project</label>
+                    <select id="sandbox-project" name="project_id" required data-ui-ref="sandbox.landing.project-select">
+                        {% for project in projects %}<option value="{{ project.id }}">{{ project.label }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="sandbox-primary">Use Existing Project</button>
+                    {% else %}
+                    <p class="sandbox-note">You have no projects yet.</p>
+                    {% endif %}
+                </form>
+                <form method="post" action="{{ url_for('sandbox.landing') }}" class="sandbox-landing-actions">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="sandbox_id" value="{{ sandbox.id }}">
+                    {% if can_create_project %}
+                    <button type="submit" name="choice" value="new_project"
+                            data-ui-ref="sandbox.landing.new-project">Create New Project</button>
+                    {% else %}
+                    <span class="sandbox-note" data-ui-ref="sandbox.landing.new-project">Create New Project &mdash; only an
+                        administrator can create a project.</span>
+                    {% endif %}
+                    <button type="submit" name="choice" value="continue"
+                            data-ui-ref="sandbox.landing.continue">Continue in Sandbox</button>
+                </form>
+            </div>
+            <p class="sandbox-note">Either way you reach the existing Planning &amp; Zoning entry with this Sandbox as its
+                origin. A new project is created only by the New Project form, and live property research runs only
+                when you submit the Planning &amp; Zoning form.</p>
+        </section>
+        {% else %}
+        <p class="sandbox-note" data-ui-ref="sandbox.no-landing">No landing yet. Keep describing the idea - Gopilot
+            recommends a landing once it is clear what this should become.</p>
+        {% endif %}
+    </article>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block go_thread %}
+{% if sandbox and sandbox.turns %}
+<ol class="sandbox-thread" data-ui-ref="sandbox.thread">
+    {% for t in sandbox.turns %}
+    <li>
+        <p class="sandbox-thread-who">You</p>
+        <p class="sandbox-thread-text">{{ t.text }}</p>
+        <p class="sandbox-thread-who">Gopilot</p>
+        <p class="sandbox-thread-text">{{ t.reply.organization.objective }}</p>
+    </li>
+    {% endfor %}
+</ol>
+{% endif %}
+{% endblock %}

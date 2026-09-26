@@ -94,7 +94,7 @@ class Ctx:
 class Command:
     def __init__(self, cid, family, label, *, href=None, post=None, fields=None,
                  proxy=None, action=None, bulk=None, needs=None, current=None, not_yet=False,
-                 capability=None):
+                 capability=None, hint=None):
         self.id, self.family, self.label = cid, family, label
         self.href = href            # ctx -> url  (GET)
         self.post = post            # ctx -> url  (POST form)
@@ -107,6 +107,7 @@ class Command:
         self.needs = needs          # ctx -> None | reason (grey)
         self.current = current      # ctx -> bool
         self.not_yet = not_yet
+        self.hint = hint            # tooltip: what the command is FOR (presentation only)
 
 
 def registry_bulk(capability_id):
@@ -205,6 +206,10 @@ def soon(cid, family, label):
 
 COMMANDS = [
     # FILE -------------------------------------------------------------------
+    # MORPHOSIS SLICE 1: start with Gopilot before the kind of work is known.
+    Command("file.new_sandbox", "FILE", "New Sandbox", href=U("sandbox.home", new=1),
+            needs=_need(staff), current=lambda c: c.on("sandbox.home"),
+            hint="Start a clean Gopilot workspace to explore an idea before deciding what it should become."),
     Command("file.new_project", "FILE", "New Project…", href=U("portal.upload"),
             needs=_need(staff, admin), current=lambda c: c.on("portal.upload")),
     Command("file.upload", "FILE", "Document Upload…", href=U("portal.document_shop_intake"),
@@ -450,7 +455,7 @@ def resolve_master_menu(ctx: Ctx) -> dict:
     for command in COMMANDS:
         item = {"id": command.id, "label": command.label, "state": "active",
                 "reason": None, "href": None, "post": None, "fields": None,
-                "proxy": None, "action": None, "bulk": None}
+                "proxy": None, "action": None, "bulk": None, "hint": command.hint}
         reason = NOT_YET if command.not_yet else (command.needs(ctx) if command.needs else None)
         if reason:
             item.update(state="grey", reason=reason)

@@ -31,6 +31,7 @@
 {% endif %}
 
 <form method="post" action="{{ url_for('portal.upload_confirm', staging_id=staging_id) }}" class="upload-form" id="upload-confirm-form">
+{% if request.args.get('sandbox') %}<input type="hidden" name="sandbox_resume" value="{{ request.args.get('sandbox') }}">{% endif %}
     {% if name_conflict %}
     <fieldset class="operating-environment-fieldset" data-ui-ref="upload.confirm.name-conflict">
         <legend>Project name &mdash; conflicting values found <span class="mono">(required)</span></legend>

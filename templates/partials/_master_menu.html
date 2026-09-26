@@ -55,7 +55,7 @@
                         <button type="submit">{{ command.label }}</button>
                     </form>
                     {%- elif command.href -%}
-                    <a href="{{ command.href }}"{% if command.state == 'current' %} aria-current="page"{% endif %}>{{ command.label }}</a>
+                    <a href="{{ command.href }}"{% if command.hint %} title="{{ command.hint }}"{% endif %}{% if command.state == 'current' %} aria-current="page"{% endif %}>{{ command.label }}</a>
                     {%- elif command.proxy -%}
                     <button type="button" data-reuse-control="{{ command.proxy }}">{{ command.label }}</button>
                     {%- else -%}

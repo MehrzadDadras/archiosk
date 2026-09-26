@@ -23,6 +23,14 @@
 <p class="mono form-error" id="upload-size-error" data-ui-ref="upload.client-size-error" hidden></p>
 
 <form method="post" enctype="multipart/form-data" class="upload-form" id="project-creation-form" action="{{ url_for('portal.upload') }}">
+{# MORPHOSIS SLICE 1: this project is being created for a Sandbox's Planning
+   Study. Only the Sandbox id travels; creation itself is this form, unchanged. #}
+{% set sandbox_resume = request.values.get('sandbox_resume') or request.args.get('sandbox') %}
+{% if sandbox_resume %}
+<input type="hidden" name="sandbox_resume" value="{{ sandbox_resume }}">
+<p class="field-hint upload-sandbox-origin">Creating this project for your Sandbox. Once it is set up you will
+    continue to your Planning Study.</p>
+{% endif %}
     {# Visual grouping only - no behavior, no new field, no new validation.
        Name and role were two loose labels above a bordered position
        fieldset, so the eye read the framed thing as the first section and

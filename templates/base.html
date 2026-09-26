@@ -129,7 +129,7 @@
         {% include "partials/_master_menu.html" %}
         {% include "partials/_identity_bar.html" %}
         {% endif %}
-        {% if authenticated and not customer_mode %}
+        {% if authenticated and not customer_mode and not clean_surface %}
         <div class="workspace-topbar">
             {# CLAUDE-P40-VW7A-QA (Move Document Controls into the Top
                Application Menu): the central region between the
@@ -429,7 +429,7 @@
         {% endif %}
 
         <div class="app-shell-body">
-        {% if authenticated and not customer_mode %}
+        {% if authenticated and not customer_mode and not clean_surface %}
         {# ---------------- The one left Lists panel (CLAUDE-P40-E3A) ---------------
            Product-owner resolution (Section 2 of this stage's own prompt):
            this IS a recursive hierarchy now, superseding P40-E2B1A's pure-
@@ -930,6 +930,10 @@
            when state is safely persisted" (this stage's own Section 6)
            would be manufacturing a confirmation nothing requires. #}
         <button type="button" class="panel-divider panel-divider-lists" id="lists-divider" data-ui-ref="shell.lists-divider" aria-expanded="true" aria-controls="launcher-panel" aria-label="Collapse Lists panel"></button>
+        {% elif clean_surface %}
+        {# MORPHOSIS SLICE 1: a clean surface (the Sandbox) shows no project
+           tree, no thumbnails and no navigator - only the Master shell, the
+           identity/status anchors and the one Composer. #}
         {% elif master_shell and customer_mode %}
         {% include "partials/_master_navigator.html" %}
         {% else %}
@@ -1252,7 +1256,7 @@
             </aside>
         </div>
         {% endif %}
-        {% if master_shell and not (project_id is defined and workspace is defined) %}
+        {% if master_shell and not clean_surface and not (project_id is defined and workspace is defined) %}
         {% include "partials/_master_context.html" %}
         {% endif %}
     </div>

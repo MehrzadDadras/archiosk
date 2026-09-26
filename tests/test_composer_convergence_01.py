@@ -72,6 +72,7 @@ _GO_ENDPOINTS = (
     "planning_zoning.converse_study",
     "portal.gateway_orientation",
     "portal.developer_home_composer",
+    "sandbox.turn",
 )
 
 

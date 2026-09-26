@@ -2649,6 +2649,16 @@ def _project_briefing_ai_status(workspace) -> tuple[str, object]:
     return _external_ai_status(workspace)
 
 
+
+def _briefing_handoff(project_id):
+    """Where the New Project flow hands a freshly prepared project over. The
+    Project Overview, as always - unless the project was created FOR a Sandbox's
+    Planning Study (MORPHOSIS SLICE 1), in which case the person goes on to the
+    Planning & Zoning entry for it. Nothing is retrieved here."""
+    from routes.sandbox import resume_redirect
+    return resume_redirect(project_id) or redirect(
+        url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+
 @workspace_bp.route("/projects/<project_id>/workspace/briefing/generate", methods=["POST"])
 @login_required
 def generate_project_briefing_route(project_id):
@@ -2678,21 +2688,21 @@ def generate_project_briefing_route(project_id):
             f"this project's security policy (controlling layer: {decision.controlling_layer}).",
             "error",
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        return _briefing_handoff(project_id)
     if status == "require_approval" and (request.form.get("confirm") or "").strip() != "once":
         flash(
             f"AI Project Briefing awaits approval (controlling layer: {decision.controlling_layer}) "
             f"- {decision.reason} Use the approval action to proceed.",
             "error",
         )
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        return _briefing_handoff(project_id)
 
     # CLAUDE-P38-D2: duplicate-call/idempotency guard - a refresh, a
     # second reviewer, or the interstitial's own auto-submit firing
     # twice must never start a second real, billed call while one is
     # already in flight.
     if store.generation_in_progress_for(workspace):
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        return _briefing_handoff(project_id)
 
     store.start_project_briefing_generation(workspace, actor=_reviewer())
 
@@ -2717,7 +2727,7 @@ def generate_project_briefing_route(project_id):
         # timed out after 30s.") for no added information.
         workspace = store.get(project_id)
         store.record_project_briefing_failure(workspace, reason=result.skipped_reason or "Unknown failure.")
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        return _briefing_handoff(project_id)
 
     from dataclasses import asdict
 
@@ -2727,7 +2737,7 @@ def generate_project_briefing_route(project_id):
         actor=_reviewer(), governance_log=_log(),
     )
     flash("Project briefing generated.", "success")
-    return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+    return _briefing_handoff(project_id)
 
 
 @workspace_bp.route("/projects/<project_id>/workspace/spin/run", methods=["POST"])
@@ -2979,7 +2989,7 @@ def preparing_project_briefing(project_id):
         or not has_evidence
         or workspace.project_briefing_last_failure_reason is not None
     ):
-        return redirect(url_for("workspace.show_workspace", project_id=project_id, view="overview"))
+        return _briefing_handoff(project_id)
 
     return render_template("preparing_project_briefing.html", project_id=project_id, document=document)
 

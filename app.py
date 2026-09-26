@@ -509,6 +509,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.project_query import project_query_bp
     from routes.help_center import help_bp
     from routes.planning_zoning import planning_bp
+    from routes.sandbox import sandbox_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp, url_prefix="/api/v1")
@@ -543,6 +544,8 @@ def _register_blueprints(app: Flask) -> None:
     # a person starting from an address does not have a project yet, which is
     # the whole reason this entrance exists.
     app.register_blueprint(planning_bp)
+    # MORPHOSIS SLICE 1: FILE > New Sandbox (routes/sandbox.py).
+    app.register_blueprint(sandbox_bp)
 
 
 def _register_error_handlers(app: Flask) -> None:
@@ -877,6 +880,9 @@ _NO_PROJECT_LISTING_ENDPOINTS = _STANDALONE_AUTH_ENDPOINTS | {
     "project_manage.manage_access",
     "project_manage.create_access_pass",
     "project_manage.rotate_access_pass",
+    # MORPHOSIS SLICE 1: the Sandbox is a clean start - it shows no project
+    # tree, so it does not query one.
+    "sandbox.home",
 }
 
 
@@ -1238,6 +1244,17 @@ def resolve_go_scope(values) -> dict:
                      selected_source_id=(source or {}).get("id"), project_id=pid)
 
     # APPLICATION - nothing open.
+    # SANDBOX (MORPHOSIS SLICE 1) - exploratory, non-canonical, before the kind
+    # of work is known. Checked before the Developer and staff branches so the
+    # Sandbox is always the Sandbox. Nothing it receives is project evidence.
+    if endpoint == "sandbox.home":
+        turns = len(((values.get("sandbox") or {}).get("turns")) or [])
+        return scope("APPLICATION", "Sandbox",
+                     heading="Sandbox", message_count=turns,
+                     post_url=url_for("sandbox.turn"),
+                     scope_key="sandbox",
+                     placeholder="Describe what you want to accomplish",
+                     input_name="text", project_scoped=False, attach=False)
     if endpoint == "portal.document_shop_jobs" and (request.args.get("view") or "active") == "active":
         return scope("APPLICATION", "Selected documents",
                      heading="My documents", message_count=0,

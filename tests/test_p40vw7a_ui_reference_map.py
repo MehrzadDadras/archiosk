@@ -125,6 +125,7 @@ _DOCUMENT_SHOP_INTAKE_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_inta
 # surface joins this scan by being added here - the list is explicit rather
 # than a glob, so adding a template to the registry stays a deliberate act.
 _PLANNING_ZONING_HTML_PATH = _REPO_ROOT / "templates" / "planning_zoning.html"
+_SANDBOX_HTML_PATH = _REPO_ROOT / "templates" / "sandbox.html"   # MORPHOSIS SLICE 1
 _PLANNING_ZONING_RESULT_HTML_PATH = (
     _REPO_ROOT / "templates" / "planning_zoning_result.html")
 _DOCUMENT_SHOP_JOBS_HTML_PATH = _REPO_ROOT / "templates" / "document_shop_jobs.html"
@@ -332,7 +333,7 @@ def _all_template_refs() -> set[str]:
         _DRAWING_UNDERSTANDING_HTML_PATH, _DOCUMENT_SHOP_INTAKE_HTML_PATH,
         _DOCUMENT_SHOP_JOBS_HTML_PATH, _DOCUMENT_SHOP_RESULT_HTML_PATH, _DOCUMENT_SHOP_DELETE_JOB_HTML_PATH,
         _DOCUMENT_SHOP_CONFIRM_REMOVE_HTML_PATH,
-        _PLANNING_ZONING_HTML_PATH, _PLANNING_ZONING_RESULT_HTML_PATH,
+        _PLANNING_ZONING_HTML_PATH, _PLANNING_ZONING_RESULT_HTML_PATH, _SANDBOX_HTML_PATH,
         # MASTERUI cutover: working controls moved VERBATIM out of
         # _app_menu.html/base.html into these partials, which the Master
         # Menu renders; their references live here now.
@@ -450,6 +451,10 @@ class RegistryConsistencyTests(unittest.TestCase):
                 r"security|operations|projects-directory|removed-projects|developer|"
                 r"developer-tools|"
                 r"landing|explore|start-trial|spin|pdm|index|tank|help|"
+                # MORPHOSIS SLICE 1 added "sandbox" - FILE > New Sandbox, the
+                # exploratory Gopilot start before the kind of work is known.
+                # Its own family: it belongs to no project, document or study.
+                r"sandbox|"
                 # CLAUDE-PLANNING-ZONING-DOOR-01 added "planning-zoning" - the
                 # front door to the planning line. A top-level family rather
                 # than a child of "projects-directory": that namespace belongs
