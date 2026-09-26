@@ -1,12 +1,14 @@
 """MORPHOSIS SLICE 1 - FILE > New Sandbox. See services/sandbox.py.
 
-Four routes, none of which creates governed work:
+Sandbox routes:
 
     GET  /sandbox           the clean start state, or the current Sandbox
                             (?new=1 starts clean - it only forgets which Sandbox
                             this browser was showing; it deletes nothing)
     POST /sandbox/turn      the ONE canonical Composer's endpoint in Sandbox
                             scope (resolve_go_scope points it here)
+    POST /sandbox/move      presentation-only position change, with the same
+                            owner scope and optimistic revision boundary
     POST /sandbox/landing   the person's decision on a recommended landing:
                             continue in the Sandbox, or start a Planning Study
     GET  /sandbox/media/<object_id>
@@ -30,7 +32,7 @@ submit is the explicit act that runs live municipal retrieval - never here.
 """
 from __future__ import annotations
 
-from flask import (Blueprint, abort, current_app, flash, redirect, render_template, request,
+from flask import (Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from services.auth import is_admin, login_required, user_is_document_shop_customer
@@ -121,6 +123,26 @@ def home():
                            sandbox_base=_store().token(session.get("username")),
                            projects=_accessible_projects() if offers_study else [],
                            can_create_project=is_admin(), object_label=sb.object_label)
+
+
+@sandbox_bp.route("/sandbox/move", methods=["POST"])
+@login_required
+def move():
+    _staff_only()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="Invalid position request."), 400
+    try:
+        record = _store().move_object(
+            session.get("username"), session.get(_SESSION_KEY), data.get("object_id"),
+            data.get("x"), data.get("y"), expected=data.get(TOKEN_FIELD) or "")
+    except sb.SandboxConflict as error:
+        return jsonify(error=str(error)), 409
+    except sb.SandboxRefused as error:
+        return jsonify(error=str(error)), 400
+    response = jsonify(sandbox_base=sb.SandboxStore._token_of(record))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @sandbox_bp.route("/sandbox/turn", methods=["POST"])

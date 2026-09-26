@@ -46,6 +46,8 @@ lineage is recorded rather than assumed.
 | TPL-017 | New project / upload | `portal.upload`, folder upload and confirmation routes | `upload.html`, `upload_confirm.html`, gateway family | form/error/confirmation patterns, orientation helper | Establish-project help widget is deterministic; not the Developer Composer. | No. | project setup and environment identity. | ingestion/project-creation lanes; **REUSABLE**. | Do not conflate setup help with project conversation. |
 | TPL-018 | Search / operations / about | `portal.search`, `portal.operations`, `portal.about` | `search.html`/`operations.html`/`about.html` | base/app menu, result/list patterns | No primary Composer. | Developer may inspect these as application objects. | app identity and result/status context. | respective route/UI tests; **PARTIAL**. | Candidate-specific patterns need review before reuse. |
 
+| TPL-019 | Liquid Sandbox | `sandbox.home` `/sandbox` | `sandbox.html`, `_macros.html`, `base.html` | shared Composer/thread, outline selection, DOM object positions | yes / yes; same Composer and selection context path | Provisional objects; selection grants no permission. | Objective and Composer anchored; field and outline share object identity. | `test_sandbox_composer_continuity.py`, `test_sandbox_spatial_field.py`; **SPECIALIZED**. | No field intelligence or collaboration; authenticated production interaction proof requires authorized access. |
+
 ## Current reference candidates
 
 - Project interaction reference: **TPL-005 Project workspace**. It has the

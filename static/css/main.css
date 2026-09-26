@@ -9415,6 +9415,11 @@ body,
     /* The grabber keeps its touch target and loses its padding — it was
        costing more vertical space than the control needed. */
     .tray-composer-grabber { min-height: 22px; padding: 0.3rem 0; }
+    /* The grabber and dock share the declared chat height. A 100%-height
+       dock below the grabber puts its input outside the visible frame. */
+    .chat-region { display: flex; flex-direction: column; }
+    .chat-region > .conversation-dock-panel { flex: 1; height: auto; min-height: 0; }
+    .tray-composer-grabber { flex-shrink: 0; }
 }
 
 /* ============================================================

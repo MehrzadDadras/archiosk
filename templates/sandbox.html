@@ -111,6 +111,34 @@
        selection path My Documents uses) - GOV-P-001: context, never permission.
        The form is never submitted itself; it only names the selection. #}
     {% if sandbox and sandbox.objects %}
+    <section class="sandbox-spatial" aria-label="Sandbox spatial field"
+             data-move-url="{{ url_for('sandbox.move') }}" data-base="{{ sandbox_base }}"
+             data-csrf="{{ csrf_token() }}">
+        <h2 class="sandbox-heading">Object field</h2>
+        <p class="sandbox-note">Drag a Move handle, or focus it and use arrow keys. Select objects for your next message.</p>
+        <p class="sandbox-move-status" role="status" aria-live="polite"></p>
+        <div class="sandbox-field-scroll" tabindex="0" aria-label="Scrollable object field">
+            <div class="sandbox-field">
+                {% for obj in sandbox.objects %}
+                {% set position = obj.get('position', {'x': 24 + (loop.index0 % 3) * 292, 'y': 24 + (loop.index0 // 3) * 260}) %}
+                <article class="sandbox-field-object" data-field-object="{{ obj.id }}"
+                         data-x="{{ position.x }}" data-y="{{ position.y }}" data-modality="{{ obj.modality }}">
+                    <div class="sandbox-field-controls">
+                        <button type="button" class="sandbox-move" aria-label="Move {{ obj.type }} {{ loop.index }}">Move</button>
+                        <button type="button" class="sandbox-field-select" aria-pressed="false"
+                                aria-label="Select {{ obj.type }} {{ loop.index }}">Select</button>
+                    </div>
+                    <p class="sandbox-object-meta">{{ obj.type }} &middot; provisional</p>
+                    {% if obj.type == 'image' and obj.content.media.retained %}
+                    <img src="{{ url_for('sandbox.media', object_id=obj.id) }}" alt="{{ object_label(obj) }}" draggable="false" loading="lazy">
+                    {% else %}
+                    <p class="sandbox-field-text">{{ object_label(obj) }}</p>
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
     <form id="sandbox-selection" class="sandbox-outline" data-ui-ref="sandbox.outline"
           aria-labelledby="sandbox-outline-heading" action="{{ url_for('sandbox.home') }}" method="get">
         <h2 id="sandbox-outline-heading" class="sandbox-heading">In this Sandbox
@@ -144,9 +172,15 @@
 </section>
 {% endblock %}
 
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/sandbox_field.js') }}?v={{ static_version }}" defer></script>
+{% endblock %}
+
 {% block go_thread %}
 {% if sandbox and sandbox.turns %}
-<ol class="sandbox-thread" data-ui-ref="sandbox.thread">
+<ol class="sandbox-thread conversation-thread" data-ui-ref="sandbox.thread"
+    data-conversation-scope="{{ go.dock.scope_key }}">
     {% for t in sandbox.turns %}
     <li>
         <p class="sandbox-thread-who">You</p>

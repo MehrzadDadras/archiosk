@@ -382,7 +382,19 @@ body[data-master-shell="on"] .survey-evaluation label { margin-top: var(--space-
 /* MORPHOSIS SLICE 1 - the Sandbox (templates/sandbox.html). A quiet centre:
    one prompt when empty, one organized card once Gopilot has replied. Tokens
    only - no raw colours - so every appearance repaints it. */
-.sandbox { max-width: 760px; margin: 0 auto; padding: var(--space-6, 32px) var(--space-4) var(--space-4); font-family: var(--font-body); }
+.sandbox { max-width: 1200px; min-width: 0; margin: 0 auto; padding: var(--space-6, 32px) var(--space-4) var(--space-4); font-family: var(--font-body); }
+.sandbox-spatial { margin-top: var(--space-4); min-width: 0; }
+.sandbox-field-scroll { overflow: auto; height: 60vh; min-height: 340px; max-width: 100%; border: var(--master-hairline); background: var(--surface-primary); }
+.sandbox-field { position: relative; width: 900px; min-height: 560px; }
+.sandbox-field-object { position: absolute; box-sizing: border-box; width: 268px; height: 236px; padding: var(--space-3); border: var(--master-hairline); background: var(--surface-secondary); color: var(--text-primary); overflow: auto; }
+.sandbox-field-object.is-selected { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.sandbox-field-object.is-moving, .sandbox-field-object:focus-within { z-index: 1; }
+.sandbox-field-controls { display: flex; justify-content: space-between; gap: var(--space-2); }
+.sandbox-field-controls button { min-width: 44px; min-height: 44px; font: inherit; color: var(--text-primary); background: var(--surface-primary); border: var(--master-hairline); cursor: pointer; }
+.sandbox-field-controls .sandbox-move { cursor: grab; touch-action: none; }
+.sandbox-field-object img { width: 100%; height: 128px; object-fit: contain; }
+.sandbox-field-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.sandbox-move-status { min-height: 1.5em; color: var(--text-secondary); }
 .sandbox-start { text-align: center; padding-top: 12vh; }
 .sandbox-prompt { font-family: var(--font-display); font-size: var(--text-2xl); color: var(--text-primary); margin: 0 0 var(--space-2); font-weight: 500; }
 .sandbox-support { font-size: var(--text-md); color: var(--text-secondary); margin: 0 0 var(--space-4); }

@@ -621,6 +621,24 @@ class SandboxStore:
             return record
         return self._update(username, expected, append)
 
+    def move_object(self, username: str, sandbox_id: str, object_id: str, x, y, *,
+                    expected: str) -> dict:
+        """Change presentation only, under the same owner lock and revision check."""
+        if not expected:
+            raise SandboxConflict("Refresh this Sandbox before moving an object.")
+        if any(type(v) not in (int, float) or not 0 <= v <= 10000 for v in (x, y)):
+            raise SandboxRefused("Positions must be numbers between 0 and 10000.")
+
+        def move(record):
+            if record is None or record.get("id") != sandbox_id:
+                raise SandboxRefused("This object is not in the current Sandbox.")
+            obj = next((o for o in record["objects"] if o["id"] == object_id), None)
+            if obj is None:
+                raise SandboxRefused("This object is not in the current Sandbox.")
+            obj["position"] = {"x": round(x, 2), "y": round(y, 2)}
+            return record
+        return self._update(username, expected, move)
+
     def record_decision(self, username: str, sandbox_id: str, choice: str, *,
                         expected: Optional[str] = None) -> dict:
         def decide(record):
