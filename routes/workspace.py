@@ -5606,6 +5606,21 @@ def _developer_mode_active() -> bool:
     return bool(is_admin() and session.get("developer_mode"))
 
 
+def _gopilot_turn_labels(project_id, case, selected_source_id, text, residual=None):
+    """GOPILOT CORE: this workspace turn's (frame, intent) - through the ONE
+    labelling path every canonical Composer endpoint uses
+    (routes/portal.gopilot_turn_labels). Labels only; nothing reads them yet."""
+    from routes.portal import gopilot_turn_labels
+
+    kind = "INVESTIGATION" if case else ("SOURCE" if selected_source_id else "PROJECT")
+    labels = gopilot_turn_labels(kind, text, residual=residual, context={
+        "project_id": project_id,
+        "case_id": (case or {}).get("id"),
+        "selected_source_id": selected_source_id,
+    })
+    return (labels["frame"], labels["intent"]) if labels else (None, None)
+
+
 def _run_conversation_turn(
     project_id: str, store: CaseWorkspaceStore, workspace, case: Optional[dict], text: str,
     anchor: Optional[dict] = None, current_view: Optional[str] = None,
@@ -5708,6 +5723,7 @@ def _run_conversation_turn(
         )
         return
 
+    residual_sink = []   # GOPILOT CORE step 3: the residual this turn was interpreted with
     result = interpret_message(
         text=text,
         workspace=workspace,
@@ -5733,7 +5749,11 @@ def _run_conversation_turn(
         # An absent or unrecognized value means "capable", so the boundary can
         # only ever be reached deliberately.
         surface=(request.form.get("surface") or "").strip()[:20] or None,
+        residual_sink=residual_sink,
     )
+    result.turn_frame, result.intent_envelope = _gopilot_turn_labels(
+        project_id, case, selected_source_id, text,
+        residual=residual_sink[0] if residual_sink else None)
 
     store.add_message(
         workspace,
@@ -6012,6 +6032,8 @@ def _composer_photo_turn(project_id, store, workspace, case_id, message_text, im
     parsed = _parse_image_data_url(image_data_url or "")
     if parsed is None:
         return False, None
+    case_record = next((c for c in workspace.cases if c["id"] == case_id), None) if case_id else None
+    _gopilot_turn_labels(project_id, case_record, None, message_text or "")
 
     media_type, image_b64 = parsed
     if len(image_b64) * 3 / 4 > _MAX_IMAGE_BYTES:

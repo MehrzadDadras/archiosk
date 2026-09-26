@@ -173,6 +173,11 @@ class InterpretationResult:
     # creates real, governed Design-Builder Workspace folders. None
     # whenever no such offer applies.
     organize_source_id: Optional[str] = None
+    # GOPILOT CORE step 1: the turn's frame and intent envelope, attached by the
+    # caller (routes/workspace.py _run_conversation_turn). Labels only - never
+    # persisted, rendered or read by any handler yet.
+    turn_frame: Optional[dict] = None
+    intent_envelope: Optional[dict] = None
     # CLAUDE-CA1D-RIVER-01 (Project Gravity / River Continuity): the
     # "fourth beat" - a meaningful, evidence-grounded answer should not
     # end as inert prose when a safe, ALREADY-IMPLEMENTED next
@@ -664,6 +669,7 @@ def interpret_message(
     developer_application_selection: Optional[dict] = None,
     residual_admission: Optional["ResidualAdmission"] = None,
     surface: Optional[str] = None,
+    residual_sink: Optional[list] = None,
 ) -> InterpretationResult:
     """
     `case` is now optional (a project-level aperture - no Investigation
@@ -1073,6 +1079,12 @@ def interpret_message(
             anchor=anchor, selected_source=validated_selected_source,
             current_view=validated_current_view,
         )
+    # GOPILOT CORE step 3: the caller's intent label must describe the SAME
+    # intent this turn is interpreted with. Only reached once every
+    # deterministic handler above has declined, so a sink stays empty for a
+    # deterministic turn. Read-only: nothing here changes what happens next.
+    if residual_sink is not None:
+        residual_sink.append(residual)
     # CLAUDE-MOBILE-CONTINUATION-01: the device boundary, checked before any
     # handler runs.
     #
@@ -3052,3 +3064,303 @@ def _handle_quantitative_investigation(
             "engineering sign-off."
         ),
     )
+
+
+# -- GOPILOT CORE step 1: the intent envelope -----------------------------
+#
+# Labels what a turn is ABOUT, independently of the page it was sent from:
+# APPLICATION, PROJECT, DOCUMENT_SOURCE, INVESTIGATION_STUDY, MIXED or UNKNOWN.
+# A label only. Nothing in this function dispatches, answers, writes or grants,
+# and nothing yet reads its result - interpret_message above is unchanged and
+# still decides what a turn does. "A model classification may decide how a
+# message is UNDERSTOOD, never what is DONE" (governance/STATUS.md): this is the
+# deterministic first pass; residual ambiguity stays UNKNOWN in this step.
+#
+# It reuses this module's own detectors (_is_instruction_to,
+# _looks_like_investigation_request, _looks_like_contextual_reference,
+# _looks_like_orientation_request, _looks_like_project_question), the Gateway's
+# deterministic navigation (a named project comes ONLY from the caller's
+# access-scoped list, so an inaccessible project cannot be named), and the
+# Master command registry's own no-project destinations. It adds one phrase
+# table, for deictic Source references, deliberately NOT added to
+# _CONTEXTUAL_REFERENCE_PHRASES: that table dispatches, and this step changes
+# no dispatch.
+
+INTENT_ENVELOPE_APPLICATION = "APPLICATION"
+INTENT_ENVELOPE_PROJECT = "PROJECT"
+INTENT_ENVELOPE_DOCUMENT_SOURCE = "DOCUMENT_SOURCE"
+INTENT_ENVELOPE_INVESTIGATION_STUDY = "INVESTIGATION_STUDY"
+INTENT_ENVELOPE_MIXED = "MIXED"
+INTENT_ENVELOPE_UNKNOWN = "UNKNOWN"
+
+_NAVIGATION_VERBS = (
+    "take me to", "bring me to", "go to", "navigate to", "switch to", "jump to",
+    "open", "show me",
+)
+
+_SOURCE_DEICTIC_PHRASES = (
+    "what does this say", "what does it say", "what is this", "what's this",
+    "read this", "summarize this", "summarise this", "explain this",
+    "this page", "this drawing", "this document", "this sheet", "this file",
+)
+
+# Clause boundaries for a message that asks for more than one thing.
+_CLAUSE_SPLIT = re.compile(r"\s*(?:;|\.\s+|,?\s+and then\s+|,?\s+then\s+|,?\s+and\s+|,?\s+also\s+)\s*")
+
+# Which credential envelope grants each intent envelope (services/turn_frame).
+# STAKEHOLDER_TOKEN grants DOCUMENT_SOURCE only: a pass reads its permitted
+# sheets and nothing else (the sheet scope itself is enforced server-side by
+# services/project_rbac.scope_ai_context, never by this label).
+_INTENT_GRANTED_BY = {
+    INTENT_ENVELOPE_APPLICATION: {"APPLICATION"},
+    INTENT_ENVELOPE_PROJECT: {"PROJECT"},
+    INTENT_ENVELOPE_DOCUMENT_SOURCE: {"DOCUMENT_SOURCE", "CUSTOMER_DOCUMENT_SHOP", "STAKEHOLDER_TOKEN"},
+    INTENT_ENVELOPE_INVESTIGATION_STUDY: {"INVESTIGATION_STUDY"},
+}
+
+# GOPILOT CORE step 2 - transition state. One of:
+INTENT_STATE_IN_ENVELOPE = "IN_ENVELOPE"                    # may operate where it was asked
+INTENT_STATE_TRANSITION_REQUIRED = "TRANSITION_REQUIRED"    # credential may, this envelope must not
+INTENT_STATE_NOT_AUTHORIZED = "NOT_AUTHORIZED"              # credential cannot hold the envelope
+INTENT_STATE_UNRESOLVED = "UNRESOLVED"                      # unknown intent, or no object to act on
+
+# The kind of move a transition would be (the approved cross-envelope table).
+# Nothing here performs one; each is a label a later, gated step may act on.
+TRANSITION_NAVIGATE = "navigate"            # any -> APPLICATION: carries nothing
+TRANSITION_ENTER = "enter"                  # APPLICATION -> a project envelope, explicit target
+TRANSITION_NARROW = "narrow"                # PROJECT -> a Source or Case in the same project
+TRANSITION_WIDEN = "widen"                  # Source/Case -> PROJECT, same project
+TRANSITION_LATERAL = "lateral"              # Source <-> Case, same project
+TRANSITION_CROSS_PROJECT = "cross_project"  # PROJECT A -> accessible PROJECT B: ids only
+TRANSITION_LEAVE_OVERLAY = "leave_overlay"  # DEVELOPER_INSPECT -> project authority as a normal session
+
+
+def _in_current_envelope(current: Optional[str], part: str, target_project_id: Optional[str] = None,
+                         current_project_id: Optional[str] = None) -> bool:
+    if part == INTENT_ENVELOPE_DOCUMENT_SOURCE:
+        return current in ("DOCUMENT_SOURCE", "CUSTOMER_DOCUMENT_SHOP", "STAKEHOLDER_TOKEN")
+    if (part == INTENT_ENVELOPE_PROJECT and target_project_id and current_project_id
+            and target_project_id != current_project_id):
+        return False   # the same KIND of envelope, but a different project: cross-project
+    return current == part
+
+
+def _transition_kind(current: Optional[str], part: str, target_project_id: Optional[str],
+                     current_project_id: Optional[str]) -> str:
+    if part == INTENT_ENVELOPE_APPLICATION:
+        return TRANSITION_NAVIGATE
+    if current == "DEVELOPER_INSPECT":
+        return TRANSITION_LEAVE_OVERLAY
+    if (part == INTENT_ENVELOPE_PROJECT and target_project_id and current_project_id
+            and target_project_id != current_project_id):
+        return TRANSITION_CROSS_PROJECT
+    if current in ("APPLICATION", "CUSTOMER_DOCUMENT_SHOP"):
+        return TRANSITION_ENTER
+    if current == INTENT_ENVELOPE_PROJECT:
+        return TRANSITION_NARROW
+    if part == INTENT_ENVELOPE_PROJECT:
+        return TRANSITION_WIDEN
+    return TRANSITION_LATERAL
+
+
+def _destination_in(clause: str, destinations) -> Optional[dict]:
+    for destination in destinations or ():
+        label = (destination.get("label") or "").lower().replace("…", "").replace("...", "").strip()
+        if label and re.search(r"(?<![a-z])" + re.escape(label) + r"(?![a-z])", clause):
+            return destination
+    return None
+
+
+def _clause_envelope(clause: str, destinations) -> tuple[Optional[str], Optional[dict]]:
+    """One clause's envelope, deterministic, in this module's own priority."""
+    bare = _strip_polite_opener(clause)
+    if bare.startswith(_NAVIGATION_VERBS):
+        destination = _destination_in(bare, destinations)
+        if destination is not None:
+            return INTENT_ENVELOPE_APPLICATION, destination
+    if (("rfi" in clause and _is_instruction_to(clause, ("draft", "write", "prepare", "raise", "issue")))
+            or _is_instruction_to(clause, ("analyze", "analyse", "compare", "investigate"))
+            or (_is_instruction_to(clause, ("apply",)) and "finding" in clause)
+            or _looks_like_investigation_request(clause)):
+        return INTENT_ENVELOPE_INVESTIGATION_STUDY, None
+    # A question about the application itself: the same conjunction
+    # interpret_message uses before answering from the capability registry,
+    # or a self-reference that names ARCHIOSK outright.
+    if _looks_like_capability_question(clause) and (
+            find_capability_by_phrase(clause) is not None or "archiosk" in clause):
+        return INTENT_ENVELOPE_APPLICATION, None
+    if (_looks_like_contextual_reference(clause)
+            or any(phrase in clause for phrase in _SOURCE_DEICTIC_PHRASES)):
+        return INTENT_ENVELOPE_DOCUMENT_SOURCE, None
+    if _looks_like_orientation_request(clause) or _looks_like_project_question(clause):
+        return INTENT_ENVELOPE_PROJECT, None
+    return None, None
+
+
+# GOPILOT CORE step 3: what the existing residual model classification MEANT,
+# as an envelope. Understanding only - authorization, transition state, target
+# and landing stay deterministic below, whatever the model said.
+_RESIDUAL_INTENT_ENVELOPE = {
+    "general_answer": INTENT_ENVELOPE_PROJECT,
+    "organize_advice": INTENT_ENVELOPE_PROJECT,
+    "external_research": INTENT_ENVELOPE_PROJECT,
+    "propose_work_product_issue": INTENT_ENVELOPE_PROJECT,
+    "contextual_reference": INTENT_ENVELOPE_DOCUMENT_SOURCE,
+    "propose_source_revision": INTENT_ENVELOPE_DOCUMENT_SOURCE,
+    "investigate_requirement": INTENT_ENVELOPE_INVESTIGATION_STUDY,
+    "propose_draft_rfi": INTENT_ENVELOPE_INVESTIGATION_STUDY,
+    "propose_apply_findings": INTENT_ENVELOPE_INVESTIGATION_STUDY,
+}
+# Residual outcomes that ARE a confident classification. DECLINED (the model
+# never ran) and CLARIFY (ambiguous, or several referents) are not.
+_RESIDUAL_CONFIDENT = ("project_inquiry", "action_proposed", "conversational_contribution")
+_RESIDUAL_UNGROUNDED = "conversational_contribution"   # ASIDE: no grounding in this project
+
+
+def classify_intent_envelope(text: str, frame: dict, *, navigation_target: Optional[dict] = None,
+                             application_destinations=(), residual=None) -> dict:
+    """Label a turn with the envelope its INTENT belongs to.
+
+    `frame` is services/turn_frame.build_turn_frame's output. `navigation_target`
+    is routes/portal._gateway_navigation_target's answer for this text over the
+    caller's access-scoped projects. `application_destinations` is
+    services/master_commands.application_destinations().
+
+    Returns {"envelope", "parts", "target_project_id", "destination",
+    "authorized", "context_resolved", "state", "transition_required",
+    "target_envelope", "transition", "part_states"}.
+
+    `state` is one of IN_ENVELOPE, TRANSITION_REQUIRED, NOT_AUTHORIZED or
+    UNRESOLVED. `transition_required` is True only when the credential may use
+    the target envelope, the target object is resolved, and the target is not
+    the envelope the turn was asked in - the current envelope must then not
+    execute it directly. It is never True for an unauthorized part. `authorized` is True only when every part
+    is an envelope the frame's CREDENTIAL can hold - the page is never
+    consulted for it - and a PROJECT target is only ever a project the caller
+    could already open.
+    """
+    lowered = (text or "").strip().lower()
+    frame = frame or {}
+    envelope_set = set(frame.get("envelope_set") or ())
+    context_ids = frame.get("context_ids") or {}
+    parts: list[str] = []
+    destination = None
+    target_project_id = None
+
+    def add(envelope):
+        if envelope not in parts:
+            parts.append(envelope)
+
+    if lowered:
+        if navigation_target and navigation_target.get("project_id"):
+            target_project_id = navigation_target["project_id"]
+            navigating = _strip_polite_opener(lowered).startswith(_NAVIGATION_VERBS)
+            add(INTENT_ENVELOPE_APPLICATION if navigating else INTENT_ENVELOPE_PROJECT)
+        elif navigation_target:
+            add(INTENT_ENVELOPE_APPLICATION)   # the Gateway's own New Project rule
+        for clause in _CLAUSE_SPLIT.split(lowered):
+            if not clause:
+                continue
+            envelope, found = _clause_envelope(clause, application_destinations)
+            if envelope is None:
+                continue
+            if envelope == INTENT_ENVELOPE_PROJECT and target_project_id and \
+                    INTENT_ENVELOPE_APPLICATION in parts and len(parts) == 1:
+                continue   # "open X" already said where; its question is about X
+            if found is not None and destination is None:
+                destination = found["id"]
+            add(envelope)
+
+    # Residual reconciliation. Deterministic classification stays first: the
+    # residual is consulted ONLY when it found nothing. The model's intent
+    # class becomes the envelope - understanding only. It never supplies a
+    # target project, never widens envelope_set, and an ASIDE (the model found
+    # no grounding in this project) never resolves to the current project.
+    classified_by = "deterministic" if parts else None
+    ungrounded = False
+    if not parts and residual is not None:
+        outcome = getattr(residual, "outcome", None)
+        mapped = _RESIDUAL_INTENT_ENVELOPE.get(getattr(residual, "intent_class", None))
+        if outcome in _RESIDUAL_CONFIDENT and mapped:
+            add(mapped)
+            classified_by = "residual_model"
+            ungrounded = outcome == _RESIDUAL_UNGROUNDED
+
+    if not parts:
+        envelope = INTENT_ENVELOPE_UNKNOWN
+    elif len(parts) == 1:
+        envelope = parts[0]
+    else:
+        envelope = INTENT_ENVELOPE_MIXED
+
+    current = frame.get("current_envelope")
+
+    def part_authorized(part):
+        if current == "STAKEHOLDER_TOKEN":
+            # A pass never reaches session or project authority, whatever an
+            # envelope_set claims: only its own sheets, in its own envelope.
+            return part == INTENT_ENVELOPE_DOCUMENT_SOURCE and "STAKEHOLDER_TOKEN" in envelope_set
+        return bool(_INTENT_GRANTED_BY[part] & envelope_set)
+
+    authorized = bool(parts) and all(part_authorized(part) for part in parts)
+
+    needs = {
+        INTENT_ENVELOPE_PROJECT: bool(target_project_id or context_ids.get("project_id")),
+        INTENT_ENVELOPE_DOCUMENT_SOURCE: bool(context_ids.get("selected_source_id")
+                                              or (context_ids.get("project_id")
+                                                  and frame.get("current_envelope") in
+                                                  ("DOCUMENT_SOURCE", "CUSTOMER_DOCUMENT_SHOP"))),
+        INTENT_ENVELOPE_INVESTIGATION_STUDY: bool(context_ids.get("case_id") or context_ids.get("run_id")),
+        INTENT_ENVELOPE_APPLICATION: True,
+    }
+    if ungrounded:
+        # The current project's evidence did not ground this reference, so the
+        # page's project is NOT what the turn is about.
+        needs = {part: (part == INTENT_ENVELOPE_APPLICATION) for part in needs}
+    context_resolved = bool(parts) and all(needs[part] for part in parts)
+
+    # Transition state, per part. transition_required implies authorized AND a
+    # resolved object: it marks a permitted move, never a way around a refusal,
+    # and an unnamed or inaccessible target has nothing to move into.
+    part_states = []
+    for part in parts:
+        allowed = part_authorized(part)
+        resolved = needs[part]
+        moves = allowed and resolved and not _in_current_envelope(
+            current, part, target_project_id, context_ids.get("project_id"))
+        part_states.append({
+            "envelope": part,
+            "authorized": allowed,
+            "context_resolved": resolved,
+            "transition_required": moves,
+            "transition": (_transition_kind(current, part, target_project_id,
+                                            context_ids.get("project_id")) if moves else None),
+        })
+    transition_required = authorized and any(s["transition_required"] for s in part_states)
+
+    if not parts:
+        state = INTENT_STATE_UNRESOLVED
+    elif not authorized:
+        state = INTENT_STATE_NOT_AUTHORIZED
+    elif not context_resolved:
+        state = INTENT_STATE_UNRESOLVED
+    elif transition_required:
+        state = INTENT_STATE_TRANSITION_REQUIRED
+    else:
+        state = INTENT_STATE_IN_ENVELOPE
+    single = part_states[0] if len(part_states) == 1 else None
+
+    return {
+        "envelope": envelope,
+        "parts": parts,
+        "target_project_id": target_project_id,
+        "destination": destination,
+        "authorized": authorized,
+        "context_resolved": context_resolved,
+        "state": state,
+        "transition_required": transition_required,
+        "target_envelope": single["envelope"] if single else None,
+        "transition": single["transition"] if single else None,
+        "part_states": part_states,
+        "classified_by": classified_by,
+    }

@@ -165,6 +165,8 @@ def converse_study(project_id, run_id):
         bounded = planning_composer.envelope(result, project_id, run_id)
     except ValueError as exc:
         abort(409, description=str(exc))
+    from routes.portal import gopilot_turn_labels
+    gopilot_turn_labels("PLANNING_STUDY", text, context={"project_id": project_id, "run_id": run_id})
     policy = _evaluate_external_ai_policy(store, workspace)
     if policy.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
         abort(403, description='Project policy does not allow external AI requests')

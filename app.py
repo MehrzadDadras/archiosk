@@ -1126,6 +1126,7 @@ def resolve_go_scope(values) -> dict:
     from flask import request, session, url_for
 
     from services.auth import is_admin, user_is_document_shop_customer
+    from services.turn_frame import build_turn_frame
 
     identity = values.get("identity") or resolve_ui_identity(values)
     project = identity.get("project")
@@ -1143,7 +1144,18 @@ def resolve_go_scope(values) -> dict:
         dock.setdefault("draft_actions", draft)
         dock["go_scope"] = kind
         dock["scope_label"] = label
-        return {"kind": kind, "label": label, "dock": dock}
+        # GOPILOT CORE step 1: the turn frame travels with the scope. Data only
+        # - templates render `dock`, and nothing here grants or dispatches.
+        # Context ids come from the identity owner (resolve_ui_identity), which
+        # has already re-checked access - never from what the page asked for.
+        frame = build_turn_frame(kind, developer_scope=dock.get("scope_key") == "developer", context={
+            "project_id": (project or {}).get("id"),
+            "selected_source_id": (source or {}).get("id"),
+            "case_id": dock.get("case_id"),
+            "run_id": values.get("run_id") if kind == "PLANNING_STUDY" else None,
+            "selection_form": dock.get("selection_form"),
+        })
+        return {"kind": kind, "label": label, "dock": dock, "frame": frame}
 
     def developer_scope():
         return scope("APPLICATION", "Application · Developer",

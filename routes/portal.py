@@ -560,6 +560,7 @@ def developer_home_composer():
         return redirect(url_for("portal.index"))
     if request.form.get("project_id"):
         abort(400)
+    gopilot_turn_labels("APPLICATION", text, developer_scope=True)
 
     context = _developer_home_context()
     diagnostic = scope_diagnostic(text, context)
@@ -1595,6 +1596,68 @@ def gateway():
 _GATEWAY_NEW_PROJECT_PATTERN = re.compile(r"new project|create a project|start a project", re.IGNORECASE)
 
 
+def _gateway_navigation_target(message: str, projects: list[dict], can_create_project: bool):
+    """The Gateway's deterministic navigation rules, and nothing else: a named
+    project from the caller's ACCESS-SCOPED list (`_environment_projects`), or
+    New Project for a caller who may create one. Returns the navigate reply -
+    carrying `project_id` when a project was named - or None.
+
+    Shared by _classify_gateway_orientation (which answers with it) and GOPILOT
+    CORE's intent-envelope classification (which only labels a turn with it).
+    A project absent from `projects` cannot be named here at all, so naming an
+    inaccessible project never produces a target."""
+    lowered = message.strip().lower()
+    if not lowered:
+        return None
+    for project in projects:
+        name = project["display_name"].lower()
+        if name and (name in lowered or lowered in name):
+            return {
+                "kind": "navigate",
+                "url": url_for('workspace.show_workspace', project_id=project["project_id"]),
+                "text": f"Opening {project['display_name']}…",
+                "project_id": project["project_id"],
+            }
+    if can_create_project and _GATEWAY_NEW_PROJECT_PATTERN.search(lowered):
+        return {"kind": "navigate", "url": url_for('portal.upload'), "text": "Opening New Project…"}
+    return None
+
+
+def gopilot_turn_labels(scope_kind: str, text: str, *, context: dict | None = None,
+                        developer_scope: bool = False, residual=None):
+    """GOPILOT CORE: the ONE labelling path for every canonical Composer turn.
+
+    Builds the turn's frame (services/turn_frame.build_turn_frame - credential
+    from services.auth only) and its intent envelope
+    (services/conversation_interpreter.classify_intent_envelope), over the
+    caller's own access-scoped project list and the Master registry's
+    no-project destinations. Records {"frame", "intent"} on flask.g for the
+    rest of this request and returns it.
+
+    Labels only: every caller calls this AFTER its own gates and ignores the
+    result, so no reply, route or permission can change because of it. A
+    failure to label must never fail a turn, so any error records None."""
+    from flask import g
+
+    try:
+        from services.conversation_interpreter import classify_intent_envelope
+        from services.master_commands import application_destinations
+        from services.turn_frame import build_turn_frame
+
+        frame = build_turn_frame(scope_kind, developer_scope=developer_scope, context=context)
+        projects = _environment_projects(
+            get_registry(current_app), CaseWorkspaceStore(current_app.config["REGISTRY_STORE_PATH"]))
+        target = _gateway_navigation_target(text or "", projects, is_admin())
+        labels = {"frame": frame, "intent": classify_intent_envelope(
+            text or "", frame, navigation_target=target,
+            application_destinations=application_destinations(), residual=residual)}
+    except Exception:  # noqa: BLE001 - labelling is never allowed to fail a turn
+        current_app.logger.exception("GOPILOT turn labelling failed")
+        labels = None
+    g.gopilot_turn = labels
+    return labels
+
+
 def _classify_gateway_orientation(message: str, projects: list[dict], can_create_project: bool) -> dict:
     """CLAUDE-VOICE-CONSISTENCY-01: a small, deterministic, rule-based
     orientation responder for the Project Gateway's own composer -
@@ -1617,17 +1680,9 @@ def _classify_gateway_orientation(message: str, projects: list[dict], can_create
     if not lowered:
         return {"kind": "info", "text": "Say a project name to open it, or “new project” to start one."}
 
-    for project in projects:
-        name = project["display_name"].lower()
-        if name and (name in lowered or lowered in name):
-            return {
-                "kind": "navigate",
-                "url": url_for('workspace.show_workspace', project_id=project["project_id"]),
-                "text": f"Opening {project['display_name']}…",
-            }
-
-    if can_create_project and _GATEWAY_NEW_PROJECT_PATTERN.search(lowered):
-        return {"kind": "navigate", "url": url_for('portal.upload'), "text": "Opening New Project…"}
+    target = _gateway_navigation_target(message, projects, can_create_project)
+    if target is not None:
+        return {key: value for key, value in target.items() if key != "project_id"}
 
     # CLAUDE-GO-GATEWAY-COGNITION-01: what used to be here was a single canned
     # sentence offering to open a project, returned for every message that was
@@ -1864,6 +1919,7 @@ def gateway_orientation():
     """
     message = (request.form.get('message') or '')[:500]
     context = request.form.get('context', '')
+    gopilot_turn_labels("APPLICATION", message)
     if context == 'establish-project':
         return jsonify(_establish_project_reply(message))
 
@@ -3558,6 +3614,8 @@ def document_shop_result(project_id):
     if request.method == 'POST':
         question = (request.form.get('question') or '').strip()
         if question:
+            gopilot_turn_labels("DOCUMENT", question, context={
+                "project_id": project_id, "selected_source_id": result.get('source_id')})
             from services.capability_registry import DOCUMENT_VIEW_ACTION_IDS
             action_ids = DOCUMENT_VIEW_ACTION_IDS if result.get('source_id') and workspace.owner == session.get('username') else ()
             reply = document_conversation.ask(
@@ -4396,6 +4454,8 @@ def document_shop_bulk():
     if action == 'command':
         if any(w.removed_at or w.document_desk_state != 'active' for w in workspaces):
             abort(409)
+        gopilot_turn_labels("APPLICATION", request.form.get('command_text', ''),
+                            context={"selection_form": "document-bulk"})
         from services.conversation_interpreter import _evaluate_external_ai_policy
         from services.security_policy import DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE
         try:

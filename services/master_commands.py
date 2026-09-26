@@ -414,6 +414,31 @@ assert tuple(dict.fromkeys(c.family for c in COMMANDS)) == FAMILIES, "a family i
 assert len({c.id for c in COMMANDS}) == len(COMMANDS), "duplicate command id"
 
 
+def application_destinations() -> list:
+    """GOPILOT CORE step 1: the places a person can be SENT without any project
+    open - read from this registry, never restated.
+
+    A command qualifies when it navigates (`href`), is built (not `not_yet`), and
+    its own `needs` rule, asked with nothing open, raises no project, document or
+    viewer requirement. Who may then OPEN it is still the route's gate; admin-
+    and developer-only reasons do not disqualify, because classifying where a
+    turn points is not authorizing it."""
+    empty = Ctx(identity={}, endpoint="", args={}, admin=False, developer=False,
+                customer=False, username=None)
+    authority_only = {None, ADMIN_ONLY, DEVELOPER_ONLY}
+    out = []
+    for command in COMMANDS:
+        if command.href is None or command.not_yet:
+            continue
+        try:
+            reason = command.needs(empty) if command.needs else None
+        except Exception:  # a rule that cannot even be asked without context needs it
+            continue
+        if reason in authority_only:
+            out.append({"id": command.id, "family": command.family, "label": command.label})
+    return out
+
+
 def resolve_master_menu(ctx: Ctx) -> dict:
     """All 19 families, every command resolved to active / grey / current.
 
