@@ -24,7 +24,6 @@ body[data-master-shell="on"] .workspace-right-column,
 body[data-master-shell="on"] .chat-region,
 body[data-master-shell="on"] .workspace-topbar,
 body[data-master-shell="on"] .master-context,
-body[data-master-shell="on"] .master-go,
 body[data-master-shell="on"] .identity-bar,
 body[data-master-shell="on"] .status-bar {
     background: var(--surface-primary);
@@ -212,15 +211,6 @@ body[data-master-shell="on"] .workspace-topbar:not(.master-topbar) { min-height:
 .master-facts dt { color: var(--text-secondary); font-size: var(--text-xs); margin-top: var(--space-2); }
 .master-facts dd { margin: 0; color: var(--text-primary); }
 .master-empty { color: var(--text-secondary); }
-.master-go {
-    display: flex;
-    gap: var(--space-3);
-    align-items: baseline;
-    padding: var(--space-2) var(--space-4);
-    border-top: var(--master-hairline);
-    font-size: var(--text-sm);
-}
-.master-go .master-anchor-label { margin: 0; }
 
 /* -- Status line -------------------------------------------------------- */
 .status-bar { display: flex; gap: var(--space-4); padding: var(--space-1) var(--space-4); font-size: var(--text-xs); color: var(--text-secondary); }

@@ -2958,11 +2958,14 @@ class TDocumentShopCopy(SurveyReferenceCase):
         self.run_worker()
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
 
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page's own
+        # "Ask GO" heading over ds-composer -> the ONE canonical Composer, whose
+        # heading is the document itself. The intent - the sentence is not said
+        # twice on the page - is unchanged.
         self.assertEqual(body.count("Ask GO about this document"), 1,
                          "the composer heading and its field label say the same "
                          "thing twice")
-        self.assertIn('data-ui-ref="document-shop.conversation.title">Ask GO</h2>', body,
-                      "the heading is not the short form")
+        self.assertNotIn('data-ui-ref="document-shop.conversation.title"', body)
 
     def test_the_question_field_keeps_an_accessible_name(self):
         """Removing the visible duplicate must not leave the textarea nameless -
@@ -2977,7 +2980,13 @@ class TDocumentShopCopy(SurveyReferenceCase):
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
 
-        self.assertIn('aria-label="Ask GO about this document"', body)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): ds-question ->
+        # the canonical Composer's field. The property is kept, not relaxed: the
+        # field that asks about this document is still NAMED for it, and the
+        # redirect anchor still exists.
+        i = body.index('id="dock-composer-input"')
+        field = body[body.rindex("<textarea", 0, i):body.index(">", i) + 1]
+        self.assertIn('aria-label="Ask GO about this document"', field)
         self.assertNotIn('aria-labelledby="conversation"', body,
                          "the name still tracks a heading that no longer says it")
         self.assertIn('id="conversation"', body,
@@ -2992,11 +3001,18 @@ class TDocumentShopCopy(SurveyReferenceCase):
         project_id = self.upload(survey_jpeg(), "survey.jpg")
         body = self.client.get("/document-shop/jobs/%s" % project_id).get_data(as_text=True)
 
-        self.assertIn('id="ds-question"', body)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): ds-question /
+        # document-shop.conversation.send -> the canonical Composer at DOCUMENT
+        # scope: the same `question` field, posted to the same result route, by
+        # the Composer's own send button. The approved placeholder is kept.
+        i = body.index('data-ui-ref="chat.composer"')
+        form = body[body.rindex("<form", 0, i):body.index("</form>", i)]
+        self.assertIn('data-go-scope="DOCUMENT"', form)
+        self.assertIn('action="/document-shop/jobs/%s"' % project_id, form)
+        self.assertIn('name="question"', form)
+        self.assertIn('data-ui-ref="chat.composer.send"', form)
         self.assertIn(
-            'placeholder="What would you like to know about this document?"', body)
-        self.assertIn('data-ui-ref="document-shop.conversation.send"', body)
-        self.assertIn(">Ask</button>", body)
+            'placeholder="What would you like to know about this document?"', form)
 
 
 class TDocumentShopLayout(SurveyReferenceCase):
@@ -3037,7 +3053,9 @@ class TDocumentShopLayout(SurveyReferenceCase):
         self.assertIn(">Delete Document…</button>", cluster)
         self.assertLess(actions, body.index('data-ui-ref="document-shop.result.established"'),
                         "the actions come before the facts they act on")
-        for later in ("document-shop.result.reference-title", "document-shop.conversation.title"):
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page's
+        # conversation title -> the canonical Composer, which still follows.
+        for later in ("document-shop.result.reference-title", "chat.composer"):
             self.assertGreater(body.index('data-ui-ref="%s"' % later), actions,
                                "%s now sits above the actions" % later)
 
@@ -3278,7 +3296,9 @@ class VQuietPage(SurveyReferenceCase):
         cluster = body[body.index('data-master-shell="actions"'):]
         self.assertIn(">Open Original</a>", cluster)
         self.assertIn("Delete Document", cluster)
-        self.assertIn('data-ui-ref="document-shop.conversation.title"', body)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page's own
+        # conversation title -> the canonical Composer, at this document's scope.
+        self.assertIn('data-go-scope="DOCUMENT"', body)
 
     def test_the_checksum_is_removed_from_the_page_not_from_the_record(self):
         _body, project_id = self._body()

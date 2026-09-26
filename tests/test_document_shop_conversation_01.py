@@ -281,21 +281,35 @@ class ConversationRouteTests(unittest.TestCase):
             return (client or self.client).post(
                 "/document-shop/jobs/%s" % pid, data={"question": question})
 
+    def _dock_form(self, body):
+        i = body.index('data-ui-ref="chat.composer"')
+        start = body.rindex("<form", 0, i)
+        return body[start:body.index("</form>", i)]
+
     def test_the_composer_is_offered_on_the_result(self):
+        """SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page's own
+        ds-composer (document-shop.conversation.input/send) -> the ONE canonical
+        Composer at DOCUMENT scope, posting the same `question` field to the
+        same result route."""
         self._login()
-        body = self.client.get("/document-shop/jobs/%s" % self._job()).get_data(as_text=True)
-        # CLAUDE-DOCUMENT-SHOP-LAYOUT-01 shortened the visible heading to
-        # "Ask GO"; the full sentence survives as the field's accessible name.
-        self.assertIn('data-ui-ref="document-shop.conversation.title">Ask GO</h2>', body)
-        self.assertIn('aria-label="Ask GO about this document"', body)
-        self.assertIn('data-ui-ref="document-shop.conversation.input"', body)
-        self.assertIn('data-ui-ref="document-shop.conversation.send"', body)
+        pid = self._job()
+        body = self.client.get("/document-shop/jobs/%s" % pid).get_data(as_text=True)
+        self.assertEqual(body.count('data-ui-ref="chat.composer"'), 1)
+        form = self._dock_form(body)
+        self.assertIn('data-go-scope="DOCUMENT"', form)
+        self.assertIn('action="/document-shop/jobs/%s"' % pid, form)
+        self.assertIn('name="question"', form)
+        self.assertIn('aria-label="Ask GO about this document"', form)
+        self.assertIn('data-ui-ref="chat.composer.send"', form)
+        self.assertNotIn('class="ds-composer"', body)
 
     def test_the_composer_form_renders_its_own_csrf_token(self):
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): ds-composer ->
+        # the canonical dock form. The protection is identical: the form that
+        # posts the question carries its own csrf_token.
         self._login()
         body = self.client.get("/document-shop/jobs/%s" % self._job()).get_data(as_text=True)
-        form = body[body.index('class="ds-composer"'):]
-        self.assertIn('name="csrf_token"', form[:form.index("</form>")])
+        self.assertIn('name="csrf_token"', self._dock_form(body))
 
     def test_disclosure_is_shown_where_the_decision_is_made(self):
         self._login()

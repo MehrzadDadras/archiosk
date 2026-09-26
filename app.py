@@ -1069,9 +1069,14 @@ def _register_context_processors(app: Flask) -> None:
                 result=ctx.get("result"), url_for=url_for, path=request.path,
                 can_publish=bool(ctx.get("can_publish_procurement_package"))))
 
+        @pass_context
+        def go_scope(ctx):
+            return resolve_go_scope(ctx)
+
         return {
             "ui_identity": ui_identity,
             "master_menu": master_menu,
+            "go_scope": go_scope,
             # MASTERUI-PREVIEW: the Product Owner's session-scoped preview of
             # the Master UI on every page. Admin-only by construction: the flag
             # is read only while is_admin() holds, so a stale session value can
@@ -1080,6 +1085,170 @@ def _register_context_processors(app: Flask) -> None:
             # everyone. The classic shell and the admin preview are retired.
             "master_ui": True,
         }
+
+
+def _get(obj, key, default=None):
+    """Read a field the way Jinja does: attribute first, then mapping key."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def resolve_go_scope(values) -> dict:
+    """The ONE canonical GO Composer's scope for the page being rendered.
+
+    UNIVERSAL COMPOSER INVARIANT: base.html renders exactly one
+    macros.conversation_dock on every signed-in page, in one place, and this
+    decides only what it SENDS - never whether it exists. Every endpoint is an
+    existing one, with its own authority unchanged:
+
+    - PLANNING STUDY   -> planning_zoning.converse_study          (text)
+    - INVESTIGATION    -> workspace.post_message                  (text)
+    - PROJECT / SOURCE -> workspace.quick_start                   (text)
+    - DOCUMENT         -> portal.document_shop_result (POST)      (question)
+    - APPLICATION on My Documents -> portal.document_shop_bulk action=command
+                          (command_text), the selected ids passed as context
+    - APPLICATION, Developer Mode -> portal.developer_home_composer (message)
+    - APPLICATION, staff          -> portal.gateway_orientation (message, JSON)
+    - APPLICATION, customer elsewhere -> present, disabled, saying why: the
+      customer's application path acts on documents selected in My Documents.
+
+    Derived views (analysis history, comparison, source review, working views,
+    confirm pages) inherit through ui_identity: their governed project or
+    document decides the scope.
+    """
+    import uuid
+
+    from flask import request, session, url_for
+
+    from services.auth import is_admin, user_is_document_shop_customer
+
+    identity = values.get("identity") or resolve_ui_identity(values)
+    project = identity.get("project")
+    # A removed project is not an open context: its tombstone keeps the one
+    # Composer, at APPLICATION scope, and never points it at the removed project.
+    if project and project.get("removed"):
+        project, identity = None, {"project": None, "source": None}
+    source = identity.get("source")
+    draft = values.get("draft_actions") or ()
+    endpoint = request.endpoint or ""
+    customer = user_is_document_shop_customer()
+    developer = is_admin() and bool(session.get("developer_mode"))
+
+    def scope(kind, label, **dock):
+        dock.setdefault("draft_actions", draft)
+        dock["go_scope"] = kind
+        dock["scope_label"] = label
+        return {"kind": kind, "label": label, "dock": dock}
+
+    def developer_scope():
+        return scope("APPLICATION", "Application · Developer",
+                     heading="Developer", message_count=0,
+                     post_url=url_for("portal.developer_home_composer"),
+                     scope_key="developer",
+                     placeholder="Ask about ARCHIOSK, paste a screenshot, or run a developer command",
+                     input_name="message", project_scoped=False, attach=True)
+
+    # Developer Tools is the developer conversation's own page: its project picker
+    # selects a reset target, not a conversation, and the developer endpoint is
+    # project-less by contract (it refuses a project_id).
+    if developer and endpoint == "portal.developer_tools":
+        return developer_scope()
+
+    # PLANNING STUDY - the study conversation, exactly as planning_composer.html had it.
+    run_id = values.get("run_id")
+    if values.get("planning_composer_active") and run_id and values.get("project_id"):
+        pid = values.get("project_id")
+        messages = _get(values.get("context"), "messages", []) or []
+        return scope("PLANNING_STUDY", "Planning study",
+                     heading="Planning & Zoning", message_count=len(messages),
+                     post_url=url_for("planning_zoning.converse_study", project_id=pid, run_id=run_id),
+                     scope_key="planning:%s:%s" % (pid, run_id),
+                     placeholder="Tell GO what you are considering",
+                     project_id=pid, study_scoped=True)
+
+    # PROJECT WORKSPACE - the two conversations case_workspace.html rendered.
+    if (endpoint == "workspace.show_workspace" and values.get("workspace") is not None and values.get("project_id")
+            and project is not None):
+        pid = values.get("project_id")
+        selected = values.get("selected_source")
+        common = dict(current_view=values.get("directory_view"),
+                      selected_source_id=_get(selected, "id"),
+                      project_id=pid,
+                      current_context=values.get("current_context"),
+                      developer_ccn_context=values.get("developer_ccn_context"),
+                      conversations=values.get("open_visible_cases"),
+                      project_conversation_count=values.get("project_conversation_count") or 0)
+        case = values.get("active_case")
+        if case:
+            source_ids = _get(case, "source_ids", []) or []
+            drawings = [s for s in (values.get("active_sources") or [])
+                        if _get(s, "kind") == "drawing" and _get(s, "id") in source_ids]
+            return scope("INVESTIGATION", "Investigation",
+                         heading=_get(case, "title"),
+                         message_count=len(_get(case, "conversation", []) or []),
+                         post_url=url_for("workspace.post_message", project_id=pid, case_id=_get(case, "id")),
+                         scope_key="case-%s" % _get(case, "id"),
+                         placeholder=("Analyze this drawing for datum inconsistencies…" if drawings
+                                      else "Ask a question or investigate this Source…"),
+                         case_id=_get(case, "id"), **common)
+        return scope("SOURCE" if selected else "PROJECT", "Document" if selected else "Project",
+                     heading="Project Conversation",
+                     message_count=len(values.get("project_conversation_view") or []),
+                     post_url=url_for("workspace.quick_start", project_id=pid),
+                     scope_key="project",
+                     placeholder="Ask a question, or describe what you want to work on…",
+                     include_anchor_fields=True, **common)
+
+    if project:
+        pid = project["id"]
+        # DOCUMENT - a Document Shop document's own governed conversation.
+        if project.get("kind") == "documents":
+            conversation = values.get("conversation") or []
+            return scope("DOCUMENT", "Document",
+                         heading=project.get("name") or "Document",
+                         message_count=len(conversation) if isinstance(conversation, (list, tuple)) else 0,
+                         post_url=url_for("portal.document_shop_result", project_id=pid),
+                         scope_key="document:%s" % pid,
+                         placeholder="What would you like to know about this document?",
+                         aria_label="Ask GO about this document",
+                         input_name="question", project_scoped=False, attach=False)
+        # PROJECT / SOURCE elsewhere (confirm pages, derived views): the project conversation.
+        return scope("SOURCE" if source else "PROJECT", "Document" if source else "Project",
+                     heading="Project Conversation", message_count=0,
+                     post_url=url_for("workspace.quick_start", project_id=pid),
+                     scope_key="project",
+                     placeholder="Ask a question, or describe what you want to work on…",
+                     selected_source_id=(source or {}).get("id"), project_id=pid)
+
+    # APPLICATION - nothing open.
+    if endpoint == "portal.document_shop_jobs" and (request.args.get("view") or "active") == "active":
+        return scope("APPLICATION", "Selected documents",
+                     heading="My documents", message_count=0,
+                     post_url=url_for("portal.document_shop_bulk"),
+                     scope_key="desk", placeholder="Select documents, then tell GO what to do with them",
+                     input_name="command_text", project_scoped=False, attach=False,
+                     extra_fields={"action": "command", "request_id": uuid.uuid4().hex},
+                     selection_form="document-bulk")
+    if customer:
+        return scope("APPLICATION", "Application",
+                     heading="Archiosk", message_count=0,
+                     post_url=url_for("portal.document_shop_bulk"),
+                     scope_key="desk", placeholder="",
+                     input_name="command_text", project_scoped=False, attach=False,
+                     disabled_reason="Open My Documents and select documents to ask GO to act on them")
+    if developer:
+        return developer_scope()
+    context = values.get("go_orientation_context") or ""
+    return scope("APPLICATION", "Application",
+                 heading="Archiosk", message_count=0,
+                 post_url=url_for("portal.gateway_orientation"),
+                 scope_key="application",
+                 placeholder="Open a project, or ask what you can do here",
+                 input_name="message", project_scoped=False, attach=False, reply_mode="json",
+                 extra_fields=({"context": context} if context else {}))
 
 
 def _GENERATED_ORIGIN_TYPES():
@@ -1145,6 +1314,7 @@ def resolve_ui_identity(values) -> dict:
                        if isinstance(s, dict) and s.get("id") and not s.get("removed_at")
                        and s.get("origin_type") not in _GENERATED_ORIGIN_TYPES()],
         "owned": bool(session.get("username")) and getattr(workspace, "owner", None) == session.get("username"),
+        "removed": bool(getattr(workspace, "removed_at", None)),
     }
     # The Navigator's list for this container: the same live originals, named.
     project["sources"] = [{"id": s["id"], "name": s.get("name") or ""}

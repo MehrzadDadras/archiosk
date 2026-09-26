@@ -7,7 +7,7 @@
    the one consolidated post-sign-in destination - see routes/portal.py's
    index() docstring for the full reasoning and the retired
    templates/gateway.html this content was ported from (same routes,
-   same _environment_projects-shaped data, same orientation composer
+   same _environment_projects-shaped data, same orientation behaviour
    backend - a physical move + environment-first sequencing added on
    top, never a second implementation of any of it).
 
@@ -113,31 +113,13 @@
     {% endcall %}
     {% endif %}
 
-    {# ---------------- Gateway orientation - normal Home only (CLAUDE-
-       POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Disposition B: "port only
-       the Gateway behavior still required in the consolidated
-       no-project entry state, including Composer/orientation
-       behavior"). Ported verbatim from the retired gateway.html (same
-       backend route, same rule-based responder, same voice wiring) -
-       the only addition is the hidden `environment` field, so a
-       resolved user's matches stay inside their own governed side
-       (routes/portal.py's gateway_orientation() docstring covers the
-       isolation reasoning). #}
-    {# CLAUDE-HOME-UNIFY-01: the orientation Composer MOVED to
-       templates/projects.html, which is now the home destination for a
-       signed-in session.
-
-       It could not stay. This template renders only when Developer Mode is on
-       (routes/portal.py's index()), and the block that stood here was guarded
-       by `{% if not developer_mode %}` - a condition that can no longer be
-       true, so the Composer would have been unreachable markup rather than a
-       feature. Moved rather than copied: one implementation, one set of ids,
-       one script, now on the page people actually land on. #}
+    {# UNIVERSAL COMPOSER INVARIANT: this page has no composer of its own - the ONE
+       canonical Composer (base.html) serves it at APPLICATION scope. #}
 
     {% if developer_mode %}
-    {# Application-level Developer Mode Composer. This deliberately reuses
-       the same native /CCN service as the workspace Composer, but carries no
-       project_id while the user is on Home. #}
+    {# Developer Mode application context (a context-setting task, not a
+       composer): the developer conversation itself is the ONE canonical
+       Composer at APPLICATION scope. #}
     <div class="developer-application-context" data-ui-ref="developer.home.application-context" aria-label="Application context controls">
         <p class="pane-note">Application context</p>
         <div class="developer-home-context-actions" data-ui-ref="developer.home.context-actions">
@@ -159,28 +141,6 @@
     </div>
     {% endif %}
 </section>
-{# base.html itself never loads voice_input.js (only case_workspace.html/
-   gateway.html do, each for their own composer) - needed here for the
-   SAME window.ArchioskVoiceInput the ported script below calls. #}
-<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
-<script nonce="{{ csp_nonce }}">
 
-// The application-level Composer uses the same governed voice engine as the
-// workspace Composer; it only changes the target input and has no project_id.
-(function () {
-    // Scoped to THIS form by its own ui-ref, not to the first composer in the
-    // document. Both composers on this page now carry the shared composer
-    // attributes, and the orientation form is rendered above this one - an
-    // unscoped selector would point this microphone at the wrong field.
-    var input = document.querySelector(
-        '.developer-home-composer-form [data-developer-composer-input]');
-    if (!input || !window.ArchioskVoiceInput) return;
-    window.ArchioskVoiceInput({
-        buttonId: 'developer-home-composer-voice',
-        statusId: 'developer-home-composer-voice-status',
-        onTranscript: function (transcript) { input.value = transcript; },
-        onEnd: function () { input.focus(); },
-    });
-})();
-</script>
+
 {% endblock %}

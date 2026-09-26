@@ -80,12 +80,11 @@
 <script src="{{ url_for('static', filename='js/document_shop_bulk.js') }}" defer></script>
 {% endblock %}
 
-{% block master_go %}
+{# UNIVERSAL COMPOSER INVARIANT: on My Documents the ONE canonical Composer acts on
+   the selected documents (go_scope: APPLICATION, selection passed as context).
+   This page supplies only the disclosure that belongs beside it. #}
+{% block go_thread %}
 {% if view == 'active' %}
-<label for="document-command">Ask GO to act on the selected documents</label>
-<input id="document-command" form="document-bulk" name="command_text" maxlength="2000"
-       placeholder="For example: archive these selected documents">
-<button class="btn" type="submit" form="document-bulk" name="action" value="command">Ask GO to act</button>
-<p class="mono">Your question and the information shown on this page are sent to the AI service that powers GO. The original file is not sent.</p>
-{% else %}{{ super() }}{% endif %}
+<p class="mono" data-ui-ref="document-shop.jobs.go-disclosure">Your question and the information shown on this page are sent to the AI service that powers GO. The original file is not sent.</p>
+{% endif %}
 {% endblock %}

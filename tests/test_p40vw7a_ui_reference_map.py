@@ -726,11 +726,20 @@ class SignInGatewayIsolationTests(_BaseTestCase):
         # by having nothing to leak, which is the weakest possible green.
         client = self._client_as("vw7a_owner", 1)
         body = client.get("/", follow_redirects=True).get_data(as_text=True)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): chat.* used to
+        # mean "a project workspace is open". The ONE canonical Composer is now
+        # on every signed-in page (APPLICATION scope here), so the guarantee
+        # narrows to what it was protecting: no PROJECT-only control leaks.
+        project_only_chat = ("chat.dock.new-conversation", "chat.composer.pen",
+                             "chat.composer.attach", "chat.context-indicator",
+                             "chat.composer.capture-review")
         for ref in _DATA_REF_RE.findall(body):
             self.assertFalse(
-                ref.startswith(("display.", "toolbox.", "chat.")),
+                ref.startswith(("display.", "toolbox.") + project_only_chat),
                 f"the home page leaked an active-project-workspace reference: {ref}",
             )
+        self.assertEqual(body.count('data-ui-ref="chat.composer"'), 1)
+        self.assertIn('data-go-scope="APPLICATION"', body)
         # SUPERSEDED DELIBERATELY (MASTERUI cutover): menu.bar -> the Master Menu.
         self.assertIn('data-master-shell="menu"', body)
         self.assertIn("data-ui-ref=\"lists.projects\"", body)

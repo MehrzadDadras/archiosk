@@ -102,10 +102,15 @@ class DocumentShopFamily(_Case):
         # Selection verbs submit the page's own selection form, through GO's registry values.
         for value in ("archive", "delete", "reanalyze", "compare"):
             self.assertIn('form="document-bulk" name="action" value="%s"' % value, html)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the retired GO
+        # anchor partial (data-master-shell="go") and its page-local #document-command field ->
+        # the ONE canonical Composer inside base.html's #chat-region.
         # Ask GO to act lives in the GO anchor, once.
-        go = html.index('data-master-shell="go"')
-        self.assertGreater(html.index('value="command"'), go)
-        self.assertEqual(html.count('id="document-command"'), 1)
+        go = html.index('id="chat-region"')
+        self.assertGreater(html.index('name="action" value="command"'), go)
+        self.assertEqual(html.count('name="command_text"'), 1)
+        self.assertGreater(html.index('name="command_text"'), go)
+        self.assertIn('data-go-selection="document-bulk"', html)
 
     def test_result_has_one_action_place_and_its_conversation_in_the_go_anchor(self):
         boss = self.client_for("boss")
@@ -114,8 +119,12 @@ class DocumentShopFamily(_Case):
         for ref in ("document-shop.result.breadcrumb", "document-shop.result.doc-actions",
                     "document-shop.result.next"):
             self.assertNotIn('data-ui-ref="%s"' % ref, html)
-        self.assertEqual(html.count('id="ds-question"'), 1)
-        self.assertGreater(html.index('id="ds-question"'), html.index('data-master-shell="go"'))
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the retired GO
+        # anchor partial (data-master-shell="go") and its page-local #ds-question ->
+        # the ONE canonical Composer inside base.html's #chat-region.
+        self.assertEqual(html.count('name="question"'), 1)
+        self.assertGreater(html.index('name="question"'), html.index('id="chat-region"'))
+        self.assertIn('data-go-scope="DOCUMENT"', html)
         actions = html[html.index('data-master-shell="actions"'):html.index('data-master-shell="actions"') + 3000]
         for label in ("Open Original", "Examine", "Delete Document"):
             self.assertIn(label, actions)
@@ -140,9 +149,12 @@ class ProjectsChooserSearchFamily(_Case):
         html = self.page(boss, "/projects")
         self.assertNotIn('data-ui-ref="projects-directory.new-project"', html)
         self.assertNotIn("Other ways to start or recover work", html)
-        self.assertEqual(html.count('data-ui-ref="index.orientation.input"')
-                         + html.count('id="index-orientation-input"'), 1)
-        self.assertGreater(html.index("index-orientation"), html.index('data-master-shell="go"'))
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the retired GO
+        # anchor partial (data-master-shell="go") and its page-local index-orientation composer ->
+        # the ONE canonical Composer inside base.html's #chat-region.
+        self.assertEqual(html.count('id="dock-composer-input"'), 1)
+        self.assertGreater(html.index('action="/gateway/orientation"'), html.index('id="chat-region"'))
+        self.assertNotIn("index-orientation", html)
 
     def test_chooser_is_a_state_of_the_one_shell(self):
         html = self.page(self.client_for("boss"), "/projects/choose")

@@ -33,10 +33,17 @@ def test_visible_order_and_minimal_labels():
 
 
 def test_composer_is_last_open_surface_and_has_no_fake_suggestions():
+    # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page's own
+    # <section class="upload-composer"> -> the ONE canonical Composer, still
+    # after Upload File, still open (never a collapsed <details>), still with no
+    # fake suggestions, and still carrying the establish-project context.
     body = _page()
-    assert body.index("Upload File") < body.index(">Composer</h2>")
-    assert '<section class="upload-composer"' in body
-    composer = body[body.index('<section class="upload-composer"'):body.index('</section>', body.index('<section class="upload-composer"'))]
+    anchor = body.index('data-ui-ref="chat.composer"')
+    assert body.index(">Upload File</legend>") < anchor
+    assert body.count('data-ui-ref="chat.composer"') == 1
+    assert '<section class="upload-composer"' not in body
+    composer = body[body.rindex("<form", 0, anchor):body.index("</form>", anchor)]
+    assert 'name="context" value="establish-project"' in composer
     assert '<details' not in composer
     assert "upload-help-candidate-toggle" not in body
     assert "suggestion" not in composer.lower()

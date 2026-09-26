@@ -20,30 +20,9 @@
 
 
 
-{# CLAUDE-HOME-UNIFY-01: the orientation Composer, MOVED here from
-   templates/index.html rather than reimplemented - same ids, same form, same
-   POST to portal.gateway_orientation, same voice wiring.
-
-   It moved because this page became the home destination for a signed-in
-   session, and index.html now renders only under Developer Mode - which left
-   the block there guarded by a condition that can never be true. Without the
-   move, unifying the home would have silently deleted the only Composer a
-   signed-in session had, against the standing direction that Chat/Composer be
-   functional on every page including project-less ones.
-
-   Placed above the filters deliberately: ask first, narrow second, browse
-   third. The refs keep their `index.orientation.*` names - a data-ui-ref
-   identifies a KIND of control, not the page it sits on, and renaming them
-   would churn the registry and several test files to describe the same
-   control doing the same job. UI_REFERENCE_MAP.md records the new location. #}
-{# Now the shared shell (_macros.html composer_shell). Same ids, same
-   index.orientation.* refs, same POST - what changed is that this stopped
-   being a second hand-maintained copy of the same control. Its button said
-   "Ask" where New Project's said "Send" for no reason either page could
-   name; one shell means one word for one act. #}
-{# attach=False for the same reason New Project's is - _classify_gateway_
-   orientation takes (message, projects, can_create_project) and no image.
-   See upload.html's own note for what unlocks it. #}
+{# UNIVERSAL COMPOSER INVARIANT: the orientation Composer that lived here is now the
+   ONE canonical Composer (base.html) at APPLICATION scope - same POST to
+   portal.gateway_orientation, same reply and navigation (static/js/go_composer.js). #}
 
 
 {# CLAUDE-ENTRY-SIMPLIFY-01: operating-environment filtering lives here now.
@@ -144,85 +123,4 @@
 {% set footer_explore = true %}
 {% include "components/public_footer.html" %}
 </div>
-{% endblock %}
-
-{% block extra_scripts %}
-{# CLAUDE-HOME-UNIFY-01: the orientation Composer's own script, moved with it.
-   voice_input.js is the shared, governed engine every Composer-like surface
-   uses - loaded here for the same reason index.html loaded it, never a second
-   speech implementation. #}
-<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
-<script nonce="{{ csp_nonce }}">
-// CLAUDE-VOICE-CONSISTENCY-01 / CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01:
-// ported verbatim from the retired gateway.html's own orientation
-// composer script - same backend route, same voice wiring, only the
-// element ids and the optional environment field are new.
-(function () {
-    var form = document.getElementById('index-orientation-form');
-    var input = document.getElementById('index-orientation-input');
-    var replyEl = document.getElementById('index-orientation-reply');
-    if (!form || !input) return;
-
-    function csrfToken() {
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        return meta ? meta.content : '';
-    }
-
-    function showReply(text) {
-        if (!replyEl) return;
-        replyEl.textContent = text || '';
-        replyEl.hidden = !text;
-    }
-
-    function ask(message) {
-        var formData = new FormData(form);
-        formData.set('message', message);
-        fetch('{{ url_for("portal.gateway_orientation") }}', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRFToken': csrfToken() },
-            credentials: 'same-origin',
-        }).then(function (resp) {
-            return resp.json();
-        }).then(function (data) {
-            showReply(data.text || '');
-            if (data.kind === 'navigate' && data.url) {
-                window.setTimeout(function () { window.location.href = data.url; }, 350);
-            }
-        }).catch(function () {
-            showReply('Something went wrong - try again.');
-        });
-    }
-
-    form.addEventListener('submit', function (e) {
-        e.preventDefault();
-        var message = input.value.trim();
-        if (!message) return;
-        ask(message);
-    });
-
-    if (window.ArchioskVoiceInput) {
-        window.ArchioskVoiceInput({
-            buttonId: 'index-orientation-voice',
-            statusId: 'index-orientation-voice-status',
-            onTranscript: function (transcript) { input.value = transcript; },
-            onEnd: function () { input.focus(); },
-        });
-    }
-})();
-</script>
-{% endblock %}
-
-{# MASTERUI: the orientation composer, in the fixed GO anchor. #}
-{% block master_go %}
-<details class="ui-help-composer" open><summary>Ask GO to help you find your next step</summary>
-{{ macros.composer_shell(
-    prefix="index-orientation",
-    ui_prefix="index.orientation",
-    action=url_for('portal.gateway_orientation'),
-    send_label="Send",
-    placeholder="Open a project, or ask what you can do here",
-    aria_label="Ask Archiosk",
-    attach=False) }}
-</details>
 {% endblock %}

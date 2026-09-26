@@ -983,7 +983,13 @@
             {% if master_shell and authenticated %}{% include "partials/_status_bar.html" %}{% endif %}
         </div>
 
-        {% if (project_id is defined and workspace is defined) or planning_composer_active | default(false) %}
+        {# UNIVERSAL COMPOSER INVARIANT: every signed-in page has exactly ONE canonical
+           GO Composer - macros.conversation_dock - in this one place. go_scope()
+           (app.py) decides only what it sends (APPLICATION / PROJECT / DOCUMENT /
+           INVESTIGATION / PLANNING STUDY); pages never render a composer of their
+           own - they may only supply the conversation's history (go_thread),
+           which is display/history only. #}
+        {% if authenticated %}
         {# ---------------- The one Chat region (CLAUDE-P40-E3A, Section 9) ----------
            Full width of THIS column (Display - CLAUDE-P40-VW7A-QA2 moved
            this inside .workspace-main-column, a sibling of Lists rather
@@ -993,13 +999,10 @@
            Toolbox OUT of this column entirely, into its own full-height
            .workspace-right-column below, so this column is now just
            Display+Chat, not Display+Toolbox+Chat), beneath Display, the
-           bottom row of this column - present only within an open, ACTIVE
-           Workspace (same "workspace is defined" reasoning as Toolbox/Eye
-           below - a sticky, height-bearing bar has no honest reason to
-           occupy space on the dashboard/Security/uploads pages OR a
-           removed-Project tombstone, none of which have real conversation
-           context). Content comes from {% block chat %}, filled in only
-           by case_workspace.html. #}
+           bottom row of this column. SUPERSEDED (UNIVERSAL COMPOSER INVARIANT):
+           it used to exist only inside an open Workspace; it is now on every
+           signed-in page, because GO always has a scope - APPLICATION when
+           nothing is open. Pages fill only its history (go_thread). #}
         <div class="chat-region" id="chat-region" data-ui-ref="chat.dock">
             {# CLAUDE-MOBILE-FRAME-02, Section 6: the work/Composer boundary as
                a real touch target. The desktop handle for this same boundary
@@ -1025,15 +1028,10 @@
                  aria-valuetext="Work area working">
                 <span class="tray-composer-grabber-bar" aria-hidden="true"></span>
             </div>
-            {% block chat %}{% endblock %}
+            {% import "_macros.html" as macros %}
+            {% set go = go_scope() %}
+            {% call macros.conversation_dock(**go.dock) %}{% block go_thread %}{% endblock %}{% endcall %}
         </div>
-        {% endif %}
-        {% if master_shell and not ((project_id is defined and workspace is defined) or planning_composer_active | default(false)) %}
-        <section class="master-go" data-master-shell="go" aria-label="GO">
-            <span class="master-anchor-label">GO</span>
-            {# A page puts its own conversation here; the default points to one. #}
-            {% block master_go %}{% include "partials/_master_go.html" %}{% endblock %}
-        </section>
         {% endif %}
         </div>
 
@@ -2443,11 +2441,12 @@
     {% block extra_scripts %}{% endblock %}
     <script src="{{ url_for('static', filename='js/product_ui.js', v=static_version ~ '-ui-shell-1') }}"></script>
     <script src="{{ url_for('static', filename='js/developer_composer_input.js') }}?v={{ static_version }}"></script>
-    {# CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: loaded here rather than from
-       index.html's own content block so it runs AFTER composer_attach.js has
-       defined window.ArchioskPrepareImage. Early-returns on every page that has
-       no Developer Composer, exactly like the script above it. #}
-    <script src="{{ url_for('static', filename='js/developer_composer_image.js') }}?v={{ static_version }}"></script>
+    {# UNIVERSAL COMPOSER INVARIANT: the one Composer's behaviour (voice, drafts,
+       once-only submit, APPLICATION orientation replies, My Documents selection
+       context, clipboard paste into the existing attachment pipeline) - loaded on
+       every signed-in page, because the Composer is on every signed-in page. #}
+    <script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
+    <script src="{{ url_for('static', filename='js/go_composer.js') }}?v={{ static_version }}"></script>
     <script src="{{ url_for('static', filename='js/elapsed_status.js') }}?v={{ static_version }}"></script>
 </body>
 </html>

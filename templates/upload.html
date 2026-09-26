@@ -1,5 +1,8 @@
 {% extends "base.html" %}
-{% import "_macros.html" as macros %}
+{# UNIVERSAL COMPOSER INVARIANT: this page's orientation help is the ONE canonical
+   Composer at APPLICATION scope, sending the same establish-project context the
+   retired page-local composer sent to portal.gateway_orientation. #}
+{% set go_orientation_context = "establish-project" %}
 
 {% block title %}New Project &mdash; Archiosk{% endblock %}
 
@@ -13,7 +16,6 @@
    needs. #}
 <h1 class="np-page-title" data-ui-ref="upload.page-title">New Project</h1>
 
-<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 
 {% if error %}
 <p class="mono form-error" data-ui-ref="upload.error">{{ error }}</p>
@@ -188,31 +190,6 @@
         <button type="submit" class="btn btn-ghost" id="single-file-submit-button" data-ui-ref="upload.submit" disabled>Upload Files</button>
     </fieldset>
 </form>
-{# One shared shell (_macros.html composer_shell), not a third hand-rolled
-   copy. Same ids and the same upload.help.* reference family this page
-   already used, so nothing bound to them had to move. #}
-<section class="upload-composer" id="upload-help" data-ui-ref="upload.help">
-    <h2 class="new-project-section-heading">Composer</h2>
-    {# attach=False, deliberately, and not a shrunken ambition: the shell
-       renders a real attachment door (the Developer workbench uses it), but
-       portal.gateway_orientation's establish-project branch reaches
-       _establish_project_reply(message) - a rule-based classifier taking text
-       and nothing else. A + here would accept a screenshot the server
-       discards without saying so, which is worse than no + at all, and is the
-       exact drift main.css's own note warns about: same-looking controls
-       meaning different things. It becomes one argument change the moment
-       that endpoint can receive an image - which needs a vision-capable model
-       call on a project-less surface, and so the ACTION_EXTERNAL_AI_REQUEST
-       gate, i.e. real scope beyond this tranche. #}
-    {{ macros.composer_shell(
-        prefix="upload-orientation",
-        ui_prefix="upload.help",
-        action=url_for('portal.gateway_orientation'),
-        send_label="Send",
-        context_value="establish-project",
-        aria_label="Composer",
-        attach=False) }}
-</section>
 
 <script nonce="{{ csp_nonce }}">
 (function () {
@@ -234,33 +211,6 @@
         syncEngagement();
     }
 
-    var composer = document.getElementById('upload-orientation-form');
-    var input = document.getElementById('upload-orientation-input');
-    var reply = document.getElementById('upload-orientation-reply');
-    if (!composer || !input) return;
-    composer.addEventListener('submit', function (event) {
-        event.preventDefault();
-        var message = input.value.trim();
-        if (!message) return;
-        var csrf = document.querySelector('meta[name="csrf-token"]');
-        fetch('{{ url_for("portal.gateway_orientation") }}', {
-            method: 'POST', body: new FormData(composer),
-            headers: {'X-CSRFToken': csrf ? csrf.content : ''}, credentials: 'same-origin'
-        }).then(function (response) {
-            if (!response.ok) throw new Error('request failed');
-            return response.json();
-        }).then(function (payload) {
-            reply.textContent = payload.text || '';
-            reply.hidden = !reply.textContent;
-        }).catch(function () {
-            reply.textContent = 'Something went wrong - try again.';
-            reply.hidden = false;
-        });
-    });
-    if (window.ArchioskVoiceInput) {
-        window.ArchioskVoiceInput({buttonId: 'upload-orientation-voice', statusId: 'upload-orientation-voice-status',
-            onTranscript: function (transcript) { input.value = transcript; }, onEnd: function () { input.focus(); }});
-    }
 })();
 </script>
 <script nonce="{{ csp_nonce }}">

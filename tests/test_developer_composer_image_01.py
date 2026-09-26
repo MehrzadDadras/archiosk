@@ -30,7 +30,12 @@ from unittest.mock import patch
 from werkzeug.security import generate_password_hash
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_JS = _REPO_ROOT / "static" / "js" / "developer_composer_image.js"
+# SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the developer-only
+# static/js/developer_composer_image.js -> the ONE canonical Composer's own
+# attachment pipeline. go_composer.js routes a paste into the dock's picker;
+# composer_attach.js owns the picker, the shared prepare primitive and clearing.
+_GO_JS = _REPO_ROOT / "static" / "js" / "go_composer.js"
+_ATTACH_JS = _REPO_ROOT / "static" / "js" / "composer_attach.js"
 
 # A real 1x1 PNG, so the data: URL under test is genuinely an image.
 _PNG_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ"
@@ -303,46 +308,69 @@ class NothingIsPersisted(_DeveloperModeCase):
         add_source.assert_not_called()
 
 
-class TheClientSharesTheNormalizationBoundary(unittest.TestCase):
+class TheClientSharesTheNormalizationBoundary(_DeveloperModeCase):
     """Both doors into the same vision capability must prepare images the same
-    way, or a photo succeeds or fails purely by which surface received it."""
+    way, or a photo succeeds or fails purely by which surface received it.
+
+    SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): developer Composer
+    image script -> the canonical Composer, where paste and the picker are one
+    path: paste fills #dock-composer-image, whose change handler is the picker's.
+    """
 
     def setUp(self):
-        self.source = _JS.read_text(encoding="utf-8")
+        super().setUp()
+        self.paste_source = _GO_JS.read_text(encoding="utf-8")
+        self.attach_source = _ATTACH_JS.read_text(encoding="utf-8")
+
+    def _developer_dock(self):
+        html = self.client.get("/admin/developer-tools").get_data(as_text=True)
+        i = html.index('data-ui-ref="chat.composer"')
+        start = html.rindex("<form", 0, i)
+        return html[start:html.index("</form>", i)]
 
     def test_it_reuses_the_shared_prepare_primitive(self):
-        self.assertIn("window.ArchioskPrepareImage", self.source)
+        # The picker's change handler attaches through the one shared primitive...
+        change = self.attach_source[self.attach_source.index("input.addEventListener('change'"):]
+        self.assertIn("attach(files[0])", change[:200])
+        self.assertIn("window.ArchioskPrepareImage(file", self.attach_source)
+        # ...and a paste is handed to that same picker, not prepared separately.
+        self.assertIn("goImage.files = dt.files;", self.paste_source)
+        self.assertIn("goImage.dispatchEvent(new Event('change'", self.paste_source)
+        self.assertIn("document.getElementById('dock-composer-image')", self.paste_source)
 
     def test_it_does_not_reimplement_resizing(self):
-        # If this file ever grows its own canvas/quality loop, the two surfaces
-        # have started disagreeing about what is too big.
-        code = _strip_js_comments(self.source)
+        # If the paste path ever grows its own canvas/quality loop, the two
+        # doors have started disagreeing about what is too big.
+        code = _strip_js_comments(self.paste_source)
         for reimplementation in ["createElement('canvas')", "toDataURL", "MAX_EDGE"]:
             self.assertNotIn(reimplementation, code)
 
     def test_it_binds_paste_to_the_composer_not_the_document(self):
-        # A paste meant for another field on Home must not be swallowed.
-        self.assertIn("messageBox.addEventListener('paste'", self.source)
-        self.assertNotIn("document.addEventListener('paste'", self.source)
+        # A paste meant for another field on the page must not be swallowed.
+        self.assertIn("goInput.addEventListener('paste'", self.paste_source)
+        self.assertNotIn("document.addEventListener('paste'", self.paste_source)
 
     def test_it_clears_the_attachment_after_submit(self):
-        self.assertIn("form.addEventListener('submit'", self.source)
+        submit = self.attach_source[self.attach_source.index("form.addEventListener('submit'"):]
+        self.assertIn("window.setTimeout(clear, 0)", submit[:200])
 
     def test_the_markup_offers_both_a_picker_and_a_hidden_transport_field(self):
-        # 3ab9477 moved the Developer Composer off authenticated `/` and onto
-        # the protected /admin/developer-tools surface. The control itself is
-        # unchanged - same ids, same hidden transport field - so this is a
-        # path correction, not a narrowed assertion.
-        markup = (_REPO_ROOT / "templates" / "developer_tools.html").read_text(encoding="utf-8")
-        self.assertIn('id="developer-home-composer-image"', markup)
-        self.assertIn('name="image_data_url"', markup)
-        self.assertIn('accept="image/*"', markup)
+        dock = self._developer_dock()
+        self.assertIn('action="/developer-composer"', dock)
+        self.assertIn('id="dock-composer-image"', dock)
+        self.assertIn('name="image_data_url"', dock)
+        self.assertIn('accept="image/*"', dock)
 
     def test_it_does_not_import_project_evidence_flows(self):
-        # Make-Q / Add-to-Q / capture review are project-evidence concerns and
-        # have no meaning on a surface that files nothing.
-        code = _strip_js_comments(self.source).lower()
-        for project_only in ["make-q", "add-to-q", "capture-review", "register_eye_capture"]:
+        # Make-Q / Add-to-Q are project-evidence concerns and have no meaning
+        # at a scope that files nothing: the developer dock does not render them,
+        # and the paste path names none of them.
+        dock = self._developer_dock()
+        for project_only in ['id="dock-composer-make-q"', 'id="dock-composer-add-to-q"',
+                             "/workspace/quick-start"]:
+            self.assertNotIn(project_only, dock)
+        code = _strip_js_comments(self.paste_source).lower()
+        for project_only in ["make-q", "add-to-q", "register_eye_capture"]:
             self.assertNotIn(project_only, code)
 
 

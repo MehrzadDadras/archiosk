@@ -242,7 +242,10 @@ class TheAffordanceTests(unittest.TestCase):
         block = block[:block.index("dock-composer-pen") + 200]
         # The bounded Planning Composer deliberately excludes the project-wide
         # draft-assist route; its context must not expand to other project files.
-        self.assertIn("{% if project_id and not study_scoped %}", block)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the one Composer
+        # now serves project-less scopes too, so the gate also requires a
+        # PROJECT-scoped dock - still never without a project, never in a study.
+        self.assertIn("{% if project_id and project_scoped and not study_scoped %}", block)
 
     def test_one_component_serves_phone_and_desktop(self):
         self.assertEqual(self.macros.count('id="dock-composer-pen-sheet"'), 1)

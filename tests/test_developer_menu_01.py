@@ -233,25 +233,35 @@ class TheBadgeCarriesItsOwnExit(_MenuCase):
 
 
 class ItActuallyWorksEndToEnd(_MenuCase):
+    # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the separate
+    # developer.home.composer.form -> the ONE canonical Composer, whose
+    # APPLICATION scope posts to portal.developer_home_composer (attachments on)
+    # in Developer Mode, and to the staff orientation route otherwise.
+    _DEV_ACTION = 'action="/developer-composer"'
+
     def test_entering_developer_mode_reveals_the_developer_composer(self):
         # The point of finding the control is what it unlocks - and as of
         # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01 that Composer accepts screenshots.
         client = self._client("menu_admin", "admin", 1)
-        self.assertNotIn('data-ui-ref="developer.home.composer.form"', self._home(client))
+        self.assertNotIn(self._DEV_ACTION, self._home(client))
         resp = client.post("/developer-mode/toggle")
         self.assertEqual(resp.status_code, 302)
         root = client.get("/")
         self.assertEqual(root.status_code, 302)
         self.assertEqual(root.headers["Location"], "/projects")
         body = client.get("/admin/developer-tools").get_data(as_text=True)
-        self.assertIn('data-ui-ref="developer.home.composer.form"', body)
-        self.assertIn('data-ui-ref="developer.home.composer.attach"', body)
+        i = body.index('data-ui-ref="chat.composer"')
+        form = body[body.rindex("<form", 0, i):body.index("</form>", i)]
+        self.assertIn(self._DEV_ACTION, form)
+        self.assertIn('id="dock-composer-image"', form)
 
     def test_leaving_developer_mode_puts_it_back(self):
         client = self._client("menu_admin", "admin", 1)
         client.post("/developer-mode/toggle")
         client.post("/developer-mode/toggle")
-        self.assertNotIn('data-ui-ref="developer.home.composer.form"', self._home(client))
+        home = self._home(client)
+        self.assertNotIn(self._DEV_ACTION, home)
+        self.assertIn('action="/gateway/orientation"', home)
 
 
 if __name__ == "__main__":

@@ -437,6 +437,10 @@ class StableUrlRestorationTests(_BaseTestCase):
         # for the identical reason.
         csrf_re = re.compile(r'<meta name="csrf-token" content="([^"]+)">')
         nonce_re = re.compile(r'nonce="[^"]+"')
+        # UNIVERSAL COMPOSER INVARIANT: the canonical Composer's form carries
+        # its own hidden csrf_token - the same timestamped token as the meta
+        # tag, normalized for the same reason.
+        dock_csrf_re = re.compile(r'<input type="hidden" name="csrf_token" value="[^"]+">')
 
         def csrf_secret_segment(html: str) -> str:
             match = csrf_re.search(html)
@@ -452,7 +456,9 @@ class StableUrlRestorationTests(_BaseTestCase):
         normalized_before = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', docs_before)
         normalized_after = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', docs_after_navigating_away_and_back)
         normalized_before = nonce_re.sub('nonce="NORMALIZED"', normalized_before)
+        normalized_before = dock_csrf_re.sub('<input type="hidden" name="csrf_token" value="NORMALIZED">', normalized_before)
         normalized_after = nonce_re.sub('nonce="NORMALIZED"', normalized_after)
+        normalized_after = dock_csrf_re.sub('<input type="hidden" name="csrf_token" value="NORMALIZED">', normalized_after)
         self.assertEqual(normalized_before, normalized_after)
 
 

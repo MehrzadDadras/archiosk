@@ -104,8 +104,13 @@ class VoiceInputEngineSourceTests(unittest.TestCase):
         self.assertIn("window.ArchioskVoiceInput", self.voice_input_js)
 
     def test_case_workspace_js_no_longer_duplicates_the_recognition_wiring(self):
+        # MOVED VERBATIM (UNIVERSAL COMPOSER INVARIANT): the Composer's voice
+        # wiring left case_workspace.js for static/js/go_composer.js. Neither
+        # file may re-implement recognition; the Composer uses the shared engine.
+        go_composer_js = Path("static/js/go_composer.js").read_text(encoding="utf-8")
         self.assertNotIn("new SpeechRecognitionCtor", self.case_workspace_js)
-        self.assertIn("window.ArchioskVoiceInput(", self.case_workspace_js)
+        self.assertNotIn("new SpeechRecognitionCtor", go_composer_js)
+        self.assertIn("window.ArchioskVoiceInput(", go_composer_js)
 
 
 if __name__ == "__main__":

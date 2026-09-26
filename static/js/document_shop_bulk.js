@@ -18,14 +18,5 @@
   boxes.forEach(box => box.addEventListener('change', refresh));
   document.getElementById('document-select-all').addEventListener('click', () => { boxes.forEach(box => { box.checked = true; }); refresh(); });
   document.getElementById('document-clear-selection').addEventListener('click', () => { boxes.forEach(box => { box.checked = false; }); refresh(); });
-  const command = document.getElementById('document-command');
-  if (command) command.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.isComposing) {
-      event.preventDefault();
-      // The Ask GO button may sit outside the form (bound by form="document-bulk")
-      // when the Master Workspace hosts it in the GO anchor.
-      form.requestSubmit(document.querySelector('#document-bulk button[value="command"], button[form="document-bulk"][value="command"]'));
-    }
-  });
   refresh();
 })();

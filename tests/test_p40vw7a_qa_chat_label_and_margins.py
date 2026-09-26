@@ -44,12 +44,16 @@ class NoDuplicateChatLabelTests(unittest.TestCase):
     def test_composer_input_still_has_a_real_accessible_name(self):
         # Not placeholder-only - a real aria-label, just not a visible
         # duplicate label element.
-        self.assertIn('aria-label="Message"', self.macros)
+        # UNIVERSAL COMPOSER INVARIANT: the canonical input's accessible name
+        # is the `aria_label` parameter, defaulting to "Message". The element
+        # located is the one that IS the input (a <textarea> now), not the
+        # nearest preceding <input>.
+        signature = self.macros[self.macros.index("{% macro conversation_dock("):]
+        signature = signature[:signature.index("%}")]
+        self.assertIn("aria_label='Message'", signature)
         input_idx = self.macros.index('id="dock-composer-input"')
-        input_tag_start = self.macros.rindex("<input", 0, input_idx)
-        input_tag_end = self.macros.index(">", input_idx)
-        input_tag = self.macros[input_tag_start:input_tag_end]
-        self.assertIn("aria-label=", input_tag)
+        input_tag = self.macros[self.macros.rindex("<", 0, input_idx):self.macros.index(">", input_idx)]
+        self.assertIn('aria-label="{{ aria_label }}"', input_tag)
 
     def test_expand_collapse_toggle_still_present_and_functional(self):
         self.assertIn('id="conversation-size-toggle"', self.macros)

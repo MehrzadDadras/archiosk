@@ -136,7 +136,13 @@ class RemovedProjectContainmentTests(_BaseTestCase):
         # appearance-menu script's own querySelector('.workspace-pane-
         # toolbox') is harmless unconditional JS, not a containment leak.
         self.assertNotIn('id="workspace-toolbox-panel"', body)
-        self.assertNotIn('id="chat-region"', body)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): "no chat region
+        # on a removed project" -> the ONE canonical Composer is present on every
+        # signed-in page, but a removed project falls back to APPLICATION scope:
+        # nothing on this page can post into the removed project's conversation.
+        self.assertIn('data-go-scope="APPLICATION"', body)
+        self.assertNotIn(f"/projects/{self.project_id}/workspace/quick-start", body)
+        self.assertNotIn(f"/projects/{self.project_id}/workspace/cases/", body)
         self.assertNotIn("Sources (", body)
 
     def test_chat_posting_blocked(self):

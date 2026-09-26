@@ -250,35 +250,41 @@ class GatewayOrientationMarkupTests(unittest.TestCase):
             sess["username"] = "voice_markup_owner"
             sess["role"] = "admin"
 
+    def _composer_form(self, body):
+        i = body.index('data-ui-ref="chat.composer"')
+        start = body.rindex("<form", 0, i)
+        return body[start:body.index("</form>", i)]
+
     def test_index_page_has_orientation_composer_and_voice_button(self):
-        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Option C: ported
-        # from the retired gateway.html to the consolidated / (index.html)
-        # entry page - same backend route, same voice wiring, new element
-        # ids/refs only (index.* rather than gateway.*).
+        """SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page-local
+        index.orientation.* composer -> the ONE canonical Composer at APPLICATION
+        scope, posting to the same orientation route, with the same voice."""
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        self.assertIn('data-ui-ref="index.orientation.form"', body)
-        self.assertIn('data-ui-ref="index.orientation.voice"', body)
-        self.assertIn('data-ui-ref="index.orientation.submit"', body)
-        self.assertIn('id="index-orientation-reply"', body)
+        form = self._composer_form(body)
+        self.assertEqual(body.count('data-ui-ref="chat.composer"'), 1)
+        self.assertIn('action="/gateway/orientation"', form)
+        self.assertIn('data-go-scope="APPLICATION"', form)
+        self.assertIn('data-go-reply="json"', form)
+        self.assertIn('data-ui-ref="chat.composer.voice"', form)
+        self.assertIn('data-ui-ref="chat.composer.send"', form)
+        self.assertIn('id="dock-go-reply"', body)
 
     def test_voice_button_hidden_by_default_server_side(self):
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        voice_button_start = body.index('id="index-orientation-voice"')
+        voice_button_start = body.index('id="dock-composer-voice"')
         button_open_tag = body.rindex("<button", 0, voice_button_start)
         button_close_tag = body.index(">", voice_button_start)
         self.assertIn("hidden", body[button_open_tag:button_close_tag])
 
     def test_shared_voice_engine_script_loads_before_the_page_wires_it_up(self):
         # Regression guard: voice_input.js defines window.ArchioskVoiceInput
-        # synchronously at parse time - if its <script> tag rendered AFTER
-        # index.html's own inline script that calls it, the call would
-        # silently no-op on every browser (not just unsupported ones),
-        # since window.ArchioskVoiceInput wouldn't exist yet.
+        # synchronously at parse time; the Composer's wiring (go_composer.js,
+        # MOVED there from the page scripts) must load after it.
         body = self.client.get("/", follow_redirects=True).get_data(as_text=True)
-        self.assertIn("voice_input.js", body)
-        voice_engine_idx = body.index("voice_input.js")
-        wiring_call_idx = body.index("window.ArchioskVoiceInput({")
-        self.assertLess(voice_engine_idx, wiring_call_idx)
+        self.assertEqual(body.count("js/voice_input.js"), 1, "one voice engine, loaded once")
+        self.assertLess(body.index("js/voice_input.js"), body.index("js/go_composer.js"))
+        js = Path(__file__).resolve().parent.parent.joinpath("static", "js", "go_composer.js").read_text(encoding="utf-8")
+        self.assertIn("window.ArchioskVoiceInput({", js)
 
     def test_project_chooser_does_not_get_the_orientation_composer(self):
         # project_chooser.html never had this composer and still doesn't -
@@ -287,17 +293,16 @@ class GatewayOrientationMarkupTests(unittest.TestCase):
         self.assertNotIn('data-ui-ref="index.orientation.form"', body)
 
     def test_upload_page_has_a_collapsible_help_composer_with_establish_project_context(self):
-        # CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01, Addendum H.
+        """SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the collapsed
+        upload.help composer -> the ONE canonical Composer, sending the same
+        establish-project context to the same route. It sits in the GO region
+        after the New Project form, so it never obscures or joins that form."""
         body = self.client.get("/upload").get_data(as_text=True)
-        self.assertIn('data-ui-ref="upload.help"', body)
-        self.assertIn('data-ui-ref="upload.help.form"', body)
-        self.assertIn('data-ui-ref="upload.help.submit"', body)
-        self.assertIn('name="context" value="establish-project"', body)
-        # Collapsed by default - a real <details> with no `open` attribute
-        # - so it never obscures the form fields beneath it.
-        details_idx = body.rindex("<details", 0, body.index('data-ui-ref="upload.help"'))
-        details_tag = body[details_idx:body.index(">", details_idx)]
-        self.assertNotIn(" open", details_tag)
+        form = self._composer_form(body)
+        self.assertIn('action="/gateway/orientation"', form)
+        self.assertIn('name="context" value="establish-project"', form)
+        self.assertNotIn('data-ui-ref="upload.help"', body)
+        self.assertGreater(body.index('data-ui-ref="chat.composer"'), body.index('id="project-creation-form"'))
 
     def test_upload_help_composer_never_appears_elsewhere(self):
         # The real, canonical in-project Composer (case_workspace.html)

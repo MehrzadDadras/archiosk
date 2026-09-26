@@ -571,10 +571,16 @@ class PriorStagePreservationTests(_BaseTestCase):
         # below (test_p40e2b1a_recursive_projection.py's own
         # StableUrlRestorationTests has the fuller explanation).
         nonce_re = re.compile(r'nonce="[^"]+"')
+        # UNIVERSAL COMPOSER INVARIANT: the canonical Composer's form carries
+        # its own hidden csrf_token - the same timestamped token as the meta
+        # tag, normalized for the same reason.
+        dock_csrf_re = re.compile(r'<input type="hidden" name="csrf_token" value="[^"]+">')
         normalized_first = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', first)
         normalized_second = csrf_re.sub('<meta name="csrf-token" content="NORMALIZED">', second)
         normalized_first = nonce_re.sub('nonce="NORMALIZED"', normalized_first)
+        normalized_first = dock_csrf_re.sub('<input type="hidden" name="csrf_token" value="NORMALIZED">', normalized_first)
         normalized_second = nonce_re.sub('nonce="NORMALIZED"', normalized_second)
+        normalized_second = dock_csrf_re.sub('<input type="hidden" name="csrf_token" value="NORMALIZED">', normalized_second)
         self.assertEqual(normalized_first, normalized_second)
 
 

@@ -410,6 +410,10 @@ class ArchiosMenuIdentityActivityRealBrowserTests(unittest.TestCase):
         cls.tokens_css = _TOKENS_CSS_PATH.read_text(encoding="utf-8")
         cls.main_css = _MAIN_CSS_PATH.read_text(encoding="utf-8")
         cls.case_workspace_js = (_REPO_ROOT / "static" / "js" / "case_workspace.js").read_text(encoding="utf-8")
+        # MOVED VERBATIM (UNIVERSAL COMPOSER INVARIANT): the Composer's submit
+        # status handler (the one that lights #workspace-app-activity) now lives
+        # in static/js/go_composer.js, loaded by base.html on every page.
+        cls.go_composer_js = (_REPO_ROOT / "static" / "js" / "go_composer.js").read_text(encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):
@@ -446,6 +450,12 @@ class ArchiosMenuIdentityActivityRealBrowserTests(unittest.TestCase):
             html,
         )
         assert n_js == 1, "expected exactly one case_workspace.js <script src> tag to inline"
+        html, n_go = re.subn(
+            r'<script[^>]+src="[^"]*go_composer\.js[^"]*"[^>]*></script>',
+            lambda _match: f"<script>{self.go_composer_js}</script>",
+            html,
+        )
+        assert n_go == 1, "expected exactly one go_composer.js <script src> tag to inline"
         # Strip every OTHER external <script src> (no live server to fetch
         # them from, and they're not needed for this test's own evidence).
         html = re.sub(r'<link[^>]*href="[^"]*master_workspace\.css[^"]*"[^>]*>',

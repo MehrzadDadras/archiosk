@@ -127,8 +127,16 @@ class ComposerTextAlignmentTests(unittest.TestCase):
         # would recreate the duplicate-Chat-count-near-the-composer
         # defect this same stage removes) - but still a REAL accessible
         # name, not placeholder text alone.
+        # UNIVERSAL COMPOSER INVARIANT: the one canonical input takes its
+        # accessible name as a parameter (the Document Composer names itself
+        # for its document); the default every other scope gets is "Message".
         macros_source = _MACROS_HTML_PATH.read_text(encoding="utf-8")
-        self.assertIn('aria-label="Message"', macros_source)
+        signature = macros_source[macros_source.index("{% macro conversation_dock("):]
+        signature = signature[:signature.index("%}")]
+        self.assertIn("aria_label='Message'", signature)
+        input_idx = macros_source.index('id="dock-composer-input"')
+        tag = macros_source[macros_source.rindex("<", 0, input_idx):macros_source.index(">", input_idx)]
+        self.assertIn('aria-label="{{ aria_label }}"', tag)
 
     def test_no_duplicate_chat_count_label_rendered_near_the_composer(self):
         macros_source = _MACROS_HTML_PATH.read_text(encoding="utf-8")

@@ -28,43 +28,59 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         with self.client.session_transaction() as sess:
             sess["developer_mode"] = enabled
 
+    # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the separate
+    # developer.home.composer form -> the ONE canonical Composer, whose
+    # APPLICATION scope posts to /developer-composer in Developer Mode.
+    _DEV_ACTION = b'action="/developer-composer"'
+    _ORIENTATION_ACTION = b'action="/gateway/orientation"'
+
+    def _dock(self, html):
+        i = html.index(b'data-ui-ref="chat.composer"')
+        return html[html.rindex(b"<form", 0, i):html.index(b"</form>", i)]
+
     def test_normal_home_keeps_orientation_without_developer_composer(self):
         response = self.client.get("/", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b'data-ui-ref="developer.home.composer"', response.data)
-        self.assertIn(b'data-ui-ref="index.orientation.form"', response.data)
+        dock = self._dock(response.data)
+        self.assertNotIn(self._DEV_ACTION, dock)
+        self.assertIn(self._ORIENTATION_ACTION, dock)
 
     def test_developer_home_has_one_composer_and_no_gateway_ask_form(self):
         self._developer()
         response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data.count(b'data-ui-ref="developer.home.composer.form"'), 1)
-        self.assertNotIn(b'data-ui-ref="index.orientation.form"', response.data)
+        self.assertEqual(response.data.count(b'data-ui-ref="chat.composer"'), 1)
+        self.assertIn(self._DEV_ACTION, self._dock(response.data))
+        self.assertNotIn(self._ORIENTATION_ACTION, response.data)
         self.assertNotIn(b'Open a project, or ask what you can do here', response.data)
-        self.assertIn(b'data-ui-ref="developer.home.composer"', response.data)
+        self.assertIn(b'data-ui-ref="developer.home.conversation"', response.data)
 
     def test_developer_home_composer_has_canonical_microphone_and_voice_status(self):
         self._developer()
         response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'id="developer-home-composer-voice"', response.data)
-        self.assertIn(b'data-ui-ref="developer.home.composer.voice"', response.data)
-        self.assertIn(b'id="developer-home-composer-voice-status"', response.data)
-        self.assertIn(b"window.ArchioskVoiceInput", response.data)
-        self.assertIn(b"developer-home-composer-voice", response.data)
-        self.assertIn(b"developer-home-composer-voice-status", response.data)
+        dock = self._dock(response.data)
+        self.assertIn(b'id="dock-composer-voice"', dock)
+        self.assertIn(b'data-ui-ref="chat.composer.voice"', dock)
+        self.assertIn(b'id="dock-composer-voice-status"', dock)
+        root = Path(__file__).parents[1]
+        wiring = (root / "static/js/go_composer.js").read_text(encoding="utf-8")
+        self.assertIn(b"js/go_composer.js", response.data)
+        self.assertIn("window.ArchioskVoiceInput", wiring)
+        self.assertIn("dock-composer-voice", wiring)
+        self.assertIn("dock-composer-voice-status", wiring)
 
     def test_developer_home_project_navigation_remains_available_as_links(self):
         self._developer()
         response = self.client.get("/admin/developer-tools", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b'data-ui-ref="index.orientation.form"', response.data)
-        self.assertIn(b'data-ui-ref="developer.home.composer.form"', response.data)
+        self.assertNotIn(self._ORIENTATION_ACTION, response.data)
+        self.assertIn(self._DEV_ACTION, self._dock(response.data))
 
     def test_home_ccn_is_application_scoped_and_lifecycle_works(self):
         self._developer()
         response = self.client.get("/admin/developer-tools", follow_redirects=True)
-        self.assertIn(b'data-ui-ref="developer.home.composer"', response.data)
+        self.assertIn(self._DEV_ACTION, self._dock(response.data))
 
         response = self.client.post("/developer-composer", data={"message": "/CCN inspect the project list"})
         self.assertEqual(response.status_code, 302)
@@ -159,19 +175,23 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         self.assertIn("no mutation is authorized", reply)
 
     def test_shared_composer_keyboard_contract_covers_home_and_workspace(self):
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the keyboard
+        # contract once had two forms to cover (macro + developer_tools.html);
+        # there is now one form, in the macro, loaded on every page by base.html.
         from pathlib import Path
 
         root = Path(__file__).parents[1]
         script = (root / "static/js/developer_composer_input.js").read_text(encoding="utf-8")
         macro = (root / "templates/_macros.html").read_text(encoding="utf-8")
+        base = (root / "templates/base.html").read_text(encoding="utf-8")
         home = (root / "templates/developer_tools.html").read_text(encoding="utf-8")
         self.assertIn("event.shiftKey", script)
         self.assertIn("event.isComposing", script)
         self.assertIn("requestSubmit", script)
         self.assertIn("data-developer-composer-form", macro)
-        self.assertIn("data-developer-composer-form", home)
         self.assertIn("<textarea", macro)
-        self.assertIn("<textarea", home)
+        self.assertIn("js/developer_composer_input.js", base)
+        self.assertNotIn("<textarea", home, "Developer Tools must not grow a second composer")
 
     def test_ordinary_home_message_reaches_canonical_model_adapter_with_history_and_context(self):
         self._developer()
@@ -252,15 +272,19 @@ class DeveloperHomeComposerTests(unittest.TestCase):
             )
 
     def test_application_context_controls_are_outside_workbench_boundary(self):
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the workbench
+        # (developer.home.conversation) is now display-only history; the Composer
+        # that talks into it is the canonical dock, and context actions stay out.
         self._developer()
-        html = self.client.get("/admin/developer-tools", follow_redirects=True).data.decode("utf-8")
-        start = html.index('data-developer-workbench')
-        end = html.index('</section>', start)
+        html = self.client.get("/admin/developer-tools", follow_redirects=True).data
+        start = html.index(b'data-developer-workbench')
+        end = html.index(b'</section>', start)
         workbench = html[start:end]
-        self.assertIn('developer.home.composer.form', workbench)
-        self.assertIn('developer.home.composer.voice', workbench)
-        self.assertNotIn('developer.home.context-actions', workbench)
-        self.assertNotIn('Use Project list as context', workbench)
+        self.assertNotIn(b'<form', workbench)
+        self.assertNotIn(b'<textarea', workbench)
+        self.assertNotIn(b'developer.home.context-actions', workbench)
+        self.assertNotIn(b'Use Project list as context', workbench)
+        self.assertIn(self._DEV_ACTION, self._dock(html))
 
     def test_home_selection_attaches_application_object_without_authorizing_mutation(self):
         self._developer()
@@ -287,7 +311,10 @@ class DeveloperHomeComposerTests(unittest.TestCase):
         with self.client.session_transaction() as sess:
             sess.update({"role": "member", "developer_mode": True})
         self.assertEqual(self.client.get("/", follow_redirects=True).status_code, 200)
-        self.assertNotIn(b'data-ui-ref="developer.home.composer"', self.client.get("/", follow_redirects=True).data)
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): same guard, new
+        # marker - a member with a forged developer_mode flag never gets the
+        # developer Composer scope.
+        self.assertNotIn(self._DEV_ACTION, self.client.get("/", follow_redirects=True).data)
         self.assertEqual(self.client.post("/developer-composer", data={"message": "/CCN"}).status_code, 403)
 
 

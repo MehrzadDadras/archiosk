@@ -48,6 +48,18 @@ from werkzeug.security import generate_password_hash
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PRIMITIVE = _REPO_ROOT / "static" / "js" / "developer_composer_input.js"
 
+# SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the page-local
+# upload-orientation help composer (upload.help.*, #upload-orientation-input,
+# inline fetch wiring) -> the ONE canonical Composer, which on /upload posts the
+# same `message` with the same context=establish-project to the same orientation
+# route, in JSON reply mode (static/js/go_composer.js). The user intent under
+# test is unchanged: Enter asks the question, the page stays, a second question
+# also goes, an empty box asks nothing, the pointer path still works, and the
+# project-creation form is never submitted by it.
+_PAGE_SCRIPTS = ("voice_input.js", "developer_composer_input.js", "go_composer.js")
+_DOCK_INPUT = "#dock-composer-input"
+_DOCK_SEND = '[data-ui-ref="chat.composer.send"]'
+
 try:
     from playwright.sync_api import sync_playwright
 except Exception:  # pragma: no cover - environment-dependent
@@ -121,13 +133,18 @@ def _rendered_upload_page() -> str:
 
 
 def _help_form_tag(body: str) -> str:
-    i = body.index('id="upload-orientation-form"')
+    i = body.index('data-ui-ref="chat.composer"')
     return body[body.rindex("<form", 0, i):body.index(">", i) + 1]
 
 
 def _help_form_html(body: str) -> str:
-    i = body.index('id="upload-orientation-form"')
+    i = body.index('data-ui-ref="chat.composer"')
     return body[body.rindex("<form", 0, i):body.index("</form>", i)]
+
+
+def _input_tag(body: str) -> str:
+    i = body.index('id="dock-composer-input"')
+    return body[body.rindex("<textarea", 0, i):body.index(">", i) + 1]
 
 
 class MarkupContractTests(unittest.TestCase):
@@ -139,21 +156,21 @@ class MarkupContractTests(unittest.TestCase):
     def test_the_help_form_opts_in_to_the_shared_primitive(self):
         tag = _help_form_tag(self.body)
         self.assertIn("data-developer-composer-form", tag)
-        self.assertIn("data-composer-send", tag)
+        self.assertIn('action="/gateway/orientation"', tag)
+        self.assertIn('data-go-reply="json"', tag)
+        self.assertIn('name="context" value="establish-project"', _help_form_html(self.body))
 
     def test_the_declared_send_selector_matches_a_real_enabled_submit_button(self):
         # A typo in the selector would leave Enter silently dead again - the
         # exact class of failure being repaired - and nothing else would notice.
+        # The canonical form declares no data-composer-send, so the primitive's
+        # default selector must find a real, enabled submit button in it.
         tag = _help_form_tag(self.body)
-        selector = tag.split(_SEND_ATTR)[1].split("'")[0]
-        ref = selector.split('data-ui-ref="')[1].split('"')[0]
-
-        # Search AFTER the form's own opening tag: that tag carries the
-        # selector, so the first occurrence of the ui-ref in the form HTML is
-        # the attribute naming the button, not the button.
+        self.assertNotIn("data-composer-send", tag)
+        self.assertIn(_DOCK_SEND, _PRIMITIVE.read_text(encoding="utf-8"))
         form_html = _help_form_html(self.body)
         body_html = form_html[form_html.index(">") + 1:]
-        needle = 'data-ui-ref="%s"' % ref
+        needle = 'data-ui-ref="chat.composer.send"'
         self.assertIn(needle, body_html)
         open_tag = body_html[body_html.rindex("<button", 0, body_html.index(needle)):]
         open_tag = open_tag[:open_tag.index(">") + 1]
@@ -161,38 +178,24 @@ class MarkupContractTests(unittest.TestCase):
         self.assertNotIn("disabled", open_tag)
 
     def test_the_input_is_marked_as_the_composer_input(self):
-        i = self.body.index('id="upload-orientation-input"')
-        tag = self.body[self.body.rindex("<input", 0, i):self.body.index(">", i) + 1]
-        self.assertIn("data-developer-composer-input", tag)
+        self.assertIn("data-developer-composer-input", _input_tag(self.body))
 
     def test_browser_autofill_is_off_on_the_question_field(self):
-        # The leading hypothesis for the live report, and the only one that
-        # survived checking. Both composers that work (the Workspace chat dock
-        # and the Developer Composer) carry autocomplete="off"; both orientation
-        # composers, the ones reported broken, did not.
-        #
-        # Mechanism: this field is name="message" in a GET form with no action,
-        # so any native submission writes ?message=... into the URL and the
-        # browser starts offering saved values for it. When that dropdown is
-        # open, the first Enter dismisses or accepts the suggestion instead of
-        # submitting - which looks exactly like "Enter does nothing", is
-        # per-browser and per-history, and therefore does not reproduce in a
-        # clean automated browser. Unproven, but it explains every observation.
-        i = self.body.index('id="upload-orientation-input"')
-        tag = self.body[self.body.rindex("<input", 0, i):self.body.index(">", i) + 1]
-        self.assertIn('autocomplete="off"', tag)
+        # The leading hypothesis for the original live report: an open autofill
+        # dropdown eats the first Enter. The canonical Composer's field keeps
+        # autocomplete="off", as the working composers always did.
+        self.assertIn('autocomplete="off"', _input_tag(self.body))
 
     def test_the_send_button_is_still_there(self):
         # The repair adds a keyboard path; it removes no pointer path.
-        self.assertIn('data-ui-ref="upload.help.submit"', self.body)
-        self.assertIn(">Send</button>", self.body)
+        self.assertIn('data-ui-ref="chat.composer.send"', _help_form_html(self.body))
 
     def test_the_shared_primitive_still_defaults_for_forms_that_declare_nothing(self):
-        # The Workspace chat dock and Developer Composer never declare a send
-        # ref; generalizing the selector must not have orphaned them.
+        # The canonical Composer declares no send ref; generalizing the selector
+        # must not have orphaned it. (The retired developer.home.composer.send
+        # default is no longer pinned: that form no longer exists.)
         source = _PRIMITIVE.read_text(encoding="utf-8")
         self.assertIn('data-ui-ref="chat.composer.send"', source)
-        self.assertIn('data-ui-ref="developer.home.composer.send"', source)
         self.assertIn("getAttribute('data-composer-send')", source)
 
 
@@ -202,22 +205,31 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.html = _rendered_upload_page()
-        cls.primitive = _PRIMITIVE.read_text(encoding="utf-8")
+        import re
+
+        html = _rendered_upload_page()
+        # set_content() fetches no <script src>. Drop them and inline, unmodified,
+        # the real files the Composer's behaviour lives in, so their
+        # DOMContentLoaded wiring runs exactly as it does on the live page.
+        html = re.sub(r"<script[^>]*\bsrc=[^>]*></script>", "", html)
+        scripts = "".join(
+            "<script>" + (_REPO_ROOT / "static" / "js" / name).read_text(encoding="utf-8") + "</script>"
+            for name in _PAGE_SCRIPTS)
+        cls.html = html.replace("</body>", scripts + "</body>")
 
     def _page(self, browser):
         page = browser.new_page()
-        page.set_content(self.html)
-        # The page's own inline wiring already ran with set_content; the shared
-        # primitive normally arrives via a <script src> at the end of base.html,
-        # which set_content does not fetch. Inject the real file, unmodified.
-        page.add_script_tag(content=self.primitive)
-        page.evaluate("document.getElementById('upload-help').open = true")
-        # Stub LAST, on purpose: add_script_tag is itself implemented with
-        # fetch(), so installing the spy earlier records Playwright's own
-        # internal call and every count below is off by one. Neither the page's
-        # handler nor the primitive calls fetch at bind time, so nothing real
-        # is missed by waiting.
+        # Served at a real (intercepted, never-contacted) origin rather than via
+        # set_content(): on about:blank the form's relative action resolves to ""
+        # and sessionStorage is denied, so the page would not behave as it does
+        # live. Every other request is refused, so nothing leaves the browser.
+        origin = "http://archiosk.test"
+        page.route("**/*", lambda route: route.fulfill(
+            status=200, content_type="text/html", body=self.html)
+            if route.request.url == origin + "/upload" else route.abort())
+        page.goto(origin + "/upload")
+        # Stub after load: neither the primitive nor go_composer.js calls fetch
+        # at bind time, so nothing real is missed by waiting.
         page.evaluate(_FETCH_STUB)
         return page
 
@@ -227,8 +239,8 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = self._page(browser)
-            page.fill("#upload-orientation-input", question)
-            page.press("#upload-orientation-input", "Enter")
+            page.fill(_DOCK_INPUT, question)
+            page.press(_DOCK_INPUT, "Enter")
             page.wait_for_function("window.__asked && window.__asked.length > 0", timeout=5000)
             asked = page.evaluate("window.__asked")
             browser.close()
@@ -244,11 +256,11 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = self._page(browser)
-            page.fill("#upload-orientation-input", "does this navigate")
-            page.press("#upload-orientation-input", "Enter")
+            page.fill(_DOCK_INPUT, "does this navigate")
+            page.press(_DOCK_INPUT, "Enter")
             page.wait_for_function("window.__asked && window.__asked.length > 0", timeout=5000)
             still_there = page.evaluate(
-                "document.getElementById('upload-orientation-input').value")
+                "document.getElementById('dock-composer-input').value")
             browser.close()
         self.assertEqual(still_there, "does this navigate")
 
@@ -261,8 +273,8 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
             browser = p.chromium.launch(headless=True)
             page = self._page(browser)
             for text in ["first question", "second question"]:
-                page.fill("#upload-orientation-input", text)
-                page.press("#upload-orientation-input", "Enter")
+                page.fill(_DOCK_INPUT, text)
+                page.press(_DOCK_INPUT, "Enter")
             page.wait_for_function("window.__asked && window.__asked.length >= 2", timeout=5000)
             asked = page.evaluate("window.__asked")
             browser.close()
@@ -272,7 +284,7 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = self._page(browser)
-            page.press("#upload-orientation-input", "Enter")
+            page.press(_DOCK_INPUT, "Enter")
             page.wait_for_timeout(300)
             asked = page.evaluate("window.__asked")
             browser.close()
@@ -283,7 +295,7 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
             browser = p.chromium.launch(headless=True)
             page = self._page(browser)
             allowed = page.eval_on_selector(
-                "#upload-orientation-input",
+                _DOCK_INPUT,
                 "el => el.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true, cancelable: true}))",
             )
             browser.close()
@@ -293,8 +305,8 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = self._page(browser)
-            page.fill("#upload-orientation-input", "clicked not typed")
-            page.click('[data-ui-ref="upload.help.submit"]')
+            page.fill(_DOCK_INPUT, "clicked not typed")
+            page.click(_DOCK_SEND)
             page.wait_for_function("window.__asked && window.__asked.length > 0", timeout=5000)
             asked = page.evaluate("window.__asked")
             browser.close()
@@ -310,8 +322,8 @@ class RealKeyboardSubmissionTests(unittest.TestCase):
                 "window.__projectSubmits = 0;"
                 "document.getElementById('project-creation-form').addEventListener("
                 "'submit', function (e) { e.preventDefault(); window.__projectSubmits++; });")
-            page.fill("#upload-orientation-input", "how should I establish this project")
-            page.press("#upload-orientation-input", "Enter")
+            page.fill(_DOCK_INPUT, "how should I establish this project")
+            page.press(_DOCK_INPUT, "Enter")
             page.wait_for_function("window.__asked && window.__asked.length > 0", timeout=5000)
             submits = page.evaluate("window.__projectSubmits")
             browser.close()

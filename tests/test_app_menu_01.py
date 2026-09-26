@@ -390,7 +390,9 @@ class IdentityMarkAndActivityIndicatorTests(unittest.TestCase):
         # The SAME handler that already sets dock-composer-execution-status
         # also drives the indicator - never a second "GO is working"
         # mechanism, never a client-side timer.
-        js = (_REPO_ROOT / "static" / "js" / "case_workspace.js").read_text(encoding="utf-8")
+        # MOVED VERBATIM (UNIVERSAL COMPOSER INVARIANT): the Composer's submit
+        # handler now lives in go_composer.js, the one owner of the Composer.
+        js = (_REPO_ROOT / "static" / "js" / "go_composer.js").read_text(encoding="utf-8")
         idx = js.index("const executionStatus = document.getElementById('dock-composer-execution-status')")
         block = js[idx:idx + 1200]
         self.assertIn("getElementById('workspace-app-activity')", block)

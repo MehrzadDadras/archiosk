@@ -3245,6 +3245,127 @@
     <script type="application/json" id="workspace-visible-cases-data">
         {{ visible_cases_json | safe }}
     </script>
+{% if not panel_only %}
+
+    {# ---------------- Selection toolbar + Tag/Task dialogs (CLAUDE-P40-VW7) ----
+       OneNote-style contextual toolbar for a meaningful Project
+       Conversation text selection - rendered ONCE, in the Work content
+       rather than the GO region: the GO region is history/display only
+       (UNIVERSAL COMPOSER INVARIANT), and this is a task tool, not a
+       conversation. It is position: fixed, so where it sits in the DOM
+       does not move it. Hidden by default; static/js/case_workspace.js positions
+       and shows it near a real selection, never a permanent floating
+       toolbar (Section 10's own explicit "avoid adding" instruction).
+       Built-in Important/Question/Highlight are one-click (no dialog -
+       see services.case_workspace.BUILT_IN_TAGS); Add Tag and Make
+       Task open the small dialogs below, both real <form>s so the
+       existing app-wide CSRF auto-injection script populates their
+       hidden csrf_token field exactly like every other form on this
+       page - the fetch() calls in case_workspace.js read that same
+       field's value rather than inventing a second CSRF mechanism. #}
+    <div class="conv-selection-toolbar" id="conv-selection-toolbar" data-ui-ref="chat.selection-toolbar" role="toolbar" aria-label="Selected text actions" hidden>
+        <button type="button" class="conv-selection-btn" data-conv-action="tag" data-ui-ref="chat.selection-toolbar.tag">Add Tag</button>
+        {# CLAUDE-P40-VW8-QA (reversibility correction): hidden by default,
+           shown only when 1+ non-built-in Tag occurrences overlap the
+           current selection (static/js/case_workspace.js's own
+           applyAppliedTagState) - a DISTINCT button from Add Tag above
+           (Tags are multi-valued: a selection can always gain another
+           tag even while others already apply, so this never replaces
+           Add Tag's own label/action, only appears alongside it). Its
+           own text carries the applied count (e.g. "Remove Tag (2)") so
+           the state is identified without relying on color. #}
+        <button type="button" class="conv-selection-btn" data-conv-action="remove-tag" data-ui-ref="chat.selection-toolbar.remove-tag" hidden>Remove Tag</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="task" data-ui-ref="chat.selection-toolbar.task">Make Task</button>
+        {# Highlight/Important/Question: same three buttons as before,
+           but static/js/case_workspace.js's own applyAppliedTagState now
+           swaps each one's data-conv-action/data-ui-ref/label between
+           its "apply" state (unchanged identifiers: .highlight/
+           .important/.question) and a distinct "remove" state
+           (.remove-highlight/.unmark-important/.unmark-question) - never
+           both at once, and never the add identifiers reused for the
+           remove meaning (Section "UI references": "must not inherit
+           the identifiers of their corresponding add/apply actions"). #}
+        <button type="button" class="conv-selection-btn" data-conv-action="highlight" data-ui-ref="chat.selection-toolbar.highlight">Highlight</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="important" data-ui-ref="chat.selection-toolbar.important">Important</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="question" data-ui-ref="chat.selection-toolbar.question">Question</button>
+        <button type="button" class="conv-selection-btn" data-conv-action="copy" data-ui-ref="chat.selection-toolbar.copy">Copy</button>
+    </div>
+    <p class="conv-selection-status" id="conv-selection-status" role="status" aria-live="polite" hidden></p>
+    {# Short-lived Undo affordance (Section "Interaction": "immediate and
+       reversible through a short-lived Undo confirmation rather than a
+       blocking confirmation dialog") - a real, separately-focusable
+       button, not a link buried in the status text, so it is reachable
+       by keyboard and announced distinctly by a screen reader. Hidden
+       until a removal actually happens; static/js/case_workspace.js's
+       own showUndoableStatus times it out automatically. #}
+    <button type="button" class="conv-selection-undo" id="conv-selection-undo" data-ui-ref="chat.selection-toolbar.undo" hidden>Undo</button>
+
+    <div class="conv-dialog" id="conv-remove-tag-dialog" data-ui-ref="chat.remove-tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-remove-tag-dialog-heading" hidden>
+        <p class="conv-dialog-heading" id="conv-remove-tag-dialog-heading">Remove Tag</p>
+        <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
+        {# CLAUDE-P40-VW8-QA: "If multiple Tags are attached, selecting
+           Remove Tag must show the applied Tags and allow the user to
+           remove one or more individually" - a real list, one row per
+           overlapping Tag occurrence (not just whichever one happens to
+           be visibly rendered as a <mark> - Section "Selection
+           precision": routes/workspace.py's own tag_occurrences_for_
+           selection_route is the read side of this, since app.py's
+           hotlinks filter only ever draws ONE <mark> per position when
+           occurrences overlap). Populated entirely by JS
+           (populateRemoveTagDialog) - no server round-trip to open the
+           dialog itself, only to fetch which Tags currently apply
+           (already done before this dialog is ever shown). #}
+        <ul class="conv-remove-tag-list" id="conv-remove-tag-list" data-ui-ref="chat.selection-toolbar.applied-tags-list"></ul>
+        <div class="conv-dialog-actions">
+            <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Close</button>
+        </div>
+    </div>
+
+    <div class="conv-dialog" id="conv-tag-dialog" data-ui-ref="chat.tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-tag-dialog-heading" hidden>
+        <form method="post" action="{{ url_for('workspace.add_tag_occurrence_route', project_id=project_id) }}" id="conv-tag-form">
+            <p class="conv-dialog-heading" id="conv-tag-dialog-heading">Add Tag</p>
+            <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
+            <p class="conv-dialog-quote" id="conv-tag-dialog-quote"></p>
+            <label for="conv-tag-select">Existing project tag</label>
+            <select id="conv-tag-select" name="tag_id">
+                <option value="">Choose a tag&hellip;</option>
+                {% for tag in available_tags_view %}
+                <option value="{{ tag.id }}">{{ tag.name }}</option>
+                {% endfor %}
+            </select>
+            <p class="conv-dialog-or">or create a new tag</p>
+            <label for="conv-tag-new-name">New tag name</label>
+            <input type="text" id="conv-tag-new-name" name="new_tag_name" maxlength="60" placeholder="e.g. Follow up" autocomplete="off">
+            <fieldset class="conv-tag-color-picker">
+                <legend>Colour</legend>
+                {% for color in tag_color_palette %}
+                <label class="conv-tag-color-option">
+                    <input type="radio" name="new_tag_color" value="{{ color }}"{% if loop.first %} checked{% endif %}>
+                    <span class="conv-tag-color-swatch conv-tag-color-{{ color }}" aria-hidden="true"></span>
+                    {{ color }}
+                </label>
+                {% endfor %}
+            </fieldset>
+            <div class="conv-dialog-actions">
+                <button type="submit" class="btn btn-primary">Add Tag</button>
+                <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="conv-dialog" id="conv-task-dialog" data-ui-ref="chat.task-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-task-dialog-heading" hidden>
+        <form method="post" action="{{ url_for('workspace.create_task_route', project_id=project_id) }}" id="conv-task-form">
+            <p class="conv-dialog-heading" id="conv-task-dialog-heading">Make Task</p>
+            <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
+            <label for="conv-task-title">Task title</label>
+            <input type="text" id="conv-task-title" name="title" maxlength="200" required>
+            <div class="conv-dialog-actions">
+                <button type="submit" class="btn btn-primary">Create Task</button>
+                <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Cancel</button>
+            </div>
+        </form>
+    </div>
+{% endif %}
 {% endblock %}
 
 {% block toolbox %}
@@ -3943,7 +4064,9 @@
     {% endif %}
 {% endblock %}
 
-{% block chat %}
+{% block go_thread %}{# UNIVERSAL COMPOSER INVARIANT: base.html owns the ONE interactive Composer and
+   go_scope() gives it this page's scope (INVESTIGATION when a case is open,
+   otherwise PROJECT / SOURCE). This block supplies only the history it shows. #}
 {# ---------------- The ONE physical conversation dock (CLAUDE-P40-E3A) -----
    The full-width Chat region itself now lives in base.html (Section 9 -
    spans the complete application width beneath Lists/Display/Toolbox,
@@ -3963,22 +4086,7 @@
        share state across blocks - the cheapest correct fix, not a new
        mechanism. #}
     {% set drawing_sources = active_sources|selectattr("kind", "equalto", "drawing")|selectattr("id", "in", active_case.source_ids)|list %}
-    {% call macros.conversation_dock(
-        active_case.title,
-        active_case.conversation|length,
-        url_for('workspace.post_message', project_id=project_id, case_id=active_case.id),
-        'case-' ~ active_case.id,
-        ('Analyze this drawing for datum inconsistencies…' if drawing_sources else 'Ask a question or investigate this Source…'),
-        draft_actions=draft_actions,
-        current_view=directory_view,
-        selected_source_id=(selected_source.id if selected_source else None),
-        project_id=project_id,
-        current_context=current_context,
-        developer_ccn_context=developer_ccn_context,
-        case_id=active_case.id,
-        conversations=open_visible_cases,
-        project_conversation_count=project_conversation_count,
-    ) %}
+    
         <div class="conversation-thread" data-conversation-scope="case-{{ active_case.id }}" data-anchor-scope="case" data-anchor-case-id="{{ active_case.id }}" data-ui-ref="chat.thread">
             {% for message in active_case.conversation %}
             <div class="conversation-message {{ message.role }}" id="message-{{ message.id }}" data-message-id="{{ message.id }}">
@@ -4082,24 +4190,7 @@
             </form>
         </div>
         {% endif %}
-    {% endcall %}
     {% else %}
-    {% call macros.conversation_dock(
-        'Project Conversation',
-        project_conversation_view|length,
-        url_for('workspace.quick_start', project_id=project_id),
-        'project',
-        'Ask a question, or describe what you want to work on…',
-        draft_actions=draft_actions,
-        include_anchor_fields=True,
-        current_view=directory_view,
-        selected_source_id=(selected_source.id if selected_source else None),
-        project_id=project_id,
-        current_context=current_context,
-        developer_ccn_context=developer_ccn_context,
-        conversations=open_visible_cases,
-        project_conversation_count=project_conversation_count,
-    ) %}
         {# CLAUDE-P40-VW8-QA: the explanatory sentence that used to live
            here ("Talk to the Project itself...") is deleted outright,
            per explicit instruction not to replace it with another
@@ -4173,127 +4264,9 @@
                sentinel's own comment above - same purpose, project-level thread. #}
             <div class="conversation-thread-bottom" data-conversation-bottom-sentinel aria-hidden="true"></div>
         </div>
-    {% endcall %}
     {% endif %}
-
-    {# ---------------- Selection toolbar + Tag/Task dialogs (CLAUDE-P40-VW7) ----
-       OneNote-style contextual toolbar for a meaningful Project
-       Conversation text selection - rendered ONCE here (outside the
-       if/active_case branch above, which two mutually exclusive
-       conversation_dock calls share) rather than duplicated per
-       branch. Hidden by default; static/js/case_workspace.js positions
-       and shows it near a real selection, never a permanent floating
-       toolbar (Section 10's own explicit "avoid adding" instruction).
-       Built-in Important/Question/Highlight are one-click (no dialog -
-       see services.case_workspace.BUILT_IN_TAGS); Add Tag and Make
-       Task open the small dialogs below, both real <form>s so the
-       existing app-wide CSRF auto-injection script populates their
-       hidden csrf_token field exactly like every other form on this
-       page - the fetch() calls in case_workspace.js read that same
-       field's value rather than inventing a second CSRF mechanism. #}
-    <div class="conv-selection-toolbar" id="conv-selection-toolbar" data-ui-ref="chat.selection-toolbar" role="toolbar" aria-label="Selected text actions" hidden>
-        <button type="button" class="conv-selection-btn" data-conv-action="tag" data-ui-ref="chat.selection-toolbar.tag">Add Tag</button>
-        {# CLAUDE-P40-VW8-QA (reversibility correction): hidden by default,
-           shown only when 1+ non-built-in Tag occurrences overlap the
-           current selection (static/js/case_workspace.js's own
-           applyAppliedTagState) - a DISTINCT button from Add Tag above
-           (Tags are multi-valued: a selection can always gain another
-           tag even while others already apply, so this never replaces
-           Add Tag's own label/action, only appears alongside it). Its
-           own text carries the applied count (e.g. "Remove Tag (2)") so
-           the state is identified without relying on color. #}
-        <button type="button" class="conv-selection-btn" data-conv-action="remove-tag" data-ui-ref="chat.selection-toolbar.remove-tag" hidden>Remove Tag</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="task" data-ui-ref="chat.selection-toolbar.task">Make Task</button>
-        {# Highlight/Important/Question: same three buttons as before,
-           but static/js/case_workspace.js's own applyAppliedTagState now
-           swaps each one's data-conv-action/data-ui-ref/label between
-           its "apply" state (unchanged identifiers: .highlight/
-           .important/.question) and a distinct "remove" state
-           (.remove-highlight/.unmark-important/.unmark-question) - never
-           both at once, and never the add identifiers reused for the
-           remove meaning (Section "UI references": "must not inherit
-           the identifiers of their corresponding add/apply actions"). #}
-        <button type="button" class="conv-selection-btn" data-conv-action="highlight" data-ui-ref="chat.selection-toolbar.highlight">Highlight</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="important" data-ui-ref="chat.selection-toolbar.important">Important</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="question" data-ui-ref="chat.selection-toolbar.question">Question</button>
-        <button type="button" class="conv-selection-btn" data-conv-action="copy" data-ui-ref="chat.selection-toolbar.copy">Copy</button>
-    </div>
-    <p class="conv-selection-status" id="conv-selection-status" role="status" aria-live="polite" hidden></p>
-    {# Short-lived Undo affordance (Section "Interaction": "immediate and
-       reversible through a short-lived Undo confirmation rather than a
-       blocking confirmation dialog") - a real, separately-focusable
-       button, not a link buried in the status text, so it is reachable
-       by keyboard and announced distinctly by a screen reader. Hidden
-       until a removal actually happens; static/js/case_workspace.js's
-       own showUndoableStatus times it out automatically. #}
-    <button type="button" class="conv-selection-undo" id="conv-selection-undo" data-ui-ref="chat.selection-toolbar.undo" hidden>Undo</button>
-
-    <div class="conv-dialog" id="conv-remove-tag-dialog" data-ui-ref="chat.remove-tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-remove-tag-dialog-heading" hidden>
-        <p class="conv-dialog-heading" id="conv-remove-tag-dialog-heading">Remove Tag</p>
-        <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
-        {# CLAUDE-P40-VW8-QA: "If multiple Tags are attached, selecting
-           Remove Tag must show the applied Tags and allow the user to
-           remove one or more individually" - a real list, one row per
-           overlapping Tag occurrence (not just whichever one happens to
-           be visibly rendered as a <mark> - Section "Selection
-           precision": routes/workspace.py's own tag_occurrences_for_
-           selection_route is the read side of this, since app.py's
-           hotlinks filter only ever draws ONE <mark> per position when
-           occurrences overlap). Populated entirely by JS
-           (populateRemoveTagDialog) - no server round-trip to open the
-           dialog itself, only to fetch which Tags currently apply
-           (already done before this dialog is ever shown). #}
-        <ul class="conv-remove-tag-list" id="conv-remove-tag-list" data-ui-ref="chat.selection-toolbar.applied-tags-list"></ul>
-        <div class="conv-dialog-actions">
-            <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Close</button>
-        </div>
-    </div>
-
-    <div class="conv-dialog" id="conv-tag-dialog" data-ui-ref="chat.tag-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-tag-dialog-heading" hidden>
-        <form method="post" action="{{ url_for('workspace.add_tag_occurrence_route', project_id=project_id) }}" id="conv-tag-form">
-            <p class="conv-dialog-heading" id="conv-tag-dialog-heading">Add Tag</p>
-            <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
-            <p class="conv-dialog-quote" id="conv-tag-dialog-quote"></p>
-            <label for="conv-tag-select">Existing project tag</label>
-            <select id="conv-tag-select" name="tag_id">
-                <option value="">Choose a tag&hellip;</option>
-                {% for tag in available_tags_view %}
-                <option value="{{ tag.id }}">{{ tag.name }}</option>
-                {% endfor %}
-            </select>
-            <p class="conv-dialog-or">or create a new tag</p>
-            <label for="conv-tag-new-name">New tag name</label>
-            <input type="text" id="conv-tag-new-name" name="new_tag_name" maxlength="60" placeholder="e.g. Follow up" autocomplete="off">
-            <fieldset class="conv-tag-color-picker">
-                <legend>Colour</legend>
-                {% for color in tag_color_palette %}
-                <label class="conv-tag-color-option">
-                    <input type="radio" name="new_tag_color" value="{{ color }}"{% if loop.first %} checked{% endif %}>
-                    <span class="conv-tag-color-swatch conv-tag-color-{{ color }}" aria-hidden="true"></span>
-                    {{ color }}
-                </label>
-                {% endfor %}
-            </fieldset>
-            <div class="conv-dialog-actions">
-                <button type="submit" class="btn btn-primary">Add Tag</button>
-                <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Cancel</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="conv-dialog" id="conv-task-dialog" data-ui-ref="chat.task-dialog" role="dialog" aria-modal="true" aria-labelledby="conv-task-dialog-heading" hidden>
-        <form method="post" action="{{ url_for('workspace.create_task_route', project_id=project_id) }}" id="conv-task-form">
-            <p class="conv-dialog-heading" id="conv-task-dialog-heading">Make Task</p>
-            <p class="conv-dialog-error" data-conv-dialog-error role="alert" hidden></p>
-            <label for="conv-task-title">Task title</label>
-            <input type="text" id="conv-task-title" name="title" maxlength="200" required>
-            <div class="conv-dialog-actions">
-                <button type="submit" class="btn btn-primary">Create Task</button>
-                <button type="button" class="btn btn-ghost" data-conv-dialog-cancel>Cancel</button>
-            </div>
-        </form>
-    </div>
 {% endblock %}
+
 
 {% block extra_scripts %}
 {% if not panel_only %}
@@ -4315,10 +4288,6 @@
 <script src="{{ url_for('static', filename='js/drawing_image_viewer.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/document_structure_registration.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/investigation_snapshot.js') }}?v={{ static_version }}"></script>
-{# CLAUDE-VOICE-CONSISTENCY-01: shared voice-input engine (window.ArchioskVoiceInput),
-   loaded before case_workspace.js so its DOMContentLoaded handler can call
-   it - see voice_input.js's own header comment. #}
-<script src="{{ url_for('static', filename='js/voice_input.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/case_workspace.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/files_folder_menus.js') }}?v={{ static_version }}"></script>
 <script src="{{ url_for('static', filename='js/spin_timestamps.js') }}?v={{ static_version }}"></script>

@@ -51,6 +51,11 @@
             if (submitting) return;
             submitting = true;
         });
+        // A form that handles its own submission in place (no page load) says
+        // when that submission is over, so the next Enter can send again. Until
+        // then `submitting` holds, which is what stops a repeated Enter from
+        // sending the same question twice.
+        form.addEventListener('composer:settled', function () { submitting = false; });
     }
 
     function bindAll() {

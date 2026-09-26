@@ -396,7 +396,13 @@ class ToolboxContractTests(_BaseTestCase):
         for url in ("/", "/projects", "/upload", "/removed-projects"):
             body = client.get(url, follow_redirects=True).get_data(as_text=True)
             self.assertNotIn('id="workspace-toolbox-panel"', body, url)
-            self.assertNotIn('id="chat-region"', body, url)
+            # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): "no chat
+            # region outside a workspace" -> the ONE canonical Composer is on
+            # every signed-in page, at APPLICATION scope when no project is open,
+            # never carrying a project conversation.
+            self.assertEqual(body.count('data-ui-ref="chat.composer"'), 1, url)
+            self.assertIn('data-go-scope="APPLICATION"', body, url)
+            self.assertNotIn("/workspace/quick-start", body, url)
 
     def test_toolbox_never_duplicates_new_project_removed_projects_or_security(self):
         # CLAUDE-P40-EYE1: was sliced to id="chat-region" - Chat now

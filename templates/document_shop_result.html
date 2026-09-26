@@ -333,16 +333,16 @@
 
 {% endblock %}
 
-{# MASTERUI: the document's conversation, in the fixed GO anchor. #}
-{% block master_go %}
-{# CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: the continuation.
+{# UNIVERSAL COMPOSER INVARIANT: base.html owns the ONE Composer; go_scope() makes it
+   this DOCUMENT's conversation (posting the same `question` to this same route).
+   This block supplies only the conversation's history and its disclosure.
 
-   Placed BELOW the result and above the way onward, because it is a
-   continuation of the examination, not a replacement for it. The stored result
-   above is unchanged by anything said here. #}
-<h2 class="np-section-title" id="conversation"
-    data-ui-ref="document-shop.conversation.title">Ask GO</h2>
-
+   CLAUDE-DOCUMENT-SHOP-CONVERSATION-01: the continuation of the examination,
+   not a replacement for it. The stored result above is unchanged by anything
+   said here. #}
+{% block go_thread %}
+{# The redirect after a question lands here: routes/portal.py _anchor='conversation'. #}
+<span id="conversation"></span>
 {% if conversation %}
 <ol class="ds-conversation" data-ui-ref="document-shop.conversation.thread">
     {% for turn in conversation %}
@@ -420,35 +420,7 @@
 <p class="mono form-error" data-ui-ref="document-shop.conversation.error">{{ conversation_error }}</p>
 {% endif %}
 
-<form method="post" class="ds-composer"
-      action="{{ url_for('portal.document_shop_result', project_id=project_id) }}"
-      data-ui-ref="document-shop.conversation.form">
-    {# Server-rendered, for the same reason the upload form is: a form whose
-       token arrives only via JavaScript reports its own failure as an expired
-       session, which sends the person to re-authenticate over nothing. #}
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {# CLAUDE-DOCUMENT-SHOP-COPY-01: the visible label is gone, the ACCESSIBLE
-       NAME is not.
 
-       "Ask GO about this document" appeared twice - as the section heading and
-       again as this field's label - which is duplicate copy on screen and a
-       duplicate announcement to a screen reader. Deleting the <label> outright
-       would have left the textarea with no accessible name at all, trading a
-       cosmetic problem for a real one.
-
-       CLAUDE-DOCUMENT-SHOP-LAYOUT-01 then shortened the heading to "Ask GO",
-       so pointing at it would have QUIETLY SHORTENED THE ACCESSIBLE NAME too -
-       a screen reader would hear "Ask GO, edit text" and be told nothing about
-       what to ask about. The name is stated here instead, unchanged from the
-       one the deleted <label> carried. #}
-    <textarea id="ds-question" name="question" rows="3" class="text-input ds-composer-input"
-              data-ui-ref="document-shop.conversation.input"
-              aria-label="Ask GO about this document"
-              placeholder="What would you like to know about this document?"></textarea>
-    <button type="submit" class="btn btn-primary"
-            id="ds-conversation-send"
-            data-ui-ref="document-shop.conversation.send">Ask</button>
-</form>
 
 {# Plain-language disclosure. Named here rather than buried in a policy page,
    because this is the moment the person decides to send something. #}
@@ -473,7 +445,7 @@
    something, and what leaves their account is theirs to know. So the claim
    that matters stays visible - the file itself never goes - and the full
    account sits behind a disclosure for anyone who wants it. #}
-<p class="mono ds-composer-note" data-ui-ref="document-shop.conversation.disclosure">
+<p class="mono ds-conversation-note" data-ui-ref="document-shop.conversation.disclosure">
     Your question and the information shown on this page are sent to the AI service that powers GO. The original file is not sent.
     <a href="#ds-sending" data-ui-ref="document-shop.conversation.disclosure-more">How GO uses this document</a>
 </p>
@@ -498,33 +470,4 @@
 {% if result.pending %}
 <script src="{{ url_for('static', filename='js/document_shop_status.js') }}?v={{ config['STATIC_VERSION'] }}" defer></script>
 {% endif %}
-<script nonce="{{ csp_nonce }}">
-    // CLAUDE-CUSTOMER-CONTAINMENT-01: one question, one request.
-    //
-    // Asking GO takes seconds - a real provider call - and the page gives no
-    // sign of it, so a second tap is the reasonable thing for a person to do.
-    // Two identical questions were then genuinely asked, genuinely answered
-    // and genuinely charged for, and on a phone the second request could also
-    // lose the write race and end on an error page.
-    //
-    // Same shape as templates/upload.html's own double-submit guard rather
-    // than a new one, and the same acknowledged limit: this closes the second
-    // TAP, not two separate tabs racing the server. The server side of that is
-    // services/document_conversation._post_with_retry, which now tolerates the
-    // collision instead of showing the customer a write-conflict page.
-    (function () {
-        var form = document.querySelector('.ds-composer');
-        var send = document.getElementById('ds-conversation-send');
-        var input = document.getElementById('ds-question');
-        if (!form || !send) { return; }
-        var sent = false;
-        form.addEventListener('submit', function (event) {
-            if (sent) { event.preventDefault(); return; }
-            if (input && !input.value.trim()) { return; }
-            sent = true;
-            send.disabled = true;
-            send.textContent = 'Asking…';
-        });
-    })();
-</script>
 {% endblock %}

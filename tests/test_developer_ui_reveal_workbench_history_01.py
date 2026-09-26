@@ -46,8 +46,14 @@ class DeveloperUiRevealWorkbenchHistoryTests(unittest.TestCase):
         to, which is stronger: a renamed button still passes, a removed
         capability does not.
         """
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): "exactly one
+        # developer.home.composer.form" -> exactly one canonical Composer on the
+        # page, posting to the developer conversation route.
         response = self.client.get("/admin/developer-tools")
-        self.assertEqual(response.data.count(b'data-ui-ref="developer.home.composer.form"'), 1)
+        self.assertEqual(response.data.count(b'data-ui-ref="chat.composer"'), 1)
+        dock_at = response.data.index(b'data-ui-ref="chat.composer"')
+        dock = response.data[response.data.rindex(b"<form", 0, dock_at):response.data.index(b"</form>", dock_at)]
+        self.assertIn(b'action="/developer-composer"', dock)
         self.assertIn(b'data-developer-workbench', response.data)
         self.assertIn(b"/developer-composer/new-chat", response.data)
         self.client.post("/developer-composer", data={"message": "Inspect the home page"})

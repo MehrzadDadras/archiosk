@@ -343,18 +343,29 @@ class TheConversationSurvivesBeingAskedTwice(_CustomerCase):
         self.assertEqual(document_conversation.CONCURRENT_WRITE_RETRIES,
                          perception_worker.CONCURRENT_WRITE_RETRIES)
 
+    def _composer_js(self):
+        # SUPERSEDED DELIBERATELY (UNIVERSAL COMPOSER INVARIANT): the Document
+        # Shop's own composer and its double-submit script are retired; the one
+        # canonical Composer (base.html, DOCUMENT scope here) is guarded once, for
+        # every scope, by go_composer.js - loaded by base.html on every page.
+        base = (_REPO_ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+        self.assertIn("js/go_composer.js", base)
+        return (_REPO_ROOT / "static" / "js" / "go_composer.js").read_text(encoding="utf-8")
+
     def test_the_composer_cannot_fire_twice_from_one_page(self):
-        template = (_REPO_ROOT / "templates" / "document_shop_result.html").read_text(
-            encoding="utf-8")
-        self.assertIn("ds-conversation-send", template)
-        self.assertIn("send.disabled = true", template)
+        js = self._composer_js()
+        self.assertIn("if (goSent) { e.preventDefault(); return; }", js)
+        self.assertIn("sendBtn.disabled = true", js)
 
     def test_the_guard_still_lets_an_empty_box_through_to_the_server(self):
         """The server says "Type a question first"; the guard must not eat that."""
-        template = (_REPO_ROOT / "templates" / "document_shop_result.html").read_text(
-            encoding="utf-8")
-        window = template[template.index("ds-conversation-send"):]
-        self.assertIn("!input.value.trim()", window)
+        js = self._composer_js()
+        window = js[js.index("let goSent = false;"):]
+        window = window[:window.index("goSent = true;")]
+        # An empty box returns BEFORE the guard arms, without preventDefault.
+        self.assertIn("!goInput.value.trim()", window)
+        empty_branch = window[window.index("!goInput.value.trim()"):]
+        self.assertNotIn("preventDefault", empty_branch[:empty_branch.index("return;")])
 
 
 if __name__ == "__main__":
