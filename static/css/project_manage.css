@@ -186,7 +186,19 @@ body.pm {
    box, that IS the pass. A printed page carrying the form and the whole token
    table would be a credential list left on a table. */
 @media print {
-    body.pm > *:not(.pm-bb) { display: none !important; }
+    /* The placard prints alone. Inside the Master UI shell the card is
+       nested, so: hide everything that is not the card, not inside it and not
+       one of its ancestors, and flatten those ancestors so the shell's grid,
+       padding and fixed chrome cannot frame or clip it. */
+    body *:not(.pm-bb):not(.pm-bb *):not(:has(.pm-bb)) { display: none !important; }
+    body :has(.pm-bb) {
+        display: block !important; position: static !important;
+        margin: 0 !important; padding: 0 !important; border: 0 !important;
+        width: auto !important; max-width: none !important;
+        height: auto !important; max-height: none !important;
+        overflow: visible !important; background: none !important;
+        box-shadow: none !important; transform: none !important;
+    }
     .pm-bb {
         border: 2px solid var(--qr-plate-dark);
         background: var(--qr-plate-light);

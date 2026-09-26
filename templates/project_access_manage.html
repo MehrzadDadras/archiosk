@@ -1,25 +1,25 @@
 {# CLAUDE-RBAC-TOKENS-04 - the architect's access panel.
 
-   Standalone, like the other project-scoped surfaces in this tranche: it does
-   not extend base.html, because base.html renders the Lists panel with its
-   global project tree and this page is deliberately about ONE project.
+   MASTERUI (UNIVERSAL COMPOSER INVARIANT): this page renders inside the one
+   Master Workspace shell, with base.html's one canonical Composer. It was
+   standalone because base.html once rendered a global project tree and this
+   page is deliberately about ONE project. That property is kept, not traded:
+   app.py lists this page's endpoints in _NO_PROJECT_LISTING_ENDPOINTS, so no
+   other project is even queried here, let alone rendered.
 
    The generated link is shown ONCE, in the response to the POST that made it.
    There is no way back to it - reloading this page will not show it again,
    because the raw token was never stored anywhere. That is the correct
    behaviour and the page says so plainly rather than letting the architect
    discover it by losing one.
-#}<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Access passes &mdash; {{ project_id }}</title>
+#}{% extends "base.html" %}
+{% block title %}Access passes &mdash; {{ project_id }}{% endblock %}
+{% block extra_head %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/project_manage.css') }}?v={{ static_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/public_footer.css') }}?v={{ static_version }}">
-</head>
-<body class="pm">
+{% endblock %}
+{% block content %}<div class="pm access-page">
 
 <header class="pm-head">
     <h1>Access passes</h1>
@@ -102,7 +102,7 @@
         {# Print goes through the browser's own dialog - no new dependency, and
            the print stylesheet hides everything except this card, so a placard
            taped to a site box is the pass and nothing else. #}
-        <button type="button" class="pm-bb-print" onclick="window.print()"
+        <button type="button" class="pm-bb-print"
                 data-ui-ref="manage.access.print">Print placard</button>
     </div>
 </section>
@@ -242,6 +242,16 @@
 {% set footer_minimal = true %}
 {% set footer_explore = true %}
 {% include "components/public_footer.html" %}
+</div>{% endblock %}
 
-</body>
-</html>
+{% block extra_scripts %}
+{# Print placard. Bound here, not with an inline onclick: the application CSP
+   (script-src 'self' 'nonce-...') refuses inline event handlers, so an onclick
+   attribute silently did nothing. A nonce'd script is what the CSP allows. #}
+<script nonce="{{ csp_nonce }}">
+(function () {
+    var button = document.querySelector('[data-ui-ref="manage.access.print"]');
+    if (button) { button.addEventListener('click', function () { window.print(); }); }
+}());
+</script>
+{% endblock %}

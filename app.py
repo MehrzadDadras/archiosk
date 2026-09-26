@@ -867,7 +867,17 @@ _STANDALONE_AUTH_ENDPOINTS = {"portal.login", "portal.forgot_password", "portal.
 # own comment below ("the query and the data being present at all was
 # the defect, not just its rendering") applied to the one query that's
 # actually irrelevant here, not the whole context.
-_NO_PROJECT_LISTING_ENDPOINTS = _STANDALONE_AUTH_ENDPOINTS | {"portal.gateway"}
+#
+# The project access panel is the same principle for a different reason: it is
+# deliberately about ONE project, and it once stayed out of base.html entirely
+# to guarantee that. Inside the Master UI the guarantee is this set - no other
+# project is queried on its three rendering endpoints (revoke only redirects).
+_NO_PROJECT_LISTING_ENDPOINTS = _STANDALONE_AUTH_ENDPOINTS | {
+    "portal.gateway",
+    "project_manage.manage_access",
+    "project_manage.create_access_pass",
+    "project_manage.rotate_access_pass",
+}
 
 
 def _register_context_processors(app: Flask) -> None:

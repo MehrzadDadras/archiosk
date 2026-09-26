@@ -242,14 +242,14 @@ class EverySignedInPageRendersExactlyOneComposer(unittest.TestCase):
         c.post("/login", data={"username": name, "password": self.PW})
         return c
 
-    def upload(self, c):
+    def upload(self, c, name=None):
         from PIL import Image
         from services.bhive_parser import BHiveParser
         buf = io.BytesIO()
         Image.new("RGB", (40, 30)).save(buf, "JPEG")
         with patch.object(BHiveParser, "parse", _fake_parse):
             r = c.post("/document-shop", data={"file": (io.BytesIO(buf.getvalue()), "a.jpg"),
-                                               "name": "One composer " + uuid.uuid4().hex[:6]},
+                                               "name": name or "One composer " + uuid.uuid4().hex[:6]},
                        content_type="multipart/form-data")
         return r.headers["Location"].rstrip("/").split("/")[-1]
 
@@ -287,6 +287,43 @@ class EverySignedInPageRendersExactlyOneComposer(unittest.TestCase):
                 self.one_composer(boss, url, scope)
         with self.subTest(url="confirm page"):
             self.one_composer(boss, "/document-shop/jobs/%s/sources/%s/remove" % (pid, sid), "DOCUMENT", "post")
+
+    def test_the_access_panel_is_one_shell_about_one_project(self):
+        """/project/<id>/manage/access was a standalone shell with no Composer.
+        It now renders inside the Master UI with the one canonical Composer,
+        and it still shows ONE project: the user's other projects are neither
+        listed nor named, on the page or on the pass it mints."""
+        boss = self.client("conv_boss")
+        here = self.upload(boss, "Access panel home")
+        other = self.upload(boss, "Some other project")
+        for method, data in (("get", None),
+                             ("post", {"label": "Framer", "role": "owner", "expires_in": "24h"})):
+            with self.subTest(method=method):
+                url = "/project/%s/manage/access" % here
+                if method == "post":
+                    r = boss.post(url, data=data)
+                    self.assertEqual(r.status_code, 200)
+                    html = r.get_data(as_text=True)
+                    self.assertIn('data-ui-ref="manage.access.bb-pass"', html)
+                    # Print placard: no inline handler (the CSP refuses them),
+                    # bound instead by a nonce'd script the CSP allows.
+                    self.assertEqual(re.findall(r'<[^>]*\son[a-z]+="', html), [])
+                    self.assertRegex(html, r'<script nonce="[^"]+">[^<]*manage\.access\.print[^<]*window\.print\(\)')
+                else:
+                    html = self.one_composer(boss, url, "DOCUMENT")
+                self.assertEqual(html.count(_COMPOSER_ANCHOR), 1)
+                # ONE document: one doctype, one <html lang=>, one <body> element
+                # (base.html's own script comments mention "<html>" in prose).
+                self.assertEqual(html.lower().count("<!doctype"), 1)
+                self.assertEqual(html.count("<html lang="), 1)
+                self.assertEqual(len(re.findall(r"<body\s", html)), 1)
+                self.assertNotIn('<body class="pm">', html)
+                self.assertIn('id="chat-region"', html)
+                self.assertIn("Access panel home", html)
+                self.assertNotIn(other, html)
+                self.assertNotIn("Some other project", html)
+                self.assertIn('data-ui-ref="manage.access.form"', html)
+                self.assertIn('data-ui-ref="footer.public"', html)
 
     def test_developer_mode_folds_into_the_same_composer(self):
         boss = self.client("conv_boss")
