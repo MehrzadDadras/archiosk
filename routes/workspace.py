@@ -573,15 +573,25 @@ def _require_export_allowed(workspace, project_id: str):
 
 # -- Approval Gate ---------------------------------------------------------------
 
-def _is_approved_for_session(action_class: str) -> bool:
-    return action_class in session.get("approved_action_classes", [])
+# A "for this session" approval is keyed by (action_class, project_id), never
+# by action class alone: approving Apply in Project A must not approve Apply
+# in Project B (project boundaries are strict). Entries are [project_id,
+# action_class] pairs - JSON-safe for the cookie session. The former key,
+# "approved_action_classes", held bare classes; it is deliberately no longer
+# read, so an approval granted before this change is simply asked for again.
+_SESSION_APPROVALS_KEY = "approved_project_actions"
 
 
-def _approve_for_session(action_class: str) -> None:
-    approved = session.get("approved_action_classes", [])
-    if action_class not in approved:
-        approved.append(action_class)
-    session["approved_action_classes"] = approved
+def _is_approved_for_session(action_class: str, project_id: str) -> bool:
+    return [project_id, action_class] in session.get(_SESSION_APPROVALS_KEY, [])
+
+
+def _approve_for_session(action_class: str, project_id: str) -> None:
+    approved = session.get(_SESSION_APPROVALS_KEY, [])
+    entry = [project_id, action_class]
+    if entry not in approved:
+        approved.append(entry)
+    session[_SESSION_APPROVALS_KEY] = approved
 
 
 def _require_approval(action_class: str, description: str, project_id: str, case_id: str):
@@ -593,12 +603,12 @@ def _require_approval(action_class: str, description: str, project_id: str, case
     """
     confirm = request.form.get("confirm")
 
-    if _is_approved_for_session(action_class):
+    if _is_approved_for_session(action_class, project_id):
         return None
     if confirm == "once":
         return None
     if confirm == "session":
-        _approve_for_session(action_class)
+        _approve_for_session(action_class, project_id)
         return None
     if confirm == "no":
         flash("Cancelled - no change was made.", "error")
