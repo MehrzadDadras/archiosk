@@ -27,6 +27,13 @@
         <p class="sandbox-kicker">Gopilot &middot; provisional</p>
         <h2 class="sandbox-heading">Your objective</h2>
         <p class="sandbox-objective">{{ org.objective }}</p>
+        {% for att in reply.attachments or [] %}
+        <p class="sandbox-attachment" data-ui-ref="sandbox.attachment">
+            {% if att.status == 'provisional' %}Image attached ({{ att.media_type }}, {% if att.bytes < 1024 %}under 1 KB{% else %}{{ (att.bytes / 1024)|round(0)|int }} KB{% endif %})
+            &middot; {{ 'read by Gopilot' if att.analysed else 'received, not analysed' }} &middot; provisional
+            {% else %}An image was attached but not accepted (type, size or policy).{% endif %}
+        </p>
+        {% endfor %}
 
         <div class="sandbox-grid">
             {% for key, title in (('known_facts', 'What you have told me'), ('unknowns', 'Not yet known'),
@@ -104,6 +111,7 @@
     <li>
         <p class="sandbox-thread-who">You</p>
         <p class="sandbox-thread-text">{{ t.text }}</p>
+        {% if t.reply.attachments %}<p class="sandbox-thread-who">&#128206; image attached</p>{% endif %}
         <p class="sandbox-thread-who">Gopilot</p>
         <p class="sandbox-thread-text">{{ t.reply.organization.objective }}</p>
     </li>

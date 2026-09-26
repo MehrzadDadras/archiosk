@@ -5849,21 +5849,6 @@ def post_message(project_id, case_id):
     return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
 
 
-_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # Anthropic's own base64-image ceiling; a hard, honest cap.
-
-
-def _parse_image_data_url(data_url: str) -> Optional[tuple[str, str]]:
-    """`(media_type, base64_data)`, or None if not a well-formed `data:image/...;base64,...`
-    URL - the exact shape static/js/document_marks.js's FileReader.readAsDataURL
-    already produces client-side, never trusted without this check."""
-    if not data_url or not data_url.startswith("data:image/"):
-        return None
-    header, _, payload = data_url.partition(",")
-    if not payload or not header.endswith(";base64"):
-        return None
-    return header[len("data:"):-len(";base64")], payload
-
-
 # CLAUDE-GO-COMPOSER-CAPTURE-01 -----------------------------------------
 # The Composer's "+" attachment. A photo now rides the ordinary composer
 # submit, so text and image arrive together and "make a new Q" is one action
@@ -6039,16 +6024,20 @@ def _composer_photo_turn(project_id, store, workspace, case_id, message_text, im
     register_eye_capture - the established EXIF-stripping, GPS-presence-only
     pathway. This function never writes an image to disk itself.
     """
-    parsed = _parse_image_data_url(image_data_url or "")
-    if parsed is None:
+    # GOPILOT NERVOUS SYSTEM: the ONE governed image intake (services/composer_image).
+    # Size and type are checked here, before the project's own policy gate below.
+    from services import composer_image
+
+    image = composer_image.validate(image_data_url)
+    if image.status in (composer_image.STATUS_ABSENT, composer_image.STATUS_MALFORMED):
         return False, None
     case_record = next((c for c in workspace.cases if c["id"] == case_id), None) if case_id else None
     _gopilot_turn_labels(project_id, case_record, None, message_text or "")
 
-    media_type, image_b64 = parsed
-    if len(image_b64) * 3 / 4 > _MAX_IMAGE_BYTES:
-        flash("That photo is too large to send (5MB limit).", "error")
+    if not image.accepted:
+        flash(image.reason, "error")
         return True, None
+    media_type, image_b64 = image.media_type, image.base64
 
     wants_new = _asked_for_a_new_investigation(message_text)
     # Only meaningful inside an open Q - "add this to this Q" from the project
@@ -6282,18 +6271,18 @@ def open_image_in_composer(project_id):
         if case is None:
             abort(404)
 
-    parsed = _parse_image_data_url(request.form.get("image_data_url") or "")
-    if parsed is None:
+    # GOPILOT NERVOUS SYSTEM: the ONE governed image intake (services/composer_image),
+    # which checks the ceiling on the payload before decoding anything.
+    from services import composer_image
+
+    image = composer_image.from_request(request.form)
+    if image.status in (composer_image.STATUS_ABSENT, composer_image.STATUS_MALFORMED):
         flash("No image was received to send to Composer.", "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
-
-    media_type, image_b64 = parsed
-    # A rough, cheap ceiling check on the base64 string itself (~4/3 the
-    # decoded size) before ever decoding - avoids doing real work on an
-    # obviously-oversized payload.
-    if len(image_b64) * 3 / 4 > _MAX_IMAGE_BYTES:
-        flash("That image is too large to send to Composer (5MB limit).", "error")
+    if not image.accepted:
+        flash(image.reason, "error")
         return redirect(url_for("workspace.show_workspace", project_id=project_id, case=case_id))
+    media_type, image_b64 = image.media_type, image.base64
 
     store.add_message(
         workspace, case_id, role="human",

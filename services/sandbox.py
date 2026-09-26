@@ -117,6 +117,20 @@ _SCHEMA_HINT = (
 )
 
 
+def attachment_identity(image_base64: str, media_type: str, *, analysed: bool) -> dict:
+    """What a Sandbox keeps of an attachment: its identity, never its bytes."""
+    import base64
+    try:
+        raw = base64.b64decode(image_base64, validate=False)
+    except Exception:  # noqa: BLE001 - identity must never fail a turn
+        raw = image_base64.encode("ascii", "ignore")
+    return {
+        "kind": "image", "media_type": media_type, "bytes": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(), "analysed": bool(analysed),
+        "status": "provisional", "canonical": False,
+    }
+
+
 def _deterministic_organization(text: str) -> dict:
     """An honest fallback when the model is unavailable or not permitted: it
     separates what was said from what must still be established, and never
@@ -150,19 +164,25 @@ def _deterministic_organization(text: str) -> dict:
     }
 
 
-def organize(text: str, history_texts=(), *, model_allowed: bool, api_key=None, model=None) -> dict:
+def organize(text: str, history_texts=(), *, model_allowed: bool, api_key=None, model=None,
+             image_base64: Optional[str] = None, image_media_type: Optional[str] = None) -> dict:
     """Organize the idea. The model is used only when policy allows it; any
-    failure or malformed reply falls back to the deterministic organization."""
+    failure or malformed reply falls back to the deterministic organization.
+    An attached image travels with the text as ONE turn and is context only."""
     if model_allowed:
         try:
             from services.llm_gateway import call_llm_json
 
             context = "\n".join(f"- {t}" for t in (history_texts or ())[-6:])
-            prompt = (f"Earlier in this Sandbox:\n{context}\n\n" if context else "") + \
+            seen = ("They attached an image. Use what it shows as context for their objective; "
+                    "anything you read from it is a provisional observation, not a fact.\n\n"
+                    if image_base64 else "")
+            prompt = (f"Earlier in this Sandbox:\n{context}\n\n" if context else "") + seen + \
                      f"The person says:\n{text}\n\nReturn JSON shaped like: {_SCHEMA_HINT}"
             outcome = call_llm_json(user_prompt=prompt, system_prompt=_SYSTEM_PROMPT,
                                     api_key=api_key, model=model, max_tokens=900,
-                                    log_label="Sandbox organize")
+                                    log_label="Sandbox organize",
+                                    image_base64=image_base64, image_media_type=image_media_type)
             parsed = getattr(outcome, "parsed", None) if getattr(outcome, "ran", False) else None
             if isinstance(parsed, dict) and str(parsed.get("objective") or "").strip():
                 return {
@@ -175,7 +195,13 @@ def organize(text: str, history_texts=(), *, model_allowed: bool, api_key=None, 
                 }
         except Exception:  # noqa: BLE001 - organization must never fail a turn
             pass
-    return _deterministic_organization(text)
+    organization = _deterministic_organization(text)
+    if image_base64:
+        # Honest about what did not happen: the image was received, not read.
+        organization["unknowns"] = _clip(["What the attached image shows - it was received but not "
+                                          "analysed, because the model is not available here"]
+                                         + organization["unknowns"])
+    return organization
 
 
 # -- the non-canonical store ------------------------------------------------------
@@ -253,4 +279,8 @@ def lineage(record: dict) -> dict:
         "turn_count": len(turns),
         "started_at": record.get("created_at"),
         "canonical": False,
+        # Attachment IDENTITY only (never bytes), each tied to its turn - carried
+        # forward only because a person explicitly chose this landing.
+        "attachments": [dict(att, turn=index) for index, turn in enumerate(turns)
+                        for att in ((turn.get("reply") or {}).get("attachments") or [])],
     }

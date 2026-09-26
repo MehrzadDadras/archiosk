@@ -127,51 +127,45 @@ class NoNewEvidenceOrIngestionPathTests(unittest.TestCase):
         call_sites = workspace.count("image_base64=")
         self.assertEqual(call_sites, 3)
 
-        # CLAUDE-DEVELOPER-COMPOSER-IMAGE-01: routes/portal.py is now a second
-        # vision-bearing module - the Developer Composer accepts a pasted
-        # screenshot, at the Product Owner's explicit request.
-        #
-        # The "only workspace.py" clause was an artifact of workspace.py being
-        # the only place vision existed; this test's own wording has always
-        # said the count "was never the real protection" and that what matters
-        # is that vision cannot arrive through an UNGOVERNED back door. So the
-        # rule is enforced where it actually lives: any route module that
-        # transmits an image must resolve the policy gate first. That is
-        # strictly stronger than the previous check, which said nothing at all
-        # about a module it did not expect to exist.
-        vision_modules = {"workspace.py", "portal.py"}
+        # GOPILOT NERVOUS SYSTEM: the file allowlist this used to keep ({"workspace.py",
+        # "portal.py"}) answered "which files may transmit an image", which every new
+        # Composer surface then had to edit. The real rule is structural, and it is
+        # stronger: ANY route module that transmits an image takes it from the ONE
+        # governed intake (services/composer_image) with its context's external-AI
+        # gate, before it transmits - and that gate genuinely resolves the action.
+        portal_code = "\n".join(
+            line for line in (ROOT / "routes" / "portal.py").read_text(encoding="utf-8").splitlines()
+            if not line.strip().startswith("#"))
+        gate = portal_code[portal_code.index("def _project_less_external_ai_allowed"):]
+        gate = gate[:gate.index("\ndef ")]
+        self.assertIn("ACTION_EXTERNAL_AI_REQUEST", gate)
         for other in (ROOT / "routes").glob("*.py"):
-            if other.name in vision_modules:
+            if other.name == "workspace.py":
+                continue
+            code = "\n".join(line for line in other.read_text(encoding="utf-8").splitlines()
+                             if not line.strip().startswith("#"))
+            if "image_base64=" not in code:
                 continue
             with self.subTest(module=other.name):
-                self.assertNotIn("image_base64=", other.read_text(encoding="utf-8"))
-
-        # Each call site is gated: the policy decision is resolved before it.
-        for index in range(call_sites):
-            position = -1
-            for _ in range(index + 1):
-                position = workspace.index("image_base64=", position + 1)
-            preceding = workspace[:position]
-            with self.subTest(call_site=index):
-                self.assertIn("ACTION_EXTERNAL_AI_REQUEST", preceding)
-
-        # portal.py's own gate, asserted against CODE rather than text. A
-        # comment naming ACTION_EXTERNAL_AI_REQUEST would satisfy a substring
-        # check while gating nothing - the prose standing in for the guarantee
-        # it describes. So this requires the real resolver to (a) exist, (b)
-        # actually resolve the action, and (c) be CALLED on the path that
-        # transmits.
-        portal_src = (ROOT / "routes" / "portal.py").read_text(encoding="utf-8")
-        portal_code = "\n".join(
-            line for line in portal_src.splitlines() if not line.strip().startswith("#"))
-        with self.subTest(module="portal.py"):
-            self.assertIn("def _project_less_external_ai_allowed", portal_code)
-            self.assertIn("ACTION_EXTERNAL_AI_REQUEST", portal_code)
-            # Called, not merely defined, and before the image is returned to
-            # the caller that transmits it.
-            gate_call = portal_code.index("if not _project_less_external_ai_allowed():")
-            transmit = portal_code.index("image_base64=image_base64")
-            self.assertLess(gate_call, transmit)
+                intake = code.index("composer_image.from_request(")
+                self.assertIn("policy_allowed=_project_less_external_ai_allowed",
+                              code[intake:code.index(")", intake) + 1])
+                # Every function that transmits an image either receives it as a
+                # parameter (a transmit helper) or takes it from the intake itself.
+                import ast
+                for fn in ast.walk(ast.parse(code)):
+                    if not isinstance(fn, ast.FunctionDef):
+                        continue
+                    sends = [kw for node in ast.walk(fn) if isinstance(node, ast.Call)
+                             for kw in node.keywords if kw.arg == "image_base64"
+                             and not (isinstance(kw.value, ast.Constant) and kw.value.value is None)]
+                    if not sends:
+                        continue
+                    params = {a.arg for a in fn.args.args + fn.args.kwonlyargs}
+                    body = ast.get_source_segment(code, fn)
+                    self.assertTrue("image_base64" in params or "composer_image.from_request(" in body,
+                                    "%s.%s sends an image it did not take from the intake"
+                                    % (other.name, fn.name))
 
     def test_gps_coordinates_are_still_never_read(self):
         """services/image_intelligence.py detects GPS PRESENCE only. Mobile

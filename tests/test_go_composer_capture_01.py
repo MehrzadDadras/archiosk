@@ -54,10 +54,17 @@ class TheControlExistsWhereTheWorkIsTests(unittest.TestCase):
         self.assertIn('name="image_data_url"', MACROS)
 
     def test_it_asks_a_phone_for_the_rear_camera(self):
+        # GOPILOT NERVOUS SYSTEM: `capture` is a macro parameter now, so a surface
+        # can offer the device's own chooser instead. The intent is unchanged and
+        # asserted semantically: the DEFAULT still asks a phone for the rear
+        # camera, and the input renders whatever capture it is given.
+        signature = MACROS[MACROS.index("{% macro conversation_dock("):]
+        signature = signature[: signature.index("%}")]
+        self.assertIn("capture='environment'", signature)
         block = MACROS[MACROS.index('id="dock-composer-image"'):]
         block = block[: block.index(">")]
         self.assertIn('accept="image/*"', block)
-        self.assertIn('capture="environment"', block)
+        self.assertIn('{% if capture %} capture="{{ capture }}"{% endif %}', block)
 
     def test_the_photo_rides_the_same_submit_as_the_text(self):
         """One action, not three - no second upload route, no handoff."""
@@ -374,9 +381,13 @@ class APhoneSizedPhotoMustNotBeRefusedTests(unittest.TestCase):
 
     def test_the_server_ceiling_is_still_enforced_independently(self):
         """Client-side shrinking is a convenience, never the boundary."""
+        # GOPILOT NERVOUS SYSTEM: the ceiling lives in the ONE governed intake, and
+        # both workspace entry points go through it.
         route = (ROOT_DIR / "routes" / "workspace.py").read_text(encoding="utf-8")
-        self.assertIn("_MAX_IMAGE_BYTES", route)
-        self.assertGreaterEqual(route.count("> _MAX_IMAGE_BYTES"), 2)
+        intake = (ROOT_DIR / "services" / "composer_image.py").read_text(encoding="utf-8")
+        self.assertIn("MAX_IMAGE_BYTES = 5 * 1024 * 1024", intake)
+        self.assertIn("> MAX_IMAGE_BYTES", intake)
+        self.assertEqual(route.count("composer_image.validate(") + route.count("composer_image.from_request("), 2)
 
 
 class TheNextStepIsVisibleTests(unittest.TestCase):

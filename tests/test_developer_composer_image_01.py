@@ -77,11 +77,13 @@ class ParsingWhatTheClientSends(unittest.TestCase):
         self.flask_app = app_module.create_app("testing")
 
     def _parse(self, value):
-        from routes.portal import _developer_composer_image
+        # GOPILOT NERVOUS SYSTEM: the Developer Composer's image now comes through
+        # the ONE governed intake (services/composer_image), with its project-less
+        # gate. Same cases, same (base64, media_type) / (None, None) contract.
+        from services import composer_image
 
-        with self.flask_app.test_request_context(
-                "/developer-composer", method="POST", data={"image_data_url": value}):
-            return _developer_composer_image()
+        image = composer_image.from_request({"image_data_url": value}, policy_allowed=lambda: True)
+        return (image.base64, image.media_type) if image.accepted else (None, None)
 
     def test_a_real_png_data_url_is_accepted(self):
         encoded, media_type = self._parse(_PNG_DATA_URL)

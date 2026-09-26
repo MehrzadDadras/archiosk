@@ -105,7 +105,9 @@ class EveryWrapperBehaviourSurvivesTests(unittest.TestCase):
         )
 
     def test_the_size_ceiling_still_runs_before_the_gate(self):
-        self.assertLess(PHOTO_TURN.index("_MAX_IMAGE_BYTES"),
+        # GOPILOT NERVOUS SYSTEM: the ceiling is enforced by the ONE governed
+        # intake, called before the project's own policy gate.
+        self.assertLess(PHOTO_TURN.index("composer_image.validate("),
                         PHOTO_TURN.index("_evaluate_security_action"))
 
     def test_photo_persistence_survives(self):

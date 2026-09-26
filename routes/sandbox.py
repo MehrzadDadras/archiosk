@@ -113,10 +113,22 @@ def home():
 def turn():
     _staff_only()
     text = (request.form.get("text") or "").strip()[:4000]
-    if not text:
-        return redirect(url_for("sandbox.home"))
 
     from routes.portal import _project_less_external_ai_allowed, gopilot_turn_labels
+    from services import composer_image
+
+    # The canonical Composer's attachment, through the ONE governed image intake
+    # (PNG/JPEG/GIF/WebP, 5MB, base64) with this project-less surface's external-AI
+    # gate. Nothing is written to disk, registered, or kept beyond its identity.
+    image = composer_image.from_request(request.form, policy_allowed=_project_less_external_ai_allowed)
+    attached = image.sent
+    image_base64, image_media_type = (image.base64, image.media_type) if image.accepted else (None, None)
+    if attached and not image.accepted:
+        flash(image.reason + " The text was sent without it.", "error")
+    if not text and image_base64:
+        text = "What should I make of this?"
+    if not text:
+        return redirect(url_for("sandbox.home"))
 
     labels = gopilot_turn_labels("APPLICATION", text)
     store = _store()
@@ -125,17 +137,29 @@ def turn():
     session[_SESSION_KEY] = record["id"]
 
     history = [t["text"] for t in record["turns"]]
+    model_allowed = _project_less_external_ai_allowed()
     organization = sb.organize(
         text, history,
-        model_allowed=_project_less_external_ai_allowed(),
+        model_allowed=model_allowed,
         api_key=current_app.config.get("ANTHROPIC_API_KEY"),
         model=current_app.config.get("ANTHROPIC_MODEL"),
+        image_base64=image_base64, image_media_type=image_media_type,
     )
+    attachments = []
+    if image_base64:
+        attachments.append(sb.attachment_identity(
+            image_base64, image_media_type,
+            analysed=model_allowed and organization.get("source") == "model"))
+    elif attached:
+        # Received but refused (type, size or policy): said, never silently dropped.
+        attachments.append({"kind": "image", "status": "not accepted", "analysed": False,
+                            "canonical": False})
     reply = {
         "organization": organization,
         "external": sb.external_check(text, history),
         "landing": sb.recommend_landing(text, history),
         "intent": ((labels or {}).get("intent") or {}).get("envelope"),
+        "attachments": attachments,
         "canonical": False,
     }
     store.add_turn(username, record["id"], text, reply)

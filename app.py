@@ -1104,6 +1104,78 @@ def _get(obj, key, default=None):
     return getattr(obj, key, default)
 
 
+# -- GOPILOT NERVOUS SYSTEM: the canonical Composer capability contract -------
+#
+# NEW SURFACE = CONTEXT + AUTHORITY + EXPLICIT EXCEPTIONS.
+#
+# Every scope resolve_go_scope returns INHERITS every capability below. A
+# universal capability is unavailable only when the scope says so, by name, with
+# a reason (disabled= for a product/scope/security decision, blocked= for a
+# technical incompatibility). A context capability follows the scope's context
+# (is a project open? is there a selection surface?) and says why when it does
+# not apply. Nothing is switched off by omission: scope() refuses a raw `attach`
+# flag, and tests/test_gopilot_nervous_system_01.py fails any scope whose
+# capabilities are not fully declared.
+COMPOSER_UNIVERSAL_CAPABILITIES = (
+    "text",            # the canonical textarea, Enter to send, once-only, drafts
+    "voice",           # push-to-talk into the textarea (voice_input.js)
+    "image_attach",    # paste, Attach/upload, device chooser, preview/remove/replace,
+                       # server intake through services/composer_image
+    "turn_labels",     # frame / intent / transition (routes/portal.gopilot_turn_labels)
+    "accessibility",   # the input's accessible name (aria_label)
+    "csrf",            # the dock form's own token
+)
+COMPOSER_CONTEXT_CAPABILITIES = {
+    "draft_assist": "Needs an open project: the draft-assist endpoint and its AI gate are project-scoped.",
+    "case_actions": "Needs an open project: Make a new Q / Add to this Q act on a project's Cases.",
+    "new_conversation": "Needs an open project: it starts a new project conversation.",
+    "selection_context": "This page has no selection surface to send as context.",
+}
+CAPABILITY_INHERITED = "INHERITED"
+CAPABILITY_DISABLED = "EXPLICITLY DISABLED"
+CAPABILITY_BLOCKED = "BLOCKED"
+COMPOSER_CAPABILITIES = COMPOSER_UNIVERSAL_CAPABILITIES + tuple(COMPOSER_CONTEXT_CAPABILITIES)
+
+
+def composer_capabilities(dock: dict, disabled: dict, blocked: dict) -> dict:
+    """The inheritance report for one scope: every capability, INHERITED or
+    EXPLICITLY DISABLED / BLOCKED with its reason."""
+    for declared in (disabled, blocked):
+        for name, reason in declared.items():
+            if name not in COMPOSER_CAPABILITIES:
+                raise ValueError("unknown Composer capability %r" % name)
+            if not (reason or "").strip():
+                raise ValueError("Composer capability %r is switched off without a reason" % name)
+    project_open = bool(dock.get("project_scoped", True) and dock.get("project_id")
+                        and not dock.get("study_scoped"))
+    context_available = {
+        "draft_assist": project_open,
+        "case_actions": project_open,
+        "new_conversation": bool(dock.get("project_scoped", True) and not dock.get("study_scoped")),
+        "selection_context": bool(dock.get("selection_form")),
+    }
+    report = {}
+    for name in COMPOSER_CAPABILITIES:
+        if name in blocked:
+            report[name] = {"state": CAPABILITY_BLOCKED, "reason": blocked[name]}
+        elif name in disabled:
+            report[name] = {"state": CAPABILITY_DISABLED, "reason": disabled[name]}
+        elif dock.get("disabled_reason") and name in ("text", "voice", "image_attach"):
+            report[name] = {"state": CAPABILITY_DISABLED, "reason": dock["disabled_reason"]}
+        elif name in COMPOSER_CONTEXT_CAPABILITIES and not context_available[name]:
+            reason = COMPOSER_CONTEXT_CAPABILITIES[name]
+            if dock.get("study_scoped"):
+                reason = "The planning study conversation is bounded to its retained study."
+            report[name] = {"state": CAPABILITY_DISABLED, "reason": reason}
+        else:
+            report[name] = {"state": CAPABILITY_INHERITED, "reason": ""}
+    if report["case_actions"]["state"] == CAPABILITY_INHERITED and \
+            report["image_attach"]["state"] != CAPABILITY_INHERITED:
+        report["case_actions"] = {"state": CAPABILITY_DISABLED,
+                                  "reason": "Case photo actions follow an attached image, which is off here."}
+    return report
+
+
 def resolve_go_scope(values) -> dict:
     """The ONE canonical GO Composer's scope for the page being rendered.
 
@@ -1146,7 +1218,14 @@ def resolve_go_scope(values) -> dict:
     customer = user_is_document_shop_customer()
     developer = is_admin() and bool(session.get("developer_mode"))
 
-    def scope(kind, label, **dock):
+    def scope(kind, label, disabled=None, blocked=None, **dock):
+        # GOPILOT NERVOUS SYSTEM: capabilities are inherited, never re-listed. A
+        # scope switches one off only by naming it in disabled=/blocked= with a
+        # reason - a raw flag would be the silent omission this contract forbids.
+        if "attach" in dock:
+            raise TypeError("declare image_attach in disabled=/blocked= with a reason")
+        capabilities = composer_capabilities(dock, disabled or {}, blocked or {})
+        dock["attach"] = capabilities["image_attach"]["state"] == CAPABILITY_INHERITED
         dock.setdefault("draft_actions", draft)
         dock["go_scope"] = kind
         dock["scope_label"] = label
@@ -1161,7 +1240,8 @@ def resolve_go_scope(values) -> dict:
             "run_id": values.get("run_id") if kind == "PLANNING_STUDY" else None,
             "selection_form": dock.get("selection_form"),
         })
-        return {"kind": kind, "label": label, "dock": dock, "frame": frame}
+        return {"kind": kind, "label": label, "dock": dock, "frame": frame,
+                "capabilities": capabilities}
 
     def developer_scope():
         return scope("APPLICATION", "Application · Developer",
@@ -1169,7 +1249,7 @@ def resolve_go_scope(values) -> dict:
                      post_url=url_for("portal.developer_home_composer"),
                      scope_key="developer",
                      placeholder="Ask about ARCHIOSK, paste a screenshot, or run a developer command",
-                     input_name="message", project_scoped=False, attach=True)
+                     input_name="message", project_scoped=False)
 
     # Developer Tools is the developer conversation's own page: its project picker
     # selects a reset target, not a conversation, and the developer endpoint is
@@ -1187,7 +1267,10 @@ def resolve_go_scope(values) -> dict:
                      post_url=url_for("planning_zoning.converse_study", project_id=pid, run_id=run_id),
                      scope_key="planning:%s:%s" % (pid, run_id),
                      placeholder="Tell GO what you are considering",
-                     project_id=pid, study_scoped=True)
+                     project_id=pid, study_scoped=True,
+                     disabled={"image_attach": "The planning study conversation is text-only by design: "
+                                               "converse_study refuses an image (400) so the retained "
+                                               "study stays bounded to its own sources."})
 
     # PROJECT WORKSPACE - the two conversations case_workspace.html rendered.
     if (endpoint == "workspace.show_workspace" and values.get("workspace") is not None and values.get("project_id")
@@ -1234,7 +1317,10 @@ def resolve_go_scope(values) -> dict:
                          scope_key="document:%s" % pid,
                          placeholder="What would you like to know about this document?",
                          aria_label="Ask GO about this document",
-                         input_name="question", project_scoped=False, attach=False)
+                         input_name="question", project_scoped=False,
+                         blocked={"image_attach": "The document conversation (document_shop_result) has "
+                                                  "no image intake yet; whether it should take images is "
+                                                  "an open product decision."})
         # PROJECT / SOURCE elsewhere (confirm pages, derived views): the project conversation.
         return scope("SOURCE" if source else "PROJECT", "Document" if source else "Project",
                      heading="Project Conversation", message_count=0,
@@ -1254,13 +1340,21 @@ def resolve_go_scope(values) -> dict:
                      post_url=url_for("sandbox.turn"),
                      scope_key="sandbox",
                      placeholder="Describe what you want to accomplish",
-                     input_name="text", project_scoped=False, attach=False)
+                     # The canonical Composer's own attachment path: paste, or the
+                     # device's chooser (camera, library, files) - no capture lock.
+                     input_name="text", project_scoped=False, capture=None,
+                     blocked={"draft_assist": "Draft assist's endpoint and AI gate are project-scoped; "
+                                              "a project-less draft assist is not designed yet."},
+                     disabled={"case_actions": "The Sandbox is provisional and project-less: it creates "
+                                               "no Case, so Add to Q / Make a new Q do not apply."})
     if endpoint == "portal.document_shop_jobs" and (request.args.get("view") or "active") == "active":
         return scope("APPLICATION", "Selected documents",
                      heading="My documents", message_count=0,
                      post_url=url_for("portal.document_shop_bulk"),
                      scope_key="desk", placeholder="Select documents, then tell GO what to do with them",
-                     input_name="command_text", project_scoped=False, attach=False,
+                     input_name="command_text", project_scoped=False,
+                     disabled={"image_attach": "My Documents commands act on the selected documents; "
+                                               "an image is not a selection command."},
                      extra_fields={"action": "command", "request_id": uuid.uuid4().hex},
                      selection_form="document-bulk")
     if customer:
@@ -1268,7 +1362,7 @@ def resolve_go_scope(values) -> dict:
                      heading="Archiosk", message_count=0,
                      post_url=url_for("portal.document_shop_bulk"),
                      scope_key="desk", placeholder="",
-                     input_name="command_text", project_scoped=False, attach=False,
+                     input_name="command_text", project_scoped=False,
                      disabled_reason="Open My Documents and select documents to ask GO to act on them")
     if developer:
         return developer_scope()
@@ -1278,7 +1372,10 @@ def resolve_go_scope(values) -> dict:
                  post_url=url_for("portal.gateway_orientation"),
                  scope_key="application",
                  placeholder="Open a project, or ask what you can do here",
-                 input_name="message", project_scoped=False, attach=False, reply_mode="json",
+                 input_name="message", project_scoped=False, reply_mode="json",
+                 blocked={"image_attach": "Gateway orientation (gateway_orientation) returns a JSON "
+                                          "orientation reply and has no image intake; whether it "
+                                          "should take images is an open product decision."},
                  extra_fields=({"context": context} if context else {}))
 
 

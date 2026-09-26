@@ -419,6 +419,193 @@ class ProjectPickerLabels(_Sandbox):
             self.assertTrue(label.startswith("Townhouse Renovation · "), label)
 
 
+def _png_data_url(width=24, height=16, colour=(40, 160, 120)):
+    import base64
+    import io as _io
+    from PIL import Image
+
+    buf = _io.BytesIO()
+    Image.new("RGB", (width, height), colour).save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+class SandboxMediaInput(_Sandbox):
+    """The Sandbox Composer takes an image through the canonical Composer's own
+    attachment path: one turn carries text + image to Gopilot; the image is
+    provisional context, identity-only, and never becomes a governed object."""
+
+    def send_with_image(self, text, data_url, *, allowed=True, outcome=None):
+        calls = []
+
+        def spy(**kwargs):
+            calls.append(kwargs)
+            return outcome or MODEL_REPLY
+
+        with patch("routes.portal._project_less_external_ai_allowed", return_value=allowed), \
+                patch.object(llm_gateway, "call_llm_json", side_effect=spy):
+            response = self.boss.post("/sandbox/turn", data={"text": text, "image_data_url": data_url})
+        return response, calls
+
+    def last_reply(self):
+        return sb.SandboxStore(str(self.tmp)).get("cover_boss")["turns"][-1]["reply"]
+
+    def test_the_sandbox_composer_offers_the_shared_attach_control_with_the_device_chooser(self):
+        html = self.page()
+        self.assertIn('data-ui-ref="chat.composer.attach"', html)
+        self.assertIn('id="dock-composer-image-data"', html)
+        tag = re.search(r'<input type="file" id="dock-composer-image"[^>]*>', html).group(0)
+        self.assertIn('accept="image/*"', tag)
+        self.assertNotIn("capture=", tag)            # the phone offers camera, library AND files
+
+    def test_other_scopes_keep_their_rear_camera_default_unchanged(self):
+        pid = self.upload(self.boss, "Photo Project")
+        tag = re.search(r'<input type="file" id="dock-composer-image"[^>]*>',
+                        self.page("/projects/%s/workspace" % pid)).group(0)
+        self.assertIn('capture="environment"', tag)
+
+    def test_one_turn_carries_text_and_image_to_gopilot(self):
+        before = self.governed_state()
+        data_url = _png_data_url()
+        response, calls = self.send_with_image("What is wrong with this interface?", data_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(calls), 1)                                   # one turn, one model call
+        self.assertEqual(calls[0]["image_media_type"], "image/png")
+        self.assertEqual(calls[0]["image_base64"], data_url.split(",", 1)[1])
+        self.assertIn("What is wrong with this interface?", calls[0]["user_prompt"])
+        attachment = self.last_reply()["attachments"][0]
+        self.assertEqual((attachment["media_type"], attachment["analysed"], attachment["status"],
+                          attachment["canonical"]), ("image/png", True, "provisional", False))
+        self.assertEqual(len(attachment["sha256"]), 64)
+        html = self.page()
+        self.assertIn('data-ui-ref="sandbox.attachment"', html)
+        self.assertIn("read by Gopilot", html)
+        # Nothing canonical, and the bytes are kept nowhere.
+        self.assertEqual(self.governed_state(), before)
+        payload = data_url.split(",", 1)[1][:40]
+        for path in self.tmp.rglob("*"):
+            if path.is_file():
+                with self.subTest(path=path.name):
+                    self.assertNotIn(payload, path.read_text(encoding="utf-8", errors="ignore"))
+
+    def test_an_image_alone_is_a_complete_turn(self):
+        response, calls = self.send_with_image("", _png_data_url())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(sb.SandboxStore(str(self.tmp)).get("cover_boss")["turns"][-1]["text"],
+                         "What should I make of this?")
+
+    def test_policy_denial_sends_nothing_and_says_so(self):
+        response, calls = self.send_with_image("Help me organize this idea.", _png_data_url(), allowed=False)
+        self.assertEqual(calls, [])                                       # no model, no image egress
+        reply = self.last_reply()
+        self.assertEqual(reply["attachments"][0]["status"], "not accepted")
+        self.assertEqual(reply["organization"]["source"], "deterministic")
+
+    def test_validation_is_the_shared_validation(self):
+        svg = "data:image/svg+xml;base64,PHN2Zy8+"
+        response, calls = self.send_with_image("Is this safe?", svg)
+        self.assertTrue(all(c.get("image_base64") is None for c in calls))
+        self.assertEqual(self.last_reply()["attachments"][0]["status"], "not accepted")
+        with patch("services.composer_image.MAX_IMAGE_BYTES", 10):
+            self.send_with_image("Too big?", _png_data_url(64, 64))
+        self.assertEqual(self.last_reply()["attachments"][0]["status"], "not accepted")
+
+    def test_attachment_identity_travels_only_with_an_accepted_landing(self):
+        self.send_with_image("I want a permit for this townhouse renovation.", _png_data_url())
+        record = sb.SandboxStore(str(self.tmp)).get("cover_boss")
+        origin = sb.lineage(record)
+        self.assertEqual(len(origin["attachments"]), 1)
+        self.assertEqual(origin["attachments"][0]["turn"], 0)
+        self.assertNotIn("image_base64", str(origin))
+
+
+class SandboxMediaInBrowser(_Sandbox):
+    """Real Chromium drives the canonical Composer's OWN scripts (go_composer.js
+    paste, composer_attach.js pick/preview/review/remove) on the real Sandbox page."""
+
+    def browser_page(self, playwright, width, height):
+        from pathlib import Path as _P
+
+        html = self.page()
+        root = _P(__file__).resolve().parents[1]
+        html = re.sub(r'<link rel="stylesheet" href="/static/css/([a-z_]+\.css)[^"]*">',
+                      lambda m: "<style>" + (root / "static" / "css" / m.group(1)).read_text(encoding="utf-8")
+                      + "</style>", html)
+        html = re.sub(r"<script[^>]*src=[^>]*></script>", "", html)
+        scripts = "".join("<script>" + (root / "static" / "js" / name).read_text(encoding="utf-8") + "</script>"
+                          for name in ("composer_attach.js", "developer_composer_input.js", "go_composer.js"))
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": width, "height": height})
+        page.set_content(html.replace("</body>", scripts + "</body>"), wait_until="load")
+        return browser, page
+
+    def accept_review(self, page):
+        page.wait_for_timeout(700)
+        if page.evaluate("(() => { const r = document.getElementById('dock-capture-review'); return !!r && !r.hidden; })()"):
+            page.click("#dock-capture-review-use")
+            page.wait_for_timeout(400)
+
+    def state(self, page):
+        return page.evaluate("""() => ({
+            imageLen: (document.getElementById('dock-composer-image-data').value || '').length,
+            chip: !document.getElementById('dock-composer-image-chip').hidden,
+            payload: (() => { const fd = new FormData(document.querySelector('form[data-ui-ref="chat.composer"]'));
+                              return {text: fd.get('text'), image: (fd.get('image_data_url') || '').slice(0, 22)}; })()})""")
+
+    def test_desktop_paste_preview_text_remove_replace_one_turn(self):
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as pw:
+            browser, page = self.browser_page(pw, 1440, 900)
+            paste = """async (colour) => {
+                const c = document.createElement('canvas'); c.width = 120; c.height = 80;
+                const g = c.getContext('2d'); g.fillStyle = colour; g.fillRect(0, 0, 120, 80);
+                const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+                const dt = new DataTransfer(); dt.items.add(new File([blob], 'screenshot.png', {type: 'image/png'}));
+                document.getElementById('dock-composer-input').dispatchEvent(
+                    new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}));
+            }"""
+            page.evaluate(paste, "#3a7")
+            self.accept_review(page)
+            pasted = self.state(page)
+            self.assertTrue(pasted["chip"] and pasted["imageLen"] > 100)          # preview before send
+            page.fill("#dock-composer-input", "What is wrong with this interface?")
+            page.click("#dock-composer-image-clear")                             # remove before send
+            removed = self.state(page)
+            self.assertFalse(removed["chip"])
+            self.assertEqual(removed["imageLen"], 0)
+            page.evaluate(paste, "#a33")                                        # replace
+            self.accept_review(page)
+            final = self.state(page)
+            browser.close()
+        self.assertEqual(final["payload"]["text"], "What is wrong with this interface?")
+        self.assertEqual(final["payload"]["image"], "data:image/png;base64,")      # text + image, one form
+
+    def test_upload_and_phone_viewport_use_the_same_attach_control(self):
+        import base64
+        from playwright.sync_api import sync_playwright
+
+        png = base64.b64decode(_png_data_url().split(",", 1)[1])
+        for width, height in ((1440, 900), (390, 844)):
+            with self.subTest(viewport=width), sync_playwright() as pw:
+                browser, page = self.browser_page(pw, width, height)
+                page.set_input_files("#dock-composer-image", files=[{"name": "site.png", "mimeType": "image/png",
+                                                                     "buffer": png}])
+                self.accept_review(page)
+                page.fill("#dock-composer-input", "What should I be looking at here?")
+                picked = self.state(page)
+                attach_visible = page.evaluate(
+                    "(() => { const r = document.querySelector('[data-ui-ref=\"chat.composer.attach\"]').getBoundingClientRect();"
+                    " return r.width > 0 && r.height > 0 && r.right <= innerWidth + 1; })()")
+                overflow = page.evaluate("document.documentElement.scrollWidth > innerWidth + 1")
+                browser.close()
+            self.assertTrue(picked["chip"])
+            self.assertEqual(picked["payload"]["image"], "data:image/png;base64,")
+            self.assertEqual(picked["payload"]["text"], "What should I be looking at here?")
+            self.assertTrue(attach_visible)
+            self.assertFalse(overflow)
+
+
 # -- 8: Start Planning Study uses the existing planning owner, with lineage --------
 from tests.test_planning_word_export_405 import setup_export, sign_in  # noqa: E402,F401
 

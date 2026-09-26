@@ -407,3 +407,4 @@ body[data-master-shell="on"] .survey-evaluation label { margin-top: var(--space-
 .sandbox-landing-choices { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
 .sandbox-select-label { font-size: var(--text-sm); color: var(--text-secondary); align-self: center; }
 .sandbox-landing-actions select { min-height: 40px; max-width: 100%; background: var(--surface-primary); color: var(--text-primary); border: var(--master-hairline); font: inherit; }
+.sandbox-attachment { font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 var(--space-3); }
