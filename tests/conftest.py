@@ -74,6 +74,7 @@ _INSTANCE_DIR = (BASE_DIR / "instance").resolve()
 TEST_STORE_PATHS = (
     Path(TestingConfig.REGISTRY_STORE_PATH),
     Path(TestingConfig.PROJECT_ASSET_PATH),
+    Path(TestingConfig.SANDBOX_MEDIA_PATH),
 )
 
 KEEP_ENV_VAR = "ARCHIOSK_KEEP_TEST_REGISTRY"
@@ -143,7 +144,7 @@ WORKER_ENV_VAR = "PYTEST_XDIST_WORKER"
 # (instance/test_registry_gw0, ...). Anchored to the same two stems this file
 # already resets, so a future third store follows automatically rather than
 # being silently missed.
-_WORKER_STORE_GLOBS = ("test_registry_*", "test_project_assets_*")
+_WORKER_STORE_GLOBS = ("test_registry_*", "test_project_assets_*", "test_sandbox_media_*")
 
 
 def _stale_worker_stores() -> list[Path]:

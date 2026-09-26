@@ -1,6 +1,6 @@
 """MORPHOSIS SLICE 1 - FILE > New Sandbox. See services/sandbox.py.
 
-Three routes, none of which creates governed work:
+Four routes, none of which creates governed work:
 
     GET  /sandbox           the clean start state, or the current Sandbox
                             (?new=1 starts clean - it only forgets which Sandbox
@@ -9,6 +9,9 @@ Three routes, none of which creates governed work:
                             scope (resolve_go_scope points it here)
     POST /sandbox/landing   the person's decision on a recommended landing:
                             continue in the Sandbox, or start a Planning Study
+    GET  /sandbox/media/<object_id>
+                            LIQUID SANDBOX: one retained image object of the
+                            owner's own current Sandbox (provisional media)
 
 A Planning Study always lives in a project (the planning owner requires one),
 so a Planning Study landing offers three explicit choices:
@@ -43,7 +46,18 @@ RESUME_FIELD = "sandbox_resume"
 
 
 def _store() -> sb.SandboxStore:
-    return sb.SandboxStore(current_app.config["REGISTRY_STORE_PATH"])
+    return sb.SandboxStore(current_app.config["REGISTRY_STORE_PATH"],
+                           current_app.config["SANDBOX_MEDIA_PATH"])
+
+
+# STORAGE HARDENING: every page that can write carries the owner's Sandbox token
+# as it stood when the page was drawn. A stale tab's write is refused, not merged.
+TOKEN_FIELD = "sandbox_base"
+
+
+def _refuse(refused: Exception):
+    flash(str(refused), "error")
+    return redirect(url_for("sandbox.home"))
 
 
 def _staff_only():
@@ -104,8 +118,9 @@ def home():
     latest = record["turns"][-1] if record and record["turns"] else None
     offers_study = bool(latest and (latest.get("reply") or {}).get("landing"))
     return render_template("sandbox.html", sandbox=record, clean_surface=True, latest=latest,
+                           sandbox_base=_store().token(session.get("username")),
                            projects=_accessible_projects() if offers_study else [],
-                           can_create_project=is_admin())
+                           can_create_project=is_admin(), object_label=sb.object_label)
 
 
 @sandbox_bp.route("/sandbox/turn", methods=["POST"])
@@ -123,27 +138,71 @@ def turn():
     image = composer_image.from_request(request.form, policy_allowed=_project_less_external_ai_allowed)
     attached = image.sent
     image_base64, image_media_type = (image.base64, image.media_type) if image.accepted else (None, None)
-    if attached and not image.accepted:
-        flash(image.reason + " The text was sent without it.", "error")
-    if not text and image_base64:
-        text = "What should I make of this?"
-    if not text:
-        return redirect(url_for("sandbox.home"))
 
-    labels = gopilot_turn_labels("APPLICATION", text)
+    # LIQUID SANDBOX: the objects the person selected, as context. GOV-P-001 -
+    # the host fixes the selection: only ids in the owner's OWN current Sandbox
+    # survive, and selecting changes context only, never what is permitted.
     store = _store()
     username = session.get("username")
-    record = _current() or store.start(username)
+    # A page drawn before another tab changed this Sandbox is refused here -
+    # before anything is sent to the model or kept.
+    base = request.form.get(TOKEN_FIELD) or ""
+    if base != store.token(username):
+        return _refuse(sb.SandboxConflict(
+            "This Sandbox changed in another tab or window. Refresh to see the latest, then send "
+            "again. Nothing from this message was kept or sent."))
+    existing = _current()
+    try:
+        selected, ignored = sb.resolve_selection(existing, request.form.getlist("object_id"))
+    except sb.SandboxRefused as refused:
+        return _refuse(refused)
+
+    typed = bool(text)
+    if not text and image_base64:
+        text = "What should I make of this?"
+    if not text and selected:
+        text = "What should I make of the selected objects?"
+    if not text:
+        return redirect(url_for("sandbox.home"))
+    try:
+        store.check_capacity(existing, note=typed,
+                             image_bytes=int(len(image_base64) * 3 / 4) if image_base64 else 0)
+    except sb.SandboxRefused as refused:
+        flash(str(refused), "error")                  # refused BEFORE anything is sent or kept
+        return redirect(url_for("sandbox.home"))
+    if attached and not image.accepted:
+        flash(image.reason + " The text was sent without it.", "error")
+    if ignored:
+        flash("%d selected item%s not in this Sandbox and %s ignored." % (
+            ignored, " was" if ignored == 1 else "s were", "was" if ignored == 1 else "were"), "error")
+
+    labels = gopilot_turn_labels("APPLICATION", text)
+    try:
+        record = existing or store.start(username, expected=base)
+    except sb.SandboxRefused as refused:
+        return _refuse(refused)
     session[_SESSION_KEY] = record["id"]
+    expected = base if existing else sb.SandboxStore._token_of(record)
 
     history = [t["text"] for t in record["turns"]]
     model_allowed = _project_less_external_ai_allowed()
+    # Selected images' retained bytes travel only when the same project-less
+    # external-AI gate that governs an attached image allows it.
+    selected_images = []
+    if model_allowed:
+        import base64 as _b64
+        for obj in selected:
+            raw = store.read_media(username, obj)
+            if raw is not None:
+                selected_images.append((_b64.b64encode(raw).decode("ascii"),
+                                        obj["content"]["media"]["media_type"]))
     organization = sb.organize(
         text, history,
         model_allowed=model_allowed,
         api_key=current_app.config.get("ANTHROPIC_API_KEY"),
         model=current_app.config.get("ANTHROPIC_MODEL"),
         image_base64=image_base64, image_media_type=image_media_type,
+        selected=selected, selected_images=selected_images,
     )
     attachments = []
     if image_base64:
@@ -160,10 +219,41 @@ def turn():
         "landing": sb.recommend_landing(text, history),
         "intent": ((labels or {}).get("intent") or {}).get("envelope"),
         "attachments": attachments,
+        "context": {"selected": [obj["id"] for obj in selected], "ignored": ignored},
         "canonical": False,
     }
-    store.add_turn(username, record["id"], text, reply)
+    try:
+        store.add_turn(username, record["id"], text, reply, note=typed,
+                       image=(image_base64, image_media_type) if image_base64 else None,
+                       selected=[obj["id"] for obj in selected], expected=expected)
+    except sb.SandboxRefused as refused:          # a cap, or a tab that wrote while the model ran
+        flash(str(refused), "error")
+        return redirect(url_for("sandbox.home"))
     return redirect(url_for("sandbox.home", _anchor="sandbox-latest"))
+
+
+@sandbox_bp.route("/sandbox/media/<object_id>", methods=["GET"])
+@login_required
+def media(object_id):
+    """One retained image of the owner's OWN current Sandbox - never anyone else's,
+    never a project's. Provisional media has no other way out."""
+    _staff_only()
+    record = _current()
+    obj = next((o for o in (record or {}).get("objects") or [] if o["id"] == object_id), None)
+    raw = _store().read_media(session.get("username"), obj) if obj else None
+    if raw is None:
+        abort(404)
+    from flask import Response
+    response = Response(raw, mimetype=obj["content"]["media"]["media_type"])
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Content-Disposition"] = "inline"
+    return response
+
+
+def _decide(record, choice):
+    _store().record_decision(session.get("username"), record["id"], choice,
+                             expected=request.form.get(TOKEN_FIELD) or "")
 
 
 @sandbox_bp.route("/sandbox/landing", methods=["POST"])
@@ -174,8 +264,15 @@ def landing():
     if record is None or record["id"] != request.form.get("sandbox_id"):
         abort(404)
     choice = request.form.get("choice")
+    try:
+        return _landing(record, choice)
+    except sb.SandboxRefused as refused:          # a stale tab chose on an older Sandbox
+        return _refuse(refused)
+
+
+def _landing(record, choice):
     if choice == sb.DECISION_CONTINUE:
-        _store().record_decision(session.get("username"), record["id"], choice)
+        _decide(record, choice)
         flash("Staying in the Sandbox. Nothing was created.", "success")
         return redirect(url_for("sandbox.home", _anchor="sandbox-latest"))
     if choice not in (sb.DECISION_EXISTING_PROJECT, sb.DECISION_NEW_PROJECT):
@@ -187,12 +284,12 @@ def landing():
         project_id = (request.form.get("project_id") or "").strip()
         if project_id not in {p["id"] for p in _accessible_projects()}:
             abort(404)          # not a project this person can open - never confirmed
-        _store().record_decision(session.get("username"), record["id"], choice)
+        _decide(record, choice)
         return redirect(url_for("planning_zoning.planning_zoning", sandbox=record["id"],
                                 project_id=project_id))
     # Create New Project: the existing owner decides who may create one.
     if not is_admin():
         abort(403)
-    _store().record_decision(session.get("username"), record["id"], choice)
+    _decide(record, choice)
     session[_RESUME_KEY] = {"sandbox_id": record["id"], "project_id": None}
     return redirect(url_for("portal.upload", sandbox=record["id"]))

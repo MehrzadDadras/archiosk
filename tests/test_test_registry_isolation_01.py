@@ -84,6 +84,9 @@ class TheResetTargetsTheStoresThatActuallyAccumulateTests(unittest.TestCase):
         configured = {
             Path(TestingConfig.REGISTRY_STORE_PATH).resolve(),
             Path(TestingConfig.PROJECT_ASSET_PATH).resolve(),
+            # LIQUID SANDBOX storage hardening: provisional Sandbox media has its
+            # own fixed test root, reset like the other two.
+            Path(TestingConfig.SANDBOX_MEDIA_PATH).resolve(),
         }
         reset = {p.resolve() for p in self.conftest.TEST_STORE_PATHS}
         self.assertEqual(reset, configured)
@@ -99,6 +102,10 @@ class TheResetTargetsTheStoresThatActuallyAccumulateTests(unittest.TestCase):
         self.assertNotEqual(
             Path(TestingConfig.PROJECT_ASSET_PATH).resolve(),
             Path(BaseConfig.PROJECT_ASSET_PATH).resolve(),
+        )
+        self.assertNotEqual(
+            Path(TestingConfig.SANDBOX_MEDIA_PATH).resolve(),
+            Path(BaseConfig.SANDBOX_MEDIA_PATH).resolve(),
         )
 
 

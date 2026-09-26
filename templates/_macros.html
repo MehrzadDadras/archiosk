@@ -178,7 +178,7 @@
    Passed rather than switching the import to `with context`: that would change
    scoping for every macro in this 900-line file to fix one, and every other
    macro here already takes what it needs as a parameter. #}
-{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None, conversations=None, project_conversation_count=0, study_scoped=False, draft_actions=(), input_name='text', project_scoped=True, extra_fields=None, go_scope='', scope_label='', reply_mode='', selection_form='', disabled_reason=None, attach=True, aria_label='Message', capture='environment') %}
+{% macro conversation_dock(heading, message_count, post_url, scope_key, placeholder, include_anchor_fields=False, current_view=None, selected_source_id=None, project_id=None, current_context=None, developer_ccn_context=None, case_id=None, conversations=None, project_conversation_count=0, study_scoped=False, draft_actions=(), input_name='text', project_scoped=True, extra_fields=None, go_scope='', scope_label='', reply_mode='', selection_form='', selection_name='project_id', selection_optional=False, disabled_reason=None, attach=True, aria_label='Message', capture='environment') %}
 {# CLAUDE-COMPOSER-DRAFT-ASSIST-01: the action sheet and the comparison.
 
    ONE component for both form factors. On a phone it is a bottom sheet; on a
@@ -287,7 +287,7 @@
         {% endif %}
     </div>
     {{ caller() }}
-    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer" data-developer-composer-form data-go-scope="{{ go_scope }}"{% if reply_mode %} data-go-reply="{{ reply_mode }}"{% endif %}{% if selection_form %} data-go-selection="{{ selection_form }}"{% endif %}>
+    <form class="conversation-input-form conversation-dock-composer" method="post" action="{{ post_url }}" data-ui-ref="chat.composer" data-developer-composer-form data-go-scope="{{ go_scope }}"{% if reply_mode %} data-go-reply="{{ reply_mode }}"{% endif %}{% if selection_form %} data-go-selection="{{ selection_form }}" data-go-selection-name="{{ selection_name }}"{% if selection_optional %} data-go-selection-optional{% endif %}{% endif %}>
         {# Its own token, as the retired Document Shop composer carried: every scope's
            POST is CSRF-protected without depending on the page's injection script. #}
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -212,6 +212,7 @@ def call_llm_json(
     log_label: str = "LLM call",
     image_base64: Optional[str] = None,
     image_media_type: Optional[str] = None,
+    images: Optional[list] = None,
 ) -> LLMCallOutcome:
     """
     One request/response round trip - no tool use, no re-prompting, no
@@ -233,6 +234,10 @@ def call_llm_json(
     same plain string it always was, not a list, so this is a strictly
     additive, backward-compatible change to the one shared gateway
     rather than a second call path.
+
+    LIQUID SANDBOX OBJECT FIELD v0: `images` [(base64, media_type), ...] adds
+    further vision blocks after `image_base64`'s, in order - the selected image
+    objects a caller already bounded and policy-gated. Same additive rule.
     """
     if os.getenv("AI_CALLS_DISABLED", "false").strip().lower() == "true":
         return LLMCallOutcome(
@@ -256,14 +261,13 @@ def call_llm_json(
     if construction_failure is not None:
         return construction_failure
 
-    if image_base64 and image_media_type:
+    vision = ([(image_base64, image_media_type)] if image_base64 and image_media_type else []) + \
+        [(data, media_type) for data, media_type in (images or ()) if data and media_type]
+    if vision:
         content = [
-            {
-                "type": "image",
-                "source": {"type": "base64", "media_type": image_media_type, "data": image_base64},
-            },
-            {"type": "text", "text": user_prompt},
-        ]
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}}
+            for data, media_type in vision
+        ] + [{"type": "text", "text": user_prompt}]
     else:
         content = user_prompt
 

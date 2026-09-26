@@ -1343,6 +1343,13 @@ def resolve_go_scope(values) -> dict:
                      # The canonical Composer's own attachment path: paste, or the
                      # device's chooser (camera, library, files) - no capture lock.
                      input_name="text", project_scoped=False, capture=None,
+                     # LIQUID SANDBOX: the outline's checked objects travel as
+                     # context (GOV-P-001); none selected is an ordinary turn.
+                     selection_form="sandbox-selection", selection_name="object_id",
+                     selection_optional=True,
+                     # STORAGE HARDENING: the Sandbox as this page saw it; a stale
+                     # tab's message is refused rather than overwriting newer state.
+                     extra_fields={"sandbox_base": values.get("sandbox_base") or ""},
                      blocked={"draft_assist": "Draft assist's endpoint and AI gate are project-scoped; "
                                               "a project-less draft assist is not designed yet."},
                      disabled={"case_actions": "The Sandbox is provisional and project-less: it creates "

@@ -102,6 +102,13 @@ class BaseConfig:
     # routes/project_assets.py, which authorizes first.
     PROJECT_ASSET_PATH = os.getenv("PROJECT_ASSET_PATH") or str(BASE_DIR / "instance" / "project_assets")
 
+    # LIQUID SANDBOX: provisional Sandbox media (images a person gave a Sandbox).
+    # A root of its own - outside REGISTRY_STORE_PATH, so registry snapshots and
+    # transactions never carry it, and outside PROJECT_ASSET_PATH and every
+    # project store. Read only by routes/sandbox.py, for the owner, and deleted
+    # with the Sandbox (services/sandbox.SandboxStore states the rules).
+    SANDBOX_MEDIA_PATH = os.getenv("SANDBOX_MEDIA_PATH") or str(BASE_DIR / "instance" / "sandbox_media")
+
     # CLAUDE-RBAC-TOKENS-03. The bidding marketplace is SCAFFOLD ONLY and this
     # flag is the switch. It is False, and while it is False the component's
     # markup is NEVER RENDERED - not rendered-and-hidden.
@@ -269,6 +276,7 @@ class TestingConfig(BaseConfig):
     _WORKER_SUFFIX = "_" + _XDIST_WORKER if _XDIST_WORKER.isalnum() and _XDIST_WORKER.islower() else ""
     REGISTRY_STORE_PATH = str(BASE_DIR / "instance" / ("test_registry" + _WORKER_SUFFIX))
     PROJECT_ASSET_PATH = str(BASE_DIR / "instance" / ("test_project_assets" + _WORKER_SUFFIX))
+    SANDBOX_MEDIA_PATH = str(BASE_DIR / "instance" / ("test_sandbox_media" + _WORKER_SUFFIX))
     SESSION_COOKIE_SECURE = False
     # Hermetic tests must never attempt a real SMTP connection based on
     # whatever the developer's local .env happens to have configured -

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from services import llm_gateway
@@ -41,8 +42,36 @@ MODEL_REPLY = _Outcome(ran=True, parsed={
 
 class _Sandbox(_App):
     def setUp(self):
+        import shutil
+        import tempfile
+
         super().setUp()
+        # Provisional media gets its own root, as in production - outside the registry.
+        self.media = Path(tempfile.mkdtemp(prefix="archiosk_sandbox_media_"))
+        self.app.config["SANDBOX_MEDIA_PATH"] = str(self.media)
+        self.addCleanup(shutil.rmtree, self.media, True)
         self.boss = self.client("cover_boss")
+
+    def client(self, name):
+        """STORAGE HARDENING: every real Sandbox page carries the token of the
+        Sandbox it was drawn from, and a write without the current one is
+        refused. These clients behave as a FRESH tab: they echo their user's
+        token as it stands now. Stale tabs are proved explicitly, by passing an
+        old token (tests/test_liquid_sandbox_storage_hardening_01.py)."""
+        c = super().client(name)
+        real_post = c.post
+
+        def fresh_tab_post(url, *args, **kwargs):
+            data = kwargs.get("data")
+            if str(url).startswith("/sandbox/") and isinstance(data, dict) and "sandbox_base" not in data:
+                kwargs["data"] = dict(data, sandbox_base=self.token(name))
+            return real_post(url, *args, **kwargs)
+
+        c.post = fresh_tab_post
+        return c
+
+    def token(self, username="cover_boss"):
+        return sb.SandboxStore(str(self.tmp)).token(username)
 
     def page(self, url="/sandbox"):
         return self.boss.get(url).get_data(as_text=True)
@@ -617,7 +646,8 @@ def test_8_start_planning_study_uses_the_planning_owner_and_keeps_lineage(setup_
     app, store, result, _ = setup_export
     client = sign_in(app)
     with patch.object(llm_gateway, "call_llm_json", return_value=NO_MODEL):
-        client.post("/sandbox/turn", data={"text": TOWNHOUSE})
+        client.post("/sandbox/turn", data={"text": TOWNHOUSE,
+                                           "sandbox_base": sb.SandboxStore(store.store_path).token("export-planner")})
     record = sb.SandboxStore(store.store_path).get("export-planner")
     entry = client.get("/planning-zoning?sandbox=%s&project_id=p" % record["id"]).get_data(as_text=True)
     assert 'name="sandbox_origin" value="%s"' % record["id"] in entry

@@ -66,6 +66,7 @@
                       data-ui-ref="sandbox.landing.existing-project">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="sandbox_id" value="{{ sandbox.id }}">
+                    <input type="hidden" name="sandbox_base" value="{{ sandbox_base }}">
                     <input type="hidden" name="choice" value="existing_project">
                     {% if projects %}
                     <label class="sandbox-select-label" for="sandbox-project">Use Existing Project</label>
@@ -80,6 +81,7 @@
                 <form method="post" action="{{ url_for('sandbox.landing') }}" class="sandbox-landing-actions">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="sandbox_id" value="{{ sandbox.id }}">
+                    <input type="hidden" name="sandbox_base" value="{{ sandbox_base }}">
                     {% if can_create_project %}
                     <button type="submit" name="choice" value="new_project"
                             data-ui-ref="sandbox.landing.new-project">Create New Project</button>
@@ -101,6 +103,44 @@
         {% endif %}
     </article>
     {% endif %}
+
+    {# LIQUID SANDBOX - OBJECT FIELD v0: the outline projection of the stored
+       objects, in field order. It renders the record's own `objects` and nothing
+       else, so the outline and the stored state cannot disagree. A checked object
+       travels with the NEXT Composer message as context (go_composer.js, the same
+       selection path My Documents uses) - GOV-P-001: context, never permission.
+       The form is never submitted itself; it only names the selection. #}
+    {% if sandbox and sandbox.objects %}
+    <form id="sandbox-selection" class="sandbox-outline" data-ui-ref="sandbox.outline"
+          aria-labelledby="sandbox-outline-heading" action="{{ url_for('sandbox.home') }}" method="get">
+        <h2 id="sandbox-outline-heading" class="sandbox-heading">In this Sandbox
+            <span class="sandbox-outline-count">&middot; {{ sandbox.objects|length }} provisional
+                {{ 'object' if sandbox.objects|length == 1 else 'objects' }}</span></h2>
+        <p class="sandbox-note">Select objects to give Gopilot as context for your next message.
+            Selecting gives context, never permission.</p>
+        <ol class="sandbox-outline-list">
+            {% for obj in sandbox.objects %}
+            <li class="sandbox-object sandbox-object-{{ obj.type }}" data-ui-ref="sandbox.outline.object"
+                data-object-id="{{ obj.id }}" data-object-type="{{ obj.type }}">
+                <input type="checkbox" id="sandbox-object-{{ obj.id }}" name="object_id" value="{{ obj.id }}"
+                       form="sandbox-selection" data-ui-ref="sandbox.outline.select">
+                <label for="sandbox-object-{{ obj.id }}">
+                    {% if obj.type == 'image' and obj.content.media.retained %}
+                    <img class="sandbox-object-thumb" src="{{ url_for('sandbox.media', object_id=obj.id) }}"
+                         alt="Image you attached ({{ object_label(obj) }})" loading="lazy">
+                    {% endif %}
+                    <span class="sandbox-object-text">{{ object_label(obj) }}</span>
+                    <span class="sandbox-object-meta">{{ obj.type }} &middot; message {{ obj.origin.turn + 1 }}
+                        &middot; provisional{% if obj.type == 'image' and not obj.content.media.retained %}
+                        &middot; not retained (sent before images were kept){% endif %}</span>
+                </label>
+            </li>
+            {% endfor %}
+        </ol>
+        <p class="sandbox-selection-count" data-go-selection-count="sandbox-selection"
+           data-ui-ref="sandbox.selection-count" aria-live="polite"></p>
+    </form>
+    {% endif %}
 </section>
 {% endblock %}
 
@@ -112,6 +152,8 @@
         <p class="sandbox-thread-who">You</p>
         <p class="sandbox-thread-text">{{ t.text }}</p>
         {% if t.reply.attachments %}<p class="sandbox-thread-who">&#128206; image attached</p>{% endif %}
+        {% if t.selected %}<p class="sandbox-thread-who" data-ui-ref="sandbox.thread.context">With {{ t.selected|length }}
+            selected {{ 'object' if t.selected|length == 1 else 'objects' }} as context</p>{% endif %}
         <p class="sandbox-thread-who">Gopilot</p>
         <p class="sandbox-thread-text">{{ t.reply.organization.objective }}</p>
     </li>

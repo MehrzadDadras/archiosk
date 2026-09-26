@@ -12,7 +12,10 @@
  *   portal.gateway_orientation, unchanged;
  * - APPLICATION scope, My Documents (data-go-selection): the selected document ids
  *   travel with the request as Composer context, to the existing selection
- *   action - the same ids the desk's own selection controls hold;
+ *   action - the same ids the desk's own selection controls hold. The Sandbox
+ *   (LIQUID SANDBOX) uses the same path for its selected objects: the field name
+ *   comes from data-go-selection-name, and data-go-selection-optional makes an
+ *   empty selection an ordinary message rather than a refusal;
  * - paste: a pasted screenshot enters the Composer's EXISTING attachment
  *   pipeline (composer_attach.js), as the retired developer composer allowed.
  *
@@ -34,11 +37,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Selection context: attach the desk's selected ids; nothing selected -> say so, send nothing.
     const selectionFormId = goForm.getAttribute('data-go-selection');
+    const selectionName = goForm.getAttribute('data-go-selection-name') || 'project_id';
+    const selectionOptional = goForm.hasAttribute('data-go-selection-optional');
     if (selectionFormId) {
+        const selectedBoxes = () => document.querySelectorAll(
+            'input[form="' + selectionFormId + '"][name="' + selectionName + '"]:checked');
+        const count = document.querySelector('[data-go-selection-count="' + selectionFormId + '"]');
+        const showCount = () => {
+            if (!count) return;
+            const n = selectedBoxes().length;
+            count.textContent = n ? n + (n === 1 ? ' object' : ' objects')
+                + ' selected - sent as context with your next message' : '';
+        };
+        document.addEventListener('change', (e) => {
+            if (e.target.matches && e.target.matches('input[form="' + selectionFormId + '"]')) showCount();
+        });
+        showCount();
         goForm.addEventListener('submit', (e) => {
             goForm.querySelectorAll('input[data-go-selected]').forEach((el) => el.remove());
-            const selected = document.querySelectorAll(
-                'input[form="' + selectionFormId + '"][name="project_id"]:checked');
+            const selected = selectedBoxes();
+            if (!selected.length && selectionOptional) return;
             if (!selected.length) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
@@ -50,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selected.forEach((box) => {
                 const hidden = document.createElement('input');
                 hidden.type = 'hidden';
-                hidden.name = 'project_id';
+                hidden.name = selectionName;
                 hidden.value = box.value;
                 hidden.setAttribute('data-go-selected', '');
                 goForm.appendChild(hidden);
