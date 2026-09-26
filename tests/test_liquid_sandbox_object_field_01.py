@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import inspect
+import json
 import re
 from pathlib import Path
 from unittest.mock import patch
@@ -63,7 +64,7 @@ class _Field(_Sandbox):
         if "selected these provisional Sandbox objects" not in prompt:
             return []
         block = prompt.split("selected these provisional Sandbox objects", 1)[1].split("\n\n", 1)[0]
-        return [line for line in block.splitlines() if line.startswith("- [")]
+        return [json.loads(line) for line in block.splitlines() if line.startswith("{")]
 
 
 class PastedImageSurvivesAsAProvisionalObject(_Field):
@@ -119,8 +120,11 @@ class SelectionIsExactlyTheSelectedObjects(_Field):
         self.assertEqual(len(calls), 1)
         block = self.selection_block(calls[0]["user_prompt"])
         self.assertEqual(len(block), 2)
-        self.assertTrue(block[0].startswith("- [image 1] Image (png"))   # field order, not click order
-        self.assertEqual(block[1], "- [note] " + MARKER_B)
+        self.assertEqual([o["id"] for o in block], [image["id"], b["id"]])
+        self.assertEqual(block[0]["content"]["image_number"], 1)
+        self.assertEqual(block[0]["modality"], "image")
+        self.assertEqual(block[1]["content"]["text"], MARKER_B)
+        self.assertEqual(block[1]["modality"], "text")
         stored = self.store_bytes(image)
         self.assertEqual(calls[0]["images"], [(base64.b64encode(stored).decode("ascii"), "image/png")])
         self.assertIsNone(calls[0]["image_base64"])                     # no NEW image this turn
@@ -129,7 +133,9 @@ class SelectionIsExactlyTheSelectedObjects(_Field):
     def test_a_single_selection_and_no_selection(self):
         a, image, b, c = self.seeded()
         _, calls = self.turn("Only this.", selected=[c["id"]])
-        self.assertEqual(self.selection_block(calls[0]["user_prompt"]), ["- [note] " + MARKER_C])
+        block = self.selection_block(calls[0]["user_prompt"])
+        self.assertEqual([o["id"] for o in block], [c["id"]])
+        self.assertEqual(block[0]["content"]["text"], MARKER_C)
         self.assertNotIn("images", calls[0])
         _, calls = self.turn("Nothing selected.")
         self.assertEqual(self.selection_block(calls[0]["user_prompt"]), [])
@@ -148,12 +154,137 @@ class ForgedSelectionIdsAreIgnored(_Field):
 
         response, calls = self.turn("Look at these.", selected=[a["id"], "f" * 32, foreign_id, "<script>"])
         prompt = calls[0]["user_prompt"]
-        self.assertEqual(self.selection_block(prompt), ["- [note] " + MARKER_A])
+        block = self.selection_block(prompt)
+        self.assertEqual([o["id"] for o in block], [a["id"]])
+        self.assertEqual(block[0]["content"]["text"], MARKER_A)
         self.assertNotIn("SECRET neighbour note", prompt)
         self.assertEqual(self.record()["turns"][-1]["reply"]["context"], {"selected": [a["id"]], "ignored": 3})
         self.assertEqual(self.record()["turns"][-1]["selected"], [a["id"]])
         self.assertIn("3 selected items were not in this Sandbox and were ignored.",
                       self.boss.get("/sandbox").get_data(as_text=True))
+
+
+class ObjectEnvelope(_Field):
+    def test_shared_preview_under_response_csp_and_touch_target(self):
+        from playwright.sync_api import sync_playwright, expect
+        from urllib.parse import urlsplit
+
+        def respond(route):
+            response = self.boss.get(urlsplit(route.request.url).path)
+            route.fulfill(status=response.status_code, headers=dict(response.headers), body=response.data)
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            try:
+                page = browser.new_page(viewport={"width": 390, "height": 844})
+                page.route("http://sandbox.test/**", respond)
+                page.goto("http://sandbox.test/sandbox")
+                box = page.locator(".composer-attach").bounding_box()
+                self.assertGreaterEqual(box["width"], 44)
+                self.assertGreaterEqual(box["height"], 44)
+                page.locator("#dock-composer-image").set_input_files({
+                    "name": "sample.png", "mimeType": "image/png",
+                    "buffer": base64.b64decode(_png_data_url().split(",", 1)[1])})
+                expect(page.locator("#dock-capture-review-image")).to_have_js_property("complete", True)
+                self.assertGreater(page.locator("#dock-capture-review-image").evaluate("img => img.naturalWidth"), 0)
+                self.assertTrue(page.locator("#dock-capture-review-image").get_attribute("src").startswith("blob:"))
+                page.click("#dock-capture-review-use")
+                expect(page.locator("#dock-composer-image-data")).to_have_value(re.compile(r"data:image/"))
+                self.assertEqual(page.locator("#dock-composer-input").get_attribute("placeholder"), "Ask about this photo")
+                self.assertEqual(page.locator("#dock-composer-image-arrival").input_value(), "uploaded")
+                page.click("#dock-composer-image-clear")
+                self.assertEqual(page.locator("#dock-composer-image-arrival").input_value(), "unknown")
+                page.evaluate("""async () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 48; canvas.height = 32;
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                    const clipboard = new DataTransfer();
+                    clipboard.items.add(new File([blob], 'paste.png', {type: 'image/png'}));
+                    document.querySelector('#dock-composer-input').dispatchEvent(
+                        new ClipboardEvent('paste', {clipboardData: clipboard, bubbles: true, cancelable: true}));
+                }""")
+                expect(page.locator("#dock-capture-review-image")).to_have_js_property("naturalWidth", 48)
+                page.click("#dock-capture-review-use")
+                expect(page.locator("#dock-composer-image-data")).to_have_value(re.compile(r"data:image/"))
+                self.assertEqual(page.locator("#dock-composer-image-arrival").input_value(), "pasted")
+                page.locator("#dock-composer-input").press_sequentially("A note")
+                self.assertEqual(page.locator('input[name="text_arrival"]').input_value(), "typed")
+                page.reload()
+                expect(page.locator("#dock-composer-input")).to_have_value("A note")
+                page.locator("#dock-composer-input").press_sequentially(" continued")
+                self.assertEqual(page.locator('input[name="text_arrival"]').input_value(), "unknown")
+            finally:
+                browser.close()
+
+    def test_scope_order_and_identity_survive_reload_and_legacy_completion(self):
+        self.seeded()
+        store = sb.SandboxStore(str(self.tmp), str(self.media))
+        record = self.record()
+        ids = [o["id"] for o in record["objects"]]
+        for obj in record["objects"]:
+            for key in ("sandbox_id", "owner", "sequence", "modality"):
+                obj.pop(key)
+            obj["origin"].pop("arrival")
+        store._save(record)
+        before = store._path("cover_boss").read_bytes()
+        loaded = store.get("cover_boss")
+        self.assertEqual(before, store._path("cover_boss").read_bytes())
+        self.assertEqual([o["id"] for o in loaded["objects"]], ids)
+        for index, obj in enumerate(loaded["objects"]):
+            self.assertEqual((obj["owner"], obj["sandbox_id"], obj["sequence"]),
+                             ("cover_boss", record["id"], index))
+            self.assertEqual(obj["origin"]["arrival"], "unknown")
+        self.turn("One more note")
+        self.assertEqual([o["id"] for o in self.record()["objects"][:4]], ids)
+
+    def test_note_mentioning_a_screenshot_remains_text_at_the_model_seam(self):
+        self.turn("This screenshot shows a sketch; no image was attached.")
+        obj = self.objects()[0]
+        _, calls = self.turn("Consider this", selected=[obj["id"]])
+        block = self.selection_block(calls[0]["user_prompt"])
+        self.assertEqual((block[0]["type"], block[0]["modality"]), ("note", "text"))
+        self.assertEqual(block[0]["id"], obj["id"])
+        self.assertNotIn("images", calls[0])
+        self.assertIsNone(calls[0]["image_base64"])
+
+    def test_missing_selected_image_does_not_shift_image_binding(self):
+        self.turn("", _png_data_url(24, 16))
+        self.turn("", _png_data_url(32, 32))
+        first, second = self.objects()
+        store = sb.SandboxStore(str(self.tmp), str(self.media))
+        media = first["content"]["media"]
+        store._media_path("cover_boss", media["sha256"], media["media_type"]).unlink()
+        _, calls = self.turn("Compare", selected=[first["id"], second["id"]])
+        block = self.selection_block(calls[0]["user_prompt"])
+        self.assertFalse(block[0]["content"]["available_to_model"])
+        self.assertIsNone(block[0]["content"]["image_number"])
+        self.assertEqual(block[1]["content"]["image_number"], 1)
+        self.assertEqual(len(calls[0]["images"]), 1)
+
+    def test_arrival_is_bounded_and_cannot_forge_scope_or_authority(self):
+        with patch.object(llm_gateway, "call_llm_json", return_value=MODEL_REPLY), \
+                patch("routes.portal._project_less_external_ai_allowed", return_value=True):
+            self.boss.post("/sandbox/turn", data={
+                "text": "A pasted note", "text_arrival": "pasted", "image_arrival": "uploaded",
+                "image_data_url": _png_data_url(), "owner": "another_person",
+                "canonical": "true", "type": "evidence", "created_by": "model"})
+        note, image = self.objects()
+        self.assertEqual(note["origin"]["arrival"], "pasted")
+        self.assertEqual(image["origin"]["arrival"], "uploaded")
+        for obj in (note, image):
+            self.assertEqual(obj["owner"], "cover_boss")
+            self.assertEqual(obj["created_by"], "person")
+            self.assertFalse(obj["canonical"])
+            self.assertEqual(obj["status"], "provisional")
+        self.assertEqual(sb.arrival("generated", sb.OBJECT_NOTE), "unknown")
+        self.assertEqual(sb.arrival("typed", sb.OBJECT_IMAGE), "unknown")
+
+    def test_blob_permission_is_exclusive_to_image_sources(self):
+        response = self.boss.get("/sandbox")
+        directives = response.headers["Content-Security-Policy"].split(";")
+        blob = [d.strip() for d in directives if "blob:" in d]
+        self.assertEqual(blob, ["img-src 'self' data: blob:"])
+        self.assertIn("object-src 'none'", response.headers["Content-Security-Policy"])
 
 
 class SelectionChangesContextNeverAuthority(_Field):

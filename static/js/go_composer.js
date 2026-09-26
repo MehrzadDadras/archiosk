@@ -139,7 +139,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const dt = new DataTransfer();
             dt.items.add(file);
             goImage.files = dt.files;
-            goImage.dispatchEvent(new Event('change', { bubbles: true }));
+            goImage.dispatchEvent(new CustomEvent('change', { bubbles: true, detail: { arrival: 'pasted' } }));
+        });
+    }
+
+    if (goInput && goForm) {
+        const arrival = document.createElement('input');
+        arrival.type = 'hidden';
+        arrival.name = 'text_arrival';
+        arrival.value = 'unknown';
+        goForm.appendChild(arrival);
+        const observed = new Set();
+        goInput.addEventListener('beforeinput', () => {
+            // Restored drafts and programmatic prefills have no observed arrival.
+            if (!observed.size && goInput.value) observed.add('unknown');
+        });
+        goInput.addEventListener('input', (event) => {
+            if (!goInput.value) {
+                observed.clear();
+                arrival.value = 'unknown';
+                return;
+            }
+            if (event.inputType === 'insertFromPaste') observed.add('pasted');
+            else if (event.inputType === 'insertText' || event.inputType === 'insertCompositionText') observed.add('typed');
+            else if (!event.inputType || !event.inputType.startsWith('delete')) observed.add('unknown');
+            arrival.value = observed.has('unknown') ? 'unknown'
+                : observed.size > 1 ? 'mixed' : Array.from(observed)[0] || 'unknown';
         });
     }
 

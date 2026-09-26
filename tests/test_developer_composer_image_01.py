@@ -333,11 +333,13 @@ class TheClientSharesTheNormalizationBoundary(_DeveloperModeCase):
     def test_it_reuses_the_shared_prepare_primitive(self):
         # The picker's change handler attaches through the one shared primitive...
         change = self.attach_source[self.attach_source.index("input.addEventListener('change'"):]
-        self.assertIn("attach(files[0])", change[:200])
+        self.assertIn("attach(files[0])", change.split("\n    });", 1)[0])
         self.assertIn("window.ArchioskPrepareImage(file", self.attach_source)
         # ...and a paste is handed to that same picker, not prepared separately.
         self.assertIn("goImage.files = dt.files;", self.paste_source)
-        self.assertIn("goImage.dispatchEvent(new Event('change'", self.paste_source)
+        # The same change event now carries observed arrival provenance.
+        self.assertIn("goImage.dispatchEvent(new CustomEvent('change'", self.paste_source)
+        self.assertIn("detail: { arrival: 'pasted' }", self.paste_source)
         self.assertIn("document.getElementById('dock-composer-image')", self.paste_source)
 
     def test_it_does_not_reimplement_resizing(self):

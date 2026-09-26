@@ -32,6 +32,7 @@
 
     var input = document.getElementById('dock-composer-image');
     var field = document.getElementById('dock-composer-image-data');
+    var arrivalField = document.getElementById('dock-composer-image-arrival');
 
     var chip = document.getElementById('dock-composer-image-chip');
     var thumb = document.getElementById('dock-composer-image-thumb');
@@ -56,7 +57,9 @@
     var reviewRetake = document.getElementById('dock-capture-review-retake');
     var reviewDiscard = document.getElementById('dock-capture-review-discard');
     var originalPlaceholder = messageBox ? messageBox.getAttribute('placeholder') : null;
-    var ATTACHED_PLACEHOLDER = 'Ask about this photo, or tap Make a new Q';
+    var ATTACHED_PLACEHOLDER = makeQ
+        ? 'Ask about this photo, or tap Make a new Q'
+        : 'Ask about this photo';
 
     // The route enforces this independently; this copy exists so a photo is
     // brought UNDER the limit here rather than rejected there.
@@ -69,6 +72,7 @@
     var QUALITY_STEPS = [0.85, 0.7, 0.55, 0.4];
 
     function clear() {
+        if (arrivalField) arrivalField.value = 'unknown';
         field.value = '';
         input.value = '';
         if (thumb) thumb.removeAttribute('src');
@@ -92,6 +96,7 @@
     }
 
     function fail(message) {
+        if (arrivalField) arrivalField.value = 'unknown';
         field.value = '';
         if (nextStep) nextStep.hidden = true;
         if (thumb) thumb.removeAttribute('src');
@@ -493,7 +498,9 @@
     // control.  Only the Composer-specific wiring below requires its markup.
     if (!input || !field) return;
 
-    input.addEventListener('change', function () {
+    input.addEventListener('change', function (event) {
+        if (arrivalField) arrivalField.value = event.detail && event.detail.arrival === 'pasted'
+            ? 'pasted' : 'uploaded';
         var files = input.files;
         if (files && files.length) attach(files[0]);
     });

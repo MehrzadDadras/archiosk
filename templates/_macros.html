@@ -367,6 +367,7 @@
            passes capture=None (MORPHOSIS SLICE 1: the Sandbox). One input either way. #}
         <input type="file" id="dock-composer-image" accept="image/*"{% if capture %} capture="{{ capture }}"{% endif %} hidden>
         <input type="hidden" name="image_data_url" id="dock-composer-image-data">
+        <input type="hidden" name="image_arrival" id="dock-composer-image-arrival" value="unknown">
         {# CLAUDE-CAPTURE-REVIEW-01: the confirmation step between taking a photo
            and attaching it.
 

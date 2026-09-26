@@ -134,7 +134,7 @@ def turn():
 
     # The canonical Composer's attachment, through the ONE governed image intake
     # (PNG/JPEG/GIF/WebP, 5MB, base64) with this project-less surface's external-AI
-    # gate. Nothing is written to disk, registered, or kept beyond its identity.
+    # gate. Accepted bytes are retained only by the provisional Sandbox owner.
     image = composer_image.from_request(request.form, policy_allowed=_project_less_external_ai_allowed)
     attached = image.sent
     image_base64, image_media_type = (image.base64, image.media_type) if image.accepted else (None, None)
@@ -189,11 +189,13 @@ def turn():
     # Selected images' retained bytes travel only when the same project-less
     # external-AI gate that governs an attached image allows it.
     selected_images = []
+    selected_image_ids = []
     if model_allowed:
         import base64 as _b64
         for obj in selected:
             raw = store.read_media(username, obj)
             if raw is not None:
+                selected_image_ids.append(obj["id"])
                 selected_images.append((_b64.b64encode(raw).decode("ascii"),
                                         obj["content"]["media"]["media_type"]))
     organization = sb.organize(
@@ -202,7 +204,7 @@ def turn():
         api_key=current_app.config.get("ANTHROPIC_API_KEY"),
         model=current_app.config.get("ANTHROPIC_MODEL"),
         image_base64=image_base64, image_media_type=image_media_type,
-        selected=selected, selected_images=selected_images,
+        selected=selected, selected_images=selected_images, selected_image_ids=selected_image_ids,
     )
     attachments = []
     if image_base64:
@@ -225,6 +227,8 @@ def turn():
     try:
         store.add_turn(username, record["id"], text, reply, note=typed,
                        image=(image_base64, image_media_type) if image_base64 else None,
+                       text_arrival=request.form.get("text_arrival"),
+                       image_arrival=request.form.get("image_arrival"),
                        selected=[obj["id"] for obj in selected], expected=expected)
     except sb.SandboxRefused as refused:          # a cap, or a tab that wrote while the model ran
         flash(str(refused), "error")

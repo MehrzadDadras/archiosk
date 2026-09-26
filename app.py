@@ -476,7 +476,9 @@ def _register_security_headers(app: Flask) -> None:
             # data: is safe to allow broadly for img-src specifically
             # (unlike script-src) - a data: URI can only ever decode to
             # pixels, never execute as script.
-            "img-src 'self' data:; "
+            # Composer review holds the original File in an object URL until
+            # accepted or discarded. Permit that scheme for images only.
+            "img-src 'self' data: blob:; "
             f"script-src 'self' 'nonce-{nonce}'"
         )
         return response

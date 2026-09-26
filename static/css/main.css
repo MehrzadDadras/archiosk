@@ -9223,6 +9223,11 @@ html[data-tray-layer="eye"] .eye-maximize-btn { display: none; }
 .conversation-input-form > * {
     min-width: 0;
 }
+.conversation-input-form > .composer-attach {
+    /* The flex overflow reset above must not shrink this touch target. */
+    min-width: 44px;
+    min-height: 44px;
+}
 .conversation-input-form textarea {
     /* Belt and braces: even at its minimum, never wider than the row. */
     max-width: 100%;
