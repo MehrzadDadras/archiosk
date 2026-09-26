@@ -207,8 +207,11 @@ def soon(cid, family, label):
 COMMANDS = [
     # FILE -------------------------------------------------------------------
     # MORPHOSIS SLICE 1: start with Gopilot before the kind of work is known.
-    Command("file.new_sandbox", "FILE", "New Sandbox", href=U("sandbox.home", new=1),
+    Command("file.open_sandbox", "FILE", "Open Sandbox", href=U("sandbox.home", resume=1),
             needs=_need(staff), current=lambda c: c.on("sandbox.home"),
+            hint="Return to your saved provisional objects and conversation."),
+    Command("file.new_sandbox", "FILE", "New Sandbox", href=U("sandbox.home", new=1),
+            needs=_need(staff),
             hint="Start a clean Gopilot workspace to explore an idea before deciding what it should become."),
     Command("file.new_project", "FILE", "New Project…", href=U("portal.upload"),
             needs=_need(staff, admin), current=lambda c: c.on("portal.upload")),

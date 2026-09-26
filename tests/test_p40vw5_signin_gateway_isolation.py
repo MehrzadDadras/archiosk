@@ -205,23 +205,25 @@ class ProtectedRouteTests(_BaseTestCase):
 
 
 # ---------------------------------------------------------------------------
-# 4. Successful sign-in reaches the Gateway; safe next= preserved
+# 4. Successful sign-in opens the Sandbox; explicit project deep links survive
 # ---------------------------------------------------------------------------
 
 class SuccessfulSignInTests(_BaseTestCase):
-    def test_normal_sign_in_reaches_the_gateway(self):
-        # CLAUDE-HOME-UNIFY-01: /projects, the single home destination for a
-        # signed-in session. Same argument Option C made when it stopped routing
-        # logins through /gateway, applied one step further: "/" now only
-        # redirects onward to /projects for an ordinary session, so naming the
-        # destination directly lands sign-in on the directory in ONE response.
-        # Asserting the Location header rather than following it is the point -
-        # a test that followed redirects would pass either way and would not
-        # notice the hop coming back.
+    def test_normal_sign_in_opens_the_saved_sandbox(self):
         client = self.flask_app.test_client()
         resp = client.post("/login", data={"username": "vw5_admin", "password": "x"}, follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.headers["Location"], "/projects")
+        self.assertEqual(resp.headers["Location"], "/sandbox?resume=1")
+
+    def test_legacy_home_and_invalid_targets_land_in_the_sandbox(self):
+        from urllib.parse import urlencode
+        client = self.flask_app.test_client()
+        for target in ('/', '/projects', '/projects?view=all', '/gateway', '/sandbox', '//evil.example'):
+            with self.subTest(target=target):
+                response = client.post('/login?' + urlencode({'next': target}),
+                    data={'username': 'vw5_admin', 'password': 'x'})
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.headers['Location'], '/sandbox?resume=1')
 
     def test_safe_next_after_a_direct_protected_link_is_preserved(self):
         # Existing, already-security-tested behaviour (test_p40d1_auth_

@@ -1210,38 +1210,23 @@ def health():
 
 
 def _resolve_next_url() -> str:
-    """?next= target after a successful/already-satisfied login.
+    """Post-login entry, with role containment and explicit deep links preserved.
 
-    CLAUDE-HOME-UNIFY-01: portal.projects_list, the single home
-    destination for a signed-in session (Product Owner, 2026-09-01).
+    Staff enter their saved provisional Sandbox. Legacy home targets also
+    resolve there, so an old sign-in link cannot restore the Projects landing.
+    The role-home owner still determines the customer boundary; root navigation
+    and error-page destinations remain with that owner.
+    """
+    from urllib.parse import urlsplit
 
-    Pointing here DIRECTLY rather than at portal.index is the same
-    argument CLAUDE-POST-SIGNIN-GATEWAY-SIMPLIFICATION-01 Option C made
-    when it stopped routing logins through portal.gateway: index() now
-    only redirects onward to this exact endpoint for an ordinary
-    session, so naming it here lands sign-in on the directory in one
-    response instead of two. It also makes the destination unconditional
-    - index()'s developer-mode branch governs what "/" shows, never
-    where a successful sign-in arrives.
-
-    The fallback below matters as much as the default. It is what an
-    off-site or protocol-relative ?next= is replaced WITH, so it must
-    name the same destination - a fallback still pointing at
-    portal.index would reintroduce the hop for exactly the requests that
-    were already suspicious.
-
-    Only follows same-site relative paths -- ?next=https://evil.example
-    would otherwise redirect an authenticated session off-site."""
-    # CLAUDE-CUSTOMER-CONTAINMENT-01: asks the one governed rule rather than
-    # re-deciding it. CLAUDE-DOCUMENT-SHOP-DOOR-01 resolved a customer's home
-    # HERE, because this function is already the one place that decides where a
-    # session lands - but it was the ONLY role-aware destination in the
-    # application, which is exactly why the root and every error handler
-    # disagreed with it. The policy now lives in services.auth; this reads it.
-    home = url_for(role_home_endpoint())
+    endpoint = role_home_endpoint()
+    sandbox_entry = endpoint == "portal.projects_list"
+    home = url_for("sandbox.home", resume=1) if sandbox_entry else url_for(endpoint)
     next_url = request.args.get('next') or home
     if not next_url.startswith('/') or next_url.startswith('//'):
-        next_url = home
+        return home
+    if sandbox_entry and urlsplit(next_url).path.rstrip('/') in ("", "/projects", "/gateway", "/sandbox"):
+        return home
     return next_url
 
 

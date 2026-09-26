@@ -154,11 +154,11 @@ class AuthenticatedAuthShellIsolationTests(_BaseAuthShellTestCase):
             client.get("/login", follow_redirects=False)
         mock_nav.assert_not_called()
 
-    def test_authenticated_login_follows_next_when_same_site(self):
+    def test_authenticated_login_replaces_the_legacy_home_target(self):
         client = self._client_as("shelluser", 1)
         resp = client.get("/login?next=/projects", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(resp.headers["Location"].endswith("/projects"))
+        self.assertEqual(resp.headers["Location"], "/sandbox?resume=1")
 
     def test_authenticated_login_ignores_an_off_site_next(self):
         client = self._client_as("shelluser", 1)

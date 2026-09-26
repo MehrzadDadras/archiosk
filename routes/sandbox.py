@@ -3,7 +3,8 @@
 Sandbox routes:
 
     GET  /sandbox           the clean start state, or the current Sandbox
-                            (?new=1 starts clean - it only forgets which Sandbox
+                            (resume=1 opens the owner's saved Sandbox;
+                            new=1 starts clean - it only forgets which Sandbox
                             this browser was showing; it deletes nothing)
     POST /sandbox/turn      the ONE canonical Composer's endpoint in Sandbox
                             scope (resolve_go_scope points it here)
@@ -116,10 +117,18 @@ def home():
     if request.args.get("new"):
         session.pop(_SESSION_KEY, None)
         return redirect(url_for("sandbox.home"))
+    if request.args.get("resume"):
+        saved = _store().get(session.get("username"))
+        if saved:
+            session[_SESSION_KEY] = saved["id"]
+        else:
+            session.pop(_SESSION_KEY, None)
+        return redirect(url_for("sandbox.home"))
     record = _current()
     latest = record["turns"][-1] if record and record["turns"] else None
     offers_study = bool(latest and (latest.get("reply") or {}).get("landing"))
     return render_template("sandbox.html", sandbox=record, clean_surface=True, latest=latest,
+                           has_saved_sandbox=not record and bool(_store().get(session.get("username"))),
                            sandbox_base=_store().token(session.get("username")),
                            projects=_accessible_projects() if offers_study else [],
                            can_create_project=is_admin(), object_label=sb.object_label)

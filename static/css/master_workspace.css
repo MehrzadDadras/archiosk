@@ -386,9 +386,11 @@ body[data-master-shell="on"] .survey-evaluation label { margin-top: var(--space-
 .sandbox-spatial { margin-top: var(--space-4); min-width: 0; }
 .sandbox-field-scroll { overflow: auto; height: 60vh; min-height: 340px; max-width: 100%; border: var(--master-hairline); background: var(--surface-primary); }
 .sandbox-field { position: relative; width: 900px; min-height: 560px; }
-.sandbox-field-object { position: absolute; box-sizing: border-box; width: 268px; height: 236px; padding: var(--space-3); border: var(--master-hairline); background: var(--surface-secondary); color: var(--text-primary); overflow: auto; }
+.sandbox-field-empty { max-width: 28ch; margin: var(--space-4); color: var(--text-secondary); }
+.sandbox-field-object { position: absolute; box-sizing: border-box; width: 268px; height: 236px; padding: var(--space-3); border: var(--master-hairline); background: var(--canvas); color: var(--text-primary); overflow: auto; }
+.app-main.appearance-deep-ocean .sandbox-field-object { background: var(--ocean-glass-foreground); }
 .sandbox-field-object.is-selected { outline: 2px solid var(--text-primary); outline-offset: -2px; }
-.sandbox-field-object.is-moving, .sandbox-field-object:focus-within { z-index: 1; }
+.sandbox-field-object.is-moving, .sandbox-field-object:hover, .sandbox-field-object:focus-within { z-index: 1; }
 .sandbox-field-controls { display: flex; justify-content: space-between; gap: var(--space-2); }
 .sandbox-field-controls button { min-width: 44px; min-height: 44px; font: inherit; color: var(--text-primary); background: var(--surface-primary); border: var(--master-hairline); cursor: pointer; }
 .sandbox-field-controls .sandbox-move { cursor: grab; touch-action: none; }

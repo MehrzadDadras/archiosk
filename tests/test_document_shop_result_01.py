@@ -94,10 +94,10 @@ class DocumentShopResultTests(unittest.TestCase):
         self.assertEqual(r.status_code, 302)
         self.assertIn("/document-shop/jobs", r.headers["Location"])
 
-    def test_admin_signin_still_lands_on_projects(self):
+    def test_admin_signin_lands_in_the_saved_sandbox(self):
         r = self._login("boss")
         self.assertEqual(r.status_code, 302)
-        self.assertIn("/projects", r.headers["Location"])
+        self.assertEqual(r.headers["Location"], "/sandbox?resume=1")
         self.assertNotIn("document-shop", r.headers["Location"])
 
     def test_customer_gets_navigation_of_their_own(self):
