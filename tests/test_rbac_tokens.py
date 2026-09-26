@@ -1635,18 +1635,6 @@ class FooterPlacementTests(_ManagePanelTestCase):
             f"/project/{PILOT_PROJECT_ID}/manage/access").get_data(as_text=True)
         self.assertIn('data-ui-ref="footer.public"', body)
 
-    def test_the_footer_is_never_on_a_drawing_viewport(self):
-        """A coordination desk is full-bleed on purpose: every pixel of chrome
-        is a pixel of drawing somebody cannot see. Asserted against the
-        TEMPLATES, because these surfaces are developer-gated and a route-level
-        check would silently pass on a redirect."""
-        root = Path(__file__).resolve().parents[1] / "templates"
-        for name in ("nipigon_coordination.html", "calm_lake_prototype.html"):
-            with self.subTest(template=name):
-                source = (root / name).read_text(encoding="utf-8")
-                self.assertNotIn("public_footer", source)
-                self.assertNotIn("site-footer", source)
-
     def test_the_footer_is_never_on_an_authentication_surface(self):
         """Learned the hard way, in this session.
 

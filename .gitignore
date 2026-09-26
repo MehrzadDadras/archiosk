@@ -43,8 +43,9 @@ tools/static_preview/build/
 # have swept them into a commit as if they were fixtures.
 tests/fixtures/nreocrc/_lab_instance_scratch*/
 
-# Derived rasters of the 5 Nipigon source PDFs (tools/render_nipigon_assets.py).
-# The PDFs remain authoritative; these are regenerable bytes.
+# Derived rasters of the 5 Nipigon source PDFs. The Nipigon prototype and its
+# renderer are retired; the ignore stays so any leftover local copy - a real
+# third-party drawing set - can never be committed.
 static/nipigon/
 
 # Held-out evaluation oracles. Five tracked tests - test_storage_bridge_01.py,

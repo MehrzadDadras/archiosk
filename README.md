@@ -62,7 +62,6 @@ checkout is a real defect; the 39 skips break down as
 | Skips | Cause | To run them instead |
 | --- | --- | --- |
 | 27 | Real Chromium is not installed | `pip install playwright && playwright install chromium` |
-| 9 | `static/nipigon/` absent (see Optional fixtures) | provision the fixture |
 | 3 | Tesseract **is** installed here | these three assert the no-OCR-engine degradation path, so they skip when the engine is present - the inverse of the other two rows, and the reason this number moves with the host rather than with the repository |
 
 The Playwright tests are not decoration: they provide browser-computed
@@ -77,14 +76,10 @@ classified `EXTERNAL_OPTIONAL_FIXTURE`: absent, the tests **skip with a
 message naming the provisioning command**; present, they run in full and
 assert exactly what they always did.
 
-| Fixture | Size | Provision with |
-| --- | --- | --- |
-| `static/nipigon/` — 5 Nipigon rendered sheets | ~91 MB | `NIPIGON_SOURCE_ROOT=<dir> python tools/render_nipigon_assets.py` |
-
-The renderer writes `static/nipigon/manifest.json` beside the assets recording
-the tool, the source root, the render time, and each source file's SHA-256 —
-so a provisioned fixture can always state what it is a picture of and when it
-was taken.
+There are none at present. The one there was - `static/nipigon/`, the 5
+Nipigon rendered sheets, and the 9 skips it accounted for in the measurement
+above - was retired with the Nipigon prototype (UNIVERSAL COMPOSER INVARIANT).
+The measurement is kept as it was taken rather than re-stated.
 
 Visit `http://127.0.0.1:5000` and sign in. To see the UI populated
 without ingesting anything yourself, open any project already sitting

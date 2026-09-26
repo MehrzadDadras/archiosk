@@ -75,7 +75,10 @@ class NoHardcodedForegroundColorsAnywhereTests(unittest.TestCase):
     # unnoticed - surfaced rather than left red, because the test's own
     # docstring scopes it to stylesheets that repaint "the WHOLE app", and a
     # single-template prototype is not one of those.
-    _PROTOTYPE_STYLESHEETS = {"tokens.css", "calm_lake.css", "nipigon.css"}
+    # calm_lake.css and nipigon.css are retired with their prototypes
+    # (UNIVERSAL COMPOSER INVARIANT), so their named exemptions are removed
+    # rather than left pointing at nothing. Only tokens.css remains.
+    _PROTOTYPE_STYLESHEETS = {"tokens.css"}
 
     def test_tokens_css_hardcoded_hex_only_appears_in_token_definitions(self):
         # tokens.css is the ONE place raw hex values are expected (that

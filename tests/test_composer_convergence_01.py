@@ -333,6 +333,43 @@ class RecordedExceptions(unittest.TestCase):
         self.assertNotIn("data-developer-composer-form", text)
         self.assertNotIn("composer-attach", text)
 
+    def test_calm_lake_is_retired_not_excepted(self):
+        """The admin Calm Lake prototype was a standalone shell with no canonical
+        Composer. V2 allows no zero-Composer active page and no standalone-shell
+        exception, and its capabilities are superseded in the product (Eye pane,
+        evidence basis, Approval Gate, Composer voice), so it is RETIRED: no
+        route, no template, no stylesheet, no script, no registration."""
+        root = Path(__file__).resolve().parent.parent
+        for rel in ("routes/calm_lake_prototype.py", "templates/calm_lake_prototype.html",
+                    "templates/_calm_lake_plan.html", "static/css/calm_lake.css",
+                    "static/js/calm_lake.js"):
+            with self.subTest(file=rel):
+                self.assertFalse((root / rel).exists(), rel)
+        app_py = (root / "app.py").read_text(encoding="utf-8")
+        self.assertNotIn("calm_lake", app_py)
+        from app import create_app
+        app = create_app("testing")
+        self.assertFalse([r.rule for r in app.url_map.iter_rules() if "calm" in r.rule])
+        self.assertNotIn("calm_lake", app.blueprints)
+
+    def test_nipigon_is_retired_not_excepted(self):
+        """The admin Nipigon desk was the last standalone signed-in shell with
+        no canonical Composer. Its capabilities are superseded on governed
+        Sources (services/detail_callout.py, services/sheet_identity.py, the
+        Eye pane, Source provenance) or were prototype-only, so it is RETIRED:
+        no route, template, stylesheet, script, renderer or preferences file."""
+        root = Path(__file__).resolve().parent.parent
+        for rel in ("routes/nipigon_coordination.py", "templates/nipigon_coordination.html",
+                    "static/css/nipigon.css", "static/js/nipigon.js",
+                    "tools/render_nipigon_assets.py", "config/engine_preferences.json"):
+            with self.subTest(file=rel):
+                self.assertFalse((root / rel).exists(), rel)
+        self.assertNotIn("nipigon", (root / "app.py").read_text(encoding="utf-8"))
+        from app import create_app
+        app = create_app("testing")
+        self.assertFalse([r.rule for r in app.url_map.iter_rules() if "nipigon" in r.rule])
+        self.assertNotIn("nipigon", app.blueprints)
+
     def test_task_forms_are_not_labelled_as_go_composers(self):
         for template, retired, current in (
                 ("planning_zoning_result.html", "Ask GO to review", "Submit for review"),

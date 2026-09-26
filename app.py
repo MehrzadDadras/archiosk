@@ -503,8 +503,6 @@ def _register_blueprints(app: Flask) -> None:
     from routes.security import security_bp
     from routes.operations import operations_bp
     from routes.storage_bridge import storage_bridge_bp
-    from routes.calm_lake_prototype import calm_lake_bp
-    from routes.nipigon_coordination import nipigon_bp
     from routes.project_assets import project_assets_bp
     from routes.project_manage import project_manage_bp
     from routes.project_entry import project_entry_bp
@@ -522,12 +520,6 @@ def _register_blueprints(app: Flask) -> None:
     # which also puts them inside _wants_json()'s "/api/" test so a refusal
     # reaches an agent as JSON rather than as an HTML error page.
     app.register_blueprint(storage_bridge_bp)
-    # CLAUDE-CALM-LAKE-SURFACE-PROTOTYPE-01: a bounded visual prototype,
-    # admin + Developer Mode only, fixture-fed, writes nothing. Registered
-    # last and deliberately in its own module so the whole experiment is one
-    # `git rm` plus these two lines when it concludes.
-    app.register_blueprint(calm_lake_bp)
-    app.register_blueprint(nipigon_bp)
     # CLAUDE-RBAC-TOKENS-01: the ONLY path to a project drawing sheet. No
     # url_prefix - it carries its own /project/<id>/sheet/<id> path. It reads
     # from instance/project_assets/, never from static/, because Flask serves
