@@ -1239,6 +1239,174 @@ class PostQuotaGateTests(_SafeLandingTestCase):
         self.assertNotIn(secret_question, href)
 
 
+class TokenAskAuthorityTests(_SafeLandingTestCase):
+    """CLAUDE-TOKEN-ASK-SCOPE-01 - the token-scoped GO endpoint takes its scope
+    from the PASS and its permission from the project's POLICY.
+
+        token -> authorize_token -> permitted sheets derived on the server
+              -> scope_ai_context -> external-AI security policy -> meter
+              -> model
+
+    Proved with the spy: what the model receives is recorded, so "the client
+    cannot widen the scope" and "policy stops the call" are counted, not read
+    off a branch."""
+
+    def _contexts(self):
+        return [[s.get("sheet_id") for s in call["context"]] for call in self.model_calls]
+
+    def _used(self):
+        from services import trial_allowance
+
+        with self.flask_app.app_context():
+            return trial_allowance.usage(PILOT_PROJECT_ID, limit=self.ALLOWANCE)["used"]
+
+    def _set_profile(self, classification):
+        from services.case_workspace import CaseWorkspaceStore
+
+        store = CaseWorkspaceStore(self.tmp_dir)
+        workspace = store.get_or_create(PILOT_PROJECT_ID)
+        workspace.security_profile = classification
+        store.save(workspace)
+
+    def _activate_baseline_decision(self, decision):
+        from services.security_governance import (
+            CONTROL_SOURCE_ARCHIOSK_DEFAULT, SecurityGovernanceStore,
+        )
+        from services.security_policy import ACTION_EXTERNAL_AI_REQUEST
+
+        store = SecurityGovernanceStore(str(self.tmp_dir))
+        record = store.get()
+        baseline = store.create_baseline_draft(record, created_by="admin_user")
+        store.add_control_decision(
+            record, baseline_id=baseline["id"], action_id=ACTION_EXTERNAL_AI_REQUEST,
+            decision=decision, source_type=CONTROL_SOURCE_ARCHIOSK_DEFAULT, actor="admin_user")
+        store.acknowledge_capability_impact(record, baseline["id"], actor="admin_user")
+        store.activate_baseline(record, baseline["id"], actor="admin_user")
+
+    def _spy(self, question_text, context):
+        self.model_calls.append({"question": question_text, "context": context})
+        return "an answer"
+
+    # 1 ---------------------------------------------------------------------
+    def test_a_permitted_question_reaches_the_model_with_server_derived_context(self):
+        # The client claims NO scope at all; the pass still has one.
+        _id, raw = self._issue("trade", disciplines=["structural"])
+        body = self._ask(raw, sheets=[]).get_json()
+        self.assertTrue(body["model_called"])
+        self.assertEqual(self._contexts(), [["RS501"]])
+        self.assertEqual(body["sheets_in_scope"], ["RS501"])
+
+    # 2 ---------------------------------------------------------------------
+    def test_forged_client_sheet_ids_are_ignored(self):
+        """RS999 is a structural mark the old path would have admitted -
+        scope_ai_context alone checks discipline, not existence. A101 is a
+        sheet of ANOTHER project. Neither may reach the model."""
+        _id, raw = self._issue("trade", disciplines=["structural"])
+        forged = [{"sheet_id": "A204"}, {"sheet_id": "RS999"}, {"sheet_id": "A101"},
+                  {"sheet_id": "../some-other-project/A101"}]
+        body = self._ask(raw, sheets=forged).get_json()
+        self.assertEqual(self._contexts(), [["RS501"]])
+        self.assertEqual(body["sheets_in_scope"], ["RS501"])
+
+    # 3 ---------------------------------------------------------------------
+    def test_unpermitted_disciplines_never_enter_model_context(self):
+        # Five asks below; the class's 3-query allowance would meter the last
+        # ones out before the model, which is a different property.
+        self.flask_app.config["TRIAL_QUERY_ALLOWANCE"] = 10
+        _id, structural = self._issue("trade", disciplines=["structural"])
+        _id, architectural = self._issue("engineer", disciplines=["architectural"])
+        for payload in (None, [], [{"sheet_id": "A204"}], [{"sheet_id": "RS501"}]):
+            self._ask(structural, sheets=payload)
+        self.assertTrue(self.model_calls)
+        self.assertTrue(all(ctx == ["RS501"] for ctx in self._contexts()), self._contexts())
+        self.model_calls.clear()
+        self._ask(architectural, sheets=[{"sheet_id": "RS501"}])
+        self.assertEqual(self._contexts(), [["A204"]])
+
+    # 4 ---------------------------------------------------------------------
+    def test_revoked_or_expired_pass_makes_no_model_call(self):
+        from services import project_rbac
+
+        token_id, revoked = self._issue("owner")
+        with self.flask_app.app_context():
+            project_rbac.revoke_token(token_id, actor="architect_user")
+        _id, expired = self._issue_expired("owner")
+        for label, raw in (("revoked", revoked), ("expired", expired)):
+            with self.subTest(pass_state=label):
+                self.assertEqual(self._ask(raw).status_code, 403)
+        self.assertEqual(self.model_calls, [])
+        self.assertEqual(self._used(), 0)
+
+    # 5 ---------------------------------------------------------------------
+    def test_project_policy_deny_makes_no_model_call(self):
+        # A RESTRICTED project profile resolves external_ai_request to DENY.
+        self._set_profile("restricted")
+        _id, raw = self._issue("owner")
+        body = self._ask(raw).get_json()
+        self.assertFalse(body["model_called"])
+        self.assertTrue(body["policy_blocked"])
+        self.assertIsNone(body["answer"])
+        self.assertEqual(self.model_calls, [])
+        self.assertEqual(self._used(), 0, "a policy refusal spent trial allowance")
+
+    # 6 ---------------------------------------------------------------------
+    def test_require_approval_is_not_a_token_bypass(self):
+        """A pass bearer has no Approval Gate to pass. Nothing a request can
+        carry - a confirm field, a query flag, a session approval - turns
+        REQUIRE_APPROVAL into a model call."""
+        from unittest.mock import patch
+
+        self._activate_baseline_decision("require_approval")
+        _id, raw = self._issue("owner")
+        self.assertFalse(self._ask(raw).get_json()["model_called"])
+
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"], sess["username"], sess["role"] = 1, "admin_user", "admin"
+            sess["approved_action_classes"] = ["external_ai_request", "apply"]
+        with patch("routes.project_query._invoke_model", side_effect=self._spy):
+            response = client.post(
+                f"/project/{PILOT_PROJECT_ID}/ask?confirm=session",
+                headers={"X-Project-Token": raw},
+                json={"question": "q", "confirm": "once", "approved": True})
+        body = response.get_json()
+        self.assertFalse(body["model_called"])
+        self.assertTrue(body["policy_blocked"])
+        self.assertEqual(self.model_calls, [])
+        self.assertEqual(self._used(), 0)
+
+    # 7 ---------------------------------------------------------------------
+    def test_a_staff_session_in_the_same_browser_cannot_influence_token_authority(self):
+        from unittest.mock import patch
+
+        from services import project_rbac
+
+        client = self.flask_app.test_client()
+        with client.session_transaction() as sess:
+            sess["user_id"], sess["username"], sess["role"] = 1, "admin_user", "admin"
+            sess["developer_mode"] = True
+
+        token_id, raw = self._issue("trade", disciplines=["structural"])
+        with patch("routes.project_query._invoke_model", side_effect=self._spy):
+            scoped = client.post(f"/project/{PILOT_PROJECT_ID}/ask",
+                                 headers={"X-Project-Token": raw},
+                                 json={"question": "q", "sheets": [{"sheet_id": "A204"}]})
+            no_token = client.post(f"/project/{PILOT_PROJECT_ID}/ask",
+                                   json={"question": "q"})
+            with self.flask_app.app_context():
+                project_rbac.revoke_token(token_id, actor="architect_user")
+            revoked = client.post(f"/project/{PILOT_PROJECT_ID}/ask",
+                                  headers={"X-Project-Token": raw},
+                                  json={"question": "q"})
+        # An admin session widens nothing: the pass is still structural only.
+        self.assertEqual(scoped.get_json()["sheets_in_scope"], ["RS501"])
+        self.assertEqual(self._contexts(), [["RS501"]])
+        # And it substitutes for nothing: no pass, or a dead one, is refused.
+        self.assertEqual(no_token.status_code, 403)
+        self.assertEqual(revoked.status_code, 403)
+        self.assertEqual(len(self.model_calls), 1)
+
+
 class DrawingToolImmunityTests(_SafeLandingTestCase):
     """The second half of the promise: "the system allows you to get home
     safely". Every one of these runs with the allowance fully spent."""

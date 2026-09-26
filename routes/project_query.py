@@ -12,7 +12,19 @@ because there is no code path through which it could.
 
 THE ORDER OF OPERATIONS IS THE FEATURE
 
-    admission -> model call -> append
+    token -> authorize_token -> permitted sheets DERIVED ON THE SERVER
+          -> scope_ai_context -> external-AI security policy -> admission
+          -> model call -> append
+
+The scope comes from the pass, never from the request: the sheet set is what
+routes/project_entry.py lists for this token, filtered again by
+scope_ai_context. Anything the client sends as `sheets` is ignored. The
+project's external-AI policy is resolved by the canonical route-layer owner
+(routes/workspace.py _evaluate_security_action -> security_policy.
+evaluate_action) BEFORE the meter, so a policy refusal costs no allowance.
+Only ALLOW and ALLOW_APPROVED_ROUTE reach the model - the same rule every
+signed-in caller applies. REQUIRE_APPROVAL stops here too: a pass bearer has
+no Approval Gate to pass, and a token must never become a way around one.
 
 `consume_query` is asked BEFORE the model runs and its answer decides whether
 the model runs at all. When the answer is FINAL, the model still runs and the
@@ -48,6 +60,12 @@ from services.trial_allowance import (
 project_query_bp = Blueprint("project_query", __name__)
 
 _REFUSED_BODY = "Not authorised.\n"
+
+
+# Said the same way for every non-proceeding policy decision: the bearer is
+# not told which layer refused, only that GO cannot run here.
+POLICY_BLOCKED_MESSAGE = ("GO is not available on this project under its "
+                          "security policy. The drawings remain available.")
 
 
 def _refuse() -> Response:
@@ -100,7 +118,36 @@ def project_ask(project_id: str):
     note_token_use(token)
     workspace = _workspace(project_id)
 
+    # Context is scoped to what THIS bearer may read, from the pass itself,
+    # before anything else - an authorization boundary that holds over HTTP
+    # and leaks through a model is not a boundary. The request body carries
+    # no scope: its `sheets`, if any, are ignored.
+    from routes.project_entry import _permitted_sheets
+
+    permitted = scope_ai_context(token, _permitted_sheets(token, project_id))
+
     limit = current_app.config.get("TRIAL_QUERY_ALLOWANCE", 0)
+
+    # The project's external-AI policy, through its canonical owner, before
+    # the meter and before the model.
+    from routes.workspace import _evaluate_security_action
+    from services.security_policy import (
+        ACTION_EXTERNAL_AI_REQUEST, DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE,
+    )
+
+    policy = _evaluate_security_action(workspace, ACTION_EXTERNAL_AI_REQUEST)
+    if policy.decision not in (DECISION_ALLOW, DECISION_ALLOW_APPROVED_ROUTE):
+        return jsonify({
+            "answer": None,
+            "safe_landing": None,
+            "model_called": False,
+            "policy_blocked": True,
+            "message": POLICY_BLOCKED_MESSAGE,
+            "view_box": payload.get("view_box"),
+            "sheets_in_scope": [s.get("sheet_id") for s in permitted],
+            "usage": usage(project_id, limit=limit),
+        }), 200
+
     admin_email = current_app.config.get("ADMIN_CONTACT_EMAIL", "")
     byok = byok_key_present(workspace)
 
@@ -120,12 +167,6 @@ def project_ask(project_id: str):
         body = apply_to_answer("", state, landing)
         body["usage"] = usage(project_id, limit=limit)
         return jsonify(body), 200
-
-    # Context is scoped to what THIS bearer may read, before the prompt is
-    # built - an authorization boundary that holds over HTTP and leaks through
-    # a model is not a boundary. See services/project_rbac.scope_ai_context.
-    sheets = payload.get("sheets") or []
-    permitted = scope_ai_context(token, sheets)
 
     answer = _invoke_model(question, permitted)
 
